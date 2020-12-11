@@ -237,7 +237,11 @@ type IterOptions struct {
 	// [start, end] time range. If you must guarantee that you never see a key
 	// outside of the time bounds, perform your own filtering.
 	//
-	// These fields are only relevant for MVCCIterators.
+	// These fields are only relevant for MVCCIterators. Additionally, an
+	// MVCCIterator with timestamp hints will not see separated intents, and may
+	// not see some interleaved intents. Currently, the only way to correctly
+	// use such an iterator is to use it in concert with an iterator without
+	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 

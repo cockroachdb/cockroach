@@ -12,14 +12,14 @@ query T
 EXPLAIN (TYPES) SELECT min(1), max(1), count(NULL), sum_int(1), avg(1), sum(1), stddev(1), variance(1),
 bool_and(true), bool_or(false), xor_agg(b'\x01'), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1),
 regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
-regr_count(1, 1)
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 FROM kv
 ----
 distribution: local
 vectorized: true
 ·
 • group (scalar)
-│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
 │ estimated row count: 1 (missing stats)
 │ aggregate 0: min(column7)
 │ aggregate 1: max(column7)
@@ -43,6 +43,8 @@ vectorized: true
 │ aggregate 19: regr_sxy(column7, column7)
 │ aggregate 20: regr_syy(column7, column7)
 │ aggregate 21: count_rows()
+│ aggregate 22: regr_avgx(column7, column7)
+│ aggregate 23: regr_avgy(column7, column7)
 │
 └── • render
     │ columns: (column7 int, column10 unknown, column17 bool, column19 bool, column21 bytes)
@@ -63,14 +65,14 @@ query T
 EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v),
 bool_and(v = 1), bool_or(v = 1), xor_agg(s::bytes), corr(v, k), covar_pop(v, k), covar_samp(v, k), sqrdiff(v),
 regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
-regr_count(1, 1)
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 FROM kv
 ----
 distribution: local
 vectorized: true
 ·
 • group (scalar)
-│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int)
+│ columns: (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
 │ estimated row count: 1 (missing stats)
 │ aggregate 0: min(v)
 │ aggregate 1: max(v)
@@ -94,6 +96,8 @@ vectorized: true
 │ aggregate 19: regr_sxy(column10, column10)
 │ aggregate 20: regr_syy(column10, column10)
 │ aggregate 21: count_rows()
+│ aggregate 22: regr_avgx(column10, column10)
+│ aggregate 23: regr_avgy(column10, column10)
 │
 └── • render
     │ columns: (column10 int, column16 bool, column19 bytes, k int, v int)
@@ -115,13 +119,13 @@ query T
 EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1),
 bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01')), corr(1, 1), covar_pop(1, 1), covar_samp(1, 1), sqrdiff(1),
 regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(1, 1), regr_syy(1, 1),
-regr_count(1, 1)
+regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 ----
 distribution: local
 vectorized: false
 ·
 • render
-│ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int)
+│ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)
 │ estimated row count: 1
 │ render 0: ((avg)[decimal]::FLOAT8)[float]
 │ render 1: (to_hex((xor_agg)[bytes]))[string]
@@ -145,9 +149,11 @@ vectorized: false
 │ render 19: (regr_sxy)[float]
 │ render 20: (regr_syy)[float]
 │ render 21: (count_rows)[int]
+│ render 22: (regr_avgx)[float]
+│ render 23: (regr_avgy)[float]
 │
 └── • group (scalar)
-    │ columns: (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, count_rows int)
+    │ columns: (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, count_rows int, regr_avgx float, regr_avgy float)
     │ estimated row count: 1
     │ aggregate 0: min(column1)
     │ aggregate 1: count(column3)
@@ -171,6 +177,8 @@ vectorized: false
     │ aggregate 19: regr_sxy(column1, column1)
     │ aggregate 20: regr_syy(column1, column1)
     │ aggregate 21: count_rows()
+    │ aggregate 22: regr_avgx(column1, column1)
+    │ aggregate 23: regr_avgy(column1, column1)
     │
     └── • values
           columns: (column1 int, column3 unknown, column11 bool, column14 bytes)

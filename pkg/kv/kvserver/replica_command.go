@@ -929,6 +929,21 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
+	// If there are testing knobs, we're definitely in a test.
+	// Try to catch tests that use manual replication while the
+	// replication queue is active. Such tests are often flaky.
+	if knobs := r.store.TestingKnobs(); knobs != nil &&
+		!knobs.DisableReplicateQueue &&
+		!knobs.AllowDangerousReplicationChanges {
+		bq := r.store.replicateQueue.baseQueue
+		bq.mu.Lock()
+		disabled := bq.mu.disabled
+		bq.mu.Unlock()
+		if !disabled {
+			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
+		}
+	}
+
 	// We execute the change serially if we're not allowed to run atomic
 	// replication changes or if that was explicitly disabled.
 	st := r.ClusterSettings()
@@ -1348,7 +1363,7 @@ func (r *Replica) atomicReplicationChange(
 	descriptorOK := false
 	start := timeutil.Now()
 	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	for re := retry.StartWithCtx(ctx, retOpts); ; re.Next() {
+	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
 		rDesc := r.Desc()
 		if rDesc.Generation >= desc.Generation {
 			descriptorOK = true
@@ -1645,6 +1660,18 @@ func prepareChangeReplicasTrigger(
 	return crt, nil
 }
 
+func within10s(ctx context.Context, fn func() error) error {
+	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
+	var err error
+	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+	}
+	return ctx.Err()
+}
+
 type changeReplicasTxnArgs struct {
 	db *kv.DB
 
@@ -1719,9 +1746,11 @@ func execChangeReplicasTxn(
 		}
 		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
 
-		for maxAttempts, i := 10, 0; i < maxAttempts; i++ {
+		// NB: we haven't written any intents yet, so even in the unlikely case in which
+		// this is held up, we won't block anyone else.
+		if err := within10s(ctx, func() error {
 			if args.testAllowDangerousReplicationChanges {
-				break
+				return nil
 			}
 			// Run (and retry for a bit) a sanity check that the configuration
 			// resulting from this change is able to meet quorum. It's
@@ -1734,7 +1763,7 @@ func execChangeReplicasTxn(
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
 			liveReplicas, _ := args.liveAndDeadReplicas(replicas.All())
-			if !crt.Desc.Replicas().CanMakeProgress(
+			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
 						if inner.ReplicaID == rDesc.ReplicaID {
@@ -1744,14 +1773,12 @@ func execChangeReplicasTxn(
 					return false
 				}) {
 				// NB: we use newQuorumError which is recognized by the replicate queue.
-				err := newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
+				return newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
 					"based on live replicas %v", crt.Desc, crt.Added(), crt.Removed(), liveReplicas)
-				if i == maxAttempts-1 {
-					return err
-				}
-				log.Infof(ctx, "%s; retrying", err)
-				time.Sleep(time.Second)
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 
 		{
@@ -1935,12 +1962,14 @@ func recordRangeEventsInLog(
 // the snapshot was a success.
 //
 // `receiveSnapshot` takes the key-value pairs sent and incrementally creates
-// three SSTs from them for direct ingestion: one for the replicated range-ID
-// local keys, one for the range local keys, and one for the user keys. The
-// reason it creates three separate SSTs is to prevent overlaps with the
-// memtable and existing SSTs in RocksDB. Each of the SSTs also has a range
-// deletion tombstone to delete the existing data in the range.
+// three to five SSTs from them for direct ingestion: one for the replicated
+// range-ID local keys, one for the range local keys, optionally two for the
+// lock table keys, and one for the user keys. The reason it creates these as
+// separate SSTs is to prevent overlaps with the memtable and existing SSTs in
+// RocksDB. Each of the SSTs also has a range deletion tombstone to delete the
+// existing data in the range.
 //
+
 // Applying the snapshot: After the recipient has received the message
 // indicating it has all the data, it hands it all to
 // `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks
@@ -1953,11 +1982,12 @@ func recordRangeEventsInLog(
 // process, several other SSTs may be created for direct ingestion. An SST for
 // the unreplicated range-ID local keys is created for the Raft entries, hard
 // state, and truncated state. An SST is created for deleting each subsumed
-// replica's range-ID local keys and at most two SSTs are created for deleting
-// the user keys and range local keys of all subsumed replicas. All in all, a
-// maximum of 6 + SR SSTs will be created for direct ingestion where SR is the
-// number of subsumed replicas. In the case where there are no subsumed
-// replicas, 4 SSTs will be created.
+// replica's range-ID local keys and at most four SSTs are created for
+// deleting the user keys, range local keys, and lock table keys (up to 2
+// ssts) of all subsumed replicas. All in all, a maximum of 6 + 4*SR SSTs will
+// be created for direct ingestion where SR is the number of subsumed
+// replicas. In the case where there are no subsumed replicas, 4 to 6 SSTs
+// will be created.
 //
 // [1]: The largest class of rejections here is if the store contains a replica
 // that overlaps the snapshot but has a different id (we maintain an invariant
@@ -2275,7 +2305,7 @@ func (s *Store) AdminRelocateRange(
 	// out.
 	every := log.Every(time.Minute)
 	for {
-		for re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second}); ; re.Next() {
+		for re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second}); re.Next(); {
 			if err := ctx.Err(); err != nil {
 				return err
 			}

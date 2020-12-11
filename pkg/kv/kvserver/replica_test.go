@@ -6242,6 +6242,11 @@ func TestRangeStatsComputation(t *testing.T) {
 		ValCount:    2,
 		IntentCount: 1,
 	})
+	if !storage.DisallowSeparatedIntents {
+		// Account for TxnDidNotUpdateMeta
+		expMS.LiveBytes += 2
+		expMS.ValBytes += 2
+	}
 	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
@@ -6513,7 +6518,9 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			tc := testContext{}
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
-			tc.Start(t, stopper)
+			cfg := TestStoreConfig(nil)
+			cfg.TestingKnobs.DisableReplicateQueue = true
+			tc.StartWithStoreConfig(t, stopper, cfg)
 			// We now allow adding a replica to the same node, to support rebalances
 			// within the same node when replication is 1x, so add another replica to the
 			// range descriptor to avoid this case.
@@ -12570,7 +12577,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
-	sp.StartRecording(tracing.SingleNodeRecording)
+	sp.StartRecording(tracing.SnowballRecording)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)

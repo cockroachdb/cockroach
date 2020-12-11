@@ -3849,7 +3849,7 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(fmtPgwireFormat) {
+	if ctx.flags.HasAnyFlags(fmtPgwireFormat | FmtPGCatalog) {
 		d.pgwireFormat(ctx)
 		return
 	}
@@ -4258,7 +4258,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		}
 		return queryOid(ctx, t, NewDString(funcDef.Name))
 	case oid.T_regtype:
-		parsedTyp, err := ctx.Planner.ParseType(s)
+		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {
 			return &DOid{
 				semanticType: t,

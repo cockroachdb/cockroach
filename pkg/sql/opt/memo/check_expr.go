@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// +build race
+// +build crdb_test
 
 package memo
 
@@ -78,6 +78,9 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *ProjectExpr:
+		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
+			panic(errors.AssertionFailedf("projection passes through column not in input"))
+		}
 		for _, item := range t.Projections {
 			// Check that column id is set.
 			if item.Col == 0 {

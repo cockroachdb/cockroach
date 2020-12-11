@@ -174,9 +174,6 @@ func getResultColumns(
 			return nil, errors.AssertionFailedf("unknown explain mode %v", o.Mode)
 		}
 
-	case explainPlanOp:
-		return colinfo.ExplainPlanColumns, nil
-
 	case explainOptOp:
 		return colinfo.ExplainPlanColumns, nil
 
@@ -187,7 +184,7 @@ func getResultColumns(
 		return colinfo.ShowTraceColumns, nil
 
 	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
-		cancelQueriesOp, cancelSessionsOp, errorIfRowsOp, deleteRangeOp:
+		cancelQueriesOp, cancelSessionsOp, createStatisticsOp, errorIfRowsOp, deleteRangeOp:
 		// These operations produce no columns.
 		return nil, nil
 

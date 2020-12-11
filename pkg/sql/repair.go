@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,7 +57,7 @@ import (
 // all descriptors at the end of the transaction to ensure that this operation
 // didn't break a reference to this descriptor.
 func (p *planner) UnsafeUpsertDescriptor(
-	ctx context.Context, descID int64, encodedDesc []byte,
+	ctx context.Context, descID int64, encodedDesc []byte, force bool,
 ) error {
 	const method = "crdb_internal.unsafe_upsert_descriptor()"
 	if err := checkPlannerStateForRepairFunctions(ctx, p, method); err != nil {
@@ -69,9 +71,18 @@ func (p *planner) UnsafeUpsertDescriptor(
 	}
 
 	// Fetch the existing descriptor.
+
 	existing, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	var forceNoticeString string // for the event
 	if !errors.Is(err, catalog.ErrDescriptorNotFound) && err != nil {
-		return err
+		if force {
+			notice := pgnotice.NewWithSeverityf("WARNING",
+				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
+			p.BufferClientNotice(ctx, notice)
+			forceNoticeString = notice.Error()
+		} else {
+			return err
+		}
 	}
 
 	// Validate that existing is sane and store its hex serialization into
@@ -130,20 +141,12 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return err
 		}
 	}
-	return MakeEventLogger(p.execCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogUnsafeUpsertDescriptor,
-		int32(id),
-		int32(p.EvalContext().NodeID.SQLInstanceID()),
-		&struct {
-			ID                 descpb.ID `json:"id"`
-			ExistingDescriptor string    `json:"existing_descriptor,omitempty"`
-			Descriptor         string    `json:"descriptor,omitempty"`
-		}{
-			ID:                 id,
-			ExistingDescriptor: existingStr,
-			Descriptor:         hex.EncodeToString(encodedDesc),
+	return p.logEvent(ctx, id,
+		&eventpb.UnsafeUpsertDescriptor{
+			PreviousDescriptor: existingStr,
+			NewDescriptor:      hex.EncodeToString(encodedDesc),
+			Force:              force,
+			ForceNotice:        forceNoticeString,
 		})
 }
 
@@ -275,27 +278,14 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if validationErr != nil {
 		validationErrStr = validationErr.Error()
 	}
-	return MakeEventLogger(p.execCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogUnsafeUpsertNamespaceEntry,
-		int32(descID),
-		int32(p.EvalContext().NodeID.SQLInstanceID()),
-		&struct {
-			ParentID         descpb.ID `json:"parent_id,omitempty"`
-			ParentSchemaID   descpb.ID `json:"parent_schema_id,omitempty"`
-			Name             string    `json:"name"`
-			ID               descpb.ID `json:"id"`
-			ExistingID       descpb.ID `json:"existing_id,omitempty"`
-			Force            bool      `json:"force,omitempty"`
-			ValidationErrors string    `json:"validation_errors,omitempty"`
-		}{
-			ParentID:         parentID,
-			ParentSchemaID:   parentSchemaID,
-			ID:               descID,
+	return p.logEvent(ctx, descID,
+		&eventpb.UnsafeUpsertNamespaceEntry{
+			ParentID:         uint32(parentID),
+			ParentSchemaID:   uint32(parentSchemaID),
 			Name:             name,
-			ExistingID:       existingID,
+			PreviousID:       uint32(existingID),
 			Force:            force,
+			FailedValidation: validationErr != nil,
 			ValidationErrors: validationErrStr,
 		})
 }
@@ -308,7 +298,11 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 // will ensure that the entry does not correspond to a non-dropped descriptor
 // and that the entry exists with the provided ID.
 func (p *planner) UnsafeDeleteNamespaceEntry(
-	ctx context.Context, parentIDInt, parentSchemaIDInt int64, name string, descIDInt int64,
+	ctx context.Context,
+	parentIDInt, parentSchemaIDInt int64,
+	name string,
+	descIDInt int64,
+	force bool,
 ) error {
 	const method = "crdb_internal.unsafe_delete_namespace_entry()"
 	if err := checkPlannerStateForRepairFunctions(ctx, p, method); err != nil {
@@ -336,8 +330,16 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		}
 	}
 	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, descID, p.txn)
+	var forceNoticeString string // for the event
 	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
-		return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
+		if force {
+			notice := pgnotice.NewWithSeverityf("WARNING",
+				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
+			p.BufferClientNotice(ctx, notice)
+			forceNoticeString = notice.Error()
+		} else {
+			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
+		}
 	}
 	if err == nil && !desc.Dropped() {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -346,23 +348,13 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 	if err := p.txn.Del(ctx, key); err != nil {
 		return errors.Wrap(err, "failed to delete entry")
 	}
-	return MakeEventLogger(p.execCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogUnsafeDeleteNamespaceEntry,
-		int32(descID),
-		int32(p.EvalContext().NodeID.SQLInstanceID()),
-		&struct {
-			ParentID       descpb.ID `json:"parent_id,omitempty"`
-			ParentSchemaID descpb.ID `json:"parent_schema_id,omitempty"`
-			Name           string    `json:"name"`
-			ID             descpb.ID `json:"id"`
-			ExistingID     descpb.ID `json:"existing_id,omitempty"`
-		}{
-			ParentID:       parentID,
-			ParentSchemaID: parentSchemaID,
-			ID:             descID,
+	return p.logEvent(ctx, descID,
+		&eventpb.UnsafeDeleteNamespaceEntry{
+			ParentID:       uint32(parentID),
+			ParentSchemaID: uint32(parentSchemaID),
 			Name:           name,
+			Force:          force,
+			ForceNotice:    forceNoticeString,
 		})
 }
 
@@ -373,37 +365,38 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 // This method will perform very minimal validation. An error will be returned
 // if no such descriptor exists. This method can very easily introduce
 // corruption, beware.
-func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64) error {
+func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error {
 	const method = "crdb_internal.unsafe_delete_descriptor()"
 	if err := checkPlannerStateForRepairFunctions(ctx, p, method); err != nil {
 		return err
 	}
 	id := descpb.ID(descID)
 	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	var forceNoticeString string // for the event
 	if err != nil {
-		return err
+		if !errors.Is(err, catalog.ErrDescriptorNotFound) && force {
+			notice := pgnotice.NewWithSeverityf("WARNING",
+				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
+			p.BufferClientNotice(ctx, notice)
+			forceNoticeString = notice.Error()
+		} else {
+			return err
+		}
 	}
 	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
 	if err := p.txn.Del(ctx, descKey); err != nil {
 		return err
 	}
-	return MakeEventLogger(p.execCfg).InsertEventRecord(
-		ctx,
-		p.txn,
-		EventLogUnsafeDeleteDescriptor,
-		int32(descID),
-		int32(p.EvalContext().NodeID.SQLInstanceID()),
-		&struct {
-			ParentID       descpb.ID `json:"parent_id,omitempty"`
-			ParentSchemaID descpb.ID `json:"parent_schema_id,omitempty"`
-			Name           string    `json:"name"`
-			ID             descpb.ID `json:"id"`
-		}{
-			ParentID:       mut.GetParentID(),
-			ParentSchemaID: mut.GetParentSchemaID(),
-			ID:             mut.GetID(),
-			Name:           mut.GetName(),
-		})
+	ev := &eventpb.UnsafeDeleteDescriptor{
+		Force:       force,
+		ForceNotice: forceNoticeString,
+	}
+	if mut != nil {
+		ev.ParentID = uint32(mut.GetParentID())
+		ev.ParentSchemaID = uint32(mut.GetParentSchemaID())
+		ev.Name = mut.GetName()
+	}
+	return p.logEvent(ctx, id, ev)
 }
 
 func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method string) error {

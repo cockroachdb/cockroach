@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -449,7 +449,7 @@ type DistSQLReceiver struct {
 	alloc  rowenc.DatumAlloc
 	closed bool
 
-	rangeCache *kvcoord.RangeDescriptorCache
+	rangeCache *rangecache.RangeCache
 	tracing    *SessionTracing
 	cleanup    func()
 
@@ -563,7 +563,7 @@ func MakeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
 	stmtType tree.StatementType,
-	rangeCache *kvcoord.RangeDescriptorCache,
+	rangeCache *rangecache.RangeCache,
 	txn *kv.Txn,
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
@@ -617,6 +617,9 @@ func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if meta != nil {
+		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
+			metaWriter.AddMeta(r.ctx, meta)
+		}
 		if meta.LeafTxnFinalState != nil {
 			if r.txn != nil {
 				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
@@ -673,17 +676,15 @@ func (r *DistSQLReceiver) Push(
 				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
 			}
 			meta.Metrics.Release()
-			meta.Release()
 		}
-		if meta.ContentionEvents != nil && r.contendedQueryMetric != nil {
+		if r.contendedQueryMetric != nil && len(meta.ContentionEvents) > 0 {
 			// Increment the contended query metric at most once if the query sees at
 			// least one contention event.
 			r.contendedQueryMetric.Inc(1)
 			r.contendedQueryMetric = nil
 		}
-		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
-			metaWriter.AddMeta(r.ctx, meta)
-		}
+		// Release the meta object. It is unsafe for use after this call.
+		meta.Release()
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {

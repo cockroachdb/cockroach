@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -245,17 +246,17 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogAlterRole,
+	optStrs := make([]string, len(n.roleOptions))
+	for i := range optStrs {
+		optStrs[i] = n.roleOptions[i].String()
+	}
+
+	return params.p.logEvent(params.ctx,
 		0, /* no target */
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			RoleName string
-			User     string
-		}{normalizedUsername.Normalized(), params.p.User().Normalized()},
-	)
+		&eventpb.AlterRole{
+			RoleName: normalizedUsername.Normalized(),
+			Options:  optStrs,
+		})
 }
 
 func (*alterRoleNode) Next(runParams) (bool, error) { return false, nil }

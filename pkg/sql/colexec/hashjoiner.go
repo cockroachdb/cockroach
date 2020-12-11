@@ -257,10 +257,6 @@ func (hj *hashJoiner) Init() {
 		hj.hashTableInitialNumBuckets,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
-		// Store all columns from the right source since we need to be able to
-		// export the full batches when falling back to the external hash
-		// joiner.
-		nil, /* colsToStore */
 		allowNullEquality,
 		hashTableFullBuildMode,
 		probeMode,
@@ -314,7 +310,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 }
 
 func (hj *hashJoiner) build(ctx context.Context) {
-	hj.ht.build(ctx, hj.inputTwo)
+	hj.ht.fullBuild(ctx, hj.inputTwo)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
@@ -779,7 +775,7 @@ func NewHashJoiner(
 	spec HashJoinerSpec,
 	leftSource, rightSource colexecbase.Operator,
 	initialNumBuckets uint64,
-) colexecbase.Operator {
+) ResettableOperator {
 	var outputTypes []*types.T
 	if spec.joinType.ShouldIncludeLeftColsInOutput() {
 		outputTypes = append(outputTypes, spec.left.sourceTypes...)

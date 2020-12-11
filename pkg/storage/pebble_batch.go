@@ -74,13 +74,13 @@ func newPebbleBatch(db *pebble.DB, batch *pebble.Batch) *pebbleBatch {
 			reusable:      true,
 		},
 		prefixEngineIter: pebbleIterator{
-			lowerBoundBuf: pb.prefixIter.lowerBoundBuf,
-			upperBoundBuf: pb.prefixIter.upperBoundBuf,
+			lowerBoundBuf: pb.prefixEngineIter.lowerBoundBuf,
+			upperBoundBuf: pb.prefixEngineIter.upperBoundBuf,
 			reusable:      true,
 		},
 		normalEngineIter: pebbleIterator{
-			lowerBoundBuf: pb.normalIter.lowerBoundBuf,
-			upperBoundBuf: pb.normalIter.upperBoundBuf,
+			lowerBoundBuf: pb.normalEngineIter.lowerBoundBuf,
+			upperBoundBuf: pb.normalEngineIter.upperBoundBuf,
 			reusable:      true,
 		},
 	}

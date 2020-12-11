@@ -41,7 +41,7 @@ var (
 // last distinct operator in that chain as well as its output column.
 func OrderedDistinctColsToOperators(
 	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.Operator, []bool, error) {
+) (ResettableOperator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
 	input = fnOp{
@@ -78,7 +78,7 @@ var _ ResettableOperator = &distinctChainOps{}
 // input columns with the given types.
 func NewOrderedDistinct(
 	input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
-) (colexecbase.Operator, error) {
+) (ResettableOperator, error) {
 	op, outputCol, err := OrderedDistinctColsToOperators(input, distinctCols, typs)
 	if err != nil {
 		return nil, err

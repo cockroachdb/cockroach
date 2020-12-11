@@ -2574,6 +2574,16 @@ restore_stmt:
     Options: *($5.restoreOptions()),
     }
   }
+| RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  {
+    $$.val = &tree.Restore{
+    DescriptorCoverage: tree.AllDescriptors,
+		Subdir: $3.expr(),
+		From: $5.listOfStringOrPlaceholderOptList(),
+		AsOf: $6.asOfClause(),
+		Options: *($7.restoreOptions()),
+    }
+  }
 | RESTORE targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
@@ -4109,7 +4119,7 @@ set_exprs_internal:
 // SET [SESSION] <var> { TO | = } <values...>
 // SET [SESSION] TIME ZONE <tz>
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
-// SET [SESSION] TRACING { TO | = } { on | off | cluster | local | kv | results } [,...]
+// SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
 // WEBDOCS/set-vars.html
@@ -5176,24 +5186,33 @@ show_survival_goal_stmt:
 // %Help: SHOW REGIONS - shows regions
 // %Category: DDL
 // %Text:
+// SHOW REGIONS FROM ALL DATABASES
 // SHOW REGIONS FROM CLUSTER
 // SHOW REGIONS FROM DATABASE
 // SHOW REGIONS FROM DATABASE <database>
 show_regions_stmt:
   SHOW REGIONS FROM CLUSTER
   {
-    $$.val = &tree.ShowRegions{}
+    $$.val = &tree.ShowRegions{
+      ShowRegionsFrom: tree.ShowRegionsFromCluster,
+    }
   }
 | SHOW REGIONS FROM DATABASE
   {
     $$.val = &tree.ShowRegions{
-      FromDatabase: true,
+      ShowRegionsFrom: tree.ShowRegionsFromDatabase,
+    }
+  }
+| SHOW REGIONS FROM ALL DATABASES
+  {
+    $$.val = &tree.ShowRegions{
+      ShowRegionsFrom: tree.ShowRegionsFromAllDatabases,
     }
   }
 | SHOW REGIONS FROM DATABASE database_name
   {
     $$.val = &tree.ShowRegions{
-      FromDatabase: true,
+      ShowRegionsFrom: tree.ShowRegionsFromDatabase,
       DatabaseName: tree.Name($5),
     }
   }
@@ -6104,11 +6123,11 @@ col_qualification_elem:
  }
 | generated_as '(' a_expr ')' STORED
  {
-    $$.val = &tree.ColumnComputedDef{Expr: $3.expr()}
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: false}
  }
 | generated_as '(' a_expr ')' VIRTUAL
  {
-    return unimplemented(sqllex, "virtual computed columns")
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: true}
  }
 | generated_as error
  {

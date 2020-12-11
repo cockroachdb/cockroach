@@ -3026,27 +3026,44 @@ type EvalDatabase interface {
 type EvalPlanner interface {
 	EvalDatabase
 	TypeReferenceResolver
-	// ParseType parses a column type.
-	ParseType(sql string) (*types.T, error)
+
+	// GetTypeFromValidSQLSyntax parses a column type when the input
+	// string uses the parseable SQL representation of a type name, e.g.
+	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
+	GetTypeFromValidSQLSyntax(sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
 
 	// UnsafeUpsertDescriptor is a used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
-	UnsafeUpsertDescriptor(ctx context.Context, descID int64, encodedDescriptor []byte) error
+	UnsafeUpsertDescriptor(
+		ctx context.Context, descID int64, encodedDescriptor []byte, force bool,
+	) error
 
 	// UnsafeDeleteDescriptor is a used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
-	UnsafeDeleteDescriptor(ctx context.Context, descID int64) error
+	UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error
 
 	// UnsafeUpsertNamespaceEntry is a used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
-	UnsafeUpsertNamespaceEntry(ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool) error
+	UnsafeUpsertNamespaceEntry(
+		ctx context.Context,
+		parentID, parentSchemaID int64,
+		name string,
+		descID int64,
+		force bool,
+	) error
 
 	// UnsafeDeleteNamespaceEntry is a used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
-	UnsafeDeleteNamespaceEntry(ctx context.Context, parentID, parentSchemaID int64, name string, descID int64) error
+	UnsafeDeleteNamespaceEntry(
+		ctx context.Context,
+		parentID, parentSchemaID int64,
+		name string,
+		descID int64,
+		force bool,
+	) error
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.

@@ -201,6 +201,15 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// PrimaryRegion returns the primary region for a multi-region type descriptor.
+func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return "", errors.AssertionFailedf(
+			"can not get primary region of a non multi-region type desc")
+	}
+	return desc.RegionConfig.PrimaryRegion, nil
+}
+
 // SetDrainingNames implements the MutableDescriptor interface.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names

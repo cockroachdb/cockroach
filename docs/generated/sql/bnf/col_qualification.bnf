@@ -9,6 +9,8 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'STORED'
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
+	| 'CONSTRAINT' constraint_name 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'UNIQUE' opt_without_index
@@ -19,6 +21,8 @@ col_qualification ::=
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| 'AS' '(' a_expr ')' 'STORED'
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'STORED'
+	| 'AS' '(' a_expr ')' 'VIRTUAL'
+	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
 	| 'COLLATE' collation_name
 	| 'FAMILY' family_name
 	| 'CREATE' 'FAMILY' family_name

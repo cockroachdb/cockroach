@@ -181,6 +181,14 @@ var aggregates = map[string]builtinDefinition{
 		"Calculates the sample covariance of the selected values.",
 	),
 
+	"regr_avgx": makeRegressionAggregateBuiltin(
+		newRegressionAvgXAggregate, "Calculates the average of the independent variable (sum(X)/N).",
+	),
+
+	"regr_avgy": makeRegressionAggregateBuiltin(
+		newRegressionAvgYAggregate, "Calculates the average of the dependent variable (sum(Y)/N).",
+	),
+
 	"regr_intercept": makeRegressionAggregateBuiltin(
 		newRegressionInterceptAggregate, "Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.",
 	),
@@ -1085,6 +1093,8 @@ var _ tree.AggregateFunc = &regressionSXXAggregate{}
 var _ tree.AggregateFunc = &regressionSXYAggregate{}
 var _ tree.AggregateFunc = &regressionSYYAggregate{}
 var _ tree.AggregateFunc = &regressionCountAggregate{}
+var _ tree.AggregateFunc = &regressionAvgXAggregate{}
+var _ tree.AggregateFunc = &regressionAvgYAggregate{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -2012,6 +2022,44 @@ func (a *covarSampAggregate) Result() (tree.Datum, error) {
 	}
 
 	return tree.NewDFloat(tree.DFloat(a.sxy / (a.n - 1))), nil
+}
+
+// regressionAvgXAggregate represents SQL:2003 average of the independent
+// variable (sum(X)/N).
+type regressionAvgXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionAvgXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionAvgXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sx / a.n)), nil
+}
+
+// regressionAvgYAggregate represents SQL:2003 average of the dependent
+// variable (sum(Y)/N).
+type regressionAvgYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionAvgYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionAvgYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionAvgYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sy / a.n)), nil
 }
 
 // regressionInterceptAggregate represents y-intercept.

@@ -10,7 +10,6 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import { Link } from "react-router-dom";
 import moment from "moment";
 import Long from "long";
 import classnames from "classnames/bind";
@@ -24,6 +23,7 @@ import {
   DownloadFile,
   DownloadFileRef,
   Anchor,
+  Link,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";

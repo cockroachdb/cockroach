@@ -56,11 +56,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 statement error index "zap" does not exist
 DROP INDEX users@zap
@@ -72,11 +72,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 # Also test that dropping with a non-existing index still drops 'foo'.
 
@@ -87,9 +87,9 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             name         ASC        false    false
+users       primary     false       1             id           ASC        false    false
 
 user testuser
 
@@ -142,11 +142,11 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
-users       foo         true        1             name         ASC        false    false
-users       foo         true        2             id           ASC        false    true
 users       bar         true        1             title        ASC        false    false
 users       bar         true        2             id           ASC        false    true
+users       foo         true        1             name         ASC        false    false
+users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 statement ok
 CREATE VIEW v AS SELECT name FROM users@{FORCE_INDEX=foo}
@@ -161,19 +161,19 @@ query TTBITTBB colnames
 SHOW INDEXES FROM users
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
-users       primary     false       1             id           ASC        false    false
 users       foo         true        1             name         ASC        false    false
 users       foo         true        2             id           ASC        false    true
+users       primary     false       1             id           ASC        false    false
 
 statement ok
 CREATE VIEW v2 AS SELECT name FROM v
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  users  table  root  0
-public  v      view   root  0
-public  v2     view   root  0
+public  users  table  root  0  NULL
+public  v      view   root  0  NULL
+public  v2     view   root  0  NULL
 
 statement ok
 GRANT ALL ON users to testuser
@@ -197,10 +197,10 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 
-query TTTTI
+query TTTTIT
 SHOW TABLES
 ----
-public  users  table  root  0
+public  users  table  root  0  NULL
 
 # Test the syntax without a '@'
 

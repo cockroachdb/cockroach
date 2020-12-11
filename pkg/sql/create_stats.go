@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,39 +57,6 @@ var featureStatsEnabled = settings.RegisterPublicBoolSetting(
 	"set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault)
 
-func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
-	if err := featureflag.CheckEnabled(
-		ctx,
-		featureStatsEnabled,
-		&p.ExecCfg().Settings.SV,
-		"ANALYZE/CREATE STATISTICS",
-	); err != nil {
-		return nil, err
-	}
-
-	return &createStatsNode{
-		CreateStats: *n,
-		p:           p,
-	}, nil
-}
-
-// Analyze is syntactic sugar for CreateStatistics.
-func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
-	if err := featureflag.CheckEnabled(
-		ctx,
-		featureStatsEnabled,
-		&p.ExecCfg().Settings.SV,
-		"ANALYZE/CREATE STATISTICS",
-	); err != nil {
-		return nil, err
-	}
-
-	return &createStatsNode{
-		CreateStats: tree.CreateStats{Table: n.Table},
-		p:           p,
-	}, nil
-}
-
 const defaultHistogramBuckets = 200
 const nonIndexColHistogramBuckets = 2
 
@@ -99,6 +67,13 @@ const nonIndexColHistogramBuckets = 2
 type createStatsNode struct {
 	tree.CreateStats
 	p *planner
+
+	// runAsJob is true by default, and causes the code below to be executed,
+	// which sets up a job and waits for it.
+	//
+	// If it is false, the flow for create statistics is planned directly; this
+	// is used when the statement is under EXPLAIN or EXPLAIN ANALYZE.
+	runAsJob bool
 
 	run createStatsRun
 }
@@ -275,6 +250,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 	// Create a job to run statistics creation.
 	statement := tree.AsStringWithFQNames(n, n.p.EvalContext().Annotations)
+	eventLogStatement := statement
 	var description string
 	if n.Name == stats.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.
@@ -294,7 +270,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			FQTableName:     fqTableName,
 			Table:           tableDesc.TableDescriptor,
 			ColumnStats:     colStats,
-			Statement:       n.String(),
+			Statement:       eventLogStatement,
 			AsOf:            asOf,
 			MaxFractionIdle: n.Options.Throttling,
 		},
@@ -480,20 +456,6 @@ func makeColStatKey(cols []descpb.ColumnID) string {
 	return colSet.String()
 }
 
-// newPlanForExplainDistSQL is part of the distSQLExplainable interface.
-func (n *createStatsNode) newPlanForExplainDistSQL(
-	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner,
-) (*PhysicalPlan, error) {
-	// Create a job record but don't actually start the job.
-	record, err := n.makeJobRecord(planCtx.ctx)
-	if err != nil {
-		return nil, err
-	}
-	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
-
-	return distSQLPlanner.createPlanForCreateStats(planCtx, job)
-}
-
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
 // jobs. A new instance is created for each job.
 type createStatsResumer struct {
@@ -588,19 +550,20 @@ func (r *createStatsResumer) Resume(
 	// because that transaction must be read-only. In the future we may want
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
-	// MakeEventLogger from the distsqlrun package.
+	// logEvent() from the distsqlrun package.
+	//
+	// TODO(knz): figure out why this is not triggered for a regular
+	// CREATE STATISTICS statement.
+	// See: https://github.com/cockroachdb/cockroach/issues/57739
 	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return MakeEventLogger(evalCtx.ExecCfg).InsertEventRecord(
-			ctx,
-			txn,
-			EventLogCreateStatistics,
-			int32(details.Table.ID),
-			int32(evalCtx.NodeID.SQLInstanceID()),
-			struct {
-				TableName string
-				Statement string
-			}{details.FQTableName, details.Statement},
-		)
+		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
+			evalCtx.NodeID.SQLInstanceID(),
+			details.Table.ID,
+			evalCtx.SessionData.User(),
+			details.Statement,
+			&eventpb.CreateStatistics{
+				TableName: details.FQTableName,
+			})
 	})
 }
 

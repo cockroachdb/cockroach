@@ -54,17 +54,20 @@ func (a *concatOrderedAgg) Compute(
 				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
-						// If we encounter a new group, and we haven't found any non-nulls for the
-						// current group, the output for this group should be null.
-						if !a.foundNonNullForCurrentGroup {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col.Set(a.curIdx, a.curAgg)
-						}
-						a.curIdx++
-						a.curAgg = zeroBytesValue
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.curAgg = zeroBytesValue
 
-						a.foundNonNullForCurrentGroup = false
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -78,16 +81,19 @@ func (a *concatOrderedAgg) Compute(
 				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
-						// If we encounter a new group, and we haven't found any non-nulls for the
-						// current group, the output for this group should be null.
-						if !a.foundNonNullForCurrentGroup {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col.Set(a.curIdx, a.curAgg)
-						}
-						a.curIdx++
-						a.curAgg = zeroBytesValue
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.curAgg = zeroBytesValue
 
+						}
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -104,17 +110,20 @@ func (a *concatOrderedAgg) Compute(
 				for _, i := range sel {
 
 					if groups[i] {
-						// If we encounter a new group, and we haven't found any non-nulls for the
-						// current group, the output for this group should be null.
-						if !a.foundNonNullForCurrentGroup {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col.Set(a.curIdx, a.curAgg)
-						}
-						a.curIdx++
-						a.curAgg = zeroBytesValue
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.curAgg = zeroBytesValue
 
-						a.foundNonNullForCurrentGroup = false
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -128,16 +137,19 @@ func (a *concatOrderedAgg) Compute(
 				for _, i := range sel {
 
 					if groups[i] {
-						// If we encounter a new group, and we haven't found any non-nulls for the
-						// current group, the output for this group should be null.
-						if !a.foundNonNullForCurrentGroup {
-							a.nulls.SetNull(a.curIdx)
-						} else {
-							a.col.Set(a.curIdx, a.curAgg)
-						}
-						a.curIdx++
-						a.curAgg = zeroBytesValue
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.curAgg = zeroBytesValue
 
+						}
+						a.isFirstGroup = false
 					}
 
 					var isNull bool
@@ -152,7 +164,9 @@ func (a *concatOrderedAgg) Compute(
 	},
 	)
 	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *concatOrderedAgg) Flush(outputIdx int) {

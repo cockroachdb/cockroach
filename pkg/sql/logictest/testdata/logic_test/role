@@ -1113,12 +1113,12 @@ SHOW DATABASES
 ----
 publicdb  root  NULL  {}  NULL
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  root  NULL
+public  publictable  table  root  NULL  NULL
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM privatedb
 ----
 
@@ -1161,7 +1161,7 @@ SELECT * FROM publicdb.publictable
 statement error user testuser does not have INSERT privilege on relation publictable
 INSERT INTO publicdb.publictable VALUES (1)
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM publicdb
 ----
 

@@ -11,9 +11,9 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"io"
 	"net"
+	"os"
 
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
@@ -26,6 +26,7 @@ var pgSSLRequest = []int32{8, 80877103}
 
 // BackendConfig contains the configuration of a backend connection that is
 // being proxied.
+// To be removed once all clients are migrated to use backend dialer.
 type BackendConfig struct {
 	// The address to which the connection is forwarded.
 	OutgoingAddress string
@@ -50,23 +51,30 @@ type BackendConfig struct {
 type Options struct {
 	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
 
-	// TODO(tbg): this is unimplemented and exists only to check which clients
-	// allow use of SNI. Should always return ("", nil).
-	BackendConfigFromSNI func(serverName string) (config *BackendConfig, clientErr error)
 	// BackendFromParams returns the config to use for the proxy -> backend
 	// connection. The TLS config is in it and it must have an appropriate
 	// ServerName for the remote backend.
+	// Deprecated: processing of the params now happens in the BackendDialer.
+	// This is only here to support OnSuccess and KeepAlive.
 	BackendConfigFromParams func(
 		params map[string]string, incomingConn *Conn,
 	) (config *BackendConfig, clientErr error)
 
 	// If set, consulted to modify the parameters set by the frontend before
 	// forwarding them to the backend during startup.
+	// Deprecated: include the code that modifies the request params
+	// in the backend dialer.
 	ModifyRequestParams func(map[string]string)
 
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
+
+	// If set, will be used to establish and return connection to the backend.
+	// If not set, the old logic will be used.
+	// The argument is the startup message received from the frontend. It
+	// contains the protocol version and params sent by the client.
+	BackendDialer func(msg *pgproto3.StartupMessage) (net.Conn, error)
 }
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
@@ -76,9 +84,16 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		if s.opts.OnSendErrToClient != nil {
 			msg = s.opts.OnSendErrToClient(code, msg)
 		}
+
+		var pgCode string
+		if code == CodeIdleDisconnect {
+			pgCode = "57P01" // admin shutdown
+		} else {
+			pgCode = "08004" // rejected connection
+		}
 		_, _ = conn.Write((&pgproto3.ErrorResponse{
 			Severity: "FATAL",
-			Code:     "08004", // rejected connection
+			Code:     pgCode,
 			Message:  msg,
 		}).Encode(nil))
 	}
@@ -88,6 +103,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	// hence it's important to close `conn` rather than `proxyConn` since closing
 	// the latter will not call `Close` method of `tls.Conn`.
 	defer func() { _ = conn.Close() }()
+	var sniServerName string
 	// If we have an incoming TLS Config, require that the client initiates
 	// with a TLS connection.
 	if s.opts.IncomingTLSConfig != nil {
@@ -114,21 +130,10 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		}
 
 		cfg := s.opts.IncomingTLSConfig.Clone()
-		var sniServerName string
+
 		cfg.GetConfigForClient = func(h *tls.ClientHelloInfo) (*tls.Config, error) {
 			sniServerName = h.ServerName
 			return nil, nil
-		}
-		if s.opts.BackendConfigFromSNI != nil {
-			cfg, clientErr := s.opts.BackendConfigFromSNI(sniServerName)
-			if clientErr != nil {
-				code := CodeSNIRoutingFailed
-				sendErrToClient(conn, code, clientErr.Error()) // won't actually be shown by most clients
-				return NewErrorf(code, "rejected by OutgoingAddrFromSNI")
-			}
-			if cfg.OutgoingAddress != "" {
-				return NewErrorf(CodeSNIRoutingFailed, "BackendConfigFromSNI is unimplemented")
-			}
 		}
 		conn = tls.Server(conn, cfg)
 	}
@@ -142,73 +147,65 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		return NewErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
-	var backendConfig *BackendConfig
-	{
-		var clientErr error
-		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
-		if clientErr != nil {
-			var codeErr *codeError
-			if !errors.As(clientErr, &codeErr) {
-				codeErr = &codeError{
-					code: CodeParamsRoutingFailed,
-					err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
+	// Add the sniServerName (if used) as parameter
+	if sniServerName != "" {
+		msg.Parameters["sni-server"] = sniServerName
+	}
+
+	backendDialer := s.opts.BackendDialer
+	if backendDialer == nil {
+		// This we need to keep until all the clients are switched to provide BackendDialer.
+		// It constructs a backend dialer from the information provided via
+		// BackendConfigFromParams function.
+		backendDialer = func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+			backendConfig, clientErr := s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
+			if clientErr != nil {
+				var codeErr *CodeError
+				if !errors.As(clientErr, &codeErr) {
+					codeErr = &CodeError{
+						code: CodeParamsRoutingFailed,
+						err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
+					}
 				}
+				return nil, codeErr
 			}
-			if codeErr.code == CodeProxyRefusedConnection {
-				s.metrics.RefusedConnCount.Inc(1)
-			} else {
-				s.metrics.RoutingErrCount.Inc(1)
+
+			// We should be able to remove this when the all clients switch to
+			// backend dialer.
+			if s.opts.ModifyRequestParams != nil {
+				s.opts.ModifyRequestParams(msg.Parameters)
 			}
-			sendErrToClient(conn, codeErr.code, clientErr.Error())
-			return codeErr
+
+			crdbConn, err := BackendDial(msg, backendConfig.OutgoingAddress, backendConfig.TLSConf)
+			if err != nil {
+				return nil, err
+			}
+
+			return crdbConn, nil
 		}
 	}
 
-	crdbConn, err := net.Dial("tcp", backendConfig.OutgoingAddress)
+	crdbConn, err := backendDialer(msg)
 	if err != nil {
 		s.metrics.BackendDownCount.Inc(1)
-		code := CodeBackendDown
-		sendErrToClient(conn, code, "unable to reach backend SQL server")
-		return NewErrorf(code, "dialing backend server: %v", err)
+		var codeErr *CodeError
+		if !errors.As(err, &codeErr) {
+			codeErr = &CodeError{
+				code: CodeBackendDown,
+				err:  errors.Errorf("unable to reach backend SQL server: %v", err),
+			}
+		}
+		if codeErr.code == CodeProxyRefusedConnection {
+			s.metrics.RefusedConnCount.Inc(1)
+		} else if codeErr.code == CodeParamsRoutingFailed {
+			s.metrics.RoutingErrCount.Inc(1)
+		}
+		sendErrToClient(conn, codeErr.code, codeErr.Error())
+		return codeErr
 	}
 	defer func() { _ = crdbConn.Close() }()
 
-	if backendConfig.TLSConf != nil {
-		// Send SSLRequest.
-		if err := binary.Write(crdbConn, binary.BigEndian, pgSSLRequest); err != nil {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendDown, "sending SSLRequest to target server: %v", err)
-		}
-
-		response := make([]byte, 1)
-		if _, err = io.ReadFull(crdbConn, response); err != nil {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendDown, "reading response to SSLRequest")
-		}
-
-		if response[0] != pgAcceptSSLRequest {
-			s.metrics.BackendDownCount.Inc(1)
-			return NewErrorf(CodeBackendRefusedTLS, "target server refused TLS connection")
-		}
-
-		outCfg := backendConfig.TLSConf.Clone()
-		crdbConn = tls.Client(crdbConn, outCfg)
-	}
-
-	if s.opts.ModifyRequestParams != nil {
-		s.opts.ModifyRequestParams(msg.Parameters)
-	}
-
-	if _, err := crdbConn.Write(msg.Encode(nil)); err != nil {
-		s.metrics.BackendDownCount.Inc(1)
-		return NewErrorf(CodeBackendDown, "relaying StartupMessage to target server %v: %v",
-			backendConfig.OutgoingAddress, err)
-	}
-
 	s.metrics.SuccessfulConnCount.Inc(1)
-	if backendConfig.OnConnectionSuccess != nil {
-		backendConfig.OnConnectionSuccess()
-	}
 
 	// These channels are buffered because we'll only consume one of them.
 	errOutgoing := make(chan error, 1)
@@ -217,6 +214,22 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if s.opts.BackendConfigFromParams != nil {
+		// Ignore the next error as we already did all checks in the BackendDialer
+		// so there shouldn't be any errors here.
+		// This is temporary until Spas moves processing of OnConnectionSuccess and
+		// KeepAliveLoop outside of the proxy.
+		backendConfig, _ := s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
+		if backendConfig.OnConnectionSuccess != nil {
+			backendConfig.OnConnectionSuccess()
+		}
+		if backendConfig.KeepAliveLoop != nil {
+			go func() {
+				errExpired <- backendConfig.KeepAliveLoop(ctx)
+			}()
+		}
+	}
+
 	go func() {
 		_, err := io.Copy(crdbConn, conn)
 		errOutgoing <- err
@@ -225,11 +238,6 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		_, err := io.Copy(conn, crdbConn)
 		errIncoming <- err
 	}()
-	if backendConfig.KeepAliveLoop != nil {
-		go func() {
-			errExpired <- backendConfig.KeepAliveLoop(ctx)
-		}()
-	}
 
 	select {
 	// NB: when using pgx, we see a nil errIncoming first on clean connection
@@ -239,11 +247,21 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	// client gets to close the connection once it's sent that message,
 	// meaning either case is possible.
 	case err := <-errIncoming:
-		if err != nil {
+		if err == nil {
+			return nil
+		} else if codeErr := (*CodeError)(nil); errors.As(err, &codeErr) &&
+			codeErr.code == CodeExpiredClientConnection {
+			s.metrics.ExpiredClientConnCount.Inc(1)
+			sendErrToClient(conn, codeErr.code, codeErr.Error())
+			return codeErr
+		} else if errors.Is(err, os.ErrDeadlineExceeded) {
+			s.metrics.IdleDisconnectCount.Inc(1)
+			sendErrToClient(conn, CodeIdleDisconnect, "terminating connection due to idle timeout")
+			return NewErrorf(CodeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
+		} else {
 			s.metrics.BackendDisconnectCount.Inc(1)
 			return NewErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
 		}
-		return nil
 	case err := <-errOutgoing:
 		// The incoming connection got closed.
 		if err != nil {

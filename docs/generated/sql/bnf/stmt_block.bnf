@@ -175,6 +175,7 @@ reset_stmt ::=
 
 restore_stmt ::=
 	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 
@@ -669,6 +670,7 @@ show_range_for_row_stmt ::=
 show_regions_stmt ::=
 	'SHOW' 'REGIONS' 'FROM' 'CLUSTER'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE'
+	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
 
 show_survival_goal_stmt ::=
@@ -2872,6 +2874,7 @@ col_qualification_elem ::=
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
 	| generated_as '(' a_expr ')' 'STORED'
+	| generated_as '(' a_expr ')' 'VIRTUAL'
 
 family_name ::=
 	name

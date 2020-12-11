@@ -102,7 +102,7 @@ SELECT orphan FROM geo_table
 query TTBTTTB rowsort
 SHOW COLUMNS FROM geo_table
 ----
-id      INT8                      false  NULL  ·  {primary,geo_table_geom_idx,geo_table_geog_idx}  false
+id      INT8                      false  NULL  ·  {geo_table_geog_idx,geo_table_geom_idx,primary}  false
 geog    GEOGRAPHY(GEOMETRY,4326)  true   NULL  ·  {geo_table_geog_idx}                             false
 geom    GEOMETRY(POINT)           true   NULL  ·  {geo_table_geom_idx}                             false
 orphan  GEOGRAPHY                 true   NULL  ·  {}                                               false
@@ -5015,6 +5015,11 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 NULL
 
 query T
+SELECT ST_AsText(ST_MakeLine(geom ORDER BY geom)) FROM geo_table
+----
+LINESTRING (1 1, 2 2, 2.22 -2.445)
+
+query T
 SELECT ST_Extent(g::geometry) FROM ( VALUES
   (NULL),
   ('POINT(-10.5 10.5)'),
@@ -5090,6 +5095,16 @@ query T
 SELECT ST_AsEWKT(ST_Collect(g::geometry)) FROM ( VALUES ('GEOMETRYCOLLECTION (POINT (1 1))'), ('GEOMETRYCOLLECTION (POINT (2 2))')) tbl(g)
 ----
 GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (1 1)), GEOMETRYCOLLECTION (POINT (2 2)))
+
+query T
+SELECT ST_AsText(ST_Collect(geom ORDER BY geom)) FROM geo_table
+----
+MULTIPOINT (1 1, 2 2, 2.22 -2.445)
+
+query T
+SELECT ST_AsText(ST_MemCollect(geom ORDER BY geom)) FROM geo_table
+----
+MULTIPOINT (1 1, 2 2, 2.22 -2.445)
 
 query T
 SELECT ST_AsEWKT(ST_MemCollect(g::geometry)) FROM ( VALUES (NULL), ('POINT (1 1)'), ('POINT EMPTY'), ('POINT (2 2)')) tbl(g)

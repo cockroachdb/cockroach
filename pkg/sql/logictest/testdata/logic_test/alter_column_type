@@ -322,6 +322,13 @@ CREATE TABLE t12 (x INT check (x > 0))
 statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
 ALTER TABLE t12 ALTER COLUMN x TYPE STRING
 
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
+
+statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+ALTER TABLE uniq ALTER COLUMN x TYPE STRING
+
 # Ensure ALTER COLUMN TYPE works correctly for interleaved tables.
 statement ok
 CREATE TABLE t13 (x INT PRIMARY KEY, y INT);

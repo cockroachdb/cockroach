@@ -12,21 +12,67 @@ package execinfrapb
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/types"
 )
 
-// Stats is part of SpanStats interface.
-func (s *ComponentStats) Stats() map[string]string {
+// ProcessorComponentID returns a ComponentID for the given processor in a flow.
+func ProcessorComponentID(flowID FlowID, processorID int32) ComponentID {
+	return ComponentID{
+		FlowID: flowID,
+		Type:   ComponentID_PROCESSOR,
+		ID:     processorID,
+	}
+}
+
+// StreamComponentID returns a ComponentID for the given stream in a flow.
+func StreamComponentID(flowID FlowID, streamID StreamID) ComponentID {
+	return ComponentID{
+		FlowID: flowID,
+		Type:   ComponentID_STREAM,
+		ID:     int32(streamID),
+	}
+}
+
+// FlowIDTagKey is the key used for flow id tags in tracing spans.
+const (
+	FlowIDTagKey = tracing.TagPrefix + "flowid"
+
+	// StreamIDTagKey is the key used for stream id tags in tracing spans.
+	StreamIDTagKey = tracing.TagPrefix + "streamid"
+
+	// ProcessorIDTagKey is the key used for processor id tags in tracing spans.
+	ProcessorIDTagKey = tracing.TagPrefix + "processorid"
+
+	// StatTagPrefix is prefixed to all stats output in Span tags.
+	StatTagPrefix = tracing.TagPrefix + "stat."
+)
+
+// StatsTags is part of the tracing.SpanStats interface.
+func (s *ComponentStats) StatsTags() map[string]string {
 	result := make(map[string]string, 4)
+	if s.Component != (ComponentID{}) {
+		result[FlowIDTagKey] = s.Component.FlowID.String()
+		switch s.Component.Type {
+		case ComponentID_PROCESSOR:
+			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID))
+		case ComponentID_STREAM:
+			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID))
+		}
+	}
+
 	s.formatStats(func(key string, value interface{}) {
 		// The key becomes a tracing span tag. Replace spaces with dots and use
 		// only lowercase characters.
 		key = strings.ToLower(strings.ReplaceAll(key, " ", "."))
-		result[key] = fmt.Sprint(value)
+		result[StatTagPrefix+key] = fmt.Sprint(value)
 	})
 	return result
 }
@@ -98,7 +144,6 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("KV time", humanizeutil.Duration(s.KV.KVTime.Value()))
 	}
 	if s.KV.ContentionTime.HasValue() {
-		// TODO(asubiotto): Round once KV layer produces real contention events.
 		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
 	if s.KV.TuplesRead.HasValue() {
@@ -126,6 +171,82 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.Output.NumTuples.HasValue() {
 		fn("tuples output", humanizeutil.Count(s.Output.NumTuples.Value()))
 	}
+}
+
+// Union creates a new ComponentStats that contains all statistics in either the
+// receiver (s) or the argument (other).
+// If a statistic is set in both, the one in the receiver (s) is preferred.
+func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
+	result := *s
+
+	// Network Rx stats.
+	if !result.NetRx.Latency.HasValue() {
+		result.NetRx.Latency = other.NetRx.Latency
+	}
+	if !result.NetRx.WaitTime.HasValue() {
+		result.NetRx.WaitTime = other.NetRx.WaitTime
+	}
+	if !result.NetRx.DeserializationTime.HasValue() {
+		result.NetRx.DeserializationTime = other.NetRx.DeserializationTime
+	}
+	if !result.NetRx.TuplesReceived.HasValue() {
+		result.NetRx.TuplesReceived = other.NetRx.TuplesReceived
+	}
+	if !result.NetRx.BytesReceived.HasValue() {
+		result.NetRx.BytesReceived = other.NetRx.BytesReceived
+	}
+
+	// Network Tx stats.
+	if !result.NetTx.TuplesSent.HasValue() {
+		result.NetTx.TuplesSent = other.NetTx.TuplesSent
+	}
+	if !result.NetTx.BytesSent.HasValue() {
+		result.NetTx.BytesSent = other.NetTx.BytesSent
+	}
+
+	// Input stats. Make sure we don't reuse slices.
+	result.Inputs = append([]InputStats(nil), s.Inputs...)
+	result.Inputs = append(result.Inputs, other.Inputs...)
+
+	// KV stats.
+	if !result.KV.KVTime.HasValue() {
+		result.KV.KVTime = other.KV.KVTime
+	}
+	if !result.KV.ContentionTime.HasValue() {
+		result.KV.ContentionTime = other.KV.ContentionTime
+	}
+	if !result.KV.TuplesRead.HasValue() {
+		result.KV.TuplesRead = other.KV.TuplesRead
+	}
+	if !result.KV.BytesRead.HasValue() {
+		result.KV.BytesRead = other.KV.BytesRead
+	}
+
+	// Exec stats.
+	if !result.Exec.ExecTime.HasValue() {
+		result.Exec.ExecTime = other.Exec.ExecTime
+	}
+	if !result.Exec.MaxAllocatedMem.HasValue() {
+		result.Exec.MaxAllocatedMem = other.Exec.MaxAllocatedMem
+	}
+	if !result.Exec.MaxAllocatedDisk.HasValue() {
+		result.Exec.MaxAllocatedDisk = other.Exec.MaxAllocatedDisk
+	}
+
+	// Output stats.
+	if !result.Output.NumBatches.HasValue() {
+		result.Output.NumBatches = other.Output.NumBatches
+	}
+	if !result.Output.NumTuples.HasValue() {
+		result.Output.NumTuples = other.Output.NumTuples
+	}
+
+	// Flow stats.
+	if !result.FlowStats.MaxMemUsage.HasValue() {
+		result.FlowStats.MaxMemUsage = other.FlowStats.MaxMemUsage
+	}
+
+	return &result
 }
 
 // MakeDeterministic is used only for testing; it modifies any non-deterministic
@@ -189,4 +310,39 @@ func (s *ComponentStats) MakeDeterministic() {
 	for i := range s.Inputs {
 		timeVal(&s.Inputs[i].WaitTime)
 	}
+}
+
+// ExtractStatsFromSpans extracts all ComponentStats from a set of tracing
+// spans.
+func ExtractStatsFromSpans(
+	spans []tracingpb.RecordedSpan, makeDeterministic bool,
+) map[ComponentID]*ComponentStats {
+	statsMap := make(map[ComponentID]*ComponentStats)
+	for i := range spans {
+		if spans[i].Stats == nil {
+			continue
+		}
+
+		var stats ComponentStats
+		if err := types.UnmarshalAny(spans[i].Stats, &stats); err != nil {
+			continue
+		}
+		if stats.Component == (ComponentID{}) {
+			continue
+		}
+		if makeDeterministic {
+			stats.MakeDeterministic()
+		}
+		existing := statsMap[stats.Component]
+		if existing == nil {
+			statsMap[stats.Component] = &stats
+		} else {
+			// In the vectorized flow we can have multiple statistics entries for one
+			// component. Merge the stats together.
+			// TODO(radu): figure out a way to emit the statistics correctly in the
+			// first place.
+			statsMap[stats.Component] = existing.Union(&stats)
+		}
+	}
+	return statsMap
 }

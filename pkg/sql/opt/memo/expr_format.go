@@ -608,6 +608,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			n.Child(f.Buffer.String())
 		}
 
+	case *CreateStatisticsExpr:
+		tp.Child(t.Syntax.String())
+
 	case *ExportExpr:
 		tp.Childf("format: %s", t.FileFormat)
 

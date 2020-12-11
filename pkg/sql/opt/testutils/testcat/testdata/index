@@ -122,24 +122,24 @@ TABLE xyz
  ├── y int
  ├── z string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
- ├── idx_expr_2 int as (y + 1) stored [hidden] [virtual-computed]
- ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
+ ├── idx_expr_1 string as (lower(z)) virtual [hidden]
+ ├── idx_expr_2 int as (y + 1) virtual [hidden]
+ ├── idx_expr_3 int as (x + y) virtual [hidden]
  ├── INDEX primary
  │    └── x int not null
  ├── INDEX idx1
- │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
  │    └── x int not null
  ├── INDEX idx2
- │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
  │    ├── y int
  │    └── x int not null
  ├── INDEX idx3
- │    ├── idx_expr_2 int as (y + 1) stored [hidden] [virtual-computed]
- │    ├── idx_expr_1 string as (lower(z)) stored [hidden] [virtual-computed]
+ │    ├── idx_expr_2 int as (y + 1) virtual [hidden]
+ │    ├── idx_expr_1 string as (lower(z)) virtual [hidden]
  │    └── x int not null
  ├── INDEX idx4
- │    ├── idx_expr_3 int as (x + y) stored [hidden] [virtual-computed]
+ │    ├── idx_expr_3 int as (x + y) virtual [hidden]
  │    ├── y int
  │    ├── x int not null
  │    ├── z string (storing)

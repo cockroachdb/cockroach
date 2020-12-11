@@ -86,6 +86,7 @@ type DatabaseDescriptor interface {
 	Regions() (descpb.Regions, error)
 	IsMultiRegion() bool
 	PrimaryRegion() (descpb.Region, error)
+	Validate() error
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -172,6 +173,7 @@ type TableDescriptor interface {
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor

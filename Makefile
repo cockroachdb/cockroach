@@ -810,6 +810,7 @@ COCKROACHSHORT := ./cockroachshort$(SUFFIX)
 LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
 	pkg/util/log/channel/channel_generated.go \
+	pkg/util/log/eventpb/eventlog_channels_generated.go \
 	pkg/util/log/log_channels_generated.go
 
 SQLPARSER_TARGETS = \
@@ -827,7 +828,8 @@ DOCGEN_TARGETS := \
 	bin/.docgen_functions \
 	docs/generated/redact_safe.md \
 	bin/.docgen_http \
-	docs/generated/logging.md
+	docs/generated/logging.md \
+	docs/generated/eventlog.md
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -904,6 +906,11 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/exec/factory.og.go \
 	pkg/sql/opt/exec/explain/explain_factory.og.go
 
+test-targets := \
+	check test testshort testslow testrace testraceslow testbuild \
+	stress stressrace \
+	roachprod-stress roachprod-stressrace
+
 go-targets-ccl := \
 	$(COCKROACH) \
 	bin/workload \
@@ -935,6 +942,9 @@ $(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
 $(COCKROACHSHORT): $(C_LIBS_SHORT)
+
+# For test targets, add a tag (used to enable extra assertions).
+$(test-targets): TAGS += crdb_test
 
 $(go-targets-ccl): $(C_LIBS_CCL)
 
@@ -1490,8 +1500,8 @@ pkg/sql/lexbase/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserv
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
-pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/lex/all_keywords.go | bin/.bootstrap
-	go run -tags all-keywords pkg/sql/lex/all_keywords.go < $< > $@.tmp || rm $@.tmp
+pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/lex/allkeywords/main.go | bin/.bootstrap
+	go run -tags all-keywords pkg/sql/lex/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
@@ -1544,24 +1554,37 @@ docs/generated/redact_safe.md:
 	  sed -E -e 's/^([^:]*):[0-9]+:.*redact\.RegisterSafeType\((.*)\).*/\1 | \`\2\`/g' >>$@.tmp || { rm -f $@.tmp; exit 1; }
 	@mv -f $@.tmp $@
 
-docs/generated/logging.md: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
-	bash $< logging.md >$@.tmp || { rm -f $@.tmp; exit 1; }
+EVENTLOG_PROTOS = \
+	pkg/util/log/eventpb/events.proto \
+	pkg/util/log/eventpb/ddl_events.proto \
+	pkg/util/log/eventpb/misc_sql_events.proto \
+	pkg/util/log/eventpb/privilege_events.proto \
+	pkg/util/log/eventpb/role_events.proto \
+	pkg/util/log/eventpb/cluster_events.proto
+
+docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
-pkg/util/log/severity/severity_generated.go: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
-	bash $< severity.go >$@.tmp || { rm -f $@.tmp; exit 1; }
+pkg/util/log/eventpb/eventlog_channels_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog_channels $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
-	gofmt -s -w $@
 
-pkg/util/log/channel/channel_generated.go: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
-	bash $< channel.go >$@.tmp || { rm -f $@.tmp; exit 1; }
+docs/generated/logging.md: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
-	gofmt -s -w $@
 
-pkg/util/log/log_channels_generated.go: pkg/util/log/gen.sh pkg/util/log/logpb/log.proto
-	bash $< log_channels.go >$@.tmp || { rm -f $@.tmp; exit 1; }
+pkg/util/log/severity/severity_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
-	gofmt -s -w $@
+
+pkg/util/log/channel/channel_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+
+pkg/util/log/log_channels_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
 
 settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
 

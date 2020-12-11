@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterDatabaseOwnerNode struct {
@@ -68,18 +69,10 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 
 	// Log Alter Database Owner event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogAlterDatabaseOwner,
-		int32(n.desc.GetID()),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			DatabaseName string
-			Owner        string
-			User         string
-		}{n.n.Name.String(), newOwner.Normalized(), params.p.User().Normalized()},
-	)
+	return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterDatabaseOwner{
+		DatabaseName: n.n.Name.String(),
+		Owner:        newOwner.Normalized(),
+	})
 }
 
 // checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.

@@ -359,21 +359,6 @@ func ColVecToDatumAndDeselect(
 					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 				}
 			}
-		case types.OidFamily:
-			switch ct.Width() {
-			case -1:
-			default:
-				typedCol := col.Int64()
-				for idx = 0; idx < length; idx++ {
-					destIdx = idx
-					srcIdx = sel[idx]
-					if nulls.NullAt(srcIdx) {
-						converted[destIdx] = tree.DNull
-						continue
-					}
-					converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
-				}
-			}
 		case types.UuidFamily:
 			switch ct.Width() {
 			case -1:
@@ -564,17 +549,6 @@ func ColVecToDatumAndDeselect(
 					// Note that there is no need for a copy since DBytes uses a string
 					// as underlying storage, which will perform the copy for us.
 					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
-				}
-			}
-		case types.OidFamily:
-			switch ct.Width() {
-			case -1:
-			default:
-				typedCol := col.Int64()
-				for idx = 0; idx < length; idx++ {
-					destIdx = idx
-					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 				}
 			}
 		case types.UuidFamily:
@@ -801,21 +775,6 @@ func ColVecToDatum(
 						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
-			case types.OidFamily:
-				switch ct.Width() {
-				case -1:
-				default:
-					typedCol := col.Int64()
-					for idx = 0; idx < length; idx++ {
-						destIdx = sel[idx]
-						srcIdx = sel[idx]
-						if nulls.NullAt(srcIdx) {
-							converted[destIdx] = tree.DNull
-							continue
-						}
-						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
-					}
-				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1047,21 +1006,6 @@ func ColVecToDatum(
 						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
-			case types.OidFamily:
-				switch ct.Width() {
-				case -1:
-				default:
-					typedCol := col.Int64()
-					for idx = 0; idx < length; idx++ {
-						destIdx = idx
-						srcIdx = idx
-						if nulls.NullAt(srcIdx) {
-							converted[destIdx] = tree.DNull
-							continue
-						}
-						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
-					}
-				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1256,17 +1200,6 @@ func ColVecToDatum(
 						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
 					}
 				}
-			case types.OidFamily:
-				switch ct.Width() {
-				case -1:
-				default:
-					typedCol := col.Int64()
-					for idx = 0; idx < length; idx++ {
-						destIdx = sel[idx]
-						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
-					}
-				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1436,17 +1369,6 @@ func ColVecToDatum(
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
-					}
-				}
-			case types.OidFamily:
-				switch ct.Width() {
-				case -1:
-				default:
-					typedCol := col.Int64()
-					for idx = 0; idx < length; idx++ {
-						destIdx = idx
-						srcIdx = idx
-						converted[destIdx] = da.NewDOid(tree.MakeDOid(tree.DInt(typedCol[srcIdx])))
 					}
 				}
 			case types.UuidFamily:

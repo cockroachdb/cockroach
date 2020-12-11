@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
@@ -62,6 +63,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// {{if not (eq .CountKind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
@@ -116,6 +118,10 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 		}
 	},
 	)
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *count_COUNTKIND_AGGKINDAgg) Flush(outputIdx int) {
@@ -168,9 +174,12 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		a.col[a.curIdx] = a.curAgg
-		a.curIdx++
-		a.curAgg = int64(0)
+		if !a.isFirstGroup {
+			a.col[a.curIdx] = a.curAgg
+			a.curIdx++
+			a.curAgg = int64(0)
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

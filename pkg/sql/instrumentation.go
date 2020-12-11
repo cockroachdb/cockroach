@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -28,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/types"
 )
 
 // instrumentationHelper encapsulates the logic around extracting information
@@ -179,29 +178,19 @@ func (ih *instrumentationHelper) Finish(
 	}
 
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
-		ih.traceMetadata.addSpans(trace, cfg.TestingKnobs.DeterministicExplainAnalyze)
-		ih.traceMetadata.annotateExplain(ih.explainPlan)
+		ih.traceMetadata.annotateExplain(ih.explainPlan, trace, cfg.TestingKnobs.DeterministicExplainAnalyze)
 	}
 
 	// TODO(radu): this should be unified with other stmt stats accesses.
 	stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
 	if stmtStats != nil {
-		networkBytesSent := int64(0)
+		var flowMetadata []*execstats.FlowMetadata
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
-			analyzer := flowInfo.analyzer
-			if err := analyzer.AddTrace(trace, cfg.TestingKnobs.DeterministicExplainAnalyze); err != nil {
-				log.VInfof(ctx, 1, "error analyzing trace statistics for stmt %s: %v", ast, err)
-				continue
-			}
-
-			networkBytesSentGroupedByNode, err := analyzer.GetNetworkBytesSent()
-			if err != nil {
-				log.VInfof(ctx, 1, "error calculating network bytes sent for stmt %s: %v", ast, err)
-				continue
-			}
-			for _, bytesSentByNode := range networkBytesSentGroupedByNode {
-				networkBytesSent += bytesSentByNode
-			}
+			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
+		}
+		queryLevelStats, errors := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		for i := 0; i < len(errors); i++ {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %v", ast, errors[i])
 		}
 
 		stmtStats.mu.Lock()
@@ -209,7 +198,7 @@ func (ih *instrumentationHelper) Finish(
 		// statistic is only recorded when statement diagnostics are enabled.
 		// TODO(asubiotto): NumericStat properties will be properly calculated
 		//  once this statistic is always collected.
-		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(networkBytesSent))
+		stmtStats.mu.data.BytesSentOverNetwork.Record(1 /* count */, float64(queryLevelStats.NetworkBytesSent))
 		stmtStats.mu.Unlock()
 	}
 
@@ -256,6 +245,14 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 // ShouldCollectBundle is true if we are collecting a support bundle.
 func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 	return ih.collectBundle
+}
+
+// ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
+// job (normally true). It is false if we are running a statement under
+// EXPLAIN ANALYZE, in which case we want to run the CREATE STATISTICS plan
+// directly.
+func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
+	return ih.outputMode != explainAnalyzePlanOutput && ih.outputMode != explainAnalyzeDebugOutput
 }
 
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
@@ -363,84 +360,32 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 // easier.
 type execNodeTraceMetadata map[exec.Node]execComponents
 
-type execComponents struct {
-	flowID     uuid.UUID
-	processors []processorTraceMetadata
-}
+type execComponents []execinfrapb.ComponentID
 
-type processorTraceMetadata struct {
-	id    execinfrapb.ProcessorID
-	stats *execinfrapb.ComponentStats
-}
-
-// associateNodeWithProcessors is called during planning, as processors are
+// associateNodeWithComponents is called during planning, as processors are
 // planned for an execution operator.
-func (m execNodeTraceMetadata) associateNodeWithProcessors(
-	node exec.Node, flowID uuid.UUID, processors []processorTraceMetadata,
+func (m execNodeTraceMetadata) associateNodeWithComponents(
+	node exec.Node, components execComponents,
 ) {
-	m[node] = execComponents{
-		flowID:     flowID,
-		processors: processors,
-	}
+	m[node] = components
 }
 
-// addSpans populates the processorTraceMetadata.fields with the statistics
-// recorded in a trace.
-func (m execNodeTraceMetadata) addSpans(spans []tracingpb.RecordedSpan, makeDeterministic bool) {
-	// Build a map from <flow-id, processor-id> pair (encoded as a string)
-	// to the corresponding processorTraceMetadata entry.
-	processorKeyToMetadata := make(map[string]*processorTraceMetadata)
-	for _, v := range m {
-		for i := range v.processors {
-			key := fmt.Sprintf("%s-p-%d", v.flowID.String(), v.processors[i].id)
-			processorKeyToMetadata[key] = &v.processors[i]
-		}
-	}
-
-	for i := range spans {
-		span := &spans[i]
-		if span.Stats == nil {
-			continue
-		}
-
-		fid, ok := span.Tags[execinfrapb.FlowIDTagKey]
-		if !ok {
-			continue
-		}
-		pid, ok := span.Tags[execinfrapb.ProcessorIDTagKey]
-		if !ok {
-			continue
-		}
-		key := fmt.Sprintf("%s-p-%s", fid, pid)
-		procMetadata := processorKeyToMetadata[key]
-		if procMetadata == nil {
-			// Processor not associated with an exec.Node; ignore.
-			continue
-		}
-
-		var stats execinfrapb.ComponentStats
-		if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
-			continue
-		}
-		if makeDeterministic {
-			stats.MakeDeterministic()
-		}
-		procMetadata.stats = &stats
-	}
-}
-
-// annotateExplain aggregates the statistics that were collected and annotates
+// annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
-func (m execNodeTraceMetadata) annotateExplain(plan *explain.Plan) {
+func (m execNodeTraceMetadata) annotateExplain(
+	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool,
+) {
+	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
 		wrapped := n.WrappedNode()
-		if meta, ok := m[wrapped]; ok {
+		if components, ok := m[wrapped]; ok {
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			for i := range meta.processors {
-				stats := meta.processors[i].stats
+			for i := range components {
+				stats := statsMap[components[i]]
 				if stats == nil {
 					incomplete = true
 					break

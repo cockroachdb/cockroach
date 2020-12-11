@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterSequenceNode struct {
@@ -78,21 +79,11 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// Record this sequence alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogAlterSequence,
-		int32(n.seqDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			SequenceName string
-			Statement    string
-			User         string
-		}{
-			params.p.ResolvedName(n.n.Name).FQString(),
-			n.n.String(),
-			params.SessionData().User().Normalized()},
-	)
+	return params.p.logEvent(params.ctx,
+		n.seqDesc.ID,
+		&eventpb.AlterSequence{
+			SequenceName: params.p.ResolvedName(n.n.Name).FQString(),
+		})
 }
 
 func (n *alterSequenceNode) Next(runParams) (bool, error) { return false, nil }

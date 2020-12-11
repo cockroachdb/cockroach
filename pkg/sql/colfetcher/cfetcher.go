@@ -297,7 +297,7 @@ type cFetcher struct {
 		// colvecs to avoid having to cast the vec to decimal on every write.
 		timestampCol *coldata.Decimals
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
-		tableoidCol []int64
+		tableoidCol coldata.DatumVec
 	}
 
 	typs      []*types.T
@@ -325,7 +325,7 @@ func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 			rf.machine.timestampCol = rf.machine.colvecs[timestampOutputIdx].Decimal()
 		}
 		if tableOidOutputIdx != noOutputColumn {
-			rf.machine.tableoidCol = rf.machine.colvecs[tableOidOutputIdx].Int64()
+			rf.machine.tableoidCol = rf.machine.colvecs[tableOidOutputIdx].Datum()
 		}
 	}
 }
@@ -1002,7 +1002,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				rf.machine.timestampCol.Set(rf.machine.rowIdx, dec)
 			}
 			if rf.table.oidOutputIdx != noOutputColumn {
-				rf.machine.tableoidCol[rf.machine.rowIdx] = int64(rf.table.desc.GetID())
+				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))
 			}
 
 			// We're finished with a row. Bump the row index, fill the row in with

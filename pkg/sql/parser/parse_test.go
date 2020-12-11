@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
@@ -281,6 +280,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a.b (b INT8)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT8)`},
 		{`CREATE TABLE a (b INT8 AS (a + b) STORED)`},
+		{`CREATE TABLE a (b INT8 AS (a + b) VIRTUAL)`},
 		{`CREATE TABLE view (view INT8)`},
 
 		{`CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY)`},
@@ -654,6 +654,7 @@ func TestParse(t *testing.T) {
 		{`SHOW RANGES FROM INDEX d.i`},
 		{`SHOW RANGES FROM INDEX i`},
 		{`SHOW REGIONS FROM CLUSTER`},
+		{`SHOW REGIONS FROM ALL DATABASES`},
 		{`SHOW REGIONS FROM DATABASE`},
 		{`SHOW REGIONS FROM DATABASE d`},
 		{`SHOW SURVIVAL GOAL FROM DATABASE`},
@@ -1700,6 +1701,14 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
+		{`RESTORE FROM ($1, $2)`},
+		{`RESTORE FROM ($1, $2), $3`},
+		{`RESTORE FROM $1, ($2, $3)`},
+		{`RESTORE FROM ($1, $2), ($3, $4)`},
+		{`RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
+		{`RESTORE FROM $4 IN $1, $2, 'bar'`},
+		{`RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys`},
+
 		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
@@ -2721,6 +2730,7 @@ SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS,
 			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE ON UPDATE SET NULL)`,
 		},
 		{`CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b) STORED)`, `CREATE TABLE a (b INT8 AS (a + b) STORED)`},
+		{`CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b) VIRTUAL)`, `CREATE TABLE a (b INT8 AS (a + b) VIRTUAL)`},
 
 		{`ALTER TABLE a ALTER b DROP STORED`, `ALTER TABLE a ALTER COLUMN b DROP STORED`},
 		{`ALTER TABLE a ADD b INT8`, `ALTER TABLE a ADD COLUMN b INT8`},
@@ -2899,23 +2909,6 @@ func TestParseDatadriven(t *testing.T) {
 			return ""
 		})
 	})
-}
-
-func TestParseTableNameWithQualifiedNames(t *testing.T) {
-	testdata := []struct {
-		name     string
-		expected string
-	}{
-		{"unique", `"unique"`},
-		{"unique.index", `"unique".index`},
-		{"table.index.primary", `"table".index.primary`},
-	}
-
-	for _, tc := range testdata {
-		name, err := parser.ParseTableNameWithQualifiedNames(tc.name)
-		require.NoError(t, err)
-		require.Equal(t, tc.expected, name.String())
-	}
 }
 
 func TestParsePanic(t *testing.T) {
@@ -3204,7 +3197,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``},
 
-		{`CREATE TABLE a(b INT8 AS (123) VIRTUAL)`, 0, `virtual computed columns`, ``},
 		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`, ``},
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`, ``},
 

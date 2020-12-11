@@ -176,8 +176,8 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.Values != nil:
-		if spec.Core.Values.NumRows != 0 {
-			return errors.Newf("values core only with zero rows supported")
+		if spec.Core.Values.NumRows != 0 && len(spec.Core.Values.Columns) != 0 {
+			return errors.Newf("values core is supported only with zero rows or zero columns")
 		}
 		return nil
 
@@ -490,7 +490,6 @@ func (r opResult) createDiskBackedSort(
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
 			es := colexec.NewExternalSorter(
-				ctx,
 				unlimitedAllocator,
 				standaloneMemAccount,
 				input, inputTypes, ordering,
@@ -506,6 +505,43 @@ func (r opResult) createDiskBackedSort(
 		},
 		args.TestingKnobs.SpillingCallbackFn,
 	), nil
+}
+
+// makeDistBackedSorterConstructors creates a DiskBackedSorterConstructor that
+// can be used by the hash-based partitioner.
+// NOTE: unless DelegateFDAcquisitions testing knob is set to true, it is up to
+// the caller to acquire the necessary file descriptors up front.
+func (r opResult) makeDiskBackedSorterConstructor(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	args *colexec.NewColOperatorArgs,
+	monitorNamePrefix string,
+	factory coldata.ColumnFactory,
+) colexec.DiskBackedSorterConstructor {
+	return func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecbase.Operator {
+		if maxNumberPartitions < colexec.ExternalSorterMinPartitions {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"external sorter is attempted to be created with %d partitions, minimum %d required",
+				maxNumberPartitions, colexec.ExternalSorterMinPartitions,
+			))
+		}
+		sortArgs := *args
+		if !args.TestingKnobs.DelegateFDAcquisitions {
+			// Set the FDSemaphore to nil. This indicates that no FDs should be
+			// acquired. The hash-based partitioner will do this up front.
+			sortArgs.FDSemaphore = nil
+		}
+		sorter, err := r.createDiskBackedSort(
+			ctx, flowCtx, &sortArgs, input, inputTypes,
+			execinfrapb.Ordering{Columns: orderingCols},
+			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
+			&execinfrapb.PostProcessSpec{}, monitorNamePrefix, factory,
+		)
+		if err != nil {
+			colexecerror.InternalError(err)
+		}
+		return sorter
+	}
 }
 
 // createAndWrapRowSource takes a processor spec, creating the row source and
@@ -695,10 +731,13 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			if core.Values.NumRows != 0 {
-				return r, errors.AssertionFailedf("values core only with zero rows supported, %d given", core.Values.NumRows)
+			if core.Values.NumRows != 0 && len(core.Values.Columns) != 0 {
+				return r, errors.AssertionFailedf(
+					"values core is supported only with zero rows or zero columns, %d rows, %d columns given",
+					core.Values.NumRows, len(core.Values.Columns),
+				)
 			}
-			result.Op = colexec.NewZeroOpNoInput()
+			result.Op = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows))
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
@@ -758,7 +797,7 @@ func NewColOperator(
 				// TODO(solon): The distsql plan for this case includes a TableReader, so
 				// we end up creating an orphaned colBatchScan. We should avoid that.
 				// Ideally the optimizer would not plan a scan in this unusual case.
-				result.Op, err = colexec.NewSingleTupleNoInputOp(streamingAllocator), nil
+				result.Op, err = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't panic.
 				result.ColumnTypes = []*types.T{}
 				break
@@ -821,24 +860,44 @@ func NewColOperator(
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
 				result.Op, err = colexec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, result.ColumnTypes)
 			} else {
-				distinctMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					// Create an unlimited mem account explicitly even though there is no
-					// disk spilling because the memory usage of an unordered distinct
-					// operator is proportional to the number of distinct tuples, not the
-					// number of input tuples.
-					// The row execution engine also gives an unlimited amount (that still
-					// needs to be approved by the upstream monitor, so not really
-					// "unlimited") amount of memory to the unordered distinct operator.
-					distinctMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "distinct")
-				}
+				// We have separate unit tests that instantiate in-memory
+				// distinct operators, so we don't need to look at
+				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
+				// a disk-backed one here.
+				distinctMemMonitorName := fmt.Sprintf("distinct-%d", spec.ProcessorID)
+				distinctMemAccount := result.createMemAccountForSpillStrategy(
+					ctx, flowCtx, distinctMemMonitorName,
+				)
 				// TODO(yuzefovich): we have an implementation of partially ordered
 				// distinct, and we should plan it when we have non-empty ordered
 				// columns and we think that the probability of distinct tuples in the
 				// input is about 0.01 or less.
-				result.Op = colexec.NewUnorderedDistinct(
-					colmem.NewAllocator(ctx, distinctMemAccount, factory), inputs[0],
-					core.Distinct.DistinctColumns, result.ColumnTypes,
+				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
+				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
+					allocator, inputs[0], core.Distinct.DistinctColumns, result.ColumnTypes,
+				)
+				diskAccount := result.createDiskAccount(ctx, flowCtx, distinctMemMonitorName)
+				result.Op = colexec.NewOneInputDiskSpiller(
+					inputs[0], inMemoryUnorderedDistinct.(colexecbase.BufferingInMemoryOperator),
+					distinctMemMonitorName,
+					func(input colexecbase.Operator) colexecbase.Operator {
+						monitorNamePrefix := "external-distinct"
+						unlimitedAllocator := colmem.NewAllocator(
+							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
+						)
+						ed := colexec.NewExternalDistinct(
+							unlimitedAllocator,
+							flowCtx,
+							args,
+							input,
+							result.ColumnTypes,
+							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
+							diskAccount,
+						)
+						result.ToClose = append(result.ToClose, ed.(colexecbase.Closer))
+						return ed
+					},
+					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
 
@@ -907,34 +966,13 @@ func NewColOperator(
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
 						)
-						// Make a copy of the DiskQueueCfg and set defaults for the hash
-						// joiner. The cache mode is chosen to automatically close the cache
-						// belonging to partitions at a parent level when repartitioning.
-						diskQueueCfg := args.DiskQueueCfg
-						diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
-						diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 						ehj := colexec.NewExternalHashJoiner(
-							unlimitedAllocator, hjSpec,
+							unlimitedAllocator,
+							flowCtx,
+							args,
+							hjSpec,
 							inputOne, inputTwo,
-							execinfra.GetWorkMemLimit(flowCtx.Cfg),
-							diskQueueCfg,
-							args.FDSemaphore,
-							func(input colexecbase.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) (colexecbase.Operator, error) {
-								sortArgs := *args
-								if !args.TestingKnobs.DelegateFDAcquisitions {
-									// Set the FDSemaphore to nil. This indicates that no FDs
-									// should be acquired. The external hash joiner will do this
-									// up front.
-									sortArgs.FDSemaphore = nil
-								}
-								return result.createDiskBackedSort(
-									ctx, flowCtx, &sortArgs, input, inputTypes,
-									execinfrapb.Ordering{Columns: orderingCols},
-									0 /* matchLen */, maxNumberPartitions, spec.ProcessorID,
-									&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-", factory)
-							},
-							args.TestingKnobs.NumForcedRepartitions,
-							args.TestingKnobs.DelegateFDAcquisitions,
+							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
 							diskAccount,
 						)
 						result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))

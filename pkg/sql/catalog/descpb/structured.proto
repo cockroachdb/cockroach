@@ -102,6 +102,19 @@ message ForeignKeyConstraint {
   reserved 10, 11, 12, 13;
 }
 
+// UniqueWithoutIndexConstraint is the representation of a unique constraint
+// that is not enforced by an index. It is stored on the TableDescriptor.
+message UniqueWithoutIndexConstraint {
+  option (gogoproto.equal) = true;
+  optional uint32 table_id = 1 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "TableID",
+                                      (gogoproto.casttype) = "ID"];
+  repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs",
+                                        (gogoproto.casttype) = "ColumnID"];
+  optional string name = 3 [(gogoproto.nullable) = false];
+  optional ConstraintValidity validity = 4 [(gogoproto.nullable) = false];
+}
+
 message ColumnDescriptor {
   option (gogoproto.equal) = true;
   optional string name = 1 [(gogoproto.nullable) = false];
@@ -506,6 +519,7 @@ message ConstraintToUpdate {
     // validation step, can occur. The check field contains the dummy
     // constraint.
     NOT_NULL = 2;
+    UNIQUE_WITHOUT_INDEX = 3;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
@@ -514,6 +528,7 @@ message ConstraintToUpdate {
   optional ForeignKeyConstraint foreign_key = 4 [(gogoproto.nullable) = false];
   reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
+  optional UniqueWithoutIndexConstraint unique_without_index_constraint = 7 [(gogoproto.nullable) = false];
 }
 
 // PrimaryKeySwap is a mutation corresponding to the atomic swap phase
@@ -529,6 +544,10 @@ message PrimaryKeySwap {
   // swapped out with the i'th index in new_indexes.
   repeated uint32 old_indexes = 2 [(gogoproto.casttype) = "IndexID"];
   repeated uint32 new_indexes = 3 [(gogoproto.casttype) = "IndexID"];
+  // new_primary_index_name is the name of the primary key when added as a
+  // new constraint to a table without a primary key. In other cases, it is
+  // the empty string.
+  optional string new_primary_index_name = 5 [(gogoproto.nullable) = false];
 }
 
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
@@ -1043,11 +1062,36 @@ message TableDescriptor {
   // the referenced table.
   repeated ForeignKeyConstraint inbound_fks = 37 [(gogoproto.nullable) = false, (gogoproto.customname) = "InboundFKs"];
 
+  // UniqueWithoutIndexConstraints contains all the unique constraints defined
+  // on this table that are not enforced by an index.
+  repeated UniqueWithoutIndexConstraint unique_without_index_constraints = 43 [(gogoproto.nullable) = false];
+
   // Temporary table support will be added to CRDB starting from 20.1. The temporary
   // flag is set to true for all temporary tables. All table descriptors created
   // before 20.1 refer to persistent tables, so lack of the flag being set implies
   // the table is persistent.
   optional bool temporary = 39 [(gogoproto.nullable) = false];
+
+  message LocalityConfig {
+    option (gogoproto.equal) = true;
+    message RegionalByTable {
+      option (gogoproto.equal) = true;
+      // Region is set if the table has an affinity with a non-primary region.
+      optional string region = 1 [(gogoproto.casttype)="Region"];
+    }
+    message RegionalByRow {
+      option (gogoproto.equal) = true;
+    }
+    message Global {
+      option (gogoproto.equal) = true;
+    }
+    oneof locality {
+      Global global = 1;
+      RegionalByTable regional_by_table = 2;
+      RegionalByRow regional_by_row = 3;
+    }
+  }
+  optional LocalityConfig locality_config = 42;
 }
 
 // SurvivalGoal is the survival goal for a database.
