@@ -131,6 +131,8 @@ func newRewindableSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
 	return q
 }
 
+// TODO(yuzefovich): refactor enqueue so that if batch is kept in-memory, it
+// was copied by this method and not the caller.
 func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
 	if batch.Length() == 0 {
 		if q.diskQueue != nil {

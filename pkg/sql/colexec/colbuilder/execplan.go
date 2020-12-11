@@ -191,14 +191,9 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.Aggregator != nil:
-		aggSpec := spec.Core.Aggregator
-		needHash, err := needHashAggregator(aggSpec)
-		if err != nil {
-			return err
-		}
-		for _, agg := range aggSpec.Aggregations {
-			if agg.FilterColIdx != nil && !needHash {
-				return errors.Newf("filtering ordered aggregation not supported")
+		for _, agg := range spec.Core.Aggregator.Aggregations {
+			if agg.FilterColIdx != nil {
+				return errors.Newf("filtering aggregation not supported")
 			}
 		}
 		return nil
@@ -815,41 +810,92 @@ func NewColOperator(
 			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
-			args := &colexecagg.NewAggregatorArgs{
+			newAggArgs := &colexecagg.NewAggregatorArgs{
 				Input:      inputs[0],
 				InputTypes: inputTypes,
 				Spec:       aggSpec,
 				EvalCtx:    evalCtx,
 			}
 			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-			args.Constructors, args.ConstArguments, args.OutputTypes, err = colexecagg.ProcessAggregations(
+			newAggArgs.Constructors, newAggArgs.ConstArguments, newAggArgs.OutputTypes, err = colexecagg.ProcessAggregations(
 				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
 			)
 			if err != nil {
 				return r, err
 			}
-			result.ColumnTypes = args.OutputTypes
+			result.ColumnTypes = newAggArgs.OutputTypes
 
 			if needHash {
-				hashAggregatorMemAccount := streamingMemAccount
-				if !useStreamingMemAccountForBuffering {
-					// Create an unlimited mem account explicitly even though there is no
-					// disk spilling because the memory usage of an aggregator is
-					// proportional to the number of groups, not the number of inputs.
-					// The row execution engine also gives an unlimited (that still
-					// needs to be approved by the upstream monitor, so not really
-					// "unlimited") amount of memory to the aggregator.
-					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
-				}
-				evalCtx.SingleDatumAggMemAccount = hashAggregatorMemAccount
-				args.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
-				args.MemAccount = hashAggregatorMemAccount
-				result.Op, err = colexec.NewHashAggregator(args)
+				// We have separate unit tests that instantiate the in-memory
+				// hash aggregators, so we don't need to look at
+				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
+				// a disk-backed one here.
+				hashAggregatorMemMonitorName := fmt.Sprintf("hash-aggregator-%d", spec.ProcessorID)
+				hashAggregatorMemAccount := result.createMemAccountForSpillStrategy(
+					ctx, flowCtx, hashAggregatorMemMonitorName,
+				)
+				newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
+				newAggArgs.MemAccount = hashAggregatorMemAccount
+				spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
+				// We need to create a separate memory account for the spilling
+				// queue because it looks at how much memory it has already used
+				// in order to decide when to spill to disk.
+				spillingQueueMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, spillingQueueMemMonitorName)
+				spillingQueueCfg := args.DiskQueueCfg
+				spillingQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+				spillingQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+				var inMemoryHashAggregator colexecbase.Operator
+				inMemoryHashAggregator, err = colexec.NewHashAggregator(
+					newAggArgs,
+					&colexec.NewSpillingQueueArgs{
+						UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
+						Types:              inputTypes,
+						// TODO(yuzefovich): at the moment, it is possible that
+						// the in-memory hash aggregator exceeds workmem limit
+						// since it'll use up to the limit for the aggregation
+						// and up to the limit for tracking all input tuples.
+						MemoryLimit:  execinfra.GetWorkMemLimit(flowCtx.Cfg),
+						DiskQueueCfg: spillingQueueCfg,
+						FDSemaphore:  args.FDSemaphore,
+						DiskAcc:      result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName),
+					},
+				)
+				ehaMonitorNamePrefix := fmt.Sprintf("external-hash-aggregator-%d", spec.ProcessorID)
+				ehaMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, ehaMonitorNamePrefix)
+				// Note that we will use an unlimited memory account here even
+				// for the in-memory hash aggregator since it is easier to do so
+				// than to try to replace the memory account if the spilling to
+				// disk occurs (if we don't replace it in such case, the wrapped
+				// aggregate functions might hit a memory error even when used
+				// by the external hash aggregator).
+				evalCtx.SingleDatumAggMemAccount = ehaMemAccount
+				result.Op = colexec.NewOneInputDiskSpiller(
+					inputs[0], inMemoryHashAggregator.(colexecbase.BufferingInMemoryOperator),
+					hashAggregatorMemMonitorName,
+					func(input colexecbase.Operator) colexecbase.Operator {
+						newAggArgs := *newAggArgs
+						// Note that the hash-based partitioner will make sure
+						// that partitions to process using the in-memory hash
+						// aggregator fit under the limit, so we use an
+						// unlimited allocator.
+						newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
+						newAggArgs.MemAccount = ehaMemAccount
+						newAggArgs.Input = input
+						return colexec.NewExternalHashAggregator(
+							flowCtx,
+							args,
+							&newAggArgs,
+							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaMonitorNamePrefix, factory),
+							result.createDiskAccount(ctx, flowCtx, ehaMonitorNamePrefix),
+						)
+					},
+					args.TestingKnobs.SpillingCallbackFn,
+				)
 			} else {
 				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
-				args.Allocator = streamingAllocator
-				args.MemAccount = streamingMemAccount
-				result.Op, err = colexec.NewOrderedAggregator(args)
+				newAggArgs.Allocator = streamingAllocator
+				newAggArgs.MemAccount = streamingMemAccount
+				result.Op, err = colexec.NewOrderedAggregator(newAggArgs)
 			}
 			result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 

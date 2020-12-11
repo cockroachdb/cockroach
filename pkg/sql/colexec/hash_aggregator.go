@@ -110,7 +110,8 @@ type hashAggregator struct {
 		anotherIntSlice []int
 	}
 
-	output coldata.Batch
+	allInputTuples *spillingQueue
+	output         coldata.Batch
 
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
@@ -119,6 +120,7 @@ type hashAggregator struct {
 }
 
 var _ ResettableOperator = &hashAggregator{}
+var _ colexecbase.BufferingInMemoryOperator = &hashAggregator{}
 var _ closableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
@@ -130,7 +132,14 @@ const hashAggregatorAllocSize = 128
 // NewHashAggregator creates a hash aggregator on the given grouping columns.
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
-func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+// newSpillingQueueArgs - when non-nil - specifies the arguments to
+// instantiate a spillingQueue with which will be used to keep all of the
+// input tuples in case the in-memory hash aggregator needs to fallback to
+// the disk-backed operator. Pass in nil in order to not track all input
+// tuples.
+func NewHashAggregator(
+	args *colexecagg.NewAggregatorArgs, newSpillingQueueArgs *NewSpillingQueueArgs,
+) (ResettableOperator, error) {
 	aggFnsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
 		args, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
@@ -160,6 +169,9 @@ func NewHashAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, 
 	hashAgg.bufferingState.tuples = newAppendOnlyBufferedBatch(args.Allocator, args.InputTypes, nil /* colsToStore */)
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
 	hashAgg.aggHelper = newAggregatorHelper(args, &hashAgg.datumAlloc, true /* isHashAgg */, hashAgg.maxBuffered)
+	if newSpillingQueueArgs != nil {
+		hashAgg.allInputTuples = newSpillingQueue(newSpillingQueueArgs)
+	}
 	return hashAgg, err
 }
 
@@ -194,6 +206,34 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			}
 			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
+			if op.allInputTuples != nil {
+				var scratchBatch coldata.Batch
+				if n > 0 {
+					// We cannot simply enqueue the pending batch because at the
+					// moment the spilling queue doesn't deep copy batches when
+					// those are kept in-memory.
+					scratchBatch = op.allInputTuples.unlimitedAllocator.NewMemBatchWithFixedCapacity(op.inputTypes, n)
+					op.allInputTuples.unlimitedAllocator.PerformOperation(scratchBatch.ColVecs(), func() {
+						for colIdx := range op.inputTypes {
+							scratchBatch.ColVec(colIdx).Copy(
+								coldata.CopySliceArgs{
+									SliceArgs: coldata.SliceArgs{
+										Src:       op.bufferingState.pendingBatch.ColVec(colIdx),
+										Sel:       op.bufferingState.pendingBatch.Selection(),
+										SrcEndIdx: n,
+									},
+								},
+							)
+						}
+						scratchBatch.SetLength(n)
+					})
+				} else {
+					scratchBatch = coldata.ZeroBatch
+				}
+				if err := op.allInputTuples.enqueue(ctx, scratchBatch); err != nil {
+					colexecerror.InternalError(err)
+				}
+			}
 			if n == 0 {
 				op.state = hashAggregatorAggregating
 				continue
@@ -424,6 +464,21 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	}
 }
 
+func (op *hashAggregator) ExportBuffered(
+	ctx context.Context, _ colexecbase.Operator,
+) coldata.Batch {
+	if op.allInputTuples == nil {
+		colexecerror.InternalError(errors.New(
+			"unexpectedly ExportBuffered is called when allInputTuples is nil",
+		))
+	}
+	batch, err := op.allInputTuples.dequeue(ctx)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return batch
+}
+
 func (op *hashAggregator) reset(ctx context.Context) {
 	if r, ok := op.input.(resetter); ok {
 		r.reset(ctx)
@@ -438,5 +493,12 @@ func (op *hashAggregator) reset(ctx context.Context) {
 }
 
 func (op *hashAggregator) Close(ctx context.Context) error {
-	return op.toClose.Close(ctx)
+	var retErr error
+	if op.allInputTuples != nil {
+		retErr = op.allInputTuples.close(ctx)
+	}
+	if err := op.toClose.Close(ctx); err != nil {
+		retErr = err
+	}
+	return retErr
 }
