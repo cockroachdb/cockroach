@@ -15,6 +15,21 @@ option go_package = "targets";
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
 
+message TargetProto {
+  option (gogoproto.onlyone) = true;
+  AddColumn AddColumn = 1;
+  DropColumn DropColumn = 2;
+  AddIndex AddIndex = 3;
+  DropIndex DropIndex = 4;
+  AddSequenceDependency AddSequenceDependency = 5;
+  AddColumnFamilyDependency AddColumnFamilyDependency = 6;
+  AddUniqueConstraint AddUniqueConstraint = 7;
+  DropUniqueConstraint DropUniqueConstraint = 8;
+  AddCheckConstraint AddCheckConstraint = 9;
+  AddCheckConstraintUnvalidated AddCheckConstraintUnvalidated = 10;
+  DropCheckConstraint DropCheckConstraint = 11;
+}
+
 message AddColumn {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];

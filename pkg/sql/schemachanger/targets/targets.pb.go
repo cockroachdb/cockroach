@@ -58,8 +58,51 @@ func (x State) String() string {
 	return proto.EnumName(State_name, int32(x))
 }
 func (State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{0}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{0}
 }
+
+type TargetProto struct {
+	AddColumn                     *AddColumn                     `protobuf:"bytes,1,opt,name=AddColumn,proto3" json:"AddColumn,omitempty"`
+	DropColumn                    *DropColumn                    `protobuf:"bytes,2,opt,name=DropColumn,proto3" json:"DropColumn,omitempty"`
+	AddIndex                      *AddIndex                      `protobuf:"bytes,3,opt,name=AddIndex,proto3" json:"AddIndex,omitempty"`
+	DropIndex                     *DropIndex                     `protobuf:"bytes,4,opt,name=DropIndex,proto3" json:"DropIndex,omitempty"`
+	AddSequenceDependency         *AddSequenceDependency         `protobuf:"bytes,5,opt,name=AddSequenceDependency,proto3" json:"AddSequenceDependency,omitempty"`
+	AddColumnFamilyDependency     *AddColumnFamilyDependency     `protobuf:"bytes,6,opt,name=AddColumnFamilyDependency,proto3" json:"AddColumnFamilyDependency,omitempty"`
+	AddUniqueConstraint           *AddUniqueConstraint           `protobuf:"bytes,7,opt,name=AddUniqueConstraint,proto3" json:"AddUniqueConstraint,omitempty"`
+	DropUniqueConstraint          *DropUniqueConstraint          `protobuf:"bytes,8,opt,name=DropUniqueConstraint,proto3" json:"DropUniqueConstraint,omitempty"`
+	AddCheckConstraint            *AddCheckConstraint            `protobuf:"bytes,9,opt,name=AddCheckConstraint,proto3" json:"AddCheckConstraint,omitempty"`
+	AddCheckConstraintUnvalidated *AddCheckConstraintUnvalidated `protobuf:"bytes,10,opt,name=AddCheckConstraintUnvalidated,proto3" json:"AddCheckConstraintUnvalidated,omitempty"`
+	DropCheckConstraint           *DropCheckConstraint           `protobuf:"bytes,11,opt,name=DropCheckConstraint,proto3" json:"DropCheckConstraint,omitempty"`
+}
+
+func (m *TargetProto) Reset()         { *m = TargetProto{} }
+func (m *TargetProto) String() string { return proto.CompactTextString(m) }
+func (*TargetProto) ProtoMessage()    {}
+func (*TargetProto) Descriptor() ([]byte, []int) {
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{0}
+}
+func (m *TargetProto) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TargetProto) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TargetProto) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TargetProto.Merge(dst, src)
+}
+func (m *TargetProto) XXX_Size() int {
+	return m.Size()
+}
+func (m *TargetProto) XXX_DiscardUnknown() {
+	xxx_messageInfo_TargetProto.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TargetProto proto.InternalMessageInfo
 
 type AddColumn struct {
 	TableID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID       `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
@@ -71,7 +114,7 @@ func (m *AddColumn) Reset()         { *m = AddColumn{} }
 func (m *AddColumn) String() string { return proto.CompactTextString(m) }
 func (*AddColumn) ProtoMessage()    {}
 func (*AddColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{0}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{1}
 }
 func (m *AddColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +149,7 @@ func (m *DropColumn) Reset()         { *m = DropColumn{} }
 func (m *DropColumn) String() string { return proto.CompactTextString(m) }
 func (*DropColumn) ProtoMessage()    {}
 func (*DropColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{1}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{2}
 }
 func (m *DropColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -143,7 +186,7 @@ func (m *AddIndex) Reset()         { *m = AddIndex{} }
 func (m *AddIndex) String() string { return proto.CompactTextString(m) }
 func (*AddIndex) ProtoMessage()    {}
 func (*AddIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{2}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{3}
 }
 func (m *AddIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -180,7 +223,7 @@ func (m *DropIndex) Reset()         { *m = DropIndex{} }
 func (m *DropIndex) String() string { return proto.CompactTextString(m) }
 func (*DropIndex) ProtoMessage()    {}
 func (*DropIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{3}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{4}
 }
 func (m *DropIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -215,7 +258,7 @@ func (m *AddSequenceDependency) Reset()         { *m = AddSequenceDependency{} }
 func (m *AddSequenceDependency) String() string { return proto.CompactTextString(m) }
 func (*AddSequenceDependency) ProtoMessage()    {}
 func (*AddSequenceDependency) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{4}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{5}
 }
 func (m *AddSequenceDependency) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -249,7 +292,7 @@ func (m *AddColumnFamilyDependency) Reset()         { *m = AddColumnFamilyDepend
 func (m *AddColumnFamilyDependency) String() string { return proto.CompactTextString(m) }
 func (*AddColumnFamilyDependency) ProtoMessage()    {}
 func (*AddColumnFamilyDependency) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{5}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{6}
 }
 func (m *AddColumnFamilyDependency) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -284,7 +327,7 @@ func (m *AddUniqueConstraint) Reset()         { *m = AddUniqueConstraint{} }
 func (m *AddUniqueConstraint) String() string { return proto.CompactTextString(m) }
 func (*AddUniqueConstraint) ProtoMessage()    {}
 func (*AddUniqueConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{6}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{7}
 }
 func (m *AddUniqueConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -319,7 +362,7 @@ func (m *DropUniqueConstraint) Reset()         { *m = DropUniqueConstraint{} }
 func (m *DropUniqueConstraint) String() string { return proto.CompactTextString(m) }
 func (*DropUniqueConstraint) ProtoMessage()    {}
 func (*DropUniqueConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{7}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{8}
 }
 func (m *DropUniqueConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -355,7 +398,7 @@ func (m *AddCheckConstraint) Reset()         { *m = AddCheckConstraint{} }
 func (m *AddCheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*AddCheckConstraint) ProtoMessage()    {}
 func (*AddCheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{8}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{9}
 }
 func (m *AddCheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -391,7 +434,7 @@ func (m *AddCheckConstraintUnvalidated) Reset()         { *m = AddCheckConstrain
 func (m *AddCheckConstraintUnvalidated) String() string { return proto.CompactTextString(m) }
 func (*AddCheckConstraintUnvalidated) ProtoMessage()    {}
 func (*AddCheckConstraintUnvalidated) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{9}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{10}
 }
 func (m *AddCheckConstraintUnvalidated) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -425,7 +468,7 @@ func (m *DropCheckConstraint) Reset()         { *m = DropCheckConstraint{} }
 func (m *DropCheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*DropCheckConstraint) ProtoMessage()    {}
 func (*DropCheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0c99809fe176d142, []int{10}
+	return fileDescriptor_targets_0ced52f4a9468fdb, []int{11}
 }
 func (m *DropCheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -451,6 +494,7 @@ func (m *DropCheckConstraint) XXX_DiscardUnknown() {
 var xxx_messageInfo_DropCheckConstraint proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*TargetProto)(nil), "cockroach.sql.schemachanger.targets.TargetProto")
 	proto.RegisterType((*AddColumn)(nil), "cockroach.sql.schemachanger.targets.AddColumn")
 	proto.RegisterType((*DropColumn)(nil), "cockroach.sql.schemachanger.targets.DropColumn")
 	proto.RegisterType((*AddIndex)(nil), "cockroach.sql.schemachanger.targets.AddIndex")
@@ -825,6 +869,134 @@ func (this *DropCheckConstraint) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (m *TargetProto) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TargetProto) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.AddColumn != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddColumn.Size()))
+		n1, err := m.AddColumn.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if m.DropColumn != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.DropColumn.Size()))
+		n2, err := m.DropColumn.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if m.AddIndex != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddIndex.Size()))
+		n3, err := m.AddIndex.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	if m.DropIndex != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.DropIndex.Size()))
+		n4, err := m.DropIndex.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	if m.AddSequenceDependency != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddSequenceDependency.Size()))
+		n5, err := m.AddSequenceDependency.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	if m.AddColumnFamilyDependency != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddColumnFamilyDependency.Size()))
+		n6, err := m.AddColumnFamilyDependency.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	if m.AddUniqueConstraint != nil {
+		dAtA[i] = 0x3a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddUniqueConstraint.Size()))
+		n7, err := m.AddUniqueConstraint.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	if m.DropUniqueConstraint != nil {
+		dAtA[i] = 0x42
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.DropUniqueConstraint.Size()))
+		n8, err := m.DropUniqueConstraint.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if m.AddCheckConstraint != nil {
+		dAtA[i] = 0x4a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddCheckConstraint.Size()))
+		n9, err := m.AddCheckConstraint.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	if m.AddCheckConstraintUnvalidated != nil {
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.AddCheckConstraintUnvalidated.Size()))
+		n10, err := m.AddCheckConstraintUnvalidated.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n10
+	}
+	if m.DropCheckConstraint != nil {
+		dAtA[i] = 0x5a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.DropCheckConstraint.Size()))
+		n11, err := m.DropCheckConstraint.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n11
+	}
+	return i, nil
+}
+
 func (m *AddColumn) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -853,11 +1025,11 @@ func (m *AddColumn) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x1a
 	i++
 	i = encodeVarintTargets(dAtA, i, uint64(m.Column.Size()))
-	n1, err := m.Column.MarshalTo(dAtA[i:])
+	n12, err := m.Column.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n1
+	i += n12
 	return i, nil
 }
 
@@ -912,11 +1084,11 @@ func (m *AddIndex) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintTargets(dAtA, i, uint64(m.Index.Size()))
-	n2, err := m.Index.MarshalTo(dAtA[i:])
+	n13, err := m.Index.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n13
 	if m.PrimaryIndex != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -971,21 +1143,21 @@ func (m *DropIndex) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintTargets(dAtA, i, uint64(m.ReplacedBy))
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA4 := make([]byte, len(m.ColumnIDs)*10)
-		var j3 int
+		dAtA15 := make([]byte, len(m.ColumnIDs)*10)
+		var j14 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA4[j3] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA15[j14] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j3++
+				j14++
 			}
-			dAtA4[j3] = uint8(num)
-			j3++
+			dAtA15[j14] = uint8(num)
+			j14++
 		}
 		dAtA[i] = 0x22
 		i++
-		i = encodeVarintTargets(dAtA, i, uint64(j3))
-		i += copy(dAtA[i:], dAtA4[:j3])
+		i = encodeVarintTargets(dAtA, i, uint64(j14))
+		i += copy(dAtA[i:], dAtA15[:j14])
 	}
 	return i, nil
 }
@@ -1046,11 +1218,11 @@ func (m *AddColumnFamilyDependency) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintTargets(dAtA, i, uint64(m.Family.Size()))
-	n5, err := m.Family.MarshalTo(dAtA[i:])
+	n16, err := m.Family.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n16
 	return i, nil
 }
 
@@ -1080,21 +1252,21 @@ func (m *AddUniqueConstraint) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintTargets(dAtA, i, uint64(m.IndexID))
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA7 := make([]byte, len(m.ColumnIDs)*10)
-		var j6 int
+		dAtA18 := make([]byte, len(m.ColumnIDs)*10)
+		var j17 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA7[j6] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA18[j17] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j6++
+				j17++
 			}
-			dAtA7[j6] = uint8(num)
-			j6++
+			dAtA18[j17] = uint8(num)
+			j17++
 		}
 		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintTargets(dAtA, i, uint64(j6))
-		i += copy(dAtA[i:], dAtA7[:j6])
+		i = encodeVarintTargets(dAtA, i, uint64(j17))
+		i += copy(dAtA[i:], dAtA18[:j17])
 	}
 	return i, nil
 }
@@ -1125,21 +1297,21 @@ func (m *DropUniqueConstraint) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintTargets(dAtA, i, uint64(m.IndexID))
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA9 := make([]byte, len(m.ColumnIDs)*10)
-		var j8 int
+		dAtA20 := make([]byte, len(m.ColumnIDs)*10)
+		var j19 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA9[j8] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA20[j19] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j8++
+				j19++
 			}
-			dAtA9[j8] = uint8(num)
-			j8++
+			dAtA20[j19] = uint8(num)
+			j19++
 		}
 		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintTargets(dAtA, i, uint64(j8))
-		i += copy(dAtA[i:], dAtA9[:j8])
+		i = encodeVarintTargets(dAtA, i, uint64(j19))
+		i += copy(dAtA[i:], dAtA20[:j19])
 	}
 	return i, nil
 }
@@ -1177,21 +1349,21 @@ func (m *AddCheckConstraint) MarshalTo(dAtA []byte) (int, error) {
 		i += copy(dAtA[i:], m.Expr)
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA11 := make([]byte, len(m.ColumnIDs)*10)
-		var j10 int
+		dAtA22 := make([]byte, len(m.ColumnIDs)*10)
+		var j21 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA11[j10] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA22[j21] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j10++
+				j21++
 			}
-			dAtA11[j10] = uint8(num)
-			j10++
+			dAtA22[j21] = uint8(num)
+			j21++
 		}
 		dAtA[i] = 0x22
 		i++
-		i = encodeVarintTargets(dAtA, i, uint64(j10))
-		i += copy(dAtA[i:], dAtA11[:j10])
+		i = encodeVarintTargets(dAtA, i, uint64(j21))
+		i += copy(dAtA[i:], dAtA22[:j21])
 	}
 	return i, nil
 }
@@ -1229,21 +1401,21 @@ func (m *AddCheckConstraintUnvalidated) MarshalTo(dAtA []byte) (int, error) {
 		i += copy(dAtA[i:], m.Expr)
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA13 := make([]byte, len(m.ColumnIDs)*10)
-		var j12 int
+		dAtA24 := make([]byte, len(m.ColumnIDs)*10)
+		var j23 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA13[j12] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA24[j23] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j12++
+				j23++
 			}
-			dAtA13[j12] = uint8(num)
-			j12++
+			dAtA24[j23] = uint8(num)
+			j23++
 		}
 		dAtA[i] = 0x22
 		i++
-		i = encodeVarintTargets(dAtA, i, uint64(j12))
-		i += copy(dAtA[i:], dAtA13[:j12])
+		i = encodeVarintTargets(dAtA, i, uint64(j23))
+		i += copy(dAtA[i:], dAtA24[:j23])
 	}
 	return i, nil
 }
@@ -1286,6 +1458,59 @@ func encodeVarintTargets(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *TargetProto) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.AddColumn != nil {
+		l = m.AddColumn.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.DropColumn != nil {
+		l = m.DropColumn.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddIndex != nil {
+		l = m.AddIndex.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.DropIndex != nil {
+		l = m.DropIndex.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddSequenceDependency != nil {
+		l = m.AddSequenceDependency.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddColumnFamilyDependency != nil {
+		l = m.AddColumnFamilyDependency.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddUniqueConstraint != nil {
+		l = m.AddUniqueConstraint.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.DropUniqueConstraint != nil {
+		l = m.DropUniqueConstraint.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddCheckConstraint != nil {
+		l = m.AddCheckConstraint.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.AddCheckConstraintUnvalidated != nil {
+		l = m.AddCheckConstraintUnvalidated.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	if m.DropCheckConstraint != nil {
+		l = m.DropCheckConstraint.Size()
+		n += 1 + l + sovTargets(uint64(l))
+	}
+	return n
+}
+
 func (m *AddColumn) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1524,6 +1749,485 @@ func sovTargets(x uint64) (n int) {
 }
 func sozTargets(x uint64) (n int) {
 	return sovTargets(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *TargetProto) GetValue() interface{} {
+	if this.AddColumn != nil {
+		return this.AddColumn
+	}
+	if this.DropColumn != nil {
+		return this.DropColumn
+	}
+	if this.AddIndex != nil {
+		return this.AddIndex
+	}
+	if this.DropIndex != nil {
+		return this.DropIndex
+	}
+	if this.AddSequenceDependency != nil {
+		return this.AddSequenceDependency
+	}
+	if this.AddColumnFamilyDependency != nil {
+		return this.AddColumnFamilyDependency
+	}
+	if this.AddUniqueConstraint != nil {
+		return this.AddUniqueConstraint
+	}
+	if this.DropUniqueConstraint != nil {
+		return this.DropUniqueConstraint
+	}
+	if this.AddCheckConstraint != nil {
+		return this.AddCheckConstraint
+	}
+	if this.AddCheckConstraintUnvalidated != nil {
+		return this.AddCheckConstraintUnvalidated
+	}
+	if this.DropCheckConstraint != nil {
+		return this.DropCheckConstraint
+	}
+	return nil
+}
+
+func (this *TargetProto) SetValue(value interface{}) bool {
+	switch vt := value.(type) {
+	case *AddColumn:
+		this.AddColumn = vt
+	case *DropColumn:
+		this.DropColumn = vt
+	case *AddIndex:
+		this.AddIndex = vt
+	case *DropIndex:
+		this.DropIndex = vt
+	case *AddSequenceDependency:
+		this.AddSequenceDependency = vt
+	case *AddColumnFamilyDependency:
+		this.AddColumnFamilyDependency = vt
+	case *AddUniqueConstraint:
+		this.AddUniqueConstraint = vt
+	case *DropUniqueConstraint:
+		this.DropUniqueConstraint = vt
+	case *AddCheckConstraint:
+		this.AddCheckConstraint = vt
+	case *AddCheckConstraintUnvalidated:
+		this.AddCheckConstraintUnvalidated = vt
+	case *DropCheckConstraint:
+		this.DropCheckConstraint = vt
+	default:
+		return false
+	}
+	return true
+}
+func (m *TargetProto) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTargets
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TargetProto: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TargetProto: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddColumn == nil {
+				m.AddColumn = &AddColumn{}
+			}
+			if err := m.AddColumn.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropColumn", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DropColumn == nil {
+				m.DropColumn = &DropColumn{}
+			}
+			if err := m.DropColumn.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddIndex == nil {
+				m.AddIndex = &AddIndex{}
+			}
+			if err := m.AddIndex.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropIndex", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DropIndex == nil {
+				m.DropIndex = &DropIndex{}
+			}
+			if err := m.DropIndex.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddSequenceDependency", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddSequenceDependency == nil {
+				m.AddSequenceDependency = &AddSequenceDependency{}
+			}
+			if err := m.AddSequenceDependency.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddColumnFamilyDependency", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddColumnFamilyDependency == nil {
+				m.AddColumnFamilyDependency = &AddColumnFamilyDependency{}
+			}
+			if err := m.AddColumnFamilyDependency.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddUniqueConstraint", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddUniqueConstraint == nil {
+				m.AddUniqueConstraint = &AddUniqueConstraint{}
+			}
+			if err := m.AddUniqueConstraint.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropUniqueConstraint", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DropUniqueConstraint == nil {
+				m.DropUniqueConstraint = &DropUniqueConstraint{}
+			}
+			if err := m.DropUniqueConstraint.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddCheckConstraint", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddCheckConstraint == nil {
+				m.AddCheckConstraint = &AddCheckConstraint{}
+			}
+			if err := m.AddCheckConstraint.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddCheckConstraintUnvalidated", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddCheckConstraintUnvalidated == nil {
+				m.AddCheckConstraintUnvalidated = &AddCheckConstraintUnvalidated{}
+			}
+			if err := m.AddCheckConstraintUnvalidated.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DropCheckConstraint", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DropCheckConstraint == nil {
+				m.DropCheckConstraint = &DropCheckConstraint{}
+			}
+			if err := m.DropCheckConstraint.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTargets(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTargets
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *AddColumn) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -3200,63 +3904,75 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/schemachanger/targets/targets.proto", fileDescriptor_targets_0c99809fe176d142)
+	proto.RegisterFile("sql/schemachanger/targets/targets.proto", fileDescriptor_targets_0ced52f4a9468fdb)
 }
 
-var fileDescriptor_targets_0c99809fe176d142 = []byte{
-	// 849 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x57, 0x4f, 0x8f, 0xdb, 0x44,
-	0x14, 0x8f, 0x9d, 0x6c, 0x12, 0xbf, 0x90, 0x36, 0x9a, 0xb6, 0x52, 0x5a, 0x09, 0x7b, 0xd5, 0x4a,
-	0x74, 0x41, 0xc2, 0x96, 0x96, 0x5b, 0x2f, 0x60, 0xc7, 0x59, 0xc9, 0xda, 0x28, 0x2d, 0xde, 0x5d,
-	0x2a, 0xb8, 0x44, 0x13, 0xcf, 0x34, 0xb1, 0xd6, 0xff, 0x32, 0x76, 0xa0, 0xf9, 0x16, 0x5c, 0xb8,
-	0x70, 0xe2, 0xc2, 0x01, 0x89, 0x4f, 0xc0, 0x27, 0xd8, 0x63, 0x0f, 0x1c, 0x7a, 0x32, 0xd4, 0x7b,
-	0x80, 0xcf, 0xd0, 0x13, 0xf2, 0xd8, 0x4e, 0xff, 0xac, 0xe0, 0xd0, 0x86, 0x80, 0xaa, 0x3d, 0xe5,
-	0xcd, 0x24, 0xf3, 0x7b, 0xbf, 0xf7, 0x7b, 0xf3, 0xde, 0xcb, 0xc0, 0xdd, 0x78, 0xe1, 0x69, 0xb1,
-	0x33, 0xa7, 0x3e, 0x76, 0xe6, 0x38, 0x98, 0x51, 0xa6, 0x25, 0x98, 0xcd, 0x68, 0x12, 0x57, 0x9f,
-	0x6a, 0xc4, 0xc2, 0x24, 0x44, 0x77, 0x9c, 0xd0, 0x39, 0x65, 0x21, 0x76, 0xe6, 0x6a, 0xbc, 0xf0,
-	0xd4, 0x57, 0x8e, 0xa8, 0xe5, 0x4f, 0x6f, 0xdd, 0xc9, 0xd1, 0x1c, 0x9c, 0x60, 0x2f, 0x9c, 0x69,
-	0x84, 0xc6, 0x4e, 0x34, 0xd5, 0xe2, 0x84, 0x2d, 0x9d, 0x64, 0xc9, 0x28, 0x29, 0x90, 0x6e, 0x5d,
-	0x9f, 0x85, 0xb3, 0x90, 0x9b, 0x5a, 0x6e, 0x15, 0xbb, 0xb7, 0x7f, 0x12, 0x41, 0xd2, 0x09, 0x19,
-	0x84, 0xde, 0xd2, 0x0f, 0x10, 0x81, 0x76, 0x82, 0xa7, 0x1e, 0x9d, 0xb8, 0xa4, 0x2f, 0xec, 0x0a,
-	0x7b, 0x5d, 0xc3, 0xca, 0x52, 0xa5, 0x75, 0x9c, 0xef, 0x59, 0xe6, 0xf3, 0x54, 0xb9, 0x37, 0x73,
-	0x93, 0xf9, 0x72, 0xaa, 0x3a, 0xa1, 0xaf, 0xad, 0x99, 0x91, 0xe9, 0x0b, 0x5b, 0x8b, 0x4e, 0x67,
-	0xda, 0x45, 0x3a, 0xaa, 0x65, 0xda, 0x2d, 0x0e, 0x6d, 0x11, 0xe4, 0x42, 0xd7, 0xe1, 0xfe, 0x26,
-	0x8f, 0xb0, 0xef, 0x7a, 0xab, 0xbe, 0xc8, 0x5d, 0xe5, 0xf8, 0x9f, 0xbd, 0x29, 0xfe, 0x01, 0x47,
-	0xb2, 0x4c, 0xfb, 0xbd, 0x02, 0xba, 0x58, 0xa3, 0x21, 0x34, 0x8b, 0x75, 0xbf, 0xbe, 0x2b, 0xec,
-	0x75, 0xf6, 0xef, 0xaa, 0xaf, 0xe9, 0xb9, 0xf0, 0xa6, 0x38, 0xa6, 0x6a, 0x11, 0xbf, 0x49, 0x63,
-	0x87, 0xb9, 0x51, 0x12, 0x32, 0xa3, 0x71, 0x96, 0x2a, 0x35, 0xbb, 0x3c, 0x7c, 0xaf, 0xf1, 0xe7,
-	0x0f, 0x8a, 0x70, 0xfb, 0x0f, 0x01, 0xc0, 0x64, 0x61, 0xb4, 0x55, 0xb1, 0x7c, 0x90, 0x4a, 0xb1,
-	0x5c, 0x52, 0x0a, 0xf5, 0x20, 0x4b, 0x95, 0x76, 0x41, 0xc2, 0x7a, 0x2b, 0xd1, 0x2a, 0x0c, 0xbb,
-	0x5d, 0xb8, 0xb0, 0x48, 0x19, 0xe9, 0xcf, 0x75, 0x68, 0xeb, 0x84, 0x58, 0x01, 0xa1, 0x8f, 0xb7,
-	0x14, 0xa7, 0x01, 0x3b, 0x6e, 0xee, 0x8e, 0xc7, 0xd8, 0xd9, 0xff, 0xe0, 0x6f, 0x12, 0xc5, 0x29,
-	0x5d, 0xc8, 0x53, 0x71, 0x14, 0xcd, 0xa1, 0x1b, 0x31, 0xd7, 0xc7, 0x6c, 0x35, 0x29, 0xb0, 0xea,
-	0x9c, 0xee, 0xe0, 0x79, 0xaa, 0x7c, 0xfa, 0xc6, 0x1c, 0x73, 0xa0, 0xfc, 0x5e, 0x95, 0xc8, 0x85,
-	0x26, 0x7d, 0x68, 0x95, 0xeb, 0x7e, 0x63, 0x57, 0xd8, 0x6b, 0xdb, 0xd5, 0x12, 0x79, 0x70, 0x95,
-	0xd1, 0xc8, 0xc3, 0x0e, 0xf5, 0x69, 0x90, 0x4c, 0x1e, 0x85, 0xac, 0xbf, 0xb3, 0x39, 0x16, 0x57,
-	0x5e, 0xc2, 0x3e, 0x08, 0x59, 0x99, 0xae, 0x5f, 0xea, 0x20, 0xe5, 0x17, 0x73, 0x9b, 0xf9, 0x72,
-	0xa1, 0xcd, 0x35, 0x7e, 0x71, 0x2d, 0xc7, 0xb9, 0x97, 0x92, 0xe8, 0x26, 0x62, 0x6d, 0x71, 0x7c,
-	0x8b, 0x20, 0x02, 0x9d, 0x32, 0x6c, 0x32, 0x99, 0xae, 0x36, 0x99, 0x54, 0xa8, 0x70, 0x8d, 0x15,
-	0x8a, 0x00, 0xd6, 0x85, 0x16, 0xf7, 0x1b, 0xbb, 0xf5, 0xbd, 0xae, 0xf1, 0x79, 0x96, 0x2a, 0x52,
-	0x55, 0x25, 0xf1, 0x46, 0x4a, 0x4d, 0xaa, 0x4a, 0x2d, 0x2e, 0x93, 0xf7, 0x4c, 0x84, 0x1b, 0x3a,
-	0x21, 0x47, 0x74, 0xb1, 0xa4, 0x81, 0x43, 0x4d, 0x1a, 0xd1, 0x80, 0xd0, 0xc0, 0x59, 0xbd, 0x93,
-	0x0d, 0x06, 0xf9, 0xd0, 0x89, 0xcb, 0x50, 0x73, 0x87, 0x45, 0x32, 0x47, 0x59, 0xaa, 0x40, 0xa5,
-	0xc0, 0x5b, 0x87, 0x06, 0x95, 0x83, 0x75, 0x3f, 0xfb, 0x55, 0x80, 0x9b, 0xeb, 0x29, 0x57, 0x8c,
-	0x86, 0xad, 0xeb, 0x7c, 0x08, 0xcd, 0x97, 0xc6, 0x5d, 0x67, 0xff, 0xe3, 0x7f, 0x1c, 0x45, 0x15,
-	0xc9, 0xd7, 0x07, 0x52, 0x01, 0x51, 0x86, 0x95, 0x8a, 0x70, 0x4d, 0x27, 0xe4, 0x24, 0x70, 0x17,
-	0x4b, 0x3a, 0x08, 0x83, 0x38, 0x61, 0xd8, 0x0d, 0x92, 0x77, 0xaf, 0x03, 0xbc, 0x5a, 0x9b, 0xf5,
-	0xad, 0xd5, 0xe6, 0x6f, 0x22, 0x5c, 0xcf, 0x1b, 0xeb, 0xa5, 0xc2, 0xff, 0x96, 0xc2, 0xdf, 0x8b,
-	0x80, 0xf2, 0xca, 0x9c, 0x53, 0xe7, 0x74, 0xeb, 0xfa, 0x22, 0x68, 0x04, 0xd8, 0xa7, 0x5c, 0x5b,
-	0xc9, 0xe6, 0x76, 0xbe, 0x47, 0x1f, 0x47, 0x8c, 0x37, 0x26, 0xc9, 0xe6, 0xf6, 0x7f, 0x36, 0x1a,
-	0x7e, 0x14, 0xe1, 0xfd, 0x8b, 0xe2, 0x9c, 0x04, 0x5f, 0x63, 0xcf, 0x25, 0x38, 0xa1, 0xe4, 0x52,
-	0x27, 0xae, 0xd3, 0x77, 0x02, 0x5c, 0xe3, 0x7f, 0xcc, 0xff, 0x2f, 0xb7, 0xa8, 0xe0, 0xf5, 0xd1,
-	0x37, 0xb0, 0x73, 0x94, 0xe0, 0x84, 0xa2, 0x0e, 0xb4, 0x4e, 0xc6, 0x87, 0xe3, 0xfb, 0x0f, 0xc7,
-	0xbd, 0x1a, 0x02, 0x68, 0xea, 0xc6, 0xd1, 0x70, 0x7c, 0xdc, 0x13, 0xd0, 0x55, 0xe8, 0x98, 0xc3,
-	0xd1, 0xf0, 0x78, 0x38, 0xb9, 0x3f, 0x1e, 0x7d, 0xd9, 0x13, 0xd1, 0x4d, 0xb8, 0x51, 0x6e, 0xe8,
-	0x63, 0x73, 0xf2, 0xd0, 0xb6, 0xaa, 0xaf, 0xea, 0xe8, 0x0a, 0x80, 0xa1, 0x0f, 0x0e, 0x0f, 0xac,
-	0xd1, 0x68, 0x68, 0xf6, 0x1a, 0xa8, 0x0b, 0xd2, 0x17, 0xfa, 0xc8, 0x32, 0xf5, 0xe3, 0xa1, 0xd9,
-	0xdb, 0xc9, 0x61, 0x1f, 0x9c, 0x18, 0x23, 0x6b, 0xd0, 0x6b, 0x1a, 0x1f, 0x9e, 0x3d, 0x93, 0x6b,
-	0x67, 0x99, 0x2c, 0x3c, 0xc9, 0x64, 0xe1, 0x69, 0x26, 0x0b, 0xbf, 0x67, 0xb2, 0xf0, 0xed, 0xb9,
-	0x5c, 0x7b, 0x72, 0x2e, 0xd7, 0x9e, 0x9e, 0xcb, 0xb5, 0xaf, 0x5a, 0xe5, 0xdb, 0x71, 0xda, 0xe4,
-	0xef, 0xc0, 0x4f, 0xfe, 0x0a, 0x00, 0x00, 0xff, 0xff, 0xb7, 0x90, 0x2d, 0x60, 0x92, 0x0e, 0x00,
+var fileDescriptor_targets_0ced52f4a9468fdb = []byte{
+	// 1041 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0x4f, 0x8f, 0xdb, 0x44,
+	0x14, 0x8f, 0x93, 0x6c, 0xfe, 0xbc, 0x90, 0x36, 0x1a, 0x5a, 0x29, 0xad, 0x44, 0x52, 0xb5, 0x12,
+	0x2d, 0x48, 0x38, 0x12, 0x1c, 0x80, 0x3d, 0x00, 0x76, 0x9c, 0x4a, 0xd6, 0x46, 0xd9, 0x65, 0x36,
+	0x4b, 0x05, 0x97, 0xc8, 0xf1, 0x4c, 0x13, 0xb3, 0xfe, 0x17, 0xdb, 0x81, 0x46, 0xe2, 0x03, 0x70,
+	0xe4, 0xc2, 0x85, 0x13, 0x17, 0x0e, 0x48, 0x7c, 0x02, 0x3e, 0xc1, 0x1e, 0x7b, 0xe0, 0xd0, 0x53,
+	0xa0, 0xd9, 0x03, 0x7c, 0x02, 0x0e, 0x3d, 0x21, 0x8f, 0xed, 0xc4, 0x9b, 0x78, 0x4b, 0x76, 0x1b,
+	0xa5, 0x52, 0xd5, 0x53, 0xc6, 0x93, 0xbc, 0xdf, 0xef, 0xbd, 0xdf, 0xf3, 0x7b, 0x6f, 0x26, 0x70,
+	0xd7, 0x1d, 0xe9, 0x0d, 0x57, 0x1d, 0x52, 0x43, 0x51, 0x87, 0x8a, 0x39, 0xa0, 0x4e, 0xc3, 0x53,
+	0x9c, 0x01, 0xf5, 0xdc, 0xe8, 0x93, 0xb7, 0x1d, 0xcb, 0xb3, 0xd0, 0x1d, 0xd5, 0x52, 0x8f, 0x1d,
+	0x4b, 0x51, 0x87, 0xbc, 0x3b, 0xd2, 0xf9, 0x33, 0x26, 0x7c, 0xf8, 0xd3, 0x9b, 0x77, 0x7c, 0x34,
+	0x55, 0xf1, 0x14, 0xdd, 0x1a, 0x34, 0x08, 0x75, 0x55, 0xbb, 0xdf, 0x70, 0x3d, 0x67, 0xac, 0x7a,
+	0x63, 0x87, 0x92, 0x00, 0xe9, 0xe6, 0xb5, 0x81, 0x35, 0xb0, 0xd8, 0xb2, 0xe1, 0xaf, 0x82, 0xdd,
+	0xdb, 0xff, 0x16, 0xa0, 0xd4, 0x65, 0x30, 0x07, 0x8c, 0xaf, 0x0d, 0x45, 0x81, 0x90, 0xa6, 0xa5,
+	0x8f, 0x0d, 0xb3, 0xca, 0xdd, 0xe2, 0xee, 0x95, 0xde, 0xe7, 0xf9, 0x35, 0x7c, 0xe0, 0xe7, 0x56,
+	0x78, 0x01, 0x80, 0xf6, 0x01, 0x24, 0xc7, 0xb2, 0x43, 0xb8, 0x34, 0x83, 0x6b, 0xac, 0x05, 0xb7,
+	0x30, 0xc3, 0x31, 0x08, 0x24, 0x43, 0x41, 0x20, 0x44, 0x36, 0x09, 0x7d, 0x54, 0xcd, 0x30, 0xb8,
+	0xf7, 0xd6, 0xf5, 0x8e, 0x19, 0xe1, 0xb9, 0xb9, 0x1f, 0xa9, 0x0f, 0x1c, 0x60, 0x65, 0x2f, 0x10,
+	0xe9, 0xdc, 0x0a, 0x2f, 0x00, 0x90, 0x0d, 0xd7, 0x05, 0x42, 0x0e, 0xe9, 0x68, 0x4c, 0x4d, 0x95,
+	0x4a, 0xd4, 0xa6, 0x26, 0xa1, 0xa6, 0x3a, 0xa9, 0xee, 0x30, 0xe4, 0xdd, 0x75, 0xbd, 0x5c, 0x45,
+	0xc0, 0xc9, 0xc0, 0xe8, 0x3b, 0xb8, 0x31, 0x17, 0xfa, 0xbe, 0x62, 0x68, 0xfa, 0x24, 0xc6, 0x9a,
+	0x63, 0xac, 0x9f, 0x5c, 0x2c, 0x73, 0xcb, 0x28, 0xf8, 0x7c, 0x02, 0xf4, 0x35, 0xbc, 0x29, 0x10,
+	0x72, 0x64, 0x6a, 0xa3, 0x31, 0x6d, 0x5a, 0xa6, 0xeb, 0x39, 0x8a, 0x66, 0x7a, 0xd5, 0x3c, 0xe3,
+	0xfd, 0x68, 0x5d, 0xde, 0x65, 0x7b, 0x9c, 0x04, 0x8a, 0x0c, 0xb8, 0xe6, 0x0b, 0xbd, 0x42, 0x56,
+	0x60, 0x64, 0x1f, 0xaf, 0x9d, 0xb4, 0x15, 0xb6, 0x44, 0x58, 0x34, 0x00, 0xe4, 0xc7, 0x3d, 0xa4,
+	0xea, 0x71, 0x8c, 0xac, 0xc8, 0xc8, 0x3e, 0x5c, 0x5b, 0xd1, 0xb3, 0xe6, 0x38, 0x01, 0x12, 0x7d,
+	0xcf, 0xc1, 0x5b, 0xab, 0xdb, 0x47, 0xe6, 0x37, 0x8a, 0xae, 0x11, 0xc5, 0xa3, 0xa4, 0x0a, 0x8c,
+	0x54, 0xbc, 0x24, 0x69, 0x0c, 0x09, 0x3f, 0x9f, 0xc8, 0x4f, 0x27, 0xab, 0xb2, 0xa5, 0xa0, 0x4b,
+	0x17, 0x48, 0x67, 0x82, 0x3d, 0x4e, 0x02, 0xdd, 0xcd, 0x9e, 0xfc, 0x5c, 0xe7, 0x6e, 0xff, 0x9a,
+	0x8e, 0x75, 0x1a, 0x44, 0xa0, 0xe0, 0x29, 0x7d, 0x9d, 0xf6, 0x34, 0xc2, 0xba, 0x4e, 0x59, 0x94,
+	0x67, 0xd3, 0x7a, 0xbe, 0xeb, 0xef, 0xc9, 0xd2, 0xb3, 0x69, 0x7d, 0x77, 0xa0, 0x79, 0xc3, 0x71,
+	0x9f, 0x57, 0x2d, 0xa3, 0x31, 0xf7, 0x86, 0xf4, 0x17, 0xeb, 0x86, 0x7d, 0x3c, 0x68, 0xac, 0xf6,
+	0x41, 0x5e, 0x96, 0x70, 0x9e, 0x41, 0xcb, 0x04, 0x69, 0x50, 0x56, 0x19, 0x5f, 0xef, 0x21, 0x7b,
+	0x9f, 0x59, 0x47, 0x2a, 0x8b, 0x3e, 0xfe, 0x67, 0x97, 0xc5, 0x0f, 0x2a, 0x43, 0x96, 0xf0, 0x1b,
+	0x6a, 0xac, 0x52, 0x50, 0x0b, 0x72, 0xc1, 0x73, 0xd8, 0xa6, 0xee, 0x2e, 0x6b, 0x38, 0xd2, 0xfb,
+	0x8a, 0x4b, 0xf9, 0x20, 0x7e, 0x89, 0xba, 0xaa, 0xa3, 0xd9, 0x9e, 0xe5, 0x88, 0xd9, 0x93, 0x69,
+	0x3d, 0x85, 0x43, 0xe3, 0xdd, 0xec, 0x3f, 0xbe, 0x56, 0x7f, 0x73, 0xf1, 0x3e, 0xba, 0x25, 0xb1,
+	0x0c, 0x28, 0x86, 0x62, 0x69, 0x24, 0x14, 0xea, 0x60, 0x36, 0xad, 0x17, 0x02, 0x27, 0xe4, 0x17,
+	0x12, 0x2d, 0xc2, 0xc0, 0x85, 0x80, 0x42, 0x26, 0x61, 0xa4, 0xbf, 0x65, 0x16, 0x0d, 0x7e, 0x4b,
+	0x71, 0x8a, 0xb0, 0xa3, 0xb1, 0x19, 0x10, 0x8c, 0xa7, 0xb7, 0xcf, 0x49, 0x14, 0x73, 0x69, 0x25,
+	0x4f, 0x81, 0x29, 0x1a, 0x42, 0xd9, 0x76, 0x34, 0x43, 0x71, 0x26, 0x3d, 0x6d, 0x3e, 0x9b, 0xca,
+	0x62, 0xf3, 0xd9, 0xb4, 0xfe, 0xe9, 0xa5, 0x7d, 0xf4, 0x81, 0xfc, 0xf7, 0x2a, 0x44, 0x0e, 0x34,
+	0xa9, 0x42, 0x3e, 0x7c, 0x66, 0x33, 0xab, 0x80, 0xa3, 0x47, 0xa4, 0xc3, 0x55, 0x87, 0xda, 0xba,
+	0xa2, 0x52, 0x83, 0x9a, 0x5e, 0xef, 0xa1, 0xe5, 0xb0, 0xd9, 0xb3, 0x21, 0x2f, 0xae, 0xc4, 0xb0,
+	0xef, 0x5b, 0x4e, 0x98, 0xae, 0xdf, 0x33, 0xb1, 0x21, 0xba, 0xb5, 0x22, 0x2e, 0x30, 0x8d, 0x17,
+	0xaf, 0x65, 0xc7, 0x67, 0x09, 0x1d, 0xdd, 0x44, 0xac, 0x79, 0x86, 0x2f, 0x13, 0x44, 0xa0, 0x14,
+	0x86, 0x4d, 0x7a, 0xfd, 0xc9, 0x26, 0x93, 0x0a, 0x11, 0xae, 0x38, 0x41, 0x36, 0xc0, 0xbc, 0xd0,
+	0xdc, 0x6a, 0xf6, 0x56, 0xe6, 0x5e, 0x59, 0xfc, 0x7c, 0x36, 0xad, 0x17, 0xa3, 0x2a, 0x71, 0x37,
+	0x52, 0x6a, 0xc5, 0xa8, 0xd4, 0xdc, 0x30, 0x79, 0x4f, 0xd3, 0xe7, 0x9c, 0x59, 0x5e, 0xc9, 0x06,
+	0x83, 0x0c, 0x28, 0xb9, 0x61, 0xa8, 0x3e, 0x61, 0x90, 0xcc, 0xf6, 0x6c, 0x5a, 0x87, 0x48, 0x81,
+	0x17, 0x0e, 0x0d, 0x22, 0x82, 0x79, 0x3f, 0xfb, 0x83, 0x7b, 0xce, 0x29, 0x6d, 0x4b, 0x3a, 0xef,
+	0x41, 0x2e, 0x36, 0xee, 0x12, 0x4e, 0xcc, 0x67, 0x46, 0x51, 0xe4, 0xe4, 0xf2, 0x40, 0x0a, 0x20,
+	0xc2, 0xb0, 0xa6, 0xe9, 0xc4, 0xe3, 0xdf, 0xab, 0xd7, 0x01, 0xce, 0xd6, 0x66, 0x66, 0x6b, 0xb5,
+	0xf9, 0x67, 0x3a, 0xf9, 0xcc, 0xfb, 0x5a, 0xe1, 0x4d, 0x29, 0xfc, 0x53, 0x3a, 0xe9, 0x98, 0xbf,
+	0x25, 0x7d, 0x11, 0x64, 0x4d, 0xc5, 0xa0, 0x4c, 0xdb, 0x22, 0x66, 0x6b, 0x7f, 0x8f, 0x3e, 0xb2,
+	0x1d, 0xd6, 0x98, 0x8a, 0x98, 0xad, 0x5f, 0xda, 0x68, 0xf8, 0x25, 0xfd, 0x3f, 0x37, 0x93, 0xd7,
+	0x3a, 0x31, 0x9d, 0x7e, 0xe4, 0x12, 0xef, 0x4d, 0x2f, 0x4f, 0x9d, 0xc0, 0xaf, 0x77, 0xbf, 0x85,
+	0x9d, 0x43, 0x4f, 0xf1, 0x28, 0x2a, 0x41, 0xfe, 0xa8, 0xb3, 0xd7, 0xd9, 0x7f, 0xd0, 0xa9, 0xa4,
+	0x10, 0x40, 0x4e, 0x10, 0x0f, 0x5b, 0x9d, 0x6e, 0x85, 0x43, 0x57, 0xa1, 0x24, 0xb5, 0xda, 0xad,
+	0x6e, 0xab, 0xb7, 0xdf, 0x69, 0x7f, 0x59, 0x49, 0xa3, 0x1b, 0x70, 0x3d, 0xdc, 0x10, 0x3a, 0x52,
+	0xef, 0x01, 0x96, 0xa3, 0xaf, 0x32, 0xe8, 0x0a, 0x80, 0x28, 0x34, 0xf7, 0xee, 0xcb, 0xed, 0x76,
+	0x4b, 0xaa, 0x64, 0x51, 0x19, 0x8a, 0x5f, 0x08, 0x6d, 0x59, 0x12, 0xba, 0x2d, 0xa9, 0xb2, 0xe3,
+	0xc3, 0x1e, 0x1c, 0x89, 0x6d, 0xb9, 0x59, 0xc9, 0x89, 0xef, 0x9c, 0x3c, 0xad, 0xa5, 0x4e, 0x66,
+	0x35, 0xee, 0xf1, 0xac, 0xc6, 0x3d, 0x99, 0xd5, 0xb8, 0xbf, 0x66, 0x35, 0xee, 0x87, 0xd3, 0x5a,
+	0xea, 0xf1, 0x69, 0x2d, 0xf5, 0xe4, 0xb4, 0x96, 0xfa, 0x2a, 0x1f, 0xde, 0x17, 0xfb, 0x39, 0xf6,
+	0x07, 0xd4, 0x07, 0xff, 0x05, 0x00, 0x00, 0xff, 0xff, 0x4a, 0x0f, 0xd0, 0x7d, 0x0b, 0x13, 0x00,
 	0x00,
 }

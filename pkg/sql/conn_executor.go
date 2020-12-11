@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2309,19 +2310,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
-		if ex.extraTxnState.schemaChangerState.inUse {
-			// Wait for new versions.
-			if err := WaitToUpdateLeasesMultiple(
-				ex.Ctx(),
-				ex.server.cfg.LeaseManager,
-				ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(),
-			); err != nil {
-				handleErr(err)
-			}
-			if err := ex.runPostCommitStages(ex.Ctx()); err != nil {
-				handleErr(err)
-			}
-		}
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx,
 			ex.server.cfg.InternalExecutor,
@@ -2526,7 +2514,34 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	if len(ex.extraTxnState.schemaChangerState.targetStates) == 0 {
 		return nil
 	}
-	return ex.runNewSchemaChanger(ctx, compiler.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn)
+	if err := ex.runNewSchemaChanger(
+		ctx, compiler.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn,
+	); err != nil {
+		return err
+	}
+
+	scs := &ex.extraTxnState.schemaChangerState
+	targetSlice := make([]*targets.TargetProto, len(scs.targetStates))
+	states := make([]targets.State, len(scs.targetStates))
+	for i := range scs.targetStates {
+		var tp targets.TargetProto
+		if !tp.SetValue(scs.targetStates[i].Target) {
+			panic("hi")
+		}
+		targetSlice[i] = &tp
+		states[i] = scs.targetStates[i].State
+	}
+	_, err := ex.planner.extendedEvalCtx.QueueJob(jobs.Record{
+		Description:   "Schema change job", // TODO(ajwerner): use const
+		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
+		Username:      ex.planner.User(),
+		DescriptorIDs: nil, // TODO(ajwerner): populate
+		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
+		Progress:      jobspb.NewSchemaChangeProgress{States: states},
+		RunningStatus: "",
+		NonCancelable: false,
+	})
+	return err
 }
 
 func (ex *connExecutor) runPostStatementStages(ctx context.Context) error {
@@ -2534,13 +2549,6 @@ func (ex *connExecutor) runPostStatementStages(ctx context.Context) error {
 		return nil
 	}
 	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringTxn)
-}
-
-func (ex *connExecutor) runPostCommitStages(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangerState.targetStates) == 0 {
-		return nil
-	}
-	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringAfterTxn)
 }
 
 func (ex *connExecutor) runNewSchemaChanger(
@@ -2573,28 +2581,6 @@ func (ex *connExecutor) withNewSchemaChangeExecutorDuringTxn(
 	ctx context.Context, f func(context.Context, *executor.Executor) error,
 ) error {
 	return f(ctx, executor.New(ex.planner.txn, &ex.extraTxnState.descCollection))
-}
-
-func (ex *connExecutor) withNewSchemaChangeExecutorDuringAfterTxn(
-	ctx context.Context, f func(context.Context, *executor.Executor) error,
-) error {
-	var descsWithNewVersions []lease.IDVersion
-	if err := descs.Txn(
-		ctx,
-		ex.server.cfg.Settings,
-		ex.server.cfg.LeaseManager,
-		ex.server.cfg.InternalExecutor,
-		ex.server.cfg.DB,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) (err error) {
-			if err := f(ctx, executor.New(txn, descriptors)); err != nil {
-				return err
-			}
-			descsWithNewVersions = descriptors.GetDescriptorsWithNewVersion()
-			return nil
-		}); err != nil {
-		return err
-	}
-	return WaitToUpdateLeasesMultiple(ctx, ex.server.cfg.LeaseManager, descsWithNewVersions)
 }
 
 // StatementCounters groups metrics for counting different types of
