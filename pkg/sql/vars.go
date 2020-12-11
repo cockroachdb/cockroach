@@ -359,11 +359,11 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			m.SetDefaultReadOnly(b)
+			m.SetDefaultTransactionReadOnly(b)
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultReadOnly)
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultTxnReadOnly)
 		},
 		GlobalDefault: globalFalse,
 	},

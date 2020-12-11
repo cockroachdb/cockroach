@@ -2061,7 +2061,7 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	mode tree.ReadWriteMode,
 ) tree.ReadWriteMode {
 	if mode == tree.UnspecifiedReadWriteMode {
-		if ex.sessionData.DefaultReadOnly {
+		if ex.sessionData.DefaultTxnReadOnly {
 			return tree.ReadOnly
 		}
 		return tree.ReadWrite
