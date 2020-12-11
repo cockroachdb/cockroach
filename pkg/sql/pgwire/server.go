@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -533,11 +534,21 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	ctx, draining, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 
+	connDetails := eventpb.CommonConnectionDetails{
+		InstanceID:    int32(s.execCfg.NodeID.SQLInstanceID()),
+		Network:       conn.RemoteAddr().Network(),
+		RemoteAddress: conn.RemoteAddr().String(),
+	}
+
 	// Some bookkeeping, for security-minded administrators.
 	// This registers the connection to the authentication log.
 	connStart := timeutil.Now()
 	if s.connLogEnabled() {
-		log.Sessions.Infof(ctx, "received connection")
+		ev := &eventpb.ClientConnectionStart{
+			CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: connStart.UnixNano()},
+			CommonConnectionDetails: connDetails,
+		}
+		log.StructuredEvent(ctx, ev)
 	}
 	defer func() {
 		// The duration of the session is logged at the end so that the
@@ -545,7 +556,13 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// to find when the connection was opened. This is important
 		// because the log files may have been rotated since.
 		if s.connLogEnabled() {
-			log.Sessions.Infof(ctx, "disconnected; duration: %s", timeutil.Now().Sub(connStart))
+			endTime := timeutil.Now()
+			ev := &eventpb.ClientConnectionEnd{
+				CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+				CommonConnectionDetails: connDetails,
+				Duration:                endTime.Sub(connStart).Nanoseconds(),
+			}
+			log.StructuredEvent(ctx, ev)
 		}
 	}()
 
@@ -622,10 +639,12 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		return s.sendErr(ctx, conn, err)
 	}
 
-	// Populate the client address field in the context tags.
+	// Populate the client address field in the context tags and the
+	// shared struct for structured logging.
 	// Only know do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
-	ctx = logtags.AddTag(ctx, "client", sArgs.RemoteAddr.String())
+	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
+	ctx = logtags.AddTag(ctx, "client", connDetails.RemoteAddress)
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
@@ -640,6 +659,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		reserved,
 		authOptions{
 			connType:        connType,
+			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
 			auth:            s.GetAuthenticationConfiguration(),

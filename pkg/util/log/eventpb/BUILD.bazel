@@ -13,6 +13,7 @@ go_library(
         "misc_sql_events.pb.go",
         "privilege_events.pb.go",
         "role_events.pb.go",
+        "session_events.pb.go",
         "zone_events.pb.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",

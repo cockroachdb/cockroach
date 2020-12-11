@@ -1183,6 +1183,172 @@ removed from a user for a type object.
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
 
+## SQL Session events
+
+Events in this category report SQL client connections
+and sessions.
+
+They are relative to a particular SQL tenant.
+In a multi-tenant setup, copies of these miscellaneous events are
+preserved in each tenant's own system.eventlog table.
+
+Events in this category are logged to channel SESSIONS.
+
+
+### `client_authentication_failed`
+
+An event of type `client_authentication_failed` is reported when a client session
+did not authenticate successfully.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_sessions.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Reason` | The reason for the authentication failure. See below for possible values for type `AuthFailReason`. | no |
+| `Detail` | The detailed error for the authentication failure. | yes |
+| `Method` | The authentication method used. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `Transport` | The connection type after transport negotiation. | no |
+| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+
+### `client_authentication_info`
+
+An event of type `client_authentication_info` is reported for intermediate
+steps during the authentication process.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_sessions.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Method` | The authentication method used, once known. | no |
+| `Info` | The authentication progress message. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `Transport` | The connection type after transport negotiation. | no |
+| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+
+### `client_authentication_ok`
+
+An event of type `client_authentication_ok` is reported when a client session
+was authenticated successfully.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_sessions.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Method` | The authentication method used. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `Transport` | The connection type after transport negotiation. | no |
+| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+
+### `client_connection_end`
+
+An event of type `client_connection_end` is reported when a client connection
+is closed. This is reported even when authentication
+fails, and even for simple cancellation messages.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_connections.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Duration` | The duration of the connection in nanoseconds. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+
+### `client_connection_start`
+
+An event of type `client_connection_start` is reported when a client connection
+is established. This is reported even when authentication
+fails, and even for simple cancellation messages.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_connections.enabled` is set.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+
+### `client_session_end`
+
+An event of type `client_session_end` is reported when a client session
+is completed.
+
+Events of this type are only emitted when the cluster setting
+`server.auth_log.sql_sessions.enabled` is set.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Duration` | The duration of the connection in nanoseconds. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
+| `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `Transport` | The connection type after transport negotiation. | no |
+| `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+
 ## SQL User and Role operations
 
 Events in this category pertain to SQL statements that modify the
@@ -1316,5 +1482,28 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
+
+
+
+
+## Enumeration types
+
+### `AuthFailReason`
+
+AuthFailReason is the inventory of possible reasons for an
+authentication failure.
+
+
+| Value | Textual alias in code or documentation | Description |
+|--|--|
+| 0 | UNKNOWN | is reported when the reason is unknown. |
+| 1 | USER_RETRIEVAL_ERROR | occurs when there was an internal error accessing the principals. |
+| 2 | USER_NOT_FOUND | occurs when the principal is unknown. |
+| 3 | LOGIN_DISABLED | occurs when the user does not have LOGIN privileges. |
+| 4 | METHOD_NOT_FOUND | occurs when no HBA rule matches or the method does not exist. |
+| 5 | PRE_HOOK_ERROR | occurs when the authentication handshake encountered a protocol error. |
+| 6 | CREDENTIALS_INVALID | occurs when the client-provided credentials were invalid. |
+| 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
+
 
 

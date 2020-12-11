@@ -1549,6 +1549,7 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/privilege_events.proto \
 	pkg/util/log/eventpb/role_events.proto \
 	pkg/util/log/eventpb/zone_events.proto \
+	pkg/util/log/eventpb/session_events.proto \
 	pkg/util/log/eventpb/cluster_events.proto
 
 docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
