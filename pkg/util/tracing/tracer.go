@@ -90,6 +90,7 @@ var zipkinCollector = settings.RegisterPublicStringSetting(
 // this won't be the case if the cluster settings move away from using global
 // state.
 type Tracer struct {
+	backgroundTracingEnabled bool
 	// Preallocated noopSpan, used to avoid creating spans when we are not using
 	// x/net/trace or lightstep and we are not recording.
 	noopSpan *Span
@@ -105,8 +106,12 @@ type Tracer struct {
 // and collects essentially nothing; use Configure() to enable various tracing
 // backends.
 func NewTracer() *Tracer {
-	t := &Tracer{}
-	t.noopSpan = &Span{tracer: t}
+	t := &Tracer{
+		backgroundTracingEnabled: envutil.EnvOrDefaultBool("COCKROACH_BACKGROUND_TRACING", false),
+	}
+	if !t.backgroundTracingEnabled {
+		t.noopSpan = &Span{tracer: t}
+	}
 	return t
 }
 
@@ -191,6 +196,10 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 		if opts.RemoteParent != nil {
 			panic("can't specify both Parent and RemoteParent")
 		}
+	}
+
+	if t.backgroundTracingEnabled {
+		opts.ForceRealSpan = true
 	}
 
 	// Avoid creating a real span when possible. If tracing is globally
