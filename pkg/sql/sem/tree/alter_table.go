@@ -257,6 +257,7 @@ type AlterTableAlterPrimaryKey struct {
 	Columns    IndexElemList
 	Interleave *InterleaveDef
 	Sharded    *ShardedIndexDef
+	Name       Name
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.

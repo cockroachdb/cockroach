@@ -3483,7 +3483,11 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 			if err != nil {
 				return err
 			}
-			newIndex.Name = "primary"
+			if args.NewPrimaryIndexName == "" {
+				newIndex.Name = PrimaryKeyIndexName
+			} else {
+				newIndex.Name = args.NewPrimaryIndexName
+			}
 			desc.PrimaryIndex = *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
 			// The primary index "implicitly" stores all columns in the table.
 			// Explicitly including them in the stored columns list is incorrect.
