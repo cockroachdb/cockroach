@@ -418,6 +418,155 @@ func (m *ChangeTypePrivilege) AppendJSONFields(printComma bool, b redact.Redacta
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *ClientAuthenticationFailed) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
+
+	if m.Reason != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Reason\":"...)
+		b = strconv.AppendInt(b, int64(m.Reason), 10)
+	}
+
+	if m.Detail != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Detail\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Detail)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.Method != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Method\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Method))
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ClientAuthenticationInfo) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
+
+	if m.Method != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Method\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Method))
+		b = append(b, '"')
+	}
+
+	if m.Info != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Info\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Info)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ClientAuthenticationOk) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
+
+	if m.Method != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Method\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Method))
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ClientConnectionEnd) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	if m.Duration != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Duration\":"...)
+		b = strconv.AppendInt(b, int64(m.Duration), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ClientConnectionStart) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *ClientSessionEnd) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonConnectionDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSessionDetails.AppendJSONFields(printComma, b)
+
+	if m.Duration != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Duration\":"...)
+		b = strconv.AppendInt(b, int64(m.Duration), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CommentOnColumn) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -604,6 +753,43 @@ func (m *CommentOnTable) AppendJSONFields(printComma bool, b redact.RedactableBy
 		}
 		printComma = true
 		b = append(b, "\"NullComment\":true"...)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *CommonConnectionDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.InstanceID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"InstanceID\":"...)
+		b = strconv.AppendInt(b, int64(m.InstanceID), 10)
+	}
+
+	if m.Network != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Network\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Network))
+		b = append(b, '"')
+	}
+
+	if m.RemoteAddress != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RemoteAddress\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RemoteAddress)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
 	}
 
 	return printComma, b
@@ -822,6 +1008,34 @@ func (m *CommonSchemaChangeEventDetails) AppendJSONFields(printComma bool, b red
 		printComma = true
 		b = append(b, "\"MutationID\":"...)
 		b = strconv.AppendUint(b, uint64(m.MutationID), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *CommonSessionDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.Transport != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Transport\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Transport))
+		b = append(b, '"')
+	}
+
+	if m.User != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"User\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
 	}
 
 	return printComma, b

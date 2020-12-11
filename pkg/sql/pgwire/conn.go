@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -227,7 +228,13 @@ func (c *conn) serveImpl(
 		sessionStart := timeutil.Now()
 		defer func() {
 			if c.authLogEnabled() {
-				log.Sessions.Infof(ctx, "session terminated; duration: %s", timeutil.Now().Sub(sessionStart))
+				endTime := timeutil.Now()
+				ev := &eventpb.ClientSessionEnd{
+					CommonEventDetails:      eventpb.CommonEventDetails{Timestamp: endTime.UnixNano()},
+					CommonConnectionDetails: authOpt.connDetails,
+					Duration:                endTime.Sub(sessionStart).Nanoseconds(),
+				}
+				log.StructuredEvent(ctx, ev)
 			}
 		}()
 	}
@@ -263,7 +270,7 @@ func (c *conn) serveImpl(
 	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c, logAuthn)
+	authPipe := newAuthPipe(c, logAuthn, authOpt, c.sessionArgs.User)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
@@ -291,7 +298,7 @@ func (c *conn) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(fixedIntSizer{size: types.Int})
+		ac.AuthOK(ctx, fixedIntSizer{size: types.Int})
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
@@ -613,7 +620,7 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 		// Signal the connection was established to the authenticator.
-		ac.AuthOK(connHandler)
+		ac.AuthOK(ctx, connHandler)
 		// Mark the authentication as succeeded in case a panic
 		// is thrown below and we need to report to the client
 		// using the defer above.
