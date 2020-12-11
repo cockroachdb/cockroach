@@ -200,7 +200,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	// caller explicitly asked for a real span they need to get one.
 	// In all other cases, a noop span will do.
 	if !t.AlwaysTrace() &&
-		opts.recordingType() == NoRecording &&
+		opts.recordingType() == RecordingOff &&
 		!opts.ForceRealSpan {
 		return t.noopSpan
 	}
@@ -306,7 +306,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	// over the remote parent, if any. If neither are specified, we're not recording.
 	recordingType := opts.recordingType()
 
-	if recordingType != NoRecording {
+	if recordingType != RecordingOff {
 		var p *crdbSpan
 		if opts.Parent != nil {
 			p = opts.Parent.crdb
@@ -471,7 +471,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 
 	var recordingType RecordingType
 	if baggage[verboseTracingBaggageKey] != "" {
-		recordingType = SnowballRecording
+		recordingType = RecordingVerbose
 	}
 
 	var shadowCtx opentracing.SpanContext
@@ -633,7 +633,7 @@ func StartSnowballTrace(
 	} else {
 		span = tracer.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))
 	}
-	span.StartRecording(SnowballRecording)
+	span.SetVerbose(true)
 	return ContextWithSpan(ctx, span), span
 }
 
@@ -649,13 +649,13 @@ func ContextWithRecordingSpan(
 ) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))
-	sp.StartRecording(SnowballRecording)
+	sp.SetVerbose(true)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = ContextWithSpan(ctx, sp)
 
 	cancel = func() {
 		cancelCtx()
-		sp.StopRecording()
+		sp.SetVerbose(false)
 		sp.Finish()
 		tr.Close()
 	}

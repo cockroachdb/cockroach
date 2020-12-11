@@ -67,7 +67,7 @@ func TestTracerRecording(t *testing.T) {
 	noop3.Finish()
 
 	s1.LogKV("x", 1)
-	s1.StartRecording(SnowballRecording)
+	s1.SetVerbose(true)
 	s1.LogKV("x", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	if s2.IsBlackHole() {
@@ -127,7 +127,7 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	s1.StopRecording()
+	s1.SetVerbose(false)
 	s1.LogKV("x", 100)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestTracerRecording(t *testing.T) {
 func TestStartChildSpan(t *testing.T) {
 	tr := NewTracer()
 	sp1 := tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SnowballRecording)
+	sp1.SetVerbose(true)
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
 	sp2.Finish()
 	sp1.Finish()
@@ -166,7 +166,7 @@ Span parent:
 	}
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SnowballRecording)
+	sp1.SetVerbose(true)
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
@@ -184,7 +184,7 @@ Span parent:
 	}
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
-	sp1.StartRecording(SnowballRecording)
+	sp1.SetVerbose(true)
 	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
 	sp2.Finish()
@@ -235,7 +235,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	// remote side.
 
 	s1 := tr.StartSpan("a", WithForceRealSpan())
-	s1.StartRecording(SnowballRecording)
+	s1.SetVerbose(true)
 
 	carrier = make(opentracing.HTTPHeadersCarrier)
 	if err := tr.Inject(s1.Meta(), opentracing.HTTPHeaders, carrier); err != nil {
