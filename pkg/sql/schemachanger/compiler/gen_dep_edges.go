@@ -18,7 +18,7 @@ func generateTargetStateDepEdges(g *targetStateGraph, t targets.Target, s target
 
 func generateAddColumnDepEdges(g *targetStateGraph, t *targets.AddColumn, s targets.State) {
 	switch s {
-	case targets.StateDeleteAndWriteOnly, targets.StatePublic:
+	case targets.State_DELETE_AND_WRITE_ONLY, targets.State_PUBLIC:
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.AddIndex:
@@ -36,18 +36,18 @@ func generateAddColumnDepEdges(g *targetStateGraph, t *targets.AddColumn, s targ
 
 func generateDropIndexDepEdges(g *targetStateGraph, t *targets.DropIndex, s targets.State) {
 	switch s {
-	case targets.StateDeleteAndWriteOnly:
+	case targets.State_DELETE_AND_WRITE_ONLY:
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.AddIndex:
 				if ot.Index.ID == t.ReplacedBy {
-					g.addDepEdge(t, s, ot, targets.StatePublic)
+					g.addDepEdge(t, s, ot, targets.State_PUBLIC)
 				}
 			case *targets.DropColumn:
 				if t.TableID != ot.TableID || !columnsContainsID(t.ColumnIDs, ot.ColumnID) {
 					continue
 				}
-				g.addDepEdge(t, s, ot, targets.StateDeleteAndWriteOnly)
+				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
 			}
 		}
 	}
@@ -57,12 +57,12 @@ func generateAddIndexDepEdges(g *targetStateGraph, t *targets.AddIndex, s target
 	// AddIndex in the Public state depends on any DropIndex it is replacing being
 	// in the DeleteAndWriteOnly state
 	switch s {
-	case targets.StatePublic:
+	case targets.State_PUBLIC:
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.DropIndex:
 				if ot.IndexID == t.ReplacementFor {
-					g.addDepEdge(t, s, ot, targets.StateDeleteAndWriteOnly)
+					g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
 				}
 			}
 		}
@@ -71,14 +71,14 @@ func generateAddIndexDepEdges(g *targetStateGraph, t *targets.AddIndex, s target
 
 func generateDropColumnDepEdges(g *targetStateGraph, t *targets.DropColumn, s targets.State) {
 	switch s {
-	case targets.StateDeleteAndWriteOnly:
+	case targets.State_DELETE_AND_WRITE_ONLY:
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.DropIndex:
 				if t.TableID != ot.TableID || !columnsContainsID(ot.ColumnIDs, t.ColumnID) {
 					continue
 				}
-				g.addDepEdge(t, s, ot, targets.StateDeleteAndWriteOnly)
+				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
 			}
 		}
 	}
@@ -87,7 +87,7 @@ func generateDropColumnDepEdges(g *targetStateGraph, t *targets.DropColumn, s ta
 /*
 
 - DropColumn:
-  - StateDeleteAndWriteOnly
+  - State_DELETE_AND_WRITE_ONLY
     - DropIndex:
        - <predicate over fields> -> DeleteAndWriteOnly
 */

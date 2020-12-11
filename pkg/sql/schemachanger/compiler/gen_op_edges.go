@@ -36,39 +36,39 @@ func generateDropColumnOpEdges(
 ) error {
 	for {
 		switch s {
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteAndWriteOnly,
+				targets.State_DELETE_AND_WRITE_ONLY,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
 					State:     s,
-					NextState: targets.StateDeleteAndWriteOnly,
+					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				(flags.ExecutionPhase == PostStatementPhase ||
 					flags.ExecutionPhase == PreCommitPhase) {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteOnly,
+				targets.State_DELETE_ONLY,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
 					State:     s,
-					NextState: targets.StateDeleteOnly,
+					NextState: targets.State_DELETE_ONLY,
 				})
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			s = g.addOpEdge(t, s,
-				targets.StateAbsent,
+				targets.State_ABSENT,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.ColumnID,
 					State:     s,
-					NextState: targets.StateAbsent,
+					NextState: targets.State_ABSENT,
 				})
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			return nil
 		default:
 			return errors.AssertionFailedf("unexpected state %s for %T", s, t)
@@ -81,65 +81,65 @@ func generateAddIndexOpEdges(
 ) error {
 	for {
 		switch s {
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PostStatementPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteOnly,
+				targets.State_DELETE_ONLY,
 				ops.AddIndexDescriptor{
 					TableID: t.TableID,
 					Index:   t.Index,
 					Primary: t.Primary,
 				})
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PreCommitPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteAndWriteOnly,
+				targets.State_DELETE_AND_WRITE_ONLY,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
 					IsPrimary: t.Primary,
 					State:     s,
-					NextState: targets.StateDeleteAndWriteOnly,
+					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			// TODO(ajwerner): In the case of a primary index swap, we only need to
 			// validate if the columns being used did not previously contain a unique
 			// and NOT NULL constraints.
 			var next targets.State
 			if !t.Index.Unique {
-				next = targets.StateValidated
+				next = targets.State_VALIDATED
 			} else {
-				next = targets.StateBackfilled
+				next = targets.State_BACKFILLED
 			}
 			s = g.addOpEdge(t, s, next, ops.IndexBackfill{
 				TableID: t.TableID,
 				IndexID: t.Index.ID,
 			})
-		case targets.StateBackfilled:
+		case targets.State_BACKFILLED:
 			s = g.addOpEdge(t, s,
-				targets.StateValidated,
+				targets.State_VALIDATED,
 				ops.UniqueIndexValidation{
 					TableID:        t.TableID,
 					PrimaryIndexID: t.PrimaryIndex,
 					IndexID:        t.Index.ID,
 				})
-		case targets.StateValidated:
+		case targets.State_VALIDATED:
 			s = g.addOpEdge(t, s,
-				targets.StatePublic,
+				targets.State_PUBLIC,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
 					IsPrimary: t.Primary,
 					State:     s,
-					NextState: targets.StatePublic,
+					NextState: targets.State_PUBLIC,
 				})
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			return nil
 		default:
 			return errors.AssertionFailedf("unexpected state %s for %T", s, t)
@@ -152,45 +152,45 @@ func generateDropIndexOpEdges(
 ) error {
 	for {
 		switch s {
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PostStatementPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteAndWriteOnly,
+				targets.State_DELETE_AND_WRITE_ONLY,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
 					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
-					NextState: targets.StateDeleteAndWriteOnly,
+					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PreCommitPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteOnly,
+				targets.State_DELETE_ONLY,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
 					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
-					NextState: targets.StateDeleteOnly,
+					NextState: targets.State_DELETE_ONLY,
 				})
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			s = g.addOpEdge(t, s,
-				targets.StateAbsent,
+				targets.State_ABSENT,
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
 					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
-					NextState: targets.StateAbsent,
+					NextState: targets.State_ABSENT,
 				})
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			return nil
 		default:
 			return errors.AssertionFailedf("unexpected state %s for %T", s, t)
@@ -209,40 +209,40 @@ func generateAddColumnOpEdges(
 ) (_ error) {
 	for {
 		switch s {
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PostStatementPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteOnly,
+				targets.State_DELETE_ONLY,
 				ops.AddColumnDescriptor{
 					TableID: t.TableID,
 					Column:  t.Column,
 				})
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
 				flags.ExecutionPhase == PreCommitPhase {
 				return nil
 			}
 			s = g.addOpEdge(t, s,
-				targets.StateDeleteAndWriteOnly,
+				targets.State_DELETE_AND_WRITE_ONLY,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.Column.ID,
 					State:     s,
-					NextState: targets.StateDeleteAndWriteOnly,
+					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			s = g.addOpEdge(t, s,
-				targets.StatePublic,
+				targets.State_PUBLIC,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
 					ColumnID:  t.Column.ID,
 					State:     s,
-					NextState: targets.StatePublic,
+					NextState: targets.State_PUBLIC,
 				})
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			return
 		default:
 			return errors.AssertionFailedf("unexpected state %s for %T", s, t)

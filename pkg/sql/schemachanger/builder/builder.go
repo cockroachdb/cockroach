@@ -148,7 +148,7 @@ func (b *Builder) alterTableAddColumn(
 			TableID: table.GetID(),
 			Column:  *col,
 		},
-		targets.StateAbsent,
+		targets.State_ABSENT,
 	)
 
 	newIdxID := b.maybeAddPrimaryIndexTargetsForColumnChange(table)
@@ -162,7 +162,7 @@ func (b *Builder) alterTableAddColumn(
 				Index:        *idx,
 				PrimaryIndex: newIdxID,
 			},
-			targets.StateAbsent,
+			targets.State_ABSENT,
 		)
 	}
 
@@ -263,7 +263,7 @@ func (b *Builder) createOrUpdateColumnFamily(
 					ColumnIDs:       []descpb.ColumnID{col.ID},
 					DefaultColumnID: 0,
 				},
-			}, targets.StateAbsent)
+			}, targets.State_ABSENT)
 		}
 	}
 	return nil
@@ -296,7 +296,7 @@ func (b *Builder) alterTableDropColumn(
 			TableID:  table.GetID(),
 			ColumnID: colToDrop.ID,
 		},
-		targets.StatePublic,
+		targets.State_PUBLIC,
 	)
 	return nil
 }
@@ -333,7 +333,7 @@ func (b *Builder) maybeAddSequenceDependencies(
 				ColumnID:   col.ID,
 				SequenceID: seqDesc.GetID(),
 			},
-			targets.StateAbsent,
+			targets.State_ABSENT,
 		)
 	}
 	return nil
@@ -374,7 +374,7 @@ func (b *Builder) maybeAddPrimaryIndexTargetsForColumnChange(
 			ReplacementFor: table.GetPrimaryIndexID(),
 			Primary:        true,
 		},
-		targets.StateAbsent,
+		targets.State_ABSENT,
 	)
 
 	// Drop the existing primary index.
@@ -385,7 +385,7 @@ func (b *Builder) maybeAddPrimaryIndexTargetsForColumnChange(
 			ReplacedBy: newIdxID,
 			ColumnIDs:  table.PrimaryIndex.ColumnIDs,
 		},
-		targets.StatePublic,
+		targets.State_PUBLIC,
 	)
 
 	return newIdxID

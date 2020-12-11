@@ -83,7 +83,7 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 		return err
 	}
 	// We want to find the index and then change its state.
-	if op.State == targets.StatePublic && op.NextState == targets.StateDeleteAndWriteOnly {
+	if op.State == targets.State_PUBLIC && op.NextState == targets.State_DELETE_AND_WRITE_ONLY {
 		var idx descpb.IndexDescriptor
 		if op.IsPrimary {
 			if table.PrimaryIndex.ID != op.IndexID {
@@ -125,18 +125,18 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 		idx := mut.GetIndex()
 		switch op.NextState {
 
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			// Can happen in revert or when removing an index.
 			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_ONLY, op.NextState, mut.State)
 			}
 			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_ONLY
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
@@ -243,7 +243,7 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 		return err
 	}
 	// We want to find the index and then change its state.
-	if op.State == targets.StatePublic && op.NextState == targets.StateDeleteAndWriteOnly {
+	if op.State == targets.State_PUBLIC && op.NextState == targets.State_DELETE_AND_WRITE_ONLY {
 		var col descpb.ColumnDescriptor
 
 		for i := range table.Columns {
@@ -277,7 +277,7 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 		col := mut.GetColumn()
 		switch op.NextState {
 
-		case targets.StateAbsent:
+		case targets.State_ABSENT:
 			// Can happen in revert or when removing an index.
 			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
@@ -299,11 +299,11 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 				fam.ColumnNames = append(fam.ColumnNames[:famIdx], fam.ColumnNames[famIdx+1:]...)
 			}
 			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
-		case targets.StateDeleteAndWriteOnly:
+		case targets.State_DELETE_AND_WRITE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		case targets.StateDeleteOnly:
+		case targets.State_DELETE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_ONLY
-		case targets.StatePublic:
+		case targets.State_PUBLIC:
 			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				return errors.AssertionFailedf("expected column to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)

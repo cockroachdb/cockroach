@@ -24,7 +24,7 @@ func TestCompiler(t *testing.T) {
 						TableID:  1,
 						ColumnID: 2,
 					},
-					targets.StatePublic,
+					targets.State_PUBLIC,
 				},
 				{
 					&targets.AddIndex{
@@ -37,7 +37,7 @@ func TestCompiler(t *testing.T) {
 						ReplacementFor: 1,
 						Primary:        true,
 					},
-					targets.StateAbsent,
+					targets.State_ABSENT,
 				},
 				{
 					&targets.DropIndex{
@@ -46,7 +46,7 @@ func TestCompiler(t *testing.T) {
 						ReplacedBy: 2,
 						ColumnIDs:  []descpb.ColumnID{1, 2},
 					},
-					targets.StatePublic,
+					targets.State_PUBLIC,
 				},
 			},
 			CompileFlags{
@@ -101,7 +101,7 @@ func TestCompile(t *testing.T) {
 			compileIterations: []compileIteration{
 				{
 					initial: []targets.TargetState{
-						{&addColTarget, targets.StateAbsent},
+						{&addColTarget, targets.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -123,7 +123,7 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteOnly},
+								{&addColTarget, targets.State_DELETE_ONLY},
 							},
 						},
 					},
@@ -138,11 +138,11 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
@@ -150,11 +150,11 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StatePublic},
+								{&addColTarget, targets.State_PUBLIC},
 							},
 						},
 					},
@@ -183,7 +183,7 @@ func TestCompile(t *testing.T) {
 			compileIterations: []compileIteration{
 				{
 					initial: []targets.TargetState{
-						{&addIdxTarget, targets.StateAbsent},
+						{&addIdxTarget, targets.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -207,7 +207,7 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addIdxTarget, targets.StateDeleteOnly},
+								{&addIdxTarget, targets.State_DELETE_ONLY},
 							},
 						},
 					},
@@ -222,11 +222,11 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newIdxID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addIdxTarget, targets.StateDeleteAndWriteOnly},
+								{&addIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
@@ -237,7 +237,7 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addIdxTarget, targets.StateValidated},
+								{&addIdxTarget, targets.State_VALIDATED},
 							},
 						},
 						{
@@ -245,11 +245,11 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newIdxID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 							},
 							[]targets.TargetState{
-								{&addIdxTarget, targets.StatePublic},
+								{&addIdxTarget, targets.State_PUBLIC},
 							},
 						},
 					},
@@ -293,9 +293,9 @@ func TestCompile(t *testing.T) {
 			compileIterations: []compileIteration{
 				{
 					initial: []targets.TargetState{
-						{&addColTarget, targets.StateAbsent},
-						{&addIdxTarget, targets.StateAbsent},
-						{&dropIdxTarget, targets.StatePublic},
+						{&addColTarget, targets.State_ABSENT},
+						{&addIdxTarget, targets.State_ABSENT},
+						{&dropIdxTarget, targets.State_PUBLIC},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -326,9 +326,9 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteOnly},
-								{&addIdxTarget, targets.StateDeleteOnly},
-								{&dropIdxTarget, targets.StatePublic},
+								{&addColTarget, targets.State_DELETE_ONLY},
+								{&addIdxTarget, targets.State_DELETE_ONLY},
+								{&dropIdxTarget, targets.State_PUBLIC},
 							},
 						},
 					},
@@ -343,18 +343,18 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addIdxTarget, targets.StateDeleteAndWriteOnly},
-								{&dropIdxTarget, targets.StatePublic},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&dropIdxTarget, targets.State_PUBLIC},
 							},
 						},
 						{
@@ -365,9 +365,9 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addIdxTarget, targets.StateBackfilled},
-								{&dropIdxTarget, targets.StatePublic},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, targets.State_BACKFILLED},
+								{&dropIdxTarget, targets.State_PUBLIC},
 							},
 						},
 						// The validation step isn't actually necessary because the new PK
@@ -381,9 +381,9 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addIdxTarget, targets.StateValidated},
-								{&dropIdxTarget, targets.StatePublic},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, targets.State_VALIDATED},
+								{&dropIdxTarget, targets.State_PUBLIC},
 							},
 						},
 						{
@@ -391,23 +391,23 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StatePublic},
-								{&addIdxTarget, targets.StatePublic},
-								{&dropIdxTarget, targets.StateDeleteAndWriteOnly},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addIdxTarget, targets.State_PUBLIC},
+								{&dropIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
@@ -415,13 +415,13 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateDeleteOnly,
+									NextState: targets.State_DELETE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StatePublic},
-								{&addIdxTarget, targets.StatePublic},
-								{&dropIdxTarget, targets.StateDeleteOnly},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addIdxTarget, targets.State_PUBLIC},
+								{&dropIdxTarget, targets.State_DELETE_ONLY},
 							},
 						},
 						{
@@ -429,13 +429,13 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateAbsent,
+									NextState: targets.State_ABSENT,
 								},
 							},
 							[]targets.TargetState{
-								{&addColTarget, targets.StatePublic},
-								{&addIdxTarget, targets.StatePublic},
-								{&dropIdxTarget, targets.StateAbsent},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addIdxTarget, targets.State_PUBLIC},
+								{&dropIdxTarget, targets.State_ABSENT},
 							},
 						},
 					},
@@ -517,9 +517,9 @@ func TestCompile(t *testing.T) {
 			compileIterations: []compileIteration{
 				{
 					initial: []targets.TargetState{
-						{&addPrimaryIdxTargetStmt1, targets.StateAbsent},
-						{&dropPrimaryIdxTargetStmt1, targets.StatePublic},
-						{&dropColTarget, targets.StatePublic},
+						{&addPrimaryIdxTargetStmt1, targets.State_ABSENT},
+						{&dropPrimaryIdxTargetStmt1, targets.State_PUBLIC},
+						{&dropColTarget, targets.State_PUBLIC},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -530,25 +530,25 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  oldColID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTargetStmt1, targets.StateAbsent},
-								{&dropPrimaryIdxTargetStmt1, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
+								{&addPrimaryIdxTargetStmt1, targets.State_ABSENT},
+								{&dropPrimaryIdxTargetStmt1, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 					},
 				},
 				{
 					initial: []targets.TargetState{
-						{&addPrimaryIdxTarget, targets.StateAbsent},
-						{&dropPrimaryIdxTarget, targets.StatePublic},
-						{&dropColTarget, targets.StateDeleteAndWriteOnly},
-						{&addColTarget, targets.StateAbsent},
-						{&addUniqueIdxTarget, targets.StateAbsent},
-						{&addUniqueConstraintTarget, targets.StateAbsent},
+						{&addPrimaryIdxTarget, targets.State_ABSENT},
+						{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+						{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+						{&addColTarget, targets.State_ABSENT},
+						{&addUniqueIdxTarget, targets.State_ABSENT},
+						{&addUniqueConstraintTarget, targets.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -579,12 +579,12 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StateDeleteOnly},
-								{&dropPrimaryIdxTarget, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StateDeleteOnly},
-								{&addUniqueIdxTarget, targets.StateAbsent},
-								{&addUniqueConstraintTarget, targets.StateAbsent},
+								{&addPrimaryIdxTarget, targets.State_DELETE_ONLY},
+								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_DELETE_ONLY},
+								{&addUniqueIdxTarget, targets.State_ABSENT},
+								{&addUniqueConstraintTarget, targets.State_ABSENT},
 							},
 						},
 					},
@@ -599,21 +599,21 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StateDeleteAndWriteOnly},
-								{&dropPrimaryIdxTarget, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addUniqueIdxTarget, targets.StateAbsent},
-								{&addUniqueConstraintTarget, targets.StateAbsent},
+								{&addPrimaryIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, targets.State_ABSENT},
+								{&addUniqueConstraintTarget, targets.State_ABSENT},
 							},
 						},
 						{
@@ -624,29 +624,29 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StateBackfilled},
-								{&dropPrimaryIdxTarget, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addUniqueIdxTarget, targets.StateAbsent},
-								{&addUniqueConstraintTarget, targets.StateAbsent},
+								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, targets.State_ABSENT},
+								{&addUniqueConstraintTarget, targets.State_ABSENT},
 							},
 						},
 						{
 							[]ops.Op{
-								// This also moves the unique constraint to StateDeleteAndWriteOnly.
+								// This also moves the unique constraint to State_DELETE_AND_WRITE_ONLY.
 								ops.IndexBackfill{
 									TableID: tableID,
 									IndexID: newUniqueIdxID,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StateBackfilled},
-								{&dropPrimaryIdxTarget, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addUniqueIdxTarget, targets.StateBackfilled},
-								{&addUniqueConstraintTarget, targets.StateDeleteAndWriteOnly},
+								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, targets.State_BACKFILLED},
+								{&addUniqueConstraintTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
@@ -658,12 +658,12 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StateBackfilled},
-								{&dropPrimaryIdxTarget, targets.StatePublic},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StateDeleteAndWriteOnly},
-								{&addUniqueIdxTarget, targets.StateBackfilled},
-								{&addUniqueConstraintTarget, targets.StateValidated},
+								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, targets.State_BACKFILLED},
+								{&addUniqueConstraintTarget, targets.State_VALIDATED},
 							},
 						},
 						{
@@ -671,17 +671,17 @@ func TestCompile(t *testing.T) {
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateDeleteAndWriteOnly,
+									NextState: targets.State_DELETE_AND_WRITE_ONLY,
 								},
 								// This also makes the unique constraint public. Eventually we
 								// will need a way to update states for index-less unique
@@ -689,16 +689,16 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newUniqueIdxID,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StatePublic},
-								{&dropPrimaryIdxTarget, targets.StateDeleteAndWriteOnly},
-								{&dropColTarget, targets.StateDeleteAndWriteOnly},
-								{&addColTarget, targets.StatePublic},
-								{&addUniqueIdxTarget, targets.StatePublic},
-								{&addUniqueConstraintTarget, targets.StatePublic},
+								{&addPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropPrimaryIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addUniqueIdxTarget, targets.State_PUBLIC},
+								{&addUniqueConstraintTarget, targets.State_PUBLIC},
 							},
 						},
 						{
@@ -706,21 +706,21 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateDeleteOnly,
+									NextState: targets.State_DELETE_ONLY,
 								},
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  oldColID,
-									NextState: targets.StateDeleteOnly,
+									NextState: targets.State_DELETE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StatePublic},
-								{&dropPrimaryIdxTarget, targets.StateDeleteOnly},
-								{&dropColTarget, targets.StateDeleteOnly},
-								{&addColTarget, targets.StatePublic},
-								{&addUniqueIdxTarget, targets.StatePublic},
-								{&addUniqueConstraintTarget, targets.StatePublic},
+								{&addPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropPrimaryIdxTarget, targets.State_DELETE_ONLY},
+								{&dropColTarget, targets.State_DELETE_ONLY},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addUniqueIdxTarget, targets.State_PUBLIC},
+								{&addUniqueConstraintTarget, targets.State_PUBLIC},
 							},
 						},
 						{
@@ -728,21 +728,21 @@ func TestCompile(t *testing.T) {
 								ops.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.StateDeleteOnly,
+									NextState: targets.State_DELETE_ONLY,
 								},
 								ops.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  oldColID,
-									NextState: targets.StateDeleteOnly,
+									NextState: targets.State_DELETE_ONLY,
 								},
 							},
 							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.StatePublic},
-								{&dropPrimaryIdxTarget, targets.StateAbsent},
-								{&dropColTarget, targets.StateAbsent},
-								{&addColTarget, targets.StatePublic},
-								{&addUniqueIdxTarget, targets.StatePublic},
-								{&addUniqueConstraintTarget, targets.StatePublic},
+								{&addPrimaryIdxTarget, targets.State_PUBLIC},
+								{&dropPrimaryIdxTarget, targets.State_ABSENT},
+								{&dropColTarget, targets.State_ABSENT},
+								{&addColTarget, targets.State_PUBLIC},
+								{&addUniqueIdxTarget, targets.State_PUBLIC},
+								{&addUniqueConstraintTarget, targets.State_PUBLIC},
 							},
 						},
 					},
@@ -754,7 +754,7 @@ func TestCompile(t *testing.T) {
 	// Proposal for new behavior. Does this work?
 	//
 	// If all columns are already public, we should be able to put the check
-	// constraint in StateDeleteAndWriteOnly during statement execution. If those
+	// constraint in State_DELETE_AND_WRITE_ONLY during statement execution. If those
 	// columns are renamed or dropped, we can just internally update or remove the
 	// constraint, respectively.
 	//
@@ -778,7 +778,7 @@ func TestCompile(t *testing.T) {
 			compileIterations: []compileIteration{
 				{
 					initial: []targets.TargetState{
-						{&addCheckTarget, targets.StateAbsent},
+						{&addCheckTarget, targets.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -794,7 +794,7 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addCheckTarget, targets.StateDeleteAndWriteOnly},
+								{&addCheckTarget, targets.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 					},
@@ -807,7 +807,7 @@ func TestCompile(t *testing.T) {
 				},
 				{
 					initial: []targets.TargetState{
-						{&addCheckTarget, targets.StateDeleteAndWriteOnly},
+						{&addCheckTarget, targets.State_DELETE_AND_WRITE_ONLY},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
@@ -821,7 +821,7 @@ func TestCompile(t *testing.T) {
 								},
 							},
 							[]targets.TargetState{
-								{&addCheckTarget, targets.StateValidated},
+								{&addCheckTarget, targets.State_VALIDATED},
 							},
 						},
 						{
@@ -829,11 +829,11 @@ func TestCompile(t *testing.T) {
 								ops.CheckConstraintStateChange{
 									TableID:   tableID,
 									Name:      checkName,
-									NextState: targets.StatePublic,
+									NextState: targets.State_PUBLIC,
 								},
 							},
 							[]targets.TargetState{
-								{&addCheckTarget, targets.StatePublic},
+								{&addCheckTarget, targets.State_PUBLIC},
 							},
 						},
 					},
@@ -918,15 +918,15 @@ func TestDebugScratch(t *testing.T) {
 	targetStates := []targets.TargetState{
 		{
 			Target: targetSlice[0],
-			State:  targets.StateDeleteOnly,
+			State:  targets.State_DELETE_ONLY,
 		},
 		{
 			Target: targetSlice[1],
-			State:  targets.StateDeleteOnly,
+			State:  targets.State_DELETE_ONLY,
 		},
 		{
 			Target: targetSlice[2],
-			State:  targets.StatePublic,
+			State:  targets.State_PUBLIC,
 		},
 	}
 

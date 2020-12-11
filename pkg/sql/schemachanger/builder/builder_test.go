@@ -73,7 +73,7 @@ func TestBuilder(t *testing.T) {
 							Name: "j",
 						},
 					},
-					targets.StateAbsent,
+					targets.State_ABSENT,
 				},
 				{
 					&targets.AddIndex{
@@ -83,7 +83,7 @@ func TestBuilder(t *testing.T) {
 						ReplacementFor: 1,
 						Primary:        true,
 					},
-					targets.StateAbsent,
+					targets.State_ABSENT,
 				},
 				{
 					&targets.DropIndex{
@@ -92,7 +92,7 @@ func TestBuilder(t *testing.T) {
 						ReplacedBy: 2,
 						ColumnIDs:  []descpb.ColumnID{1},
 					},
-					targets.StatePublic,
+					targets.State_PUBLIC,
 				},
 			},
 		},

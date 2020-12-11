@@ -265,15 +265,15 @@ func TestSchemaChanger(t *testing.T) {
 			targetStates := []targets.TargetState{
 				{
 					Target: targetSlice[0],
-					State:  targets.StateAbsent,
+					State:  targets.State_ABSENT,
 				},
 				{
 					Target: targetSlice[1],
-					State:  targets.StateAbsent,
+					State:  targets.State_ABSENT,
 				},
 				{
 					Target: targetSlice[2],
-					State:  targets.StatePublic,
+					State:  targets.State_PUBLIC,
 				},
 			}
 
@@ -309,15 +309,15 @@ func TestSchemaChanger(t *testing.T) {
 		require.Equal(t, []targets.TargetState{
 			{
 				targetSlice[0],
-				targets.StatePublic,
+				targets.State_PUBLIC,
 			},
 			{
 				targetSlice[1],
-				targets.StatePublic,
+				targets.State_PUBLIC,
 			},
 			{
 				targetSlice[2],
-				targets.StateAbsent,
+				targets.State_ABSENT,
 			},
 		}, after)
 		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
