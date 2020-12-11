@@ -142,7 +142,7 @@ func newHashJoiner(
 	)
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		h.leftSource = newInputStatCollector(h.leftSource)
 		h.rightSource = newInputStatCollector(h.rightSource)
 		h.ExecStatsForTrace = h.execStatsForTrace
