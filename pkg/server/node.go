@@ -907,13 +907,12 @@ func (n *Node) Batch(
 // and "child of remote span" cases are important, as this RPC can be called
 // either through the network or directly if the caller is local.
 //
-// It returns the derived context and a cleanup function to be called when
-// servicing the RPC is done. The cleanup function will close the span and, in
-// case the span was the child of a remote span and "snowball tracing" was
-// enabled on that parent span, it serializes the local trace into the
-// BatchResponse. The cleanup function takes the BatchResponse in which the
-// response is to serialized. The BatchResponse can be nil in case no response
-// is to be returned to the rpc caller.
+// It returns the derived context and a cleanup function to be
+// called when servicing the RPC is done. The cleanup function will
+// close the span and serialize any data recorded to that span into
+// the BatchResponse. The cleanup function takes the BatchResponse
+// in which the response is to serialized. The BatchResponse can
+// be nil in case no response is to be returned to the rpc caller.
 func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, isLocalRequest bool,
 ) (context.Context, func(*roachpb.BatchResponse)) {
@@ -947,10 +946,9 @@ func (n *Node) setupSpanForIncomingRPC(
 			return
 		}
 		if grpcSpan != nil {
-			// If this is a "snowball trace", we'll need to return all the recorded
-			// spans in the BatchResponse at the end of the request.
-			// We don't want to do this if the operation is on the same host, in which
-			// case everything is already part of the same recording.
+			// If our local span descends from a parent on the other
+			// end of the RPC (i.e. the !isLocalRequest) case,
+			// attach the span recording to the batch response.
 			if rec := grpcSpan.GetRecording(); rec != nil {
 				br.CollectedSpans = append(br.CollectedSpans, rec...)
 			}
