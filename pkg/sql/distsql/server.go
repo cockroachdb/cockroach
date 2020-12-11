@@ -87,6 +87,14 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+
+	testingGenerateMockContentionEvents.SetOnChange(&cfg.Settings.SV, func() {
+		// Note: If a race occurs with this line, this setting is being improperly
+		// used. Mock contention events should be generated either using the cluster
+		// setting or programmatically using the testing knob, but not both.
+		cfg.TestingKnobs.GenerateMockContentionEvents = testingGenerateMockContentionEvents.Get(&cfg.Settings.SV)
+	})
+
 	return ds
 }
 
@@ -396,13 +404,6 @@ func (ds *ServerImpl) NewFlowContext(
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		Local:          localState.IsLocal,
-	}
-
-	if testingGenerateMockContentionEvents.Get(&flowCtx.Cfg.Settings.SV) {
-		// Note: If a race occurs with this line, this setting is being improperly
-		// used. Mock contention events should be generated either using the cluster
-		// setting or programmatically using the testing knob, but not both.
-		ds.ServerConfig.TestingKnobs.GenerateMockContentionEvents = true
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

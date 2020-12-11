@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -47,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -268,7 +268,9 @@ func importPlanHook(
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
 
-	if err := featureflag.CheckEnabled(featureImportEnabled,
+	if err := featureflag.CheckEnabled(
+		ctx,
+		featureImportEnabled,
 		&p.ExecCfg().Settings.SV,
 		"IMPORT",
 	); err != nil {
@@ -317,7 +319,7 @@ func importPlanHook(
 		// Certain ExternalStorage URIs require super-user access. Check all the
 		// URIs passed to the IMPORT command.
 		for _, file := range filenamePatterns {
-			hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(file)
+			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(file)
 			if err != nil {
 				return err
 			}
@@ -1046,11 +1048,8 @@ func prepareNewTableDescsForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	// TODO(ajwerner): Remove this in 21.1.
-	canResetModTime := p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 	if err := backupccl.RewriteTableDescs(
-		newMutableTableDescriptors, tableRewrites, "", canResetModTime,
+		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err
 	}
@@ -1424,7 +1423,7 @@ func (r *importResumer) Resume(
 		// case we can cheaply clear-range instead of revert-range to cleanup.
 		for i := range details.Tables {
 			if !details.Tables[i].IsNew {
-				tblSpan := tabledesc.NewImmutable(*details.Tables[i].Desc).TableSpan(keys.TODOSQLCodec)
+				tblSpan := tabledesc.NewImmutable(*details.Tables[i].Desc).TableSpan(p.ExecCfg().Codec)
 				res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
 				if err != nil {
 					return errors.Wrap(err, "checking if existing table is empty")

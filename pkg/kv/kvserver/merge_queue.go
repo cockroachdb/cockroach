@@ -180,7 +180,7 @@ func (mq *mergeQueue) requestRangeStats(
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
 
-	if !mq.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionRangeStatsRespHasDesc) {
+	if !mq.store.ClusterSettings().Version.IsActive(ctx, clusterversion.RangeStatsRespHasDesc) {
 		ba.Header.ReturnRangeInfo = true
 	}
 

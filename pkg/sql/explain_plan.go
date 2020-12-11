@@ -129,7 +129,7 @@ func explainGetDistributedAndVectorized(
 	// Determine the "distributed" and "vectorized" values, which we will emit as
 	// special rows.
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	distribution = getPlanDistributionForExplainPurposes(
+	distribution = getPlanDistribution(
 		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
 		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
 	)

@@ -199,6 +199,10 @@ func ShowCreateTable(
 		return "", err
 	}
 
+	if err := showCreateLocality(desc, f); err != nil {
+		return "", err
+	}
+
 	if !displayOptions.IgnoreComments {
 		if err := showComments(tn, desc, selectComment(ctx, p, desc.GetID()), &f.Buffer); err != nil {
 			return "", err

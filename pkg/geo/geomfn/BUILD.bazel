@@ -31,6 +31,7 @@ go_library(
         "unary_operators.go",
         "unary_predicates.go",
         "validity_check.go",
+        "voronoi.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geomfn",
     visibility = ["//visibility:public"],
@@ -81,6 +82,7 @@ go_test(
         "unary_operators_test.go",
         "unary_predicates_test.go",
         "validity_check_test.go",
+        "voronoi_test.go",
     ],
     embed = [":geomfn"],
     deps = [

@@ -1,0 +1,358 @@
+# Empty configuration: use and propagate defaults.
+yaml
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    default:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that defaults propagate to file groups.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    custom:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that default dir propagates.
+yaml
+file-defaults:
+      dir: /custom
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+----
+file-defaults:
+  dir: /custom
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    custom:
+      channels: all
+      dir: /custom
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /custom
+  max-group-size: 100MiB
+
+
+# Check that default severity propagates.
+yaml
+file-defaults:
+       filter: WARNING
+sinks:
+   file-groups:
+     custom:
+       channels: DEV
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: WARNING
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    custom:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: WARNING
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+
+# Check that it's possible to capture all channels.
+yaml
+sinks:
+   file-groups:
+      custom:
+         channels: all
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    custom:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that "auditable" is transformed into other file flags.
+yaml
+sinks:
+  file-groups:
+    custom:
+      channels: DEV
+      auditable: true
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    custom:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: true
+      filter: INFO
+      format: crdb-v1-count
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+
+# Check that "auditable" is transformed into other stderr
+yaml
+sinks:
+  stderr:
+      channels: DEV
+      exit-on-error: false
+      auditable: true
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: INFO
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  file-groups:
+    default:
+      channels: all
+      dir: /default-dir
+      max-file-size: 10MiB
+      max-group-size: 100MiB
+      sync-writes: false
+      filter: INFO
+      format: crdb-v1
+      redact: false
+      redactable: true
+      exit-on-error: true
+  stderr:
+    channels: DEV
+    filter: NONE
+    format: crdb-v1-tty-count
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that NONE filter elides files.
+yaml
+file-defaults: {filter: NONE}
+----
+file-defaults:
+  dir: /default-dir
+  max-file-size: 10MiB
+  max-group-size: 100MiB
+  filter: NONE
+  format: crdb-v1
+  redact: false
+  redactable: true
+  exit-on-error: true
+  auditable: false
+sinks:
+  stderr:
+    channels: all
+    filter: NONE
+    format: crdb-v1-tty
+    redact: false
+    redactable: true
+    exit-on-error: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+
+# Check that empty dir is rejected.
+yaml
+file-defaults:
+  dir: ''
+----
+ERROR: file-defaults: log directory cannot be empty; specify '.' for current directory
+
+yaml
+sinks:
+  file-groups:
+    example:
+     dir: ''
+     channels: all
+----
+ERROR: file group "example": log directory cannot be empty; specify '.' for current directory
+
+# Check that home dir is rejected.
+yaml
+file-defaults:
+  dir: '~/foo'
+----
+ERROR: file-defaults: log directory cannot start with '~': ~/foo
+
+yaml
+sinks:
+  file-groups:
+    example:
+     dir: '~/bar'
+----
+ERROR: file group "example": log directory cannot start with '~': ~/bar
+file group "example": no channel selected

@@ -779,6 +779,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td></tr>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
+</span></td></tr>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
+</span></td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
@@ -2197,6 +2201,18 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="st_transscale"></a><code>st_transscale(geometry: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>, x_factor: <a href="float.html">float</a>, y_factor: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Translates the geometry using the deltaX and deltaY args, then scales it using the XFactor, YFactor args, working in 2D only.</p>
 </span></td></tr>
 <tr><td><a name="st_unaryunion"></a><code>st_unaryunion(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a union of the components for any geometry or geometry collection provided. Dissolves boundaries of a multipolygon.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoilines"></a><code>st_voronoilines(geometry: geometry, tolerance: <a href="float.html">float</a>, extend_to: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry asthe boundaries between cells in that diagram as a MultiLineString.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_voronoipolygons"></a><code>st_voronoipolygons(geometry: geometry, tolerance: <a href="float.html">float</a>, extend_to: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a two-dimensional Voronoi diagram from the vertices of the supplied geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>

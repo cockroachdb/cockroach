@@ -33,8 +33,8 @@ type scheduledBackupExecutor struct {
 }
 
 type backupMetrics struct {
-	jobs.ExecutorMetrics
-	rpoMetric *metric.Gauge
+	*jobs.ExecutorMetrics
+	RpoMetric *metric.Gauge
 }
 
 var _ metric.Struct = &backupMetrics{}
@@ -187,7 +187,7 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	// If this schedule is designated as maintaining the "LastBackup" metric used
 	// for monitoring an RPO SLA, update that metric.
 	if args.UpdatesLastBackupMetric {
-		e.metrics.rpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
+		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 	}
 
 	if args.UnpauseOnSuccess == jobs.InvalidScheduleID {
@@ -256,12 +256,13 @@ func init() {
 	jobs.RegisterScheduledJobExecutorFactory(
 		tree.ScheduledBackupExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
+			m := jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName())
 			return &scheduledBackupExecutor{
 				metrics: backupMetrics{
-					ExecutorMetrics: jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName()),
-					rpoMetric: metric.NewGauge(metric.Metadata{
+					ExecutorMetrics: &m,
+					RpoMetric: metric.NewGauge(metric.Metadata{
 						Name:        "schedules.BACKUP.last-completed-time",
-						Help:        "The unix timestamp of the most recently completed backup by a scehedule specified as maintaining this metric",
+						Help:        "The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric",
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 					}),

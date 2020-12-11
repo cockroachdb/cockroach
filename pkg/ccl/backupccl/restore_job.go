@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -443,13 +442,16 @@ func WriteDescriptors(
 // been dropped -- any splits that happened to pick one of its rows live on, but
 // include an ID of a table that no longer exists.
 //
-// Note that the actual restore process (i.e. inside ImportRequest) does not use
-// these keys -- they are only used to split the key space and distribute those
-// requests, thus truncation is fine. In the rare case where multiple backup
-// spans are truncated to the same prefix (i.e. entire spans resided under the
-// same interleave parent row) we'll generate some no-op splits and route the
-// work to the same range, but the actual imported data is unaffected.
-func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
+// Note that the actual restore process (i.e the restore processor method which
+// writes the KVs) does not use these keys -- they are only used to split the
+// key space and distribute those requests, thus truncation is fine. In the rare
+// case where multiple backup spans are truncated to the same prefix (i.e.
+// entire spans resided under the same interleave parent row) we'll generate
+// some no-op splits and route the work to the same range, but the actual
+// imported data is unaffected.
+func rewriteBackupSpanKey(
+	codec keys.SQLCodec, kr *storageccl.KeyRewriter, key roachpb.Key,
+) (roachpb.Key, error) {
 	// TODO(dt): support rewriting tenant keys.
 	if bytes.HasPrefix(key, keys.TenantPrefix) {
 		return key, nil
@@ -469,11 +471,11 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	// start of the table. That is, change a span start key from /Table/51/1 to
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
-	if b, id, idx, err := keys.TODOSQLCodec.DecodeIndexPrefix(newKey); err != nil {
+	if b, id, idx, err := codec.DecodeIndexPrefix(newKey); err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
-		newKey = keys.TODOSQLCodec.TablePrefix(id)
+		newKey = codec.TablePrefix(id)
 	}
 	return newKey, nil
 }
@@ -613,7 +615,8 @@ func restore(
 			}
 			mu.Unlock()
 
-			// Signal that an ImportRequest finished to update job progress.
+			// Signal that the processor has finished importing a span, to update job
+			// progress.
 			requestFinishedCh <- struct{}{}
 		}
 		return nil
@@ -691,16 +694,6 @@ type restoreResumer struct {
 
 	settings *cluster.Settings
 	execCfg  *sql.ExecutorConfig
-
-	// versionAtLeast20_2 is true if the cluster version is new enough.
-	// In release-20.1, any decoded table descriptor needed a populated
-	// modification time regardless of its version number. In 20.2 and later we've
-	// relaxed this requirement to allow version 1 descriptors to be serialized
-	// with a zero modification time. Furthermore, in 20.1, database descriptors
-	// could not be safely put into the offiline state.
-	//
-	// TODO(ajwerner): Remove in 21.1.
-	versionAtLeast20_2 bool
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -949,7 +942,6 @@ func createImportingDescriptors(
 	// use the new IDs.
 	if err := RewriteTableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
-		r.versionAtLeast20_2,
 	); err != nil {
 		return nil, nil, nil, err
 	}
@@ -1005,12 +997,8 @@ func createImportingDescriptors(
 	for _, desc := range schemasToWrite {
 		desc.SetOffline("restoring")
 	}
-	// 20.1 nodes won't make OFFLINE database descriptors public, so write them
-	// in the PUBLIC state.
-	if r.versionAtLeast20_2 {
-		for _, desc := range mutableDatabases {
-			desc.SetOffline("restoring")
-		}
+	for _, desc := range mutableDatabases {
+		desc.SetOffline("restoring")
 	}
 
 	// Collect all types after they have had their ID's rewritten.
@@ -1153,8 +1141,6 @@ func (r *restoreResumer) Resume(
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
-	r.versionAtLeast20_2 = p.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.VersionLeasedDatabaseDescriptors)
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
 		ctx, p, details, details.Encryption,

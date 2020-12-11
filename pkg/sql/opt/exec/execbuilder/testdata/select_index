@@ -497,7 +497,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, c)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: t@primary
           spans: FULL SCAN
 
@@ -539,7 +539,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, c)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: t@primary
           spans: FULL SCAN
 
@@ -560,7 +560,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, c)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: t@primary
           spans: FULL SCAN
 
@@ -739,7 +739,7 @@ vectorized: true
 │
 └── • scan
       columns: (s, i)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
 
@@ -769,11 +769,11 @@ vectorized: true
 query TTBITTBB
 CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
-abz  primary      false  1  a  DESC  false  false
-abz  primary      false  2  b  ASC   false  false
 abz  abz_c_b_key  false  1  c  DESC  false  false
 abz  abz_c_b_key  false  2  b  ASC   false  false
 abz  abz_c_b_key  false  3  a  ASC   false  true
+abz  primary      false  1  a  DESC  false  false
+abz  primary      false  2  b  ASC   false  false
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
@@ -827,7 +827,7 @@ vectorized: true
     │
     └── • scan
           columns: (k, a, b)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: tab0@primary
           spans: FULL SCAN
 
@@ -1210,7 +1210,7 @@ vectorized: true
 │
 └── • scan
       columns: (x, y)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: xy@primary
       spans: FULL SCAN
 
@@ -1227,7 +1227,7 @@ vectorized: true
 │
 └── • scan
       columns: (x, y)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: xy@primary
       spans: FULL SCAN
 
@@ -1367,7 +1367,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, b, c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: noncover@primary
           spans: FULL SCAN
 
@@ -1390,7 +1390,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, b, c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: noncover@primary
           spans: FULL SCAN
 
@@ -1407,7 +1407,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c, d)
-      estimated row count: 1000 (missing stats)
+      estimated row count: 1,000 (missing stats)
       table: noncover@primary
       spans: FULL SCAN
 
@@ -1457,12 +1457,12 @@ vectorized: true
 └── • sort
     │ columns: (a, b, c, d)
     │ ordering: +c
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +c
     │
     └── • scan
           columns: (a, b, c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: noncover@primary
           spans: FULL SCAN
 
@@ -1501,18 +1501,18 @@ vectorized: true
 ·
 • limit
 │ columns: (a, b, c, d)
-│ estimated row count: 1000 (missing stats)
+│ estimated row count: 1,000 (missing stats)
 │ count: 1000000
 │
 └── • sort
     │ columns: (a, b, c, d)
     │ ordering: +c
-    │ estimated row count: 1000 (missing stats)
+    │ estimated row count: 1,000 (missing stats)
     │ order: +c
     │
     └── • scan
           columns: (a, b, c, d)
-          estimated row count: 1000 (missing stats)
+          estimated row count: 1,000 (missing stats)
           table: noncover@primary
           spans: FULL SCAN
 

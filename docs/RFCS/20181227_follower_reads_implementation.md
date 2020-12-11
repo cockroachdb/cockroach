@@ -13,7 +13,7 @@ historical reads. Historical reads include both `AS OF SYSTEM TIME` queries as
 well as transactions with a read timestamp sufficiently in the past (for example
 long-running analytics queries). Most of the required machinery to safely
 perform these reads was implemented in the [Follower Reads
-RFC](../20180603_follower_reads.md). Follower reads can greatly improve query
+RFC](20180603_follower_reads.md). Follower reads can greatly improve query
 performance by avoiding the need to make wide area RPCs and by reducing traffic
 on lease holders. This document proposes mechanisms to expose follower reads
 through a new SQL function to determine a reasonable read time stamp and the
@@ -344,7 +344,7 @@ workload were to be shifted entirely such that all requests were forced to go to
 leaseholders it would not be capable of acceptably serving the traffic. If then,
 a burst of load or some other cluster event were to lead one or more replicas to
 fall behind in its ability to publish closed timestamps, all traffic which was
-spread over all of the replicas would begin recieving all of the load that had
+spread over all of the replicas would begin receiving all of the load that had
 been going to followers. It is possible that this concern is not realistic in
 most common cases.  Furthermore it seems straightforward to mitigate by
 increasing the target multiple. The problem seems worse as the replication

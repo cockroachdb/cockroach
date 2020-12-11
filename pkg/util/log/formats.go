@@ -13,12 +13,20 @@ package log
 import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 
 type logFormatter interface {
+	formatterName() string
 	// formatEntry formats a logpb.Entry into a newly allocated *buffer.
 	// The caller is responsible for calling putBuffer() afterwards.
 	formatEntry(entry logpb.Entry, stacks []byte) *buffer
 }
 
-var _ logFormatter = formatCrdbV1{}
-var _ logFormatter = formatCrdbV1WithCounter{}
-var _ logFormatter = formatCrdbV1TTY{}
-var _ logFormatter = formatCrdbV1TTYWithCounter{}
+var formatters = func() map[string]logFormatter {
+	m := make(map[string]logFormatter)
+	r := func(f logFormatter) {
+		m[f.formatterName()] = f
+	}
+	r(formatCrdbV1{})
+	r(formatCrdbV1WithCounter{})
+	r(formatCrdbV1TTY{})
+	r(formatCrdbV1TTYWithCounter{})
+	return m
+}()

@@ -188,7 +188,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		return &tree.DBitArray{BitArray: r}
 	case types.StringFamily:
 		// Generate a random ASCII string.
-		p := make([]byte, rng.Intn(10))
+		var length int
+		if typ.Oid() == oid.T_char || typ.Oid() == oid.T_bpchar {
+			length = 1
+		} else {
+			length = rng.Intn(10)
+		}
+		p := make([]byte, length)
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
@@ -750,6 +756,16 @@ func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 		default:
 			panic(errors.AssertionFailedf("float with an unexpected width %d", typ.Width()))
 		}
+	case types.BitFamily:
+		// A width of 64 is used by all special BitFamily datums in randInterestingDatums.
+		// If the provided bit type, typ, has a width of 0 (representing an arbitrary width) or 64 exactly,
+		// then the special datum will be valid for the provided type. Otherwise, the special type
+		// must be resized to match the width of the provided type.
+		if typ.Width() == 0 || typ.Width() == 64 {
+			return special
+		}
+		return &tree.DBitArray{BitArray: special.(*tree.DBitArray).ToWidth(uint(typ.Width()))}
+
 	default:
 		return special
 	}

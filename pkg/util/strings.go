@@ -13,6 +13,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	io "io"
 	"strings"
 	"unicode/utf8"
 
@@ -81,4 +82,59 @@ func RemoveTrailingSpaces(input string) string {
 		fmt.Fprintf(&buf, "%s\n", strings.TrimRight(line, " "))
 	}
 	return buf.String()
+}
+
+// StringListBuilder helps printing out lists of items. See
+// MakeStringListBuilder.
+type StringListBuilder struct {
+	begin, separator, end string
+
+	// started is true if we had at least one entry (and thus wrote out <begin>).
+	started bool
+}
+
+// MakeStringListBuilder creates a StringListBuilder, which is used to print out
+// lists of items. Sample usage:
+//
+//   b := MakeStringListBuilder("(", ", ", ")")
+//   b.Add(&buf, "x")
+//   b.Add(&buf, "y")
+//   b.Finish(&buf) // By now, we wrote "(x, y)".
+//
+// If Add is not called, nothing is written.
+func MakeStringListBuilder(begin, separator, end string) StringListBuilder {
+	return StringListBuilder{
+		begin:     begin,
+		separator: separator,
+		end:       end,
+		started:   false,
+	}
+}
+
+func (b *StringListBuilder) prepareToAdd(w io.Writer) {
+	if b.started {
+		_, _ = w.Write([]byte(b.separator))
+	} else {
+		_, _ = w.Write([]byte(b.begin))
+		b.started = true
+	}
+}
+
+// Add an item to the list.
+func (b *StringListBuilder) Add(w io.Writer, val string) {
+	b.prepareToAdd(w)
+	_, _ = w.Write([]byte(val))
+}
+
+// Addf is a format variant of Add.
+func (b *StringListBuilder) Addf(w io.Writer, format string, args ...interface{}) {
+	b.prepareToAdd(w)
+	fmt.Fprintf(w, format, args...)
+}
+
+// Finish must be called after all the elements have been added.
+func (b *StringListBuilder) Finish(w io.Writer) {
+	if b.started {
+		_, _ = w.Write([]byte(b.end))
+	}
 }

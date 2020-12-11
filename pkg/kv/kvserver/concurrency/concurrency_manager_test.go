@@ -985,7 +985,7 @@ func (m *monitor) waitForAsyncGoroutinesToStall(t *testing.T) {
 		// Add a small fixed delay after each iteration. This is sufficient to
 		// prevents false detection of stalls in a few cases, like when
 		// receiving on a buffered channel that already has an element in it.
-		defer time.Sleep(1 * time.Millisecond)
+		defer time.Sleep(5 * time.Millisecond)
 
 		prevStatus := status
 		status = goroutineStatus(t, filter, &m.buf)

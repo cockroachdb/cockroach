@@ -526,7 +526,7 @@
         (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
     )
     []
-    (OutputCols2 $left $right)
+    (OutputCols $left)
 )
 
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an

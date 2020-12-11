@@ -1385,3 +1385,69 @@ CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
 	tests.CheckKeyCount(t, kvDB, parentDesc.TableSpan(keys.SystemSQLCodec), 0)
 	tests.CheckKeyCount(t, kvDB, childDesc.TableSpan(keys.SystemSQLCodec), 0)
 }
+
+// Test that non-physical table deletions like DROP VIEW are immediate instead
+// of via a GC job.
+func TestDropPhysicalTableGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	_, err := sqlDB.Exec(`CREATE DATABASE test;`)
+	require.NoError(t, err)
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+
+	type tableInstance struct {
+		name         string
+		sqlType      string
+		isPhysical   bool
+		createClause string
+	}
+
+	for _, table := range [4]tableInstance{
+		{name: "t", sqlType: "TABLE", isPhysical: true, createClause: `(a INT PRIMARY KEY)`},
+		{name: "mv", sqlType: "MATERIALIZED VIEW", isPhysical: true, createClause: `AS SELECT 1`},
+		{name: "s", sqlType: "SEQUENCE", isPhysical: true, createClause: `START 1`},
+		{name: "v", sqlType: "VIEW", isPhysical: false, createClause: `AS SELECT 1`},
+	} {
+		// Create table.
+		_, err := sqlDB.Exec(fmt.Sprintf(`CREATE %s test.%s %s;`, table.sqlType, table.name, table.createClause))
+		require.NoError(t, err)
+		// Fetch table descriptor ID for future system table lookups.
+		tableDescriptor := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", table.name)
+		require.NotNil(t, tableDescriptor)
+		tableDescriptorId := tableDescriptor.GetID()
+		// Create a new zone config for the table to test its proper deletion.
+		_, err = sqlDB.Exec(fmt.Sprintf(`ALTER TABLE test.%s CONFIGURE ZONE USING gc.ttlseconds = 123456;`, table.name))
+		require.NoError(t, err)
+		// Drop table.
+		_, err = sqlDB.Exec(fmt.Sprintf(`DROP %s test.%s;`, table.sqlType, table.name))
+		require.NoError(t, err)
+		// Check for GC job kickoff.
+		var actualGCJobs int
+		countSql := fmt.Sprintf(
+			`SELECT sum(CASE description WHEN 'GC for DROP %s test.public.%s' THEN 1 ELSE 0 END) FROM [SHOW JOBS]`,
+			table.sqlType,
+			table.name)
+		sqlRun.QueryRow(t, countSql).Scan(&actualGCJobs)
+		if table.isPhysical {
+			// GC job should be created.
+			require.Equalf(t, 1, actualGCJobs, "Expected one GC job for DROP %s.", table.name, actualGCJobs)
+		} else {
+			// GC job should not be created.
+			require.Zerof(t, actualGCJobs, "Expected no GC job for DROP %s.", actualGCJobs, table.name)
+			// Test deletion of non-physical table descriptor.
+			const idCountSqlFmt = `SELECT sum(CASE id WHEN %d THEN 1 ELSE 0 END) FROM system.%s`
+			var actualDescriptors int
+			sqlRun.QueryRow(t, fmt.Sprintf(idCountSqlFmt, tableDescriptorId, "descriptor")).Scan(&actualDescriptors)
+			require.Zerof(t, actualDescriptors, "Descriptor for '%s' was not deleted as expected.", table.name)
+			// Test deletion of non-physical table zone config.
+			var actualZoneConfigs int
+			sqlRun.QueryRow(t, fmt.Sprintf(idCountSqlFmt, tableDescriptorId, "zones")).Scan(&actualZoneConfigs)
+			require.Zerof(t, actualZoneConfigs, "Zone config for '%s' was not deleted as expected.", table.name)
+		}
+	}
+}

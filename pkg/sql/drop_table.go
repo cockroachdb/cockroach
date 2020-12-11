@@ -48,6 +48,7 @@ type toDelete struct {
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"DROP TABLE",
 	); err != nil {
@@ -198,7 +199,8 @@ func (p *planner) canDropTable(
 	// error if we tried to check for ownership on the schema.
 	if checkOwnership {
 		// If the user owns the schema the table is part of, they can drop the table.
-		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
+		hasOwnership, err = p.HasOwnershipOnSchema(
+			ctx, tableDesc.GetParentSchemaID(), tableDesc.GetParentID())
 		if err != nil {
 			return err
 		}

@@ -31,6 +31,7 @@ type createDatabaseNode struct {
 // Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE DATABASE",
 	); err != nil {
@@ -127,3 +128,9 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*createDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createDatabaseNode) Close(context.Context)        {}
+
+// ReadingOwnWrites implements the planNodeReadingOwnWrites Interface. This is
+// required because we create a type descriptor for multi-region databases,
+// which must be read during validation. We also call CONFIGURE ZONE which
+// perms multiple KV operations on descriptors and expects to see its own writes.
+func (*createDatabaseNode) ReadingOwnWrites() {}

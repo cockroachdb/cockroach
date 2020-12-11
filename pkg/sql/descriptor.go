@@ -68,7 +68,7 @@ func (p *planner) createDatabase(
 	// TODO(solon): This conditional can be removed in 20.2. Every database
 	// is created with a public schema for cluster version >= 20.1, so we can remove
 	// the `shouldCreatePublicSchema` logic as well.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionNamespaceTableWithSchemas) {
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
 		shouldCreatePublicSchema = false
 	}
 
@@ -116,16 +116,18 @@ func (p *planner) createDatabase(
 		}
 		// TODO(#multiregion): See github issue:
 		// https://github.com/cockroachdb/cockroach/issues/56877.
-		err := p.createEnumWithID(
+		if err := p.createEnumWithID(
 			p.RunParams(ctx),
 			desc.RegionConfig.RegionEnumID,
 			regionLabels,
 			desc,
 			tree.NewQualifiedTypeName(dbName, tree.PublicSchema, tree.RegionEnum),
 			enumTypeMultiRegion,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, false, err
+		}
+		if err := p.applyZoneConfigFromDatabaseRegionConfig(ctx, database.Name, *regionConfig); err != nil {
+			return nil, true, err
 		}
 	}
 

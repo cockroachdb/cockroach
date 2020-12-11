@@ -231,6 +231,42 @@
 </span></td></tr>
 <tr><td><a name="percentile_disc"></a><code>percentile_disc(arg1: <a href="float.html">float</a>[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Discrete percentile: returns input values whose position in the ordering equals or exceeds the specified fractions.</p>
 </span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="float.html">float</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="int.html">int</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgx"></a><code>regr_avgx(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the independent variable (sum(X)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="float.html">float</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="float.html">float</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="int.html">int</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="int.html">int</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
+<tr><td><a name="regr_avgy"></a><code>regr_avgy(arg1: <a href="int.html">int</a>, arg2: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the average of the dependent variable (sum(Y)/N).</p>
+</span></td></tr>
 <tr><td><a name="regr_count"></a><code>regr_count(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates number of input rows in which both expressions are nonnull.</p>
 </span></td></tr>
 <tr><td><a name="regr_count"></a><code>regr_count(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="float.html">float</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates number of input rows in which both expressions are nonnull.</p>

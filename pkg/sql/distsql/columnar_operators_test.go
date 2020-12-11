@@ -79,6 +79,8 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.AggregatorSpec_REGR_SXY:             2,
 	execinfrapb.AggregatorSpec_REGR_SYY:             2,
 	execinfrapb.AggregatorSpec_REGR_COUNT:           2,
+	execinfrapb.AggregatorSpec_REGR_AVGX:            2,
+	execinfrapb.AggregatorSpec_REGR_AVGY:            2,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -384,9 +386,15 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						return cmp < 0
 					})
 
+					var outputOrdering execinfrapb.Ordering
+					if rng.Float64() < 0.5 {
+						outputOrdering = execinfrapb.Ordering{Columns: ordCols}
+					}
+
 					spec := &execinfrapb.DistinctSpec{
 						DistinctColumns: distinctCols,
 						OrderedColumns:  orderedCols,
+						OutputOrdering:  outputOrdering,
 					}
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},

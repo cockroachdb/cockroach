@@ -368,15 +368,6 @@ func (r *Registry) deprecatedResume(
 			}
 			err = r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
 			if err != nil {
-				// TODO (lucy): This needs to distinguish between assertion errors in
-				// the job registry and assertion errors in job execution returned from
-				// Resume() or OnFailOrCancel(), and only fail on the former. We have
-				// tests that purposely introduce bad state in order to produce
-				// assertion errors, which shouldn't cause the test to panic. For now,
-				// comment this out.
-				// if errors.HasAssertionFailure(err) {
-				// 	logcrash.ReportOrPanic(ctx, nil, err.Error())
-				// }
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
 			status, err := job.CurrentStatus(ctx)

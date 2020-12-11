@@ -313,17 +313,17 @@ func getVarintLen(b []byte) (int, error) {
 	return length, nil
 }
 
-// DecodeVarintAscending decodes a value encoded by EncodeVaringAscending.
+// DecodeVarintAscending decodes a value encoded by EncodeVarintAscending.
 func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	if len(b) == 0 {
-		return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value")
+		return nil, 0, errors.Errorf("insufficient bytes to decode varint value")
 	}
 	length := int(b[0]) - intZero
 	if length < 0 {
 		length = -length
 		remB := b[1:]
 		if len(remB) < length {
-			return nil, 0, errors.Errorf("insufficient bytes to decode uvarint value: %q", remB)
+			return nil, 0, errors.Errorf("insufficient bytes to decode varint value: %q", remB)
 		}
 		var v int64
 		// Use the ones-complement of each encoded byte in order to build
@@ -345,7 +345,7 @@ func DecodeVarintAscending(b []byte) ([]byte, int64, error) {
 	return remB, int64(v), nil
 }
 
-// DecodeVarintDescending decodes a uint64 value which was encoded
+// DecodeVarintDescending decodes a int64 value which was encoded
 // using EncodeVarintDescending.
 func DecodeVarintDescending(b []byte) ([]byte, int64, error) {
 	leftover, v, err := DecodeVarintAscending(b)
@@ -456,7 +456,7 @@ func EncLenUvarintDescending(v uint64) int {
 	return 2 + highestByteIndex(v)
 }
 
-// DecodeUvarintAscending decodes a varint encoded uint64 from the input
+// DecodeUvarintAscending decodes a uint64 encoded uint64 from the input
 // buffer. The remainder of the input buffer and the decoded uint64
 // are returned.
 func DecodeUvarintAscending(b []byte) ([]byte, uint64, error) {

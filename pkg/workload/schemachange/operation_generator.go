@@ -31,12 +31,13 @@ import (
 // seqNum may be shared across multiple instances of this, so it should only
 // be change atomically.
 type operationGeneratorParams struct {
-	seqNum          *int64
-	errorRate       int
-	enumPct         int
-	rng             *rand.Rand
-	ops             *deck
-	maxSourceTables int
+	seqNum             *int64
+	errorRate          int
+	enumPct            int
+	rng                *rand.Rand
+	ops                *deck
+	maxSourceTables    int
+	sequenceOwnedByPct int
 }
 
 // The OperationBuilder has the sole responsibility of generating ops
@@ -83,20 +84,27 @@ type opType int
 var opsWithExecErrorScreening = map[opType]bool{
 	addColumn: true,
 
-	createTable:   true,
-	createTableAs: true,
-	createView:    true,
-	createEnum:    true,
-	createSchema:  true,
+	createSequence: true,
+	createTable:    true,
+	createTableAs:  true,
+	createView:     true,
+	createEnum:     true,
+	createSchema:   true,
 
 	dropColumn:        true,
 	dropColumnDefault: true,
 	dropColumnNotNull: true,
+	dropSequence:      true,
+	dropTable:         true,
+	dropView:          true,
 	dropSchema:        true,
 
-	renameColumn: true,
-	renameTable:  true,
-	renameView:   true,
+	renameColumn:   true,
+	renameSequence: true,
+	renameTable:    true,
+	renameView:     true,
+
+	insertRow: true,
 }
 
 func opScreensForExecErrors(op opType) bool {
@@ -351,7 +359,89 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
-	return fmt.Sprintf(`CREATE SEQUENCE "seq%d"`, og.newUniqueSeqNum()), nil
+	seqName, err := og.randSequence(tx, og.pctExisting(false), "")
+	if err != nil {
+		return "", err
+	}
+
+	schemaExists, err := schemaExists(tx, seqName.Schema())
+	if err != nil {
+		return "", err
+	}
+	sequenceExists, err := sequenceExists(tx, seqName)
+	if err != nil {
+		return "", err
+	}
+
+	// If the sequence exists and an error should be produced, then
+	// exclude the IF NOT EXISTS clause from the statement. Otherwise, default
+	// to including the clause prevent all pgcode.DuplicateRelation errors.
+	ifNotExists := true
+	if sequenceExists && og.produceError() {
+		ifNotExists = false
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedSchema, condition: !schemaExists},
+		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
+	}.add(og.expectedExecErrors)
+
+	var seqOptions tree.SequenceOptions
+	// Decide if the sequence should be owned by a column. If so, it can
+	// set using the tree.SeqOptOwnedBy sequence option.
+	if og.randIntn(100) < og.params.sequenceOwnedByPct {
+		table, err := og.randTable(tx, og.pctExisting(true), "")
+		if err != nil {
+			return "", err
+		}
+		tableExists, err := tableExists(tx, table)
+		if err != nil {
+			return "", err
+		}
+
+		if !tableExists {
+			// If a duplicate sequence exists, then a new sequence will not be created. In this case,
+			// a pgcode.UndefinedTable will not occur.
+			if !sequenceExists {
+				og.expectedExecErrors.add(pgcode.UndefinedTable)
+			}
+			seqOptions = append(
+				seqOptions,
+				tree.SequenceOption{
+					Name:          tree.SeqOptOwnedBy,
+					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: "IrrelevantColumnName"}},
+			)
+		} else {
+			column, err := og.randColumn(tx, *table, og.pctExisting(true))
+			if err != nil {
+				return "", err
+			}
+			columnExists, err := columnExistsOnTable(tx, table, column)
+			if err != nil {
+				return "", err
+			}
+			// If a duplicate sequence exists, then a new sequence will not be created. In this case,
+			// a pgcode.UndefinedColumn will not occur.
+			if !columnExists && !sequenceExists {
+				og.expectedExecErrors.add(pgcode.UndefinedColumn)
+			}
+
+			seqOptions = append(
+				seqOptions,
+				tree.SequenceOption{
+					Name:          tree.SeqOptOwnedBy,
+					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: tree.Name(column)}},
+			)
+		}
+	}
+
+	createSeq := &tree.CreateSequence{
+		IfNotExists: ifNotExists,
+		Name:        *seqName,
+		Options:     seqOptions,
+	}
+
+	return tree.Serialize(createSeq), nil
 }
 
 func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
@@ -788,11 +878,24 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) dropSequence(tx *pgx.Tx) (string, error) {
-	sequenceName, err := og.randSequence(tx, og.pctExisting(true))
+	sequenceName, err := og.randSequence(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP SEQUENCE "%s"`, sequenceName), nil
+	ifExists := og.randIntn(2) == 0
+	dropSeq := &tree.DropSequence{
+		Names:    tree.TableNames{*sequenceName},
+		IfExists: ifExists,
+	}
+
+	sequenceExists, err := sequenceExists(tx, sequenceName)
+	if err != nil {
+		return "", err
+	}
+	if !sequenceExists && !ifExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+	}
+	return tree.Serialize(dropSeq), nil
 }
 
 func (og *operationGenerator) dropTable(tx *pgx.Tx) (string, error) {
@@ -800,7 +903,30 @@ func (og *operationGenerator) dropTable(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP TABLE %s`, tableName), nil
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	tableHasDependencies, err := tableHasDependencies(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	dropBehavior := tree.DropBehavior(og.randIntn(3))
+
+	ifExists := og.randIntn(2) == 0
+	dropTable := tree.DropTable{
+		Names:        []tree.TableName{*tableName},
+		IfExists:     ifExists,
+		DropBehavior: dropBehavior,
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedTable, !ifExists && !tableExists},
+		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && tableHasDependencies},
+	}.add(og.expectedExecErrors)
+
+	return dropTable.String(), nil
 }
 
 func (og *operationGenerator) dropView(tx *pgx.Tx) (string, error) {
@@ -808,7 +934,29 @@ func (og *operationGenerator) dropView(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`DROP VIEW %s`, viewName), nil
+	viewExists, err := tableExists(tx, viewName)
+	if err != nil {
+		return "", err
+	}
+	viewHasDependencies, err := tableHasDependencies(tx, viewName)
+	if err != nil {
+		return "", err
+	}
+
+	dropBehavior := tree.DropBehavior(og.randIntn(3))
+
+	ifExists := og.randIntn(2) == 0
+	dropView := tree.DropView{
+		Names:        []tree.TableName{*viewName},
+		IfExists:     ifExists,
+		DropBehavior: dropBehavior,
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedTable, !ifExists && !viewExists},
+		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && viewHasDependencies},
+	}.add(og.expectedExecErrors)
+	return dropView.String(), nil
 }
 
 func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
@@ -881,17 +1029,46 @@ func (og *operationGenerator) renameIndex(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) renameSequence(tx *pgx.Tx) (string, error) {
-	srcSequenceName, err := og.randSequence(tx, og.pctExisting(true))
+	srcSequenceName, err := og.randSequence(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
 	}
 
-	destSequenceName, err := og.randSequence(tx, og.pctExisting(false))
+	// Decide whether or not to produce a 'cannot change schema of table with RENAME' error
+	desiredSchema := ""
+	if !og.produceError() {
+		desiredSchema = srcSequenceName.Schema()
+	}
+
+	destSequenceName, err := og.randSequence(tx, og.pctExisting(false), desiredSchema)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf(`ALTER SEQUENCE "%s" RENAME TO "%s"`, srcSequenceName, destSequenceName), nil
+	srcSequenceExists, err := sequenceExists(tx, srcSequenceName)
+	if err != nil {
+		return "", err
+	}
+
+	destSchemaExists, err := schemaExists(tx, destSequenceName.Schema())
+	if err != nil {
+		return "", err
+	}
+
+	destSequenceExists, err := sequenceExists(tx, destSequenceName)
+	if err != nil {
+		return "", err
+	}
+
+	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
+	codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
+		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
+		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
+	}.add(og.expectedExecErrors)
+
+	return fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName), nil
 }
 
 func (og *operationGenerator) renameTable(tx *pgx.Tx) (string, error) {
@@ -1030,29 +1207,57 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting random table name")
 	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(
+			`INSERT INTO %s (IrrelevantColumnName) VALUES ("IrrelevantValue")`,
+			tableName,
+		), nil
+	}
 	cols, err := og.getTableColumns(tx, tableName.String())
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
 	colNames := []string{}
-	rows := []string{}
+	rows := [][]string{}
 	for _, col := range cols {
-		colNames = append(colNames, fmt.Sprintf(`"%s"`, col.name))
+		colNames = append(colNames, col.name)
 	}
-	numRows := og.randIntn(10) + 1
+	numRows := og.randIntn(3) + 1
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range cols {
 			d := rowenc.RandDatum(og.params.rng, col.typ, col.nullable)
 			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 		}
-		rows = append(rows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+
+		rows = append(rows, row)
 	}
+
+	// Verify if the new row will violate unique constraints by checking the constraints and
+	// existing rows in the database.
+	uniqueConstraintViolation, err := violatesUniqueConstraints(tx, tableName, colNames, rows)
+	if err != nil {
+		return "", err
+	}
+	if uniqueConstraintViolation {
+		og.expectedExecErrors.add(pgcode.UniqueViolation)
+	}
+
+	formattedRows := []string{}
+	for _, row := range rows {
+		formattedRows = append(formattedRows, fmt.Sprintf("(%s)", strings.Join(row, ",")))
+	}
+
 	return fmt.Sprintf(
 		`INSERT INTO %s (%s) VALUES %s`,
 		tableName,
 		strings.Join(colNames, ","),
-		strings.Join(rows, ","),
+		strings.Join(formattedRows, ","),
 	), nil
 }
 
@@ -1112,8 +1317,10 @@ func (og *operationGenerator) getTableColumns(tx *pgx.Tx, tableName string) ([]c
 		if err != nil {
 			return nil, err
 		}
-		typNames = append(typNames, typName)
-		ret = append(ret, c)
+		if c.name != "rowid" {
+			typNames = append(typNames, typName)
+			ret = append(ret, c)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1197,22 +1404,77 @@ ORDER BY random()
 	return name, nil
 }
 
-func (og *operationGenerator) randSequence(tx *pgx.Tx, pctExisting int) (string, error) {
+// randSequence returns a sequence qualified by a schema
+func (og *operationGenerator) randSequence(
+	tx *pgx.Tx, pctExisting int, desiredSchema string,
+) (*tree.TableName, error) {
+
+	if desiredSchema != "" {
+		if og.randIntn(100) >= pctExisting {
+			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+				SchemaName:     tree.Name(desiredSchema),
+				ExplicitSchema: true,
+			}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+			return &treeSeqName, nil
+		}
+		q := fmt.Sprintf(`
+   SELECT sequence_name
+     FROM [SHOW SEQUENCES]
+    WHERE sequence_name LIKE 'seq%%'
+			AND sequence_schema = '%s'
+ ORDER BY random()
+		LIMIT 1;
+		`, desiredSchema)
+
+		var seqName string
+		if err := tx.QueryRow(q).Scan(&seqName); err != nil {
+			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			return &treeSeqName, err
+		}
+
+		treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(desiredSchema),
+			ExplicitSchema: true,
+		}, tree.Name(seqName))
+		return &treeSeqName, nil
+	}
+
 	if og.randIntn(100) >= pctExisting {
-		return fmt.Sprintf(`seq%d`, og.newUniqueSeqNum()), nil
+		// Most of the time, this case is for creating sequences, so it
+		// is preferable that the schema exists.
+		randSchema, err := og.randSchema(tx, og.pctExisting(true))
+		if err != nil {
+			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+			return &treeSeqName, err
+		}
+		treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(randSchema),
+			ExplicitSchema: true,
+		}, tree.Name(fmt.Sprintf("seq%d", og.newUniqueSeqNum())))
+		return &treeSeqName, nil
 	}
-	const q = `
-  SELECT sequence_name
-    FROM [SHOW SEQUENCES]
-   WHERE sequence_name LIKE 'seq%'
-ORDER BY random()
-   LIMIT 1;
-`
-	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
-		return "", err
+
+	q := `
+   SELECT sequence_schema, sequence_name
+     FROM [SHOW SEQUENCES]
+    WHERE sequence_name LIKE 'seq%%'
+ ORDER BY random()
+		LIMIT 1;
+		`
+
+	var schemaName string
+	var seqName string
+	if err := tx.QueryRow(q).Scan(&schemaName, &seqName); err != nil {
+		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
+		return &treeTableName, err
 	}
-	return name, nil
+
+	treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(schemaName),
+		ExplicitSchema: true,
+	}, tree.Name(seqName))
+	return &treeSeqName, nil
+
 }
 
 func (og *operationGenerator) randEnum(tx *pgx.Tx, pctExisting int) (tree.UnresolvedName, error) {
@@ -1271,7 +1533,7 @@ func (og *operationGenerator) randTable(
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 			SchemaName:     tree.Name(desiredSchema),
 			ExplicitSchema: true,
-		}, tree.Name(fmt.Sprintf("table%d", og.newUniqueSeqNum())))
+		}, tree.Name(tableName))
 		return &treeTableName, nil
 	}
 

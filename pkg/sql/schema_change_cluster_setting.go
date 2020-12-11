@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -27,8 +28,11 @@ var featureSchemaChangeEnabled = settings.RegisterPublicBoolSetting(
 
 // checkSchemaChangeEnabled is a method that wraps the featureflag.CheckEnabled
 // method specifically for all features that are categorized as schema changes.
-func checkSchemaChangeEnabled(sv *settings.Values, schemaFeatureName string) error {
+func checkSchemaChangeEnabled(
+	ctx context.Context, sv *settings.Values, schemaFeatureName string,
+) error {
 	if err := featureflag.CheckEnabled(
+		ctx,
 		featureSchemaChangeEnabled,
 		sv,
 		fmt.Sprintf("%s is part of the schema change category, which", schemaFeatureName),

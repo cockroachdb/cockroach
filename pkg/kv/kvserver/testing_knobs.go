@@ -255,6 +255,10 @@ type StoreTestingKnobs struct {
 	// heartbeats and then expect other replicas to take the lease without
 	// worrying about Raft).
 	AllowLeaseRequestProposalsWhenNotLeader bool
+	// AllowDangerousReplicationChanges disables safeguards
+	// in execChangeReplicasTxn that prevent moving
+	// to a configuration that cannot make progress.
+	AllowDangerousReplicationChanges bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

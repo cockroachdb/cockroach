@@ -154,10 +154,10 @@ DROP DATABASE testuserdb2
 statement ok
 CREATE VIEW t.v AS SELECT k,v FROM u.kv
 
-query TTTTI
+query TTTTIT
 SHOW TABLES FROM u
 ----
-public  kv  table  root  0
+public  kv  table  root  0  NULL
 
 statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
 ALTER DATABASE u RENAME TO v

@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 )
 
@@ -39,13 +40,10 @@ type concat_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	allocator *colmem.Allocator
 	// curAgg holds the running total.
 	curAgg []byte
 	// col points to the output vector we are updating.
 	col *coldata.Bytes
-	// vec is the same as col before conversion from coldata.Vec.
-	vec coldata.Vec
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -57,55 +55,54 @@ func (a *concat_AGGKINDAgg) SetOutput(vec coldata.Vec) {
 	// {{else}}
 	a.hashAggregateFuncBase.SetOutput(vec)
 	// {{end}}
-	a.vec = vec
 	a.col = vec.Bytes()
 }
 
 func (a *concat_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	oldCurAggSize := len(a.curAgg)
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
-	a.allocator.PerformOperation(
-		[]coldata.Vec{a.vec},
-		func() {
-			// {{if eq "_AGGKIND" "Ordered"}}
-			groups := a.groups
-			// {{/*
-			// We don't need to check whether sel is non-nil when performing
-			// hash aggregation because the hash aggregator always uses non-nil
-			// sel to specify the tuples to be aggregated.
-			// */}}
-			if sel == nil {
-				_ = groups[inputLen-1]
-				if nulls.MaybeHasNulls() {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_CONCAT(a, nulls, i, true)
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_CONCAT(a, nulls, i, false)
-					}
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// {{if eq "_AGGKIND" "Ordered"}}
+		groups := a.groups
+		// {{/*
+		// We don't need to check whether sel is non-nil when performing
+		// hash aggregation because the hash aggregator always uses non-nil
+		// sel to specify the tuples to be aggregated.
+		// */}}
+		if sel == nil {
+			_ = groups[inputLen-1]
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_CONCAT(a, nulls, i, true)
 				}
-			} else
-			// {{end}}
-			{
-				sel = sel[:inputLen]
-				if nulls.MaybeHasNulls() {
-					for _, i := range sel {
-						_ACCUMULATE_CONCAT(a, nulls, i, true)
-					}
-				} else {
-					for _, i := range sel {
-						_ACCUMULATE_CONCAT(a, nulls, i, false)
-					}
+			} else {
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_CONCAT(a, nulls, i, false)
 				}
 			}
-		},
+		} else
+		// {{end}}
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+					_ACCUMULATE_CONCAT(a, nulls, i, true)
+				}
+			} else {
+				for _, i := range sel {
+					_ACCUMULATE_CONCAT(a, nulls, i, false)
+				}
+			}
+		}
+	},
 	)
-	newCurAggSize := len(a.curAgg)
-	a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	execgen.SETVARIABLESIZE(newCurAggSize, a.curAgg)
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
 }
 
 func (a *concat_AGGKINDAgg) Flush(outputIdx int) {
@@ -151,23 +148,26 @@ func _ACCUMULATE_CONCAT(a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	// {{define "accumulateConcat" }}
 	// {{if eq "_AGGKIND" "Ordered"}}
 	if groups[i] {
-		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null.
-		if !a.foundNonNullForCurrentGroup {
-			a.nulls.SetNull(a.curIdx)
-		} else {
-			a.col.Set(a.curIdx, a.curAgg)
-		}
-		a.curIdx++
-		a.curAgg = zeroBytesValue
+		if !a.isFirstGroup {
+			// If we encounter a new group, and we haven't found any non-nulls for the
+			// current group, the output for this group should be null.
+			if !a.foundNonNullForCurrentGroup {
+				a.nulls.SetNull(a.curIdx)
+			} else {
+				a.col.Set(a.curIdx, a.curAgg)
+			}
+			a.curIdx++
+			a.curAgg = zeroBytesValue
 
-		// {{/*
-		// We only need to reset this flag if there are nulls. If there are no
-		// nulls, this will be updated unconditionally below.
-		// */}}
-		// {{if .HasNulls}}
-		a.foundNonNullForCurrentGroup = false
-		// {{end}}
+			// {{/*
+			// We only need to reset this flag if there are nulls. If there are no
+			// nulls, this will be updated unconditionally below.
+			// */}}
+			// {{if .HasNulls}}
+			a.foundNonNullForCurrentGroup = false
+			// {{end}}
+		}
+		a.isFirstGroup = false
 	}
 	// {{end}}
 

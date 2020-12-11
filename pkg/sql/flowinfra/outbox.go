@@ -14,6 +14,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,6 +65,11 @@ type Outbox struct {
 
 	statsCollectionEnabled bool
 	stats                  execinfrapb.ComponentStats
+
+	// numOutboxes is an atomic that keeps track of how many outboxes are left.
+	// When there is one outbox left, the flow-level stats are added to the last
+	// outbox's span stats.
+	numOutboxes *int32
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -73,12 +79,14 @@ var _ Startable = &Outbox{}
 func NewOutbox(
 	flowCtx *execinfra.FlowCtx,
 	nodeID roachpb.NodeID,
-	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
+	numOutboxes *int32,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, nodeID: nodeID}
-	m.encoder.SetHeaderFields(flowID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
 	m.streamID = streamID
+	m.numOutboxes = numOutboxes
+	m.stats.Component = flowCtx.StreamComponentID(streamID)
 	return m
 }
 
@@ -282,6 +290,13 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					err := m.flush(ctx)
 					if err != nil {
 						return err
+					}
+					if m.numOutboxes != nil && atomic.AddInt32(m.numOutboxes, -1) == 0 {
+						// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that are associated with streams,
+						// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
+						// complicated to attach this to a flow level span. If the row exec engine gets removed, getting
+						// maxMemUsage from streamStats should be removed as well.
+						m.stats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.EvalCtx.Mon.MaximumBytes()))
 					}
 					span.SetSpanStats(&m.stats)
 					span.Finish()

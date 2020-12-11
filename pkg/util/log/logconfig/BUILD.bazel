@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logconfig",
+    srcs = [
+        "config.go",
+        "doc.go",
+        "export.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log/logpb",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/dustin/go-humanize",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "logconfig_test",
+    srcs = [
+        "config_test.go",
+        "export_test.go",
+        "validate_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":logconfig"],
+    deps = [
+        "//vendor/github.com/cockroachdb/datadriven",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)

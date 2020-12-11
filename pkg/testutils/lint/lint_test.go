@@ -446,6 +446,7 @@ func TestLint(t *testing.T) {
 					":!ccl/workloadccl/fixture_test.go",
 					":!internal/gopath/gopath.go",
 					":!cmd",
+					":!util/cgroups/cgroups.go",
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
@@ -1247,6 +1248,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^geo/geoprojbase/projections.go$`),
 			stream.GrepNot(`^sql/logictest/testdata/logic_test/pg_extension$`),
 			stream.GrepNot(`^sql/opt/testutils/opttester/testfixtures/.*`),
+			stream.GrepNot(`^util/timeutil/lowercase_timezones.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkgDir, s)
 			}),
@@ -1454,7 +1456,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/util/log: github\.com/pkg/errors$`),
 			stream.GrepNot(`cockroach/pkg/(base|release|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
-
+			stream.GrepNot(`cockroachdb/cockroach/pkg/sql/lex/allkeywords: log$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
@@ -1763,6 +1765,7 @@ func TestLint(t *testing.T) {
 			"sql/col*",
 			":!sql/colexec/operator.go",
 			":!sql/colmem/allocator.go",
+			":!sql/colmem/allocator_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1978,7 +1981,7 @@ func TestLint(t *testing.T) {
 			// We can't use the regular exception mechanism via functions.go
 			// because addStructured takes its positional argument as []interface{},
 			// instead of ...interface{}.
-			stream.GrepNot(`pkg/util/log/structured\.go:\d+:\d+: addStructured\(\): format argument is not a constant expression`),
+			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
 			// roachtest is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),

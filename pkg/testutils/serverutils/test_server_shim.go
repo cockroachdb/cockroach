@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -220,6 +221,9 @@ type TestServerInterface interface {
 	// Calling this multiple times is undefined (but see
 	// TestCluster.ScratchRange() which is idempotent).
 	ScratchRange() (roachpb.Key, error)
+
+	// Engines returns the TestServer's engines.
+	Engines() []storage.Engine
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

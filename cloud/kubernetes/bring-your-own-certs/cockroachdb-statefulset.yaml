@@ -154,6 +154,17 @@ spec:
       - name: cockroachdb
         image: cockroachdb/cockroach:v20.2.2
         imagePullPolicy: IfNotPresent
+        # TODO: Change these to appropriate values for the hardware that you're running. You can see
+        # the resources that can be allocated on each of your Kubernetes nodes by running:
+        #   kubectl describe nodes
+        # Note that requests and limits should have identical values.
+        # resources:
+        #   requests:
+        #     cpu: "16"
+        #     memory: "8Gi"
+        #   limits:
+        #     cpu: "16"
+        #     memory: "8Gi" 
         ports:
         - containerPort: 26257
           name: grpc

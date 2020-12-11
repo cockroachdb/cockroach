@@ -26,8 +26,10 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/errorutil",
+        "//pkg/util/humanizeutil",
         "//pkg/util/treeprinter",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/dustin/go-humanize",
     ],
 )
 

@@ -146,18 +146,16 @@ func (s *Server) Serve(ln net.Listener) error {
 
 		go func() {
 			s.metrics.CurConnCount.Inc(1)
-			defer func() { _ = conn.Close() }()
 			defer s.metrics.CurConnCount.Dec(1)
 			tBegin := timeutil.Now()
-			log.Infof(context.Background(), "handling client %s", conn.RemoteAddr())
+			remoteAddr := conn.RemoteAddr()
+			log.Infof(context.Background(), "handling client %s", remoteAddr)
 			err := s.Proxy(conn)
 			log.Infof(context.Background(), "client %s disconnected after %.2fs: %v",
-				conn.RemoteAddr(), timeutil.Since(tBegin).Seconds(), err)
+				remoteAddr, timeutil.Since(tBegin).Seconds(), err)
 		}()
 	}
 }
-
-var _ = (*Conn)(nil).Done // silence unused lint
 
 // Conn is a SQL connection into the proxy.
 type Conn struct {

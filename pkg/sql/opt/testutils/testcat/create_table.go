@@ -76,32 +76,39 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.interleaved = true
 	}
 
+	// Find the PK columns; we have to force these to be non-nullable.
+	pkCols := make(map[tree.Name]struct{})
+	for _, def := range stmt.Defs {
+		switch def := def.(type) {
+		case *tree.ColumnTableDef:
+			if def.PrimaryKey.IsPrimaryKey {
+				pkCols[def.Name] = struct{}{}
+			}
+
+		case *tree.UniqueConstraintTableDef:
+			if def.PrimaryKey {
+				for i := range def.Columns {
+					pkCols[def.Columns[i].Column] = struct{}{}
+				}
+			}
+		}
+	}
+
 	// Add non-mutation columns.
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
 			if !isMutationColumn(def) {
+				if _, isPKCol := pkCols[def.Name]; isPKCol {
+					def.Nullable.Nullability = tree.NotNull
+				}
 				tab.addColumn(def)
 			}
 		}
 	}
 
 	// If there is no primary index, add the hidden rowid column.
-	hasPrimaryIndex := false
-	for _, def := range stmt.Defs {
-		switch def := def.(type) {
-		case *tree.ColumnTableDef:
-			if def.PrimaryKey.IsPrimaryKey {
-				hasPrimaryIndex = true
-			}
-
-		case *tree.UniqueConstraintTableDef:
-			if def.PrimaryKey {
-				hasPrimaryIndex = true
-			}
-		}
-	}
-
+	hasPrimaryIndex := len(pkCols) > 0
 	if !hasPrimaryIndex {
 		var rowid cat.Column
 		ordinal := len(tab.Columns)
@@ -507,17 +514,29 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	}
 
 	var col cat.Column
-	col.InitNonVirtual(
-		ordinal,
-		cat.StableID(1+ordinal),
-		name,
-		kind,
-		typ,
-		nullable,
-		false, /* hidden */
-		defaultExpr,
-		computedExpr,
-	)
+	if def.Computed.Virtual {
+		col.InitVirtualComputed(
+			ordinal,
+			cat.StableID(1+ordinal),
+			name,
+			typ,
+			nullable,
+			false, /* hidden */
+			*computedExpr,
+		)
+	} else {
+		col.InitNonVirtual(
+			ordinal,
+			cat.StableID(1+ordinal),
+			name,
+			kind,
+			typ,
+			nullable,
+			false, /* hidden */
+			defaultExpr,
+			computedExpr,
+		)
+	}
 	tt.Columns = append(tt.Columns, col)
 }
 
@@ -561,31 +580,6 @@ func (tt *Table) addIndexWithVersion(
 			idx.invertedOrd = i
 		}
 		col := idx.addColumn(tt, colDef, keyCol, isLastIndexCol)
-
-		if typ == primaryIndex && col.IsNullable() {
-			// Reinitialize the column to make it non-nullable.
-			// TODO(radu): this is very hacky
-			var defaultExpr, computedExpr *string
-			if col.HasDefault() {
-				e := col.DefaultExprStr()
-				defaultExpr = &e
-			}
-			if col.IsComputed() {
-				e := col.ComputedExprStr()
-				computedExpr = &e
-			}
-			col.InitNonVirtual(
-				col.Ordinal(),
-				col.ColID(),
-				col.ColName(),
-				col.Kind(),
-				col.DatumType(),
-				false, /* nullable */
-				col.IsHidden(),
-				defaultExpr,
-				computedExpr,
-			)
-		}
 
 		if col.IsNullable() {
 			notNullIndex = false
@@ -838,9 +832,11 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	var col cat.Column
 	col.InitVirtualComputed(
 		len(tt.Columns),
+		cat.StableID(1+len(tt.Columns)),
 		name,
 		typ,
 		true, /* nullable */
+		true, /* hidden */
 		exprStr,
 	)
 	tt.Columns = append(tt.Columns, col)

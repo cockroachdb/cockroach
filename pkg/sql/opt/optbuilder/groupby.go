@@ -252,7 +252,8 @@ func (a aggregateInfo) isOrderingSensitive() bool {
 		return true
 	}
 	switch a.def.Name {
-	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg", "json_object_agg", "jsonb_object_agg":
+	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg", "json_object_agg", "jsonb_object_agg",
+		"st_makeline", "st_collect", "st_memcollect":
 		return true
 	default:
 		return false
@@ -809,6 +810,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructCovarPop(args[0], args[1])
 	case "covar_samp":
 		return b.factory.ConstructCovarSamp(args[0], args[1])
+	case "regr_avgx":
+		return b.factory.ConstructRegressionAvgX(args[0], args[1])
+	case "regr_avgy":
+		return b.factory.ConstructRegressionAvgY(args[0], args[1])
 	case "regr_intercept":
 		return b.factory.ConstructRegressionIntercept(args[0], args[1])
 	case "regr_r2":

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -345,9 +346,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecbase.Operator,
 	kvReader execinfra.KVReader,
 	inputs []colexecbase.Operator,
-	id int32,
-	idTagKey string,
-	omitNumTuples bool,
+	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
 ) (colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
@@ -368,7 +367,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 		inputStatsCollectors[i] = sc
 	}
 	vsc := colexec.NewVectorizedStatsCollector(
-		op, kvReader, id, idTagKey, omitNumTuples, inputWatch,
+		op, kvReader, component, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
 	)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, vsc)
@@ -378,12 +377,12 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 // wrapWithNetworkVectorizedStatsCollector creates a new
 // colexec.NetworkVectorizedStatsCollector that wraps op.
 func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
-	inbox *colrpc.Inbox, id int32, latency time.Duration,
+	inbox *colrpc.Inbox, component execinfrapb.ComponentID, latency time.Duration,
 ) (colexec.VectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
 	op := colexecbase.Operator(inbox)
 	networkReader := colexec.NetworkReader(inbox)
-	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, id, inputWatch, networkReader, latency)
+	nvsc := colexec.NewNetworkVectorizedStatsCollector(op, component, inputWatch, networkReader, latency)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
 }
@@ -391,13 +390,10 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 // finishVectorizedStatsCollectors finishes the given stats collectors and
 // outputs their stats to the trace contained in the ctx's span.
 func finishVectorizedStatsCollectors(
-	ctx context.Context,
-	flowID execinfrapb.FlowID,
-	vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
+	ctx context.Context, vectorizedStatsCollectors []colexec.VectorizedStatsCollector,
 ) {
-	flowIDString := flowID.String()
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.OutputStats(ctx, flowIDString)
+		vsc.OutputStats(ctx)
 	}
 }
 
@@ -485,6 +481,15 @@ type vectorizedFlowCreator struct {
 	// It must be accessed atomically.
 	numOutboxes       int32
 	materializerAdded bool
+
+	// numOutboxesExited is an atomic that keeps track of how many outboxes have exited.
+	// When numOutboxesExited equals numOutboxes, the cancellation function for the flow
+	// is called.
+	numOutboxesExited int32
+	// numOutboxesDrained is an atomic that keeps track of how many outboxes have
+	// been drained. When numOutboxesDrained equals numOutboxes, flow-level metadata is
+	// added to a flow-level span.
+	numOutboxesDrained int32
 
 	// procIdxQueue is a queue of indices into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
@@ -684,7 +689,6 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 			outboxCancelFn,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
-		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
 		// - it is the last Outbox
@@ -693,7 +697,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
 		// node is listening on, so it will shut everything down.
-		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
+		if atomic.AddInt32(&s.numOutboxesExited, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.materializerAdded && cancelFn != nil {
 			cancelFn()
 		}
 	}
@@ -774,7 +778,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 				var err error
 				localOp, err = s.wrapWithVectorizedStatsCollectorBase(
 					op, nil /* kvReader */, nil, /* inputs */
-					int32(stream.StreamID), execinfrapb.StreamIDTagKey, false /* omitNumTuples */, mons,
+					flowCtx.StreamComponentID(stream.StreamID), mons,
 				)
 				if err != nil {
 					return err
@@ -855,7 +859,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			op := colexecbase.Operator(inbox)
 			if s.recordingStats {
 				op, err = s.wrapWithNetworkVectorizedStatsCollector(
-					inbox, int32(inputStream.StreamID), latency,
+					inbox, flowCtx.StreamComponentID(inputStream.StreamID), latency,
 				)
 				if err != nil {
 					return nil, nil, nil, err
@@ -912,8 +916,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			// this stats collector to display stats.
 			var err error
 			op, err = s.wrapWithVectorizedStatsCollectorBase(
-				op, nil /* kvReader */, statsInputsAsOps, -1, /* id */
-				"" /* idTagKey */, false /* omitNumTuples */, nil, /* monitors */
+				op, nil /* kvReader */, statsInputsAsOps, execinfrapb.ComponentID{}, nil, /* monitors */
 			)
 			if err != nil {
 				return nil, nil, nil, err
@@ -975,7 +978,18 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
-						finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscs)
+						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
+							// At the last outbox, we can accurately retrieve stats for the whole flow from parent monitors.
+							// These stats are added to a flow-level span.
+							// TODO(radu): add a ComponentID type for the flow itself.
+							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
+							span.SetSpanStats(&execinfrapb.ComponentStats{
+								FlowStats: execinfrapb.FlowStats{
+									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+								},
+							})
+						}
+						finishVectorizedStatsCollectors(ctx, vscs)
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
@@ -1001,7 +1015,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 				// TODO(radu): this is a sketchy way to use this infrastructure. We
 				// aren't actually returning any stats, but we are creating and closing
 				// child spans with stats.
-				finishVectorizedStatsCollectors(ctx, flowCtx.ID, vscq)
+				finishVectorizedStatsCollectors(ctx, vscq)
 				return nil
 			}
 		}
@@ -1118,7 +1132,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
-			originalOp := result.Op
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
 				result.Op = colexec.NewInvariantsChecker(result.Op)
 			}
@@ -1146,12 +1159,13 @@ func (s *vectorizedFlowCreator) setupFlow(
 
 			op := result.Op
 			if s.recordingStats {
-				// We prevent emitting the NumTuples stat from Columnarizers because the
-				// wrapped processor already emits the same stat.
-				_, isColumnarizer := originalOp.(*colexec.Columnarizer)
+				// Note: if the original op is a Columnarizer, this will result in two
+				// sets of stats for the same processor. The code that processes stats
+				// is prepared to union the stats.
+				// TODO(radu): find a way to clean this up.
 				op, err = s.wrapWithVectorizedStatsCollectorBase(
-					op, result.KVReader, inputs, pspec.ProcessorID,
-					execinfrapb.ProcessorIDTagKey, isColumnarizer, result.OpMonitors,
+					op, result.KVReader, inputs, flowCtx.ProcessorComponentID(pspec.ProcessorID),
+					result.OpMonitors,
 				)
 				if err != nil {
 					return

@@ -278,3 +278,15 @@ define ExportPrivate {
     # Columns stores the column IDs for the statement result columns.
     Columns ColList
 }
+
+# CreateStatistics represents a CREATE STATISTICS or ANALYZE statement.
+[Relational]
+define CreateStatistics {
+    _ CreateStatisticsPrivate
+}
+
+[Private]
+define CreateStatisticsPrivate {
+    # Syntax is the tree.CreateStats AST node.
+    Syntax CreateStats
+}

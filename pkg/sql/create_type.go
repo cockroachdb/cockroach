@@ -53,6 +53,7 @@ var _ planNode = &createTypeNode{n: nil}
 
 func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
+		ctx,
 		&p.ExecCfg().Settings.SV,
 		"CREATE TYPE",
 	); err != nil {
@@ -219,7 +220,7 @@ func (p *planner) createArrayType(
 	// ID of the array type in order for the array type to correctly created.
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
-	case descpb.TypeDescriptor_ENUM:
+	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		elemTyp = types.MakeEnum(typedesc.TypeIDToOID(typDesc.GetID()), typedesc.TypeIDToOID(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
@@ -275,7 +276,7 @@ func (p *planner) createEnumWithID(
 	enumType enumType,
 ) error {
 	// Make sure that all nodes in the cluster are able to recognize ENUM types.
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionEnums) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.Enums) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"not all nodes are the correct version for ENUM type creation")
 	}
@@ -323,8 +324,16 @@ func (p *planner) createEnumWithID(
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
+	var regionConfig *descpb.TypeDescriptor_RegionConfig
 	if enumType == enumTypeMultiRegion {
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
+		primaryRegion, err := dbDesc.PrimaryRegion()
+		if err != nil {
+			return err
+		}
+		regionConfig = &descpb.TypeDescriptor_RegionConfig{
+			PrimaryRegion: primaryRegion,
+		}
 	}
 
 	// TODO (rohany): OID's are computed using an offset of
@@ -342,15 +351,13 @@ func (p *planner) createEnumWithID(
 			EnumMembers:    members,
 			Version:        1,
 			Privileges:     privs,
+			RegionConfig:   regionConfig,
 		})
 
 	// Create the implicit array type for this type before finishing the type.
-	arrayTypeID := descpb.InvalidID
-	if enumType == enumTypeUserDefined {
-		arrayTypeID, err = p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)
-		if err != nil {
-			return err
-		}
+	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)
+	if err != nil {
+		return err
 	}
 
 	// Update the typeDesc with the created array type ID.

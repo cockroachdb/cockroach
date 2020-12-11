@@ -1,7 +1,4 @@
-# LogicTest: local local-vec-off
-
-# TODO(sumeer): move these to opt/exec/execbuilder/testdata since logic tests
-# are not supposed to change when a plan changes.
+# LogicTest: local
 
 # EXPLAIN test cases for using invertedFilterer on an inverted geospatial index.
 
