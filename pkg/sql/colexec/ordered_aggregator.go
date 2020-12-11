@@ -130,10 +130,7 @@ type orderedAggregator struct {
 var _ ResettableOperator = &orderedAggregator{}
 var _ closableOperator = &orderedAggregator{}
 
-// NewOrderedAggregator creates an ordered aggregator on the given grouping
-// columns. aggCols is a slice where each index represents a new aggregation
-// function. The slice at that index specifies the columns of the input batch
-// that the aggregate function should work on.
+// NewOrderedAggregator creates an ordered aggregator.
 func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {

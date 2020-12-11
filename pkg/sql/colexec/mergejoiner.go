@@ -540,15 +540,27 @@ func (o *mergeJoinBase) Init() {
 	o.left.source.Init()
 	o.right.source.Init()
 	o.proberState.lBufferedGroup.spillingQueue = newSpillingQueue(
-		o.unlimitedAllocator, o.left.sourceTypes, o.memoryLimit,
-		o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: o.unlimitedAllocator,
+			Types:              o.left.sourceTypes,
+			MemoryLimit:        o.memoryLimit,
+			DiskQueueCfg:       o.diskQueueCfg,
+			FDSemaphore:        o.fdSemaphore,
+			DiskAcc:            o.diskAcc,
+		},
 	)
 	o.proberState.lBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.left.sourceTypes, 1, /* capacity */
 	).ColVecs()
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
-		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
-		o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: o.unlimitedAllocator,
+			Types:              o.right.sourceTypes,
+			MemoryLimit:        o.memoryLimit,
+			DiskQueueCfg:       o.diskQueueCfg,
+			FDSemaphore:        o.fdSemaphore,
+			DiskAcc:            o.diskAcc,
+		},
 	)
 	o.proberState.rBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.right.sourceTypes, 1, /* capacity */

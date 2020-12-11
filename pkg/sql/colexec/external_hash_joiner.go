@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/marusama/semaphore"
@@ -107,22 +106,15 @@ func NewExternalHashJoiner(
 		maxNumberActivePartitions int,
 		fdSemaphore semaphore.Semaphore,
 	) ResettableOperator {
-		makeOrderingCols := func(eqCols []uint32) []execinfrapb.Ordering_Column {
-			res := make([]execinfrapb.Ordering_Column, len(eqCols))
-			for i, colIdx := range eqCols {
-				res[i].ColIdx = colIdx
-			}
-			return res
-		}
 		// We need to allocate 2 FDs for reading the partitions (reused by the merge
 		// joiner) that we need to join using sort + merge join strategy, and all
 		// others are divided between the two inputs.
 		externalSorterMaxNumberPartitions := (maxNumberActivePartitions - sortMergeNonSortMinFDsOpen) / 2
-		leftOrdering := makeOrderingCols(spec.left.eqCols)
+		leftOrdering := makeOrdering(spec.left.eqCols)
 		leftPartitionSorter := createDiskBackedSorter(
 			partitionedInputs[0], spec.left.sourceTypes, leftOrdering, externalSorterMaxNumberPartitions,
 		)
-		rightOrdering := makeOrderingCols(spec.right.eqCols)
+		rightOrdering := makeOrdering(spec.right.eqCols)
 		rightPartitionSorter := createDiskBackedSorter(
 			partitionedInputs[1], spec.right.sourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 		)

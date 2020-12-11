@@ -177,9 +177,14 @@ func (r *percentRankNoPartitionOp) Init() {
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.bufferedTuples = newSpillingQueue(
-		r.allocator, r.inputTypes,
-		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              r.inputTypes,
+			MemoryLimit:        int64(float64(r.memoryLimit) * (1.0 - usedMemoryLimitFraction)),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// All rank functions start counting from 1. Before we assign the rank to a
@@ -376,15 +381,25 @@ func (r *percentRankWithPartitionOp) Init() {
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.partitionsState.spillingQueue = newSpillingQueue(
-		r.allocator, []*types.T{types.Int},
-		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              []*types.T{types.Int},
+			MemoryLimit:        int64(float64(r.memoryLimit) * relativeRankUtilityQueueMemLimitFraction),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	r.bufferedTuples = newSpillingQueue(
-		r.allocator, r.inputTypes,
-		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              r.inputTypes,
+			MemoryLimit:        int64(float64(r.memoryLimit) * (1.0 - usedMemoryLimitFraction)),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// All rank functions start counting from 1. Before we assign the rank to a
@@ -694,15 +709,25 @@ func (r *cumeDistNoPartitionOp) Init() {
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.peerGroupsState.spillingQueue = newSpillingQueue(
-		r.allocator, []*types.T{types.Int},
-		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              []*types.T{types.Int},
+			MemoryLimit:        int64(float64(r.memoryLimit) * relativeRankUtilityQueueMemLimitFraction),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	r.bufferedTuples = newSpillingQueue(
-		r.allocator, r.inputTypes,
-		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              r.inputTypes,
+			MemoryLimit:        int64(float64(r.memoryLimit) * (1.0 - usedMemoryLimitFraction)),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }
@@ -997,21 +1022,36 @@ func (r *cumeDistWithPartitionOp) Init() {
 	r.state = relativeRankBuffering
 	usedMemoryLimitFraction := 0.0
 	r.partitionsState.spillingQueue = newSpillingQueue(
-		r.allocator, []*types.T{types.Int},
-		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              []*types.T{types.Int},
+			MemoryLimit:        int64(float64(r.memoryLimit) * relativeRankUtilityQueueMemLimitFraction),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	r.peerGroupsState.spillingQueue = newSpillingQueue(
-		r.allocator, []*types.T{types.Int},
-		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              []*types.T{types.Int},
+			MemoryLimit:        int64(float64(r.memoryLimit) * relativeRankUtilityQueueMemLimitFraction),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	r.bufferedTuples = newSpillingQueue(
-		r.allocator, r.inputTypes,
-		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
+		&NewSpillingQueueArgs{
+			UnlimitedAllocator: r.allocator,
+			Types:              r.inputTypes,
+			MemoryLimit:        int64(float64(r.memoryLimit) * (1.0 - usedMemoryLimitFraction)),
+			DiskQueueCfg:       r.diskQueueCfg,
+			FDSemaphore:        r.fdSemaphore,
+			DiskAcc:            r.diskAcc,
+		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 }

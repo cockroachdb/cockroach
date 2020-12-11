@@ -84,7 +84,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	// We have output all the distinct tuples except for the ones that are part
 	// of the last input batch, so we only need to export that batch, and then
 	// we're done exporting.
