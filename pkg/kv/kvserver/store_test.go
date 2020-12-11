@@ -1424,10 +1424,7 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 		rangeID, splitKey, repl.Desc().EndKey, repl.Desc().Replicas())
 	// Minimal amount of work to keep this deprecated machinery working: Write
 	// some required Raft keys.
-	_, err = stateloader.WriteInitialState(
-		ctx, store.engine, enginepb.MVCCStats{}, *rhsDesc, roachpb.Lease{},
-		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
-	)
+	err = stateloader.WriteInitialRangeState(ctx, store.engine, *rhsDesc)
 	require.NoError(t, err)
 	newRng, err := newReplica(ctx, rhsDesc, store, repl.ReplicaID())
 	require.NoError(t, err)
@@ -2932,10 +2929,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	}
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	if _, err := stateloader.WriteInitialState(
-		ctx, s.Engine(), enginepb.MVCCStats{}, uninitDesc, roachpb.Lease{},
-		hlc.Timestamp{}, stateloader.TruncatedStateUnreplicated,
-	); err != nil {
+	if err := stateloader.WriteInitialRangeState(ctx, s.Engine(), uninitDesc); err != nil {
 		t.Fatal(err)
 	}
 	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)

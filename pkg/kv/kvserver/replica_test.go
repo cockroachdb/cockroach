@@ -286,15 +286,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
-			if _, err := stateloader.WriteInitialState(
-				ctx,
-				tc.store.Engine(),
-				enginepb.MVCCStats{},
-				*testDesc,
-				roachpb.Lease{},
-				hlc.Timestamp{},
-				stateloader.TruncatedStateUnreplicated,
-			); err != nil {
+			if err := stateloader.WriteInitialRangeState(ctx, tc.store.Engine(), *testDesc); err != nil {
 				t.Fatal(err)
 			}
 			repl, err := newReplica(ctx, testDesc, tc.store, 1)
