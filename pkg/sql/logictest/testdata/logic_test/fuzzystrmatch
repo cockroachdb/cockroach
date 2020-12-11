@@ -21,5 +21,5 @@ A500 M626 0
 query TTT
 SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL);
 ----
-A500  
+A500
 
