@@ -29,7 +29,7 @@ func TestLogTags(t *testing.T) {
 	sp1.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span foo:
-		  tags: sb=1 tag1=val1 tag2=val2
+		  tags: _verbose=1 tag1=val1 tag2=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("tag1", "tag2"))
 	shadowTracer.clear()
@@ -42,7 +42,7 @@ func TestLogTags(t *testing.T) {
 	sp2.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp2.GetRecording(), `
 		Span bar:
-			tags: one=val1 sb=1 two=val2
+			tags: _verbose=1 one=val1 two=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("one", "two"))
 	shadowTracer.clear()
@@ -52,7 +52,7 @@ func TestLogTags(t *testing.T) {
 	sp3.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp3.GetRecording(), `
 		Span baz:
-			tags: one=val1 sb=1 two=val2
+			tags: _verbose=1 one=val1 two=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("one", "two"))
 }

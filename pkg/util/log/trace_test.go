@@ -80,7 +80,7 @@ func TestTrace(t *testing.T) {
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
-		  tags: sb=1
+		  tags: _verbose=1
 		  event: test1
 		  event: test2
 		  event: testerr
@@ -107,7 +107,7 @@ func TestTraceWithTags(t *testing.T) {
 	sp.Finish()
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
-		  tags: sb=1
+		  tags: _verbose=1
 		  event: [tag=1] test1
 		  event: [tag=1] test2
 		  event: [tag=1] testerr
@@ -198,7 +198,7 @@ func TestEventLogAndTrace(t *testing.T) {
 
 	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
 		Span s:
-		  tags: sb=1
+		  tags: _verbose=1
 		  event: test3
 		  event: test4
 		  event: test5err
