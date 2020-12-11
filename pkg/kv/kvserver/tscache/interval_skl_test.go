@@ -69,7 +69,7 @@ func (s *intervalSkl) setFixedPageSize(pageSize uint32) {
 	s.pageSize = pageSize
 	s.pageSizeFixed = true
 	s.pages.Init() // clear
-	s.pushNewPage(0 /* maxWallTime */, nil /* arena */)
+	s.pushNewPage(0 /* maxTime */, nil /* arena */)
 }
 
 // setMinPages sets the minimum number of pages intervalSkl will evict down to.
@@ -80,27 +80,34 @@ func (s *intervalSkl) setMinPages(minPages int) {
 }
 
 func TestIntervalSklAdd(t *testing.T) {
-	ts1 := makeTS(200, 0)
-	ts2 := makeTS(200, 201)
-	ts3Ceil := makeTS(201, 0)
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		var tsFlag hlc.TimestampFlag
+		if synthetic {
+			tsFlag = hlc.TimestampFlag_SYNTHETIC
+		}
 
-	val1 := makeVal(ts1, "1")
-	val2 := makeVal(ts2, "2")
+		ts1 := makeTS(200, 0).SetFlag(tsFlag)
+		ts2 := makeTS(200, 201).SetFlag(tsFlag)
+		ts2Ceil := makeTS(202, 0).SetFlag(tsFlag)
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
+		val1 := makeVal(ts1, "1")
+		val2 := makeVal(ts2, "2")
 
-	s.Add([]byte("apricot"), val1)
-	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime)
-	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
-	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
-	s.Add([]byte("banana"), val2)
-	require.Equal(t, ts3Ceil.WallTime, s.frontPage().maxWallTime)
-	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
-	require.Equal(t, val2, s.LookupTimestamp([]byte("banana")))
-	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("cherry")))
+		s.Add([]byte("apricot"), val1)
+		require.Equal(t, ts1, s.frontPage().maxTime.get())
+		require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
+		require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
+		require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
+
+		s.Add([]byte("banana"), val2)
+		require.Equal(t, ts2Ceil, s.frontPage().maxTime.get())
+		require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
+		require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
+		require.Equal(t, val2, s.LookupTimestamp([]byte("banana")))
+		require.Equal(t, emptyVal, s.LookupTimestamp([]byte("cherry")))
+	})
 }
 
 func TestIntervalSklSingleRange(t *testing.T) {
@@ -450,7 +457,7 @@ func TestIntervalSklSingleKeyRanges(t *testing.T) {
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
-	require.Equal(t, int64(0), s.frontPage().maxWallTime)
+	require.Equal(t, ratchetingTime(0), s.frontPage().maxTime)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("kiwi")))
@@ -734,71 +741,79 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 	})
 }
 
-// TestIntervalSklLookupEqualsEarlierMaxWallTime tests that we properly handle
+// TestIntervalSklLookupEqualsEarlierMaxTime tests that we properly handle
 // the lookup when the timestamp for a range found in the later page is equal to
-// the maxWallTime of the earlier page.
-func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
+// the maxTime of the earlier page.
+func TestIntervalSklLookupEqualsEarlierMaxTime(t *testing.T) {
 	ts1 := makeTS(200, 0) // without Logical part
 	ts2 := makeTS(200, 1) // with Logical part
-	ts2Ceil := makeTS(201, 0)
+	ts2Ceil := makeTS(202, 0)
 
 	txnID1 := "1"
 	txnID2 := "2"
 
-	testutils.RunTrueAndFalse(t, "tsWithLogicalPart", func(t *testing.T, logicalPart bool) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
-		s.floorTS = floorTS
+	testutils.RunTrueAndFalse(t, "logical", func(t *testing.T, logical bool) {
+		testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+			s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
+			s.floorTS = floorTS
 
-		// Insert an initial value into intervalSkl.
-		initTS := ts1
-		if logicalPart {
-			initTS = ts2
-		}
-		origVal := makeVal(initTS, txnID1)
-		s.AddRange([]byte("banana"), []byte("orange"), 0, origVal)
+			// Insert an initial value into intervalSkl.
+			initTS := ts1
+			if logical {
+				initTS = ts2
+			}
+			if synthetic {
+				initTS = initTS.SetFlag(hlc.TimestampFlag_SYNTHETIC)
+			}
+			origVal := makeVal(initTS, txnID1)
+			s.AddRange([]byte("banana"), []byte("orange"), 0, origVal)
 
-		// Verify the later page's maxWallTime is what we expect.
-		expMaxTS := ts1
-		if logicalPart {
-			expMaxTS = ts2Ceil
-		}
-		require.Equal(t, expMaxTS.WallTime, s.frontPage().maxWallTime)
+			// Verify the later page's maxTime is what we expect.
+			expMaxTS := ts1
+			if logical {
+				expMaxTS = ts2Ceil
+			}
+			if synthetic {
+				expMaxTS = expMaxTS.SetFlag(hlc.TimestampFlag_SYNTHETIC)
+			}
+			require.Equal(t, expMaxTS, s.frontPage().maxTime.get())
 
-		// Rotate the page so that new writes will go to a different page.
-		s.rotatePages(s.frontPage())
+			// Rotate the page so that new writes will go to a different page.
+			s.rotatePages(s.frontPage())
 
-		// Write to overlapping and non-overlapping parts of the new page with
-		// the values that have the same timestamp as the maxWallTime of the
-		// earlier page. One value has the same txnID as the previous write in
-		// the earlier page and one has a different txnID.
-		valSameID := makeVal(expMaxTS, txnID1)
-		valDiffID := makeVal(expMaxTS, txnID2)
-		valNoID := makeValWithoutID(expMaxTS)
-		s.Add([]byte("apricot"), valSameID)
-		s.Add([]byte("banana"), valSameID)
-		s.Add([]byte("orange"), valDiffID)
-		s.Add([]byte("raspberry"), valDiffID)
+			// Write to overlapping and non-overlapping parts of the new page
+			// with the values that have the same timestamp as the maxTime of
+			// the earlier page. One value has the same txnID as the previous
+			// write in the earlier page and one has a different txnID.
+			valSameID := makeVal(expMaxTS, txnID1)
+			valDiffID := makeVal(expMaxTS, txnID2)
+			valNoID := makeValWithoutID(expMaxTS)
+			s.Add([]byte("apricot"), valSameID)
+			s.Add([]byte("banana"), valSameID)
+			s.Add([]byte("orange"), valDiffID)
+			s.Add([]byte("raspberry"), valDiffID)
 
-		require.Equal(t, valSameID, s.LookupTimestamp([]byte("apricot")))
-		require.Equal(t, valSameID, s.LookupTimestamp([]byte("banana")))
-		if logicalPart {
-			// If the initial timestamp had a logical part then
-			// s.earlier.maxWallTime is inexact (see ratchetMaxTimestamp). When
-			// we search in the earlier page, we'll find the exact timestamp of
-			// the overlapping range and realize that its not the same as the
-			// timestamp of the range in the later page. Because of this,
-			// ratchetValue WON'T remove the txnID.
-			require.Equal(t, valDiffID, s.LookupTimestamp([]byte("orange")))
-		} else {
-			// If the initial timestamp did not have a logical part then
-			// s.earlier.maxWallTime is exact. When we search in the earlier
-			// page, we'll find the overlapping range and realize that it is the
-			// same as the timestamp of the range in the later page. Because of
-			// this, ratchetValue WILL remove the txnID.
-			require.Equal(t, valNoID, s.LookupTimestamp([]byte("orange")))
-		}
-		require.Equal(t, valDiffID, s.LookupTimestamp([]byte("raspberry")))
-		require.Equal(t, floorVal, s.LookupTimestamp([]byte("tomato")))
+			require.Equal(t, valSameID, s.LookupTimestamp([]byte("apricot")))
+			require.Equal(t, valSameID, s.LookupTimestamp([]byte("banana")))
+			if logical {
+				// If the initial timestamp had a logical part then
+				// s.earlier.maxTime is inexact (see ratchetMaxTimestamp). When
+				// we search in the earlier page, we'll find the exact timestamp
+				// of the overlapping range and realize that its not the same as
+				// the timestamp of the range in the later page. Because of
+				// this, ratchetValue WON'T remove the txnID.
+				require.Equal(t, valDiffID, s.LookupTimestamp([]byte("orange")))
+			} else {
+				// If the initial timestamp did not have a logical part then
+				// s.earlier.maxTime is exact. When we search in the earlier
+				// page, we'll find the overlapping range and realize that it is
+				// the same as the timestamp of the range in the later page.
+				// Because of this, ratchetValue WILL remove the txnID.
+				require.Equal(t, valNoID, s.LookupTimestamp([]byte("orange")))
+			}
+			require.Equal(t, valDiffID, s.LookupTimestamp([]byte("raspberry")))
+			require.Equal(t, floorVal, s.LookupTimestamp([]byte("tomato")))
+		})
 	})
 }
 
@@ -901,6 +916,45 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	require.Equal(t, s.pages.Len(), s.minPages)
 }
 
+// TestIntervalSklRotateWithSyntheticTimestamps tests that if a page is evicted
+// and subsumed by the floor timestamp, then the floor timestamp will continue
+// to carry the synthtic flag, if necessary.
+func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
+	manual := hlc.NewManualClock(200)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	const minRet = 500
+	s := newIntervalSkl(clock, minRet, makeSklMetrics())
+	s.setFixedPageSize(1500)
+	s.floorTS = floorTS
+
+	// Add an initial value with a synthetic timestamp.
+	// Rotate the page so it's alone.
+	origKey := []byte("banana")
+	origTS := clock.Now().SetFlag(hlc.TimestampFlag_SYNTHETIC)
+	origVal := makeVal(origTS, "1")
+	s.Add(origKey, origVal)
+	s.rotatePages(s.frontPage())
+
+	// We should still be able to look up the initial value.
+	require.Equal(t, origVal, s.LookupTimestamp(origKey))
+
+	// Increment the clock so that the original value is not in the minimum
+	// retention window. Rotate the pages and the back page should be evicted.
+	manual.Increment(600)
+	s.rotatePages(s.frontPage())
+
+	// The initial value's page was evicted, so it should no longer exist.
+	// However, since it had the highest timestamp of all values added, its
+	// timestamp should still exist. Critically, this timestamp should still
+	// be marked as synthetic.
+	newVal := s.LookupTimestamp(origKey)
+	require.NotEqual(t, origVal, newVal, "the original value should be evicted")
+	require.Equal(t, uuid.Nil, newVal.txnID, "the original value's txn ID should be lost")
+	require.Equal(t, origVal.ts, newVal.ts, "the original value's timestamp should persist")
+	require.True(t, newVal.ts.IsFlagSet(hlc.TimestampFlag_SYNTHETIC), "the synthetic flag should persist")
+}
+
 func TestIntervalSklConcurrency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer util.EnableRacePreemptionPoints()()
@@ -973,6 +1027,9 @@ func TestIntervalSklConcurrency(t *testing.T) {
 							ts := hlc.Timestamp{WallTime: int64(j)}
 							if useClock {
 								ts = clock.Now()
+							}
+							if rng.Intn(2) == 0 {
+								ts = ts.SetFlag(hlc.TimestampFlag_SYNTHETIC)
 							}
 							nowVal := cacheValue{ts: ts, txnID: txnID}
 							s.AddRange(from, to, opt, nowVal)
@@ -1074,6 +1131,9 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 				ts := hlc.Timestamp{WallTime: int64(j)}
 				if useClock {
 					ts = clock.Now()
+				}
+				if rng.Intn(2) == 0 {
+					ts = ts.SetFlag(hlc.TimestampFlag_SYNTHETIC)
 				}
 				a.val = cacheValue{ts: ts, txnID: txnIDs[i]}
 

@@ -121,13 +121,20 @@ func ratchetValue(old, new cacheValue) (cacheValue, bool) {
 	} else if new.ts.Less(old.ts) {
 		// Nothing to update.
 		return old, false
-	} else if new.txnID != old.txnID {
-		// old.ts == new.ts but the values have different txnIDs. Remove the
-		// transaction ID from the value so that it is no longer owned by any
-		// transaction.
-		new.txnID = noTxnID
-		return new, old.txnID != noTxnID
 	}
-	// old == new.
-	return old, false
+
+	// Equal times.
+	const syn = hlc.TimestampFlag_SYNTHETIC
+	if new.ts.IsFlagSet(syn) != old.ts.IsFlagSet(syn) {
+		// old.ts == new.ts but the values have different synthetic flags.
+		// Remove the synthetic flags from the resulting value.
+		new.ts = new.ts.ClearFlag(syn)
+	}
+	if new.txnID != old.txnID {
+		// old.ts == new.ts but the values have different txnIDs. Remove the
+		// transaction ID from the resulting value so that it is no longer owned
+		// by any transaction.
+		new.txnID = noTxnID
+	}
+	return new, new != old
 }
