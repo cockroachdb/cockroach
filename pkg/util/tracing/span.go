@@ -574,7 +574,12 @@ func (s *crdbSpan) SetBaggageItemAndTag(restrictedKey, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.setBaggageItemLocked(restrictedKey, value)
-	s.setTagLocked(restrictedKey, value)
+	// Don't set the tag if this is the special cased baggage item indicating
+	// span verbosity, as it is named nondescriptly and the recording knows
+	// how to display its verbosity independently.
+	if restrictedKey != verboseTracingBaggageKey {
+		s.setTagLocked(restrictedKey, value)
+	}
 }
 
 func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
@@ -586,7 +591,6 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 		s.mu.Baggage = make(map[string]string)
 	}
 	s.mu.Baggage[restrictedKey] = value
-	s.setTagLocked(restrictedKey, value)
 }
 
 // Tracer is part of the opentracing.Span interface.
@@ -613,13 +617,15 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Tags[k] = v
 	}
 
-	switch rs.Duration {
-	case -1:
+	if rs.Duration == -1 {
 		// -1 indicates an unfinished Span. For a recording it's better to put some
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
 		rs.Duration = timeutil.Now().Sub(rs.StartTime)
-		addTag("unfinished", "")
+		addTag("_unfinished", "1")
+	}
+	if s.mu.recording.recordingType.load() == RecordingVerbose {
+		addTag("_verbose", "1")
 	}
 
 	if s.mu.stats != nil {
