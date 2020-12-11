@@ -103,19 +103,6 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.BoolFamily:
 			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 			data = c.builders.boolBuilder.NewBooleanArray().Data()
-			/*
-				case types.DecimalFamily:
-					decimals := vec.Decimal()
-					for i := 0; i < decimals.Len(); i++ {
-						d := decimals.Get(i)
-						marshaled, err := d.MarshalText()
-						if err != nil {
-							return nil, err
-						}
-						c.builders.binaryBuilder.Append(marshaled)
-					}
-					data = c.builders.binaryBuilder.NewBinaryArray().Data()
-			*/
 		case types.TimestampTZFamily:
 			timestamps := vec.Timestamp()[:n]
 			for _, ts := range timestamps {

@@ -32,7 +32,7 @@ func (d *Decimals) AppendVal(v apd.Decimal) {
 		panic("AppendVal is called on a window into Decimal")
 	}
 	d.maybeBackfillOffsets(d.Len())
-	d.data = encoding.EncodeFlatDecimal(&v, d.data)
+	d.data = encoding.EncodeFlatDecimal(&v, d.data[:d.offsets[d.Len()]])
 	d.maxSetIndex = d.Len()
 	d.offsets = append(d.offsets, int32(len(d.data)))
 }
@@ -72,7 +72,7 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	d.maybeBackfillOffsets(i)
-	d.data = encoding.EncodeFlatDecimal(&v, d.data)
+	d.data = encoding.EncodeFlatDecimal(&v, d.data[:d.offsets[i]])
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
 }

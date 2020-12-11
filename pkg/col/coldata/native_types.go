@@ -74,11 +74,11 @@ func (c Float64s) Get(idx int) float64 { return c[idx] }
 //gcassert:inline
 func (c *Decimals) Get(idx int) apd.Decimal {
 	slice := c.Bytes.Get(idx)
+	var ret apd.Decimal
 	if len(slice) == 0 {
 		// If there's a null in the slice, it'll have no data.
-		return apd.Decimal{}
+		return ret
 	}
-	var ret apd.Decimal
 	encoding.DecodeFlatDecimal(slice, &ret)
 	return ret
 }
