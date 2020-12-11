@@ -77,10 +77,10 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: sb=1 unfinished=
+			tags: _unfinished=1 _verbose=1
 			x: 2
 		Span b:
-			tags: sb=1 unfinished=
+			tags: _unfinished=1 _verbose=1
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
 		Span b:
-			tags: sb=1 unfinished=
+			tags: _unfinished=1 _verbose=1
 			x: 3
 	`); err != nil {
 		t.Fatal(err)
@@ -102,13 +102,13 @@ func TestTracerRecording(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: sb=1 unfinished=
+			tags: _unfinished=1 _verbose=1
 			x: 2
 		Span b:
-			tags: sb=1
+			tags: _verbose=1
 			x: 3
 		Span c:
-			tags: sb=1 tag=val unfinished=
+			tags: _unfinished=1 _verbose=1 tag=val
 			x: 4
 	`); err != nil {
 		t.Fatal(err)
@@ -116,13 +116,13 @@ func TestTracerRecording(t *testing.T) {
 	s3.Finish()
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-      tags: sb=1 unfinished=
+      tags: _unfinished=1 _verbose=1
 			x: 2
 		Span b:
-      tags: sb=1
+      tags: _verbose=1
 			x: 3
 		Span c:
-			tags: sb=1 tag=val
+			tags: _verbose=1 tag=val
 			x: 4
 	`); err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestTracerRecording(t *testing.T) {
 	s3.LogKV("x", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
-			tags: sb=1 tag=val
+			tags: _verbose=1 tag=val
 			x: 4
 			x: 5
 	`); err != nil {
@@ -156,9 +156,9 @@ func TestStartChildSpan(t *testing.T) {
 
 	var exp = `
 Span parent:
-      tags: sb=1
+      tags: _verbose=1
     Span child:
-      tags: sb=1
+      tags: _verbose=1
 `
 
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), exp); err != nil {
@@ -172,13 +172,13 @@ Span parent:
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span parent:
-			tags: sb=1
+			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
 	if err := TestingCheckRecordedSpans(sp2.GetRecording(), `
 		Span child:
-			tags: sb=1
+			tags: _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -191,9 +191,9 @@ Span parent:
 	sp1.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span parent:
-			tags: sb=1
+			tags: _verbose=1
 			Span child:
-				tags: key=val sb=1
+				tags: _verbose=1 key=val
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	rec := s2.GetRecording()
 	if err := TestingCheckRecordedSpans(rec, `
 		Span remote op:
-			tags: sb=1
+			tags: _verbose=1
 			x: 1
 	`); err != nil {
 		t.Fatal(err)
@@ -269,7 +269,7 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: sb=1 unfinished=
+			tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -281,9 +281,9 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
-			tags: sb=1
+			tags: _verbose=1
 		Span remote op:
-			tags: sb=1
+			tags: _verbose=1
 			x: 1
 	`); err != nil {
 		t.Fatal(err)
