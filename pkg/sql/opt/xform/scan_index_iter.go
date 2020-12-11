@@ -210,7 +210,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		filters := it.filters
+		filters := it.filtersCopy()
 
 		// If the index is a partial index, check whether or not the filters
 		// imply the predicate.
@@ -284,4 +284,13 @@ func (it *scanIndexIter) filtersImplyPredicate(
 // hasRejectFlags tests whether the given flags are all set.
 func (it *scanIndexIter) hasRejectFlags(subset indexRejectFlags) bool {
 	return it.rejectFlags&subset == subset
+}
+
+// filtersCopy copies the contents of filters to a new slice and returns the new
+// slice. This is used to avoid mutation of the filters field by an
+// enumerateIndexFunc during iteration.
+func (it *scanIndexIter) filtersCopy() memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(it.filters))
+	copy(newFilters, it.filters)
+	return newFilters
 }
