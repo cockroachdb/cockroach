@@ -233,20 +233,9 @@ func WriteInitialClusterData(
 			}
 		}
 
-		truncStateType := stateloader.TruncatedStateUnreplicated
-		lease := roachpb.Lease{}
-		_, err := stateloader.WriteInitialState(
-			ctx, batch,
-			enginepb.MVCCStats{},
-			*desc,
-			lease,
-			hlc.Timestamp{}, /* gcThreshold */
-			truncStateType,
-		)
-		if err != nil {
+		if err := stateloader.WriteInitialRangeState(ctx, batch, *desc); err != nil {
 			return err
 		}
-
 		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
 		if err != nil {
 			return err
