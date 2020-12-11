@@ -1671,7 +1671,6 @@ func TestMergeJoiner(t *testing.T) {
 							DiskQueueCfg:        queueCfg,
 							FDSemaphore:         colexecbase.NewTestingSemaphore(mjFDLimit),
 						}
-						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
