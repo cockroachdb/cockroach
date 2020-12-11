@@ -466,6 +466,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !t.Flags.Empty() {
 			tp.Childf("flags: %s", t.Flags.String())
 		}
+		if !f.HasFlags(ExprFmtHideColumns) && len(t.PrefixKeyCols) > 0 {
+			idxCols := make(opt.ColList, len(t.PrefixKeyCols))
+			idx := md.Table(t.Table).Index(t.Index)
+			for i := range idxCols {
+				idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
+			}
+			tp.Childf("prefix key columns: %v = %v", t.PrefixKeyCols, idxCols)
+		}
 		n := tp.Child("inverted-expr")
 		f.formatExpr(t.InvertedExpr, n)
 
