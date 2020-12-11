@@ -155,6 +155,24 @@ func (m *ChangeTablePrivilege) LoggingChannel() logpb.Channel { return logpb.Cha
 func (m *ChangeTypePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *ClientAuthenticationFailed) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ClientAuthenticationInfo) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ClientAuthenticationOk) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ClientConnectionEnd) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ClientConnectionStart) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *ClientSessionEnd) LoggingChannel() logpb.Channel { return logpb.Channel_SESSIONS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.

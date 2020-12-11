@@ -106,7 +106,7 @@ func authPassword(
 		return nil, err
 	}
 	if len(hashedPassword) == 0 {
-		c.Logf(ctx, "user has no password defined")
+		c.LogAuthInfof(ctx, "user has no password defined")
 	}
 
 	validUntil, err := pwValidUntilFn(ctx)
@@ -115,7 +115,7 @@ func authPassword(
 	}
 	if validUntil != nil {
 		if validUntil.Sub(timeutil.Now()) < 0 {
-			c.Logf(ctx, "password is expired")
+			c.LogAuthFailed(ctx, "password is expired", nil)
 			return nil, errors.New("password is expired")
 		}
 	}
@@ -163,10 +163,10 @@ func authCertPassword(
 ) (security.UserAuthHook, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
-		c.Logf(ctx, "no client certificate, proceeding with password authentication")
+		c.LogAuthInfof(ctx, "no client certificate, proceeding with password authentication")
 		fn = authPassword
 	} else {
-		c.Logf(ctx, "client presented certificate, proceeding with certificate validation")
+		c.LogAuthInfof(ctx, "client presented certificate, proceeding with certificate validation")
 		fn = authCert
 	}
 	return fn(ctx, c, tlsState, pwRetrieveFn, pwValidUntilFn, execCfg, entry)
