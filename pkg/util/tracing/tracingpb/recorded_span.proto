@@ -30,8 +30,9 @@ message LogRecord {
   repeated Field fields = 2 [(gogoproto.nullable) = false];
 }
 
-// RecordedSpan is a span that is part of a recording. It can be transferred
-// over the wire for snowball tracing.
+// RecordedSpan is the data recorded by a trace span. It
+// needs to be able to cross RPC boundaries so that the
+// complete recording of the trace can be constructed.
 message RecordedSpan {
   option (gogoproto.goproto_stringer) = false;
 
@@ -45,7 +46,7 @@ message RecordedSpan {
   // Operation name.
   string operation = 4;
   // Baggage items get passed from parent to child spans (even through gRPC).
-  // Notably, snowball tracing uses a special `sb` baggage item.
+  // Notably, verbose tracing uses a special baggage item.
   map<string, string> baggage = 5;
   // Tags associated with the span.
   map<string, string> tags = 6;

@@ -39,7 +39,7 @@ func (m *LogRecord) Reset()         { *m = LogRecord{} }
 func (m *LogRecord) String() string { return proto.CompactTextString(m) }
 func (*LogRecord) ProtoMessage()    {}
 func (*LogRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_cdc6b364ab4d9de8, []int{0}
+	return fileDescriptor_recorded_span_ac7a781f9ecf6725, []int{0}
 }
 func (m *LogRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -73,7 +73,7 @@ func (m *LogRecord_Field) Reset()         { *m = LogRecord_Field{} }
 func (m *LogRecord_Field) String() string { return proto.CompactTextString(m) }
 func (*LogRecord_Field) ProtoMessage()    {}
 func (*LogRecord_Field) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_cdc6b364ab4d9de8, []int{0, 0}
+	return fileDescriptor_recorded_span_ac7a781f9ecf6725, []int{0, 0}
 }
 func (m *LogRecord_Field) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -98,8 +98,9 @@ func (m *LogRecord_Field) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LogRecord_Field proto.InternalMessageInfo
 
-// RecordedSpan is a span that is part of a recording. It can be transferred
-// over the wire for snowball tracing.
+// RecordedSpan is the data recorded by a trace span. It
+// needs to be able to cross RPC boundaries so that the
+// complete recording of the trace can be constructed.
 type RecordedSpan struct {
 	// ID of the trace; spans that are part of the same hierarchy share
 	// the same trace ID.
@@ -111,7 +112,7 @@ type RecordedSpan struct {
 	// Operation name.
 	Operation string `protobuf:"bytes,4,opt,name=operation,proto3" json:"operation,omitempty"`
 	// Baggage items get passed from parent to child spans (even through gRPC).
-	// Notably, snowball tracing uses a special `sb` baggage item.
+	// Notably, verbose tracing uses a special baggage item.
 	Baggage map[string]string `protobuf:"bytes,5,rep,name=baggage,proto3" json:"baggage,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// Tags associated with the span.
 	Tags map[string]string `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
@@ -132,7 +133,7 @@ type RecordedSpan struct {
 func (m *RecordedSpan) Reset()      { *m = RecordedSpan{} }
 func (*RecordedSpan) ProtoMessage() {}
 func (*RecordedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_cdc6b364ab4d9de8, []int{1}
+	return fileDescriptor_recorded_span_ac7a781f9ecf6725, []int{1}
 }
 func (m *RecordedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -175,7 +176,7 @@ func (m *NormalizedSpan) Reset()         { *m = NormalizedSpan{} }
 func (m *NormalizedSpan) String() string { return proto.CompactTextString(m) }
 func (*NormalizedSpan) ProtoMessage()    {}
 func (*NormalizedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_cdc6b364ab4d9de8, []int{2}
+	return fileDescriptor_recorded_span_ac7a781f9ecf6725, []int{2}
 }
 func (m *NormalizedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1769,10 +1770,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_cdc6b364ab4d9de8)
+	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_ac7a781f9ecf6725)
 }
 
-var fileDescriptor_recorded_span_cdc6b364ab4d9de8 = []byte{
+var fileDescriptor_recorded_span_ac7a781f9ecf6725 = []byte{
 	// 626 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x53, 0xcd, 0x6a, 0xdb, 0x4c,
 	0x14, 0xb5, 0x6c, 0xf9, 0x47, 0x37, 0x26, 0x84, 0x21, 0x0b, 0xc5, 0x7c, 0x48, 0x21, 0x1f, 0x94,

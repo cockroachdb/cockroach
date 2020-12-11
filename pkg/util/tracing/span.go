@@ -55,7 +55,7 @@ type SpanMeta struct {
 
 	// If set, all spans derived from this context are being recorded.
 	//
-	// NB: at the time of writing, this is only ever set to SnowballTracing
+	// NB: at the time of writing, this is only ever set to RecordingVerbose
 	// and only if Baggage[verboseTracingBaggageKey] is set.
 	recordingType RecordingType
 

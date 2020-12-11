@@ -97,7 +97,7 @@ func TestTransportMoveToFront(t *testing.T) {
 }
 
 // TestSpanImport tests that the gRPC transport ingests trace information that
-// came from gRPC responses (through the "snowball tracing" mechanism).
+// came from gRPC responses (via tracingpb.RecordedSpan on the batch responses).
 func TestSpanImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
