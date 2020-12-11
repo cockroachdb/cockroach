@@ -1628,7 +1628,7 @@ func (m *AddColumn) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -1716,7 +1716,7 @@ func (m *DropColumn) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -1873,7 +1873,7 @@ func (m *AddIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2053,7 +2053,7 @@ func (m *DropIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2160,7 +2160,7 @@ func (m *AddSequenceDependency) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2259,7 +2259,7 @@ func (m *AddColumnFamilyDependency) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2420,7 +2420,7 @@ func (m *AddUniqueConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2581,7 +2581,7 @@ func (m *DropUniqueConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2781,7 +2781,7 @@ func (m *AddCheckConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -2981,7 +2981,7 @@ func (m *AddCheckConstraintUnvalidated) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
@@ -3079,7 +3079,7 @@ func (m *DropCheckConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTargets
 			}
 			if (iNdEx + skippy) > l {
