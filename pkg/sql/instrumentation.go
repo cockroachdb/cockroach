@@ -148,7 +148,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
-	newCtx, ih.sp = tracing.StartSnowballTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
 	return newCtx, true
 }
 
