@@ -285,7 +285,7 @@ func newInvertedJoiner(
 	}
 
 	collectingStats := false
-	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && sp.IsVerbose() {
 		collectingStats = true
 	}
 	if collectingStats {

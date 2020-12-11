@@ -860,7 +860,7 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
 	pb.origCtx = ctx
 	pb.Ctx, pb.span = ProcessorSpan(ctx, name)
-	if pb.span != nil && pb.span.IsRecording() {
+	if pb.span != nil && pb.span.IsVerbose() {
 		pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
 		pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
 	}
