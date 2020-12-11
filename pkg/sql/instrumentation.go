@@ -189,8 +189,8 @@ func (ih *instrumentationHelper) Finish(
 			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
 		}
 		queryLevelStats, errors := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
-		for i := 0; i < len(errors); i++ {
-			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %v", ast, errors[i])
+		if errors != nil {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, errors)
 		}
 
 		stmtStats.mu.Lock()
