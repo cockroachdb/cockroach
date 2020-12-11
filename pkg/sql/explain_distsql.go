@@ -137,7 +137,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				"explain-distsql", tracing.WithForceRealSpan(),
 				tracing.WithCtxLogTags(params.ctx))
 		}
-		sp.StartRecording(tracing.SnowballRecording)
+		sp.SetVerbose(true)
 		ctx := tracing.ContextWithSpan(params.ctx, sp)
 		planCtx.ctx = ctx
 		// Make a copy of the evalContext with the recording span in it; we can't
