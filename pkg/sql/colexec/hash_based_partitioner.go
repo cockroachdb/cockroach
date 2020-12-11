@@ -620,6 +620,13 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 			retErr = err
 		}
 	}
+	// The in-memory main operator might be a Closer (e.g. the in-memory hash
+	// aggregator), and we need to close it if so.
+	if c, ok := op.inMemMainOp.(colexecbase.Closer); ok {
+		if err := c.Close(ctx); err != nil {
+			retErr = err
+		}
+	}
 	// Note that it is ok if the disk-backed fallback operator is not a Closer -
 	// it will still be closed appropriately because we accumulate all closers
 	// in NewColOperatorResult.
