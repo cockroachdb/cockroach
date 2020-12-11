@@ -35,9 +35,9 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	// Note: We also support SET DEFAULT_TRANSACTION_READ_ONLY TO ' .... '.
 	switch n.Modes.ReadWriteMode {
 	case tree.ReadOnly:
-		p.sessionDataMutator.SetDefaultReadOnly(true)
+		p.sessionDataMutator.SetDefaultTransactionReadOnly(true)
 	case tree.ReadWrite:
-		p.sessionDataMutator.SetDefaultReadOnly(false)
+		p.sessionDataMutator.SetDefaultTransactionReadOnly(false)
 	case tree.UnspecifiedReadWriteMode:
 	default:
 		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)
