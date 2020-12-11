@@ -99,6 +99,8 @@ const (
 	avroSchema    = "schema"
 	avroSchemaURI = "schema_uri"
 
+	pgDumpIgnoreAllUnsupported = "ignore_unsupported"
+
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
 	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
@@ -133,6 +135,8 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 	avroRecordsSeparatedBy: sql.KVStringOptRequireValue,
 	avroBinRecords:         sql.KVStringOptRequireNoValue,
 	avroJSONRecords:        sql.KVStringOptRequireNoValue,
+
+	pgDumpIgnoreAllUnsupported: sql.KVStringOptRequireNoValue,
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -162,7 +166,8 @@ var mysqlOutAllowedOptions = makeStringSet(
 )
 var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs, csvRowLimit)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
-var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit)
+var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csvRowLimit,
+	pgDumpIgnoreAllUnsupported)
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
@@ -606,6 +611,9 @@ func importPlanHook(
 				maxRowSize = int32(sz)
 			}
 			format.PgDump.MaxRowSize = maxRowSize
+			if _, ok := opts[pgDumpIgnoreAllUnsupported]; ok {
+				format.PgDump.IgnoreUnsupported = true
+			}
 
 			if override, ok := opts[csvRowLimit]; ok {
 				rowLimit, err := strconv.Atoi(override)
@@ -1279,7 +1287,8 @@ func parseAndCreateBundleTableDescs(
 		tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, p, defaultCSVTableID, parentID, tableName, fks, seqVals, owner, walltime)
 	case roachpb.IOFileFormat_PgDump:
 		evalCtx := &p.ExtendedEvalContext().EvalContext
-		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner)
+		tableDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName, parentID,
+			walltime, fks, int(format.PgDump.MaxRowSize), owner, format.PgDump.IgnoreUnsupported)
 	default:
 		return tableDescs, errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
 	}

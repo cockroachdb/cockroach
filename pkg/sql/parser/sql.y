@@ -70,6 +70,17 @@ func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int
     sqllex.(*lexer).UnimplementedWithIssueDetail(issue, detail)
     return 1
 }
+
+func unimplementedWithUnsupportedNode(sqllex sqlLexer, feature string, skipDuringPGImport bool) int {
+    sqllex.(*lexer).UnimplementedWithUnsupportedNode(feature, skipDuringPGImport)
+    return 1
+}
+
+func unimplementedWithIssueDetailAndUnsupportedNode(sqllex sqlLexer, issue int, detail string, skipDuringPGImport bool) int {
+    sqllex.(*lexer).UnimplementedWithIssueDetailAndUnsupportedNode(issue, detail, skipDuringPGImport)
+    return 1
+}
+
 %}
 
 %{
@@ -720,6 +731,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> stmt_block
 %type <tree.Statement> stmt
 
+
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
@@ -732,6 +744,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_role_stmt
 %type <tree.Statement> alter_type_stmt
 %type <tree.Statement> alter_schema_stmt
+%type <tree.Statement> alter_unsupported_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1315,6 +1328,7 @@ stmt:
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
+| alter_unsupported_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 alter_ddl_stmt:
@@ -2694,6 +2708,13 @@ import_format:
     $$ = strings.ToUpper($1)
   }
 
+alter_unsupported_stmt:
+ ALTER FUNCTION error
+  {
+    return unimplementedWithUnsupportedNode(sqllex, "ALTER FUNCTION", true)
+  }
+
+
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
@@ -3099,7 +3120,8 @@ create_unsupported:
 | CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
 | CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
-| CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
+| CREATE FUNCTION error { return unimplementedWithIssueDetailAndUnsupportedNode(sqllex, 17511,
+"CREATE FUNCTION", true) }
 | CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
@@ -3109,7 +3131,8 @@ create_unsupported:
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
-| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create") }
+| CREATE TRIGGER error { return unimplementedWithIssueDetailAndUnsupportedNode(sqllex, 28296,
+"CREATE TRIGGER", true) }
 
 opt_or_replace:
   OR REPLACE {}
@@ -3847,6 +3870,10 @@ grant_stmt:
       Grantees: $7.nameList(),
     }
   }
+| GRANT privileges ON SEQUENCE error
+  {
+    return unimplementedWithUnsupportedNode(sqllex, "GRANT ON SEQUENCE", true)
+  }
 | GRANT error // SHOW HELP: GRANT
 
 // %Help: REVOKE - remove access privileges and role memberships
@@ -3893,6 +3920,10 @@ revoke_stmt:
       },
       Grantees: $7.nameList(),
     }
+  }
+| REVOKE privileges ON SEQUENCE error
+  {
+    return unimplementedWithUnsupportedNode(sqllex, "REVOKE ON SEQUENCE", true)
   }
 | REVOKE error // SHOW HELP: REVOKE
 

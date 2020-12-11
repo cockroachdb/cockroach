@@ -43,16 +43,17 @@ import (
 )
 
 type postgreStream struct {
-	s    *bufio.Scanner
-	copy *postgreStreamCopy
+	s                      *bufio.Scanner
+	copy                   *postgreStreamCopy
+	ignoreUnsupportedStmts bool
 }
 
 // newPostgreStream returns a struct that can stream statements from an
 // io.Reader.
-func newPostgreStream(r io.Reader, max int) *postgreStream {
+func newPostgreStream(r io.Reader, max int, ignoreUnsupportedStmts bool) *postgreStream {
 	s := bufio.NewScanner(r)
 	s.Buffer(nil, max)
-	p := &postgreStream{s: s}
+	p := &postgreStream{s: s, ignoreUnsupportedStmts: ignoreUnsupportedStmts}
 	s.Split(p.split)
 	return p
 }
@@ -96,14 +97,19 @@ func (p *postgreStream) Next() (interface{}, error) {
 
 	for p.s.Scan() {
 		t := p.s.Text()
-		// Regardless if we can parse the statement, check that it's not something
-		// we want to ignore.
-		if isIgnoredStatement(t) {
-			continue
-		}
+		skipOverComments(t)
 
 		stmts, err := parser.Parse(t)
 		if err != nil {
+			// There are some statements which CRDB is unable to parse but we have
+			// explicitly marked as "to be skipped" during a PGDUMP import.
+			// TODO(adityamaru): Write these to a shunt file to see what has been
+			// skipped.
+			if unsupported, ok := err.(*tree.Unsupported); ok {
+				if unsupported.SkipDuringImportPGDump && p.ignoreUnsupportedStmts {
+					continue
+				}
+			}
 			return nil, err
 		}
 		switch len(stmts) {
@@ -146,20 +152,10 @@ func (p *postgreStream) Next() (interface{}, error) {
 }
 
 var (
-	ignoreComments   = regexp.MustCompile(`^\s*(--.*)`)
-	ignoreStatements = []*regexp.Regexp{
-		regexp.MustCompile("(?i)^alter function"),
-		regexp.MustCompile("(?i)^alter sequence .* owned by"),
-		regexp.MustCompile("(?i)^comment on"),
-		regexp.MustCompile("(?i)^create extension"),
-		regexp.MustCompile("(?i)^create function"),
-		regexp.MustCompile("(?i)^create trigger"),
-		regexp.MustCompile("(?i)^grant .* on sequence"),
-		regexp.MustCompile("(?i)^revoke .* on sequence"),
-	}
+	ignoreComments = regexp.MustCompile(`^\s*(--.*)`)
 )
 
-func isIgnoredStatement(s string) bool {
+func skipOverComments(s string) {
 	// Look for the first line with no whitespace or comments.
 	for {
 		m := ignoreComments.FindStringIndex(s)
@@ -168,13 +164,6 @@ func isIgnoredStatement(s string) bool {
 		}
 		s = s[m[1]:]
 	}
-	s = strings.TrimSpace(s)
-	for _, re := range ignoreStatements {
-		if re.MatchString(s) {
-			return true
-		}
-	}
-	return false
 }
 
 type regclassRewriter struct{}
@@ -230,6 +219,7 @@ func readPostgresCreateTable(
 	fks fkHandler,
 	max int,
 	owner security.SQLUsername,
+	ignoreUnsupportedStmts bool,
 ) ([]*tabledesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
@@ -240,7 +230,7 @@ func readPostgresCreateTable(
 	createTbl := make(map[string]*tree.CreateTable)
 	createSeq := make(map[string]*tree.CreateSequence)
 	tableFKs := make(map[string][]*tree.ForeignKeyConstraintTableDef)
-	ps := newPostgreStream(input, max)
+	ps := newPostgreStream(input, max, ignoreUnsupportedStmts)
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
@@ -311,7 +301,8 @@ func readPostgresCreateTable(
 		if err != nil {
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
-		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt, p, parentID); err != nil {
+		if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, stmt, p,
+			parentID, ignoreUnsupportedStmts); err != nil {
 			return nil, err
 		}
 	}
@@ -328,6 +319,7 @@ func readPostgresStmt(
 	stmt interface{},
 	p sql.JobExecContext,
 	parentID descpb.ID,
+	ignoreUnsupportedStmts bool,
 ) error {
 	switch stmt := stmt.(type) {
 	case *tree.CreateTable:
@@ -439,6 +431,11 @@ func readPostgresStmt(
 		if match == "" || match == name {
 			createSeq[name] = stmt
 		}
+	case *tree.AlterSequence:
+		if len(stmt.Options) != 1 || stmt.Options[0].Name != tree.SeqOptOwnedBy ||
+			!ignoreUnsupportedStmts {
+			return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		}
 	// Some SELECT statements mutate schema. Search for those here.
 	case *tree.Select:
 		switch sel := stmt.Select.(type) {
@@ -494,7 +491,8 @@ func readPostgresStmt(
 					for _, fnStmt := range fnStmts {
 						switch ast := fnStmt.AST.(type) {
 						case *tree.AlterTable:
-							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq, tableFKs, ast, p, parentID); err != nil {
+							if err := readPostgresStmt(ctx, evalCtx, match, fks, createTbl, createSeq,
+								tableFKs, ast, p, parentID, ignoreUnsupportedStmts); err != nil {
 								return err
 							}
 						default:
@@ -535,13 +533,22 @@ func readPostgresStmt(
 				return err
 			}
 		}
+	case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
+		*tree.CommentOnIndex, *tree.CommentOnColumn:
+		// Ignore stmts that are parseable but un-implemented if specified by the
+		// user.
+		// TODO(adityamaru): Write to a shunt file to indicate to the user what has
+		// been skipped.
+		if !ignoreUnsupportedStmts {
+			return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		}
 	case *tree.BeginTransaction, *tree.CommitTransaction:
 		// ignore txns.
 	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData, *tree.Delete:
 		// ignore SETs and DMLs.
 	case *tree.Analyze:
-		// ANALYZE is syntatictic sugar for CreateStatistics. It can be ignored because
-		// the auto stats stuff will pick up the changes and run if needed.
+	// ANALYZE is syntatictic sugar for CreateStatistics. It can be ignored because
+	// the auto stats stuff will pick up the changes and run if needed.
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
@@ -655,7 +662,7 @@ func (m *pgDumpReader) readFile(
 	tableNameToRowsProcessed := make(map[string]int64)
 	var inserts, count int64
 	rowLimit := m.opts.RowLimit
-	ps := newPostgreStream(input, int(m.opts.MaxRowSize))
+	ps := newPostgreStream(input, int(m.opts.MaxRowSize), m.opts.IgnoreUnsupported)
 	semaCtx := tree.MakeSemaContext()
 	for _, conv := range m.tables {
 		conv.KvBatch.Source = inputIdx
@@ -910,6 +917,9 @@ func (m *pgDumpReader) readFile(
 			default:
 				return errors.Errorf("unsupported function: %s", funcName)
 			}
+		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
+			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence:
+			// parseable but ignored during schema extraction.
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// ignored.
 		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:

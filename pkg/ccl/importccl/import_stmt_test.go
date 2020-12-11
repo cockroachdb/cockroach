@@ -1019,29 +1019,6 @@ END;
 			err:  `non-public schemas unsupported: s`,
 		},
 		{
-			name: "various create ignores",
-			typ:  "PGDUMP",
-			data: `
-				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
-				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
-				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
-				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
-
-				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
-				    LANGUAGE sql
-				    AS $_$
-				SELECT $1 ~ '^[0-9]+$'
-				$_$;
-				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
-
-				CREATE TABLE t (i INT8);
-			`,
-			query: map[string][][]string{
-				getTablesQuery: {{"public", "t", "table"}},
-			},
-		},
-		{
 			name: "many tables",
 			typ:  "PGDUMP",
 			data: func() string {
@@ -5414,6 +5391,51 @@ func TestImportPgDump(t *testing.T) {
 		sqlDB.ExpectErr(t,
 			"PGDUMP file format is currently unsupported by IMPORT INTO",
 			fmt.Sprintf(`IMPORT INTO t (a, b) PGDUMP DATA (%q)`, srv.URL))
+	})
+}
+
+func TestImportPgDumpIgnoredStmts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	data := `
+				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
+				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
+				GRANT ALL ON SEQUENCE knex_migrations_id_seq TO database;
+				GRANT SELECT ON SEQUENCE knex_migrations_id_seq TO opentrials_readonly;
+
+				CREATE FUNCTION public.isnumeric(text) RETURNS boolean
+				    LANGUAGE sql
+				    AS $_$
+				SELECT $1 ~ '^[0-9]+$'
+				$_$;
+				ALTER FUNCTION public.isnumeric(text) OWNER TO roland;
+
+				CREATE TABLE t (i INT8);
+				COMMENT ON TABLE t IS 'This should be skipped';
+				COMMENT ON DATABASE t IS 'This should be skipped';
+				COMMENT ON COLUMN t IS 'This should be skipped';
+			`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	t.Run("ignore-unsupported", func(t *testing.T) {
+		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported", srv.URL)
+	})
+
+	t.Run("dont-ignore-unsupported", func(t *testing.T) {
+		sqlDB.ExpectErr(t, "syntax error", "IMPORT PGDUMP ($1)", srv.URL)
 	})
 }
 

@@ -110,6 +110,9 @@ message PgDumpOptions {
   // Indicates the number of rows to import per table.
   // Must be a non-zero positive number. 
   optional int64 row_limit = 2 [(gogoproto.nullable) = false];
+  // Indicates if all unparseable and parseable, but unimplemented PGDUMP stmts
+  // should be ignored during IMPORT.
+  optional bool ignore_unsupported = 3 [(gogoproto.nullable) = false];
 }
 
 message MysqldumpOptions {

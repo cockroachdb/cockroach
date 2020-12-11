@@ -185,6 +185,28 @@ func (l *lexer) PurposelyUnimplemented(feature string, reason string) {
 	l.populateErrorDetails()
 }
 
+func (l *lexer) UnimplementedWithIssueDetailAndUnsupportedNode(
+	issue int, detail string, skipDuringPGImport bool,
+) {
+	l.lastError = unimp.NewWithIssueDetail(issue, detail, "this syntax")
+	l.populateErrorDetails()
+	l.lastError = &tree.Unsupported{
+		Err:                    l.lastError,
+		FeatureName:            detail,
+		SkipDuringImportPGDump: skipDuringPGImport,
+	}
+}
+
+func (l *lexer) UnimplementedWithUnsupportedNode(feature string, skipDuringPGImport bool) {
+	l.lastError = unimp.New(feature, "this syntax")
+	l.populateErrorDetails()
+	l.lastError = &tree.Unsupported{
+		Err:                    l.lastError,
+		FeatureName:            feature,
+		SkipDuringImportPGDump: skipDuringPGImport,
+	}
+}
+
 // setErr is called from parsing action rules to register an error observed
 // while running the action. That error becomes the actual "cause" of the
 // syntax error.

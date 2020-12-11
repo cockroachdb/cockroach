@@ -32,7 +32,8 @@ select '123456789012345678901234567890123456789012345678901234567890123456789012
 --
 `
 
-	p := newPostgreStream(strings.NewReader(sql), defaultScanBuffer)
+	p := newPostgreStream(strings.NewReader(sql), defaultScanBuffer,
+		false /* ignoreUnsupportedStmts */)
 	var sb strings.Builder
 	for {
 		s, err := p.Next()
@@ -114,7 +115,8 @@ COPY public.t (s) FROM stdin;
 --
 `
 
-	p := newPostgreStream(strings.NewReader(sql), defaultScanBuffer)
+	p := newPostgreStream(strings.NewReader(sql), defaultScanBuffer,
+		false /* ignoreUnsupportedStmts */)
 	var sb strings.Builder
 	for {
 		s, err := p.Next()
