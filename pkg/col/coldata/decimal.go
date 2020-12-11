@@ -23,7 +23,6 @@ import (
 // values from src into the receiver starting at destIdx.
 func (d *Decimals) AppendSlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.AppendSlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
-	d.reswizzleDecimalPointers(destIdx, destIdx+(srcEndIdx-srcStartIdx))
 }
 
 // AppendVal appends the given []byte value to the end of the receiver. A nil
@@ -45,26 +44,11 @@ func unsafeSetNat(b *big.Int, words []big.Word) {
 	*ptrToWords = words
 }
 
-func (d *Decimals) reswizzleDecimalPointers(startIdx, endIdx int) {
-	for i := startIdx; i < endIdx; i++ {
-		dec, coeffBytes := d.getDecimalAndCoeffbytes(i)
-		if dec == nil {
-			continue
-		}
-		var slice []big.Word
-		if len(coeffBytes) > 0 {
-			slice = encoding.WordSliceFromByteSlice(coeffBytes)
-		}
-		unsafeSetNat(&dec.Coeff, slice)
-	}
-}
-
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive apd.Decimal values
 // from src into the receiver starting at destIdx. See the comment on
 // Bytes.CopySlice for more information.
 func (d *Decimals) CopySlice(src *Decimals, destIdx, srcStartIdx, srcEndIdx int) {
 	d.Bytes.CopySlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
-	d.reswizzleDecimalPointers(destIdx, destIdx+(srcEndIdx-srcStartIdx))
 }
 
 // Set sets the ith apd.Decimal in d. Overwriting a value that is not at the end
@@ -88,15 +72,9 @@ func (d *Decimals) Set(i int, v apd.Decimal) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	d.maybeBackfillOffsets(i)
-	n := len(d.data)
 	d.data = encoding.EncodeFlatDecimal(&v, d.data)
 	d.offsets[i+1] = int32(len(d.data))
 	d.maxSetIndex = i
-	if len(v.Coeff.Bits()) > 0 {
-		b := d.data[n:]
-		slice := encoding.WordSliceFromByteSlice(b)
-		unsafeSetNat(&v.Coeff, slice)
-	}
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to

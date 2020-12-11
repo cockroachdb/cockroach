@@ -69,15 +69,6 @@ func (c Int64s) Get(idx int) int64 { return c[idx] }
 //gcassert:inline
 func (c Float64s) Get(idx int) float64 { return c[idx] }
 
-func (c *Decimals) getDecimalAndCoeffbytes(idx int) (*apd.Decimal, []byte) {
-	slice := c.Bytes.Get(idx)
-	if len(slice) == 0 {
-		// If there's a null in the slice, it'll have no data.
-		return nil, nil
-	}
-	return encoding.UnsafeCastDecimal(slice), slice[decimalSize:]
-}
-
 // Get returns the element at index idx of the vector. The element cannot be
 // used anymore once the vector is modified.
 //gcassert:inline
@@ -87,8 +78,9 @@ func (c *Decimals) Get(idx int) apd.Decimal {
 		// If there's a null in the slice, it'll have no data.
 		return apd.Decimal{}
 	}
-	ret := encoding.UnsafeCastDecimal(slice)
-	return *ret
+	var ret apd.Decimal
+	encoding.DecodeFlatDecimal(slice, &ret)
+	return ret
 }
 
 // Get returns the element at index idx of the vector. The element cannot be

@@ -123,7 +123,14 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 	if err := EncDatumRowsToColVec(testAllocator, rows, vec, 0 /* columnIdx */, ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
+	for i := 0; i < vec.Length(); i++ {
+		got := vec.Decimal().Get(i)
+		want := expected.Decimal().Get(i)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("expected decimal %s, got %s", got.String(), want.String())
+		}
+	}
 	if !reflect.DeepEqual(vec, expected) {
-		t.Errorf("expected vector %+v, got %+v", expected, vec)
+		t.Errorf("expected vector %s, got %s", expected.Decimal().Bytes.String(), vec.Decimal().Bytes.String())
 	}
 }

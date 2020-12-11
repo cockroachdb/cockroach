@@ -118,6 +118,12 @@ func UnsafeGetAbsPtr(b *big.Int) unsafe.Pointer {
 //
 func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	coeffWords := decimal.Coeff.Bits()
+
+	oldCoeff := decimal.Coeff
+	// Zero the coefficient. We'll serialize it based on the bits we just read
+	// above, but we can't keep around the heap pointer on the big.Int: we have
+	// to produce it on demand on reads instead.
+	decimal.Coeff = big.Int{}
 	// Get the number of bytes that we'll need to reserve space for to store the
 	// entire coefficient of the decimal. We need to reserve space for the
 	// coefficient all at once, to prevent copy() from getting flummoxed by
@@ -136,12 +142,13 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 
 	appendTo = append(appendTo, byteSlice...)
 
+	// Restore the coefficient of the decimal that we were passed so that our
+	// callers don't get sad that their input was modified.
+	decimal.Coeff = oldCoeff
+
 	if nCoeffBytes > 0 {
-		decimal := UnsafeCastDecimal(appendTo[origLen:])
-		coeffPtr := (*reflect.SliceHeader)(UnsafeGetAbsPtr(&decimal.Coeff))
 		coeffBytes := byteSliceFromWordSlice(coeffWords)
 		appendTo = append(appendTo, coeffBytes...)
-		coeffPtr.Data = uintptr(unsafe.Pointer(&appendTo[origLen+int(decimalSize)]))
 	}
 
 	/*
@@ -153,12 +160,24 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	return appendTo
 }
 
+// unsafeSetNat sets the backing slice of the input big.Int to the input []big.Word
+func unsafeSetNat(b *big.Int, words []big.Word) {
+	ptrToWords := (*[]big.Word)(UnsafeGetAbsPtr(b))
+	*ptrToWords = words
+}
+
 // DecodeFlatDecimal decodes a flat-bytes decimal representation into an apd.Decimal,
 // without doing any allocations. Because this flat-bytes representation never
 // is serialized to the network or to disk, we can perform all slice accesses
 // without worrying about out-of-bounds, since we've indubitably allocated
 // sufficient space in the input byte slice in an earlier call to EncodeFlatDecimal.
-func DecodeFlatDecimal(bytes []byte, decodeInto *apd.Decimal) {
-	d := UnsafeCastDecimal(bytes)
+func DecodeFlatDecimal(toDecode []byte, decodeInto *apd.Decimal) {
+	coeffBytes := toDecode[decimalSize:]
+	d := UnsafeCastDecimal(toDecode)
+	nCoeffBytes := len(coeffBytes)
+
 	*decodeInto = *d
+	if nCoeffBytes > 0 {
+		unsafeSetNat(&decodeInto.Coeff, WordSliceFromByteSlice(coeffBytes))
+	}
 }
