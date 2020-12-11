@@ -77,7 +77,11 @@ type aggType struct {
 
 var aggTypes = []aggType{
 	{
-		new:  NewHashAggregator,
+		// This is a wrapper around NewHashAggregator so its signature is
+		// compatible with NewOrderedAggregator.
+		new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+			return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
+		},
 		name: "hash",
 	},
 	{

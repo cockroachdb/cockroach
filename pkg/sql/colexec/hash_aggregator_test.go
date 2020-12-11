@@ -16,14 +16,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -163,7 +167,68 @@ func TestHashAggregator(t *testing.T) {
 				Constructors:   constructors,
 				ConstArguments: constArguments,
 				OutputTypes:    outputTypes,
-			})
+			},
+				nil, /* newSpillingQueueArgs */
+			)
 		})
+	}
+}
+
+func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
+	defer cleanup()
+	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
+
+	aggFn := execinfrapb.AggregatorSpec_MIN
+	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
+	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
+	if testing.Short() {
+		numRows = []int{32, 32 * coldata.BatchSize()}
+		groupSizes = []int{1, coldata.BatchSize()}
+	}
+	var memAccounts []*mon.BoundAccount
+	for _, numInputRows := range numRows {
+		for _, groupSize := range groupSizes {
+			for _, agg := range []aggType{
+				{
+					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+						return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
+					},
+					name: "tracking=false",
+				},
+				{
+					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
+						memAccounts = append(memAccounts, &spillingQueueMemAcc)
+						return NewHashAggregator(args, &NewSpillingQueueArgs{
+							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+							Types:              args.InputTypes,
+							MemoryLimit:        defaultMemoryLimit,
+							DiskQueueCfg:       queueCfg,
+							FDSemaphore:        &colexecbase.TestingSemaphore{},
+							DiskAcc:            testDiskAcc,
+						})
+					},
+					name: "tracking=true",
+				},
+			} {
+				benchmarkAggregateFunction(
+					b, agg, aggFn, []*types.T{types.Int}, groupSize,
+					0 /* distinctProb */, numInputRows,
+				)
+			}
+		}
+	}
+
+	for _, account := range memAccounts {
+		account.Close(ctx)
 	}
 }

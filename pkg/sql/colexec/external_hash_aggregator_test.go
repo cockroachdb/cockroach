@@ -15,10 +15,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExternalDistinct(t *testing.T) {
+func TestExternalHashAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -54,46 +55,58 @@ func TestExternalDistinct(t *testing.T) {
 		monitors []*mon.BytesMonitor
 	)
 	// Test the case in which the default memory is used as well as the case in
-	// which the distinct spills to disk.
+	// which the hash aggregator spills to disk.
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		for tcIdx, tc := range distinctTestCases {
-			log.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
+		for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
+			if len(tc.groupCols) == 0 {
+				// If there are no grouping columns, then the ordered aggregator
+				// is planned.
+				continue
+			}
+			if tc.aggFilter != nil {
+				// Filtering aggregation is not supported with the ordered
+				// aggregation which is required for the external hash
+				// aggregator in the fallback strategy.
+				continue
+			}
+			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.name)
+			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
+				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+			)
+			require.NoError(t, err)
 			var semsToCheck []semaphore.Semaphore
 			runTestsWithTyps(
 				t,
-				[]tuples{tc.tuples},
+				[]tuples{tc.input},
 				[][]*types.T{tc.typs},
 				tc.expected,
-				// We're using an unordered verifier because the in-memory
-				// unordered distinct is free to change the order of the tuples
-				// when exporting them into an external distinct.
 				unorderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					// A sorter should never exceed ExternalSorterMinPartitions, even
-					// during repartitioning. A panic will happen if a sorter requests
-					// more than this number of file descriptors.
 					sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
-					var outputOrdering execinfrapb.Ordering
-					if tc.isOrderedOnDistinctCols {
-						outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
-					}
-					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering, queueCfg, sem,
+					op, accs, mons, closers, err := createExternalHashAggregator(
+						ctx, flowCtx, &colexecagg.NewAggregatorArgs{
+							Allocator:      testAllocator,
+							MemAccount:     testMemAcc,
+							Input:          input[0],
+							InputTypes:     tc.typs,
+							Spec:           tc.spec,
+							EvalCtx:        &evalCtx,
+							Constructors:   constructors,
+							ConstArguments: constArguments,
+							OutputTypes:    outputTypes,
+						},
+						queueCfg, sem,
 					)
-					// Check that the external distinct and the disk-backed sort
-					// were added as Closers.
-					numExpectedClosers := 2
-					if len(outputOrdering.Columns) > 0 {
-						// The final disk-backed sort must also be added as a
-						// Closer.
-						numExpectedClosers++
-					}
-					require.Equal(t, numExpectedClosers, len(closers))
-					accounts = append(accounts, newAccounts...)
-					monitors = append(monitors, newMonitors...)
-					return distinct, err
+					accounts = append(accounts, accs...)
+					monitors = append(monitors, mons...)
+					// Check that the external sorter and the disk spiller were
+					// added as Closers (the latter is responsible for closing
+					// the in-memory hash aggregator as well as the external
+					// one).
+					require.Equal(t, 2, len(closers))
+					return op, err
 				},
 			)
 			for i, sem := range semsToCheck {
@@ -109,15 +122,7 @@ func TestExternalDistinct(t *testing.T) {
 	}
 }
 
-func convertDistinctColsToOrdering(distinctCols []uint32) execinfrapb.Ordering {
-	var ordering execinfrapb.Ordering
-	for _, colIdx := range distinctCols {
-		ordering.Columns = append(ordering.Columns, execinfrapb.Ordering_Column{ColIdx: colIdx})
-	}
-	return ordering
-}
-
-func BenchmarkExternalDistinct(b *testing.B) {
+func BenchmarkExternalHashAggregator(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
@@ -139,41 +144,41 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 
+	aggFn := execinfrapb.AggregatorSpec_MIN
+	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
+	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
+	if testing.Short() {
+		numRows = []int{64 * coldata.BatchSize()}
+		groupSizes = []int{1, coldata.BatchSize()}
+	}
 	for _, spillForced := range []bool{false, true} {
-		for _, maintainOrdering := range []bool{false, true} {
-			if !spillForced && maintainOrdering {
-				// The in-memory unordered distinct maintains the input ordering
-				// by design, so it's not an interesting case to test it with
-				// both options for 'maintainOrdering' parameter, and we skip
-				// one.
-				continue
+		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+		for _, numInputRows := range numRows {
+			for _, groupSize := range groupSizes {
+				benchmarkAggregateFunction(
+					b, aggType{
+						new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+							op, accs, mons, _, err := createExternalHashAggregator(
+								ctx, flowCtx, args, queueCfg, &colexecbase.TestingSemaphore{},
+							)
+							memAccounts = append(memAccounts, accs...)
+							memMonitors = append(memMonitors, mons...)
+							// The hash-based partitioner is not a
+							// ResettableOperator, so in order to not change the
+							// signatures of the aggregator constructors, we
+							// wrap it with a noop operator. It is ok for the
+							// purposes of this benchmark.
+							return NewNoop(op), err
+						},
+						name: fmt.Sprintf("spilled=%t", spillForced),
+					},
+					aggFn, []*types.T{types.Int}, groupSize,
+					0 /* distinctProb */, numInputRows,
+				)
 			}
-			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-			name := fmt.Sprintf("spilled=%t/ordering=%t", spillForced, maintainOrdering)
-			runDistinctBenchmarks(
-				ctx,
-				b,
-				func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-					var outputOrdering execinfrapb.Ordering
-					if maintainOrdering {
-						outputOrdering = convertDistinctColsToOrdering(distinctCols)
-					}
-					op, accs, mons, _, err := createExternalDistinct(
-						ctx, flowCtx, []colexecbase.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg, &colexecbase.TestingSemaphore{},
-					)
-					memAccounts = append(memAccounts, accs...)
-					memMonitors = append(memMonitors, mons...)
-					return op, err
-				},
-				func(nCols int) int {
-					return 0
-				},
-				name,
-				true, /* isExternal */
-			)
 		}
 	}
+
 	for _, account := range memAccounts {
 		account.Close(ctx)
 	}
@@ -182,42 +187,32 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	}
 }
 
-// createExternalDistinct is a helper function that instantiates a disk-backed
-// distinct operator. It returns an operator and an error as well as memory
-// monitors and memory accounts that will need to be closed once the caller is
-// done with the operator.
-func createExternalDistinct(
+// createExternalHashAggregator is a helper function that instantiates a
+// disk-backed hash aggregator. It returns an operator and an error as well as
+// memory monitors and memory accounts that will need to be closed once the
+// caller is done with the operator.
+func createExternalHashAggregator(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecbase.Operator,
-	typs []*types.T,
-	distinctCols []uint32,
-	outputOrdering execinfrapb.Ordering,
+	newAggArgs *colexecagg.NewAggregatorArgs,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 ) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
-	distinctSpec := &execinfrapb.DistinctSpec{
-		DistinctColumns: distinctCols,
-		OutputOrdering:  outputOrdering,
-	}
 	spec := &execinfrapb.ProcessorSpec{
-		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},
+		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
-			Distinct: distinctSpec,
+			Aggregator: newAggArgs.Spec,
 		},
 		Post:        execinfrapb.PostProcessSpec{},
-		ResultTypes: typs,
+		ResultTypes: newAggArgs.OutputTypes,
 	}
 	args := &NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              input,
+		Inputs:              []colexecbase.Operator{newAggArgs.Input},
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
-	// External sorter relies on different memory accounts to
-	// understand when to start a new partition, so we will not use
-	// the streaming memory account.
 	result, err := TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }
