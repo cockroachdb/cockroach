@@ -29,7 +29,7 @@ func TestRecordingString(t *testing.T) {
 	tr2 := NewTracer()
 
 	root := tr.StartSpan("root", WithForceRealSpan())
-	root.StartRecording(SnowballRecording)
+	root.SetVerbose(true)
 	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
 	// Hackily fix the timing on the first log message, so that we can check it later.
 	root.crdb.mu.recording.recordedLogs[0].Timestamp = root.crdb.startTime.Add(time.Millisecond)
@@ -147,9 +147,9 @@ func TestRecordingInRecording(t *testing.T) {
 	tr := NewTracer()
 
 	root := tr.StartSpan("root", WithForceRealSpan())
-	root.StartRecording(SnowballRecording)
+	root.SetVerbose(true)
 	child := tr.StartSpan("child", WithParentAndAutoCollection(root), WithForceRealSpan())
-	child.StartRecording(SnowballRecording)
+	child.SetVerbose(true)
 	// The remote grandchild is also recording, however since it's remote the spans
 	// have to be imported into the parent manually (this would usually happen via
 	// code at the RPC boundaries).
