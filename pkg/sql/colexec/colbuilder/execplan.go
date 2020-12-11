@@ -535,7 +535,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
 			execinfrapb.Ordering{Columns: orderingCols},
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
-			&execinfrapb.PostProcessSpec{}, monitorNamePrefix, factory,
+			&execinfrapb.PostProcessSpec{}, monitorNamePrefix+"-", factory,
 		)
 		if err != nil {
 			colexecerror.InternalError(err)
@@ -883,11 +883,11 @@ func NewColOperator(
 					inputs[0], inMemoryUnorderedDistinct.(colexecbase.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecbase.Operator) colexecbase.Operator {
-						monitorNamePrefix := "external-distinct"
+						monitorNamePrefix := fmt.Sprintf("external-distinct-%d", spec.ProcessorID)
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
 						)
-						ed := colexec.NewExternalDistinct(
+						return colexec.NewExternalDistinct(
 							unlimitedAllocator,
 							flowCtx,
 							args,
@@ -896,11 +896,10 @@ func NewColOperator(
 							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
 							diskAccount,
 						)
-						result.ToClose = append(result.ToClose, ed.(colexecbase.Closer))
-						return ed
 					},
 					args.TestingKnobs.SpillingCallbackFn,
 				)
+				result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 			}
 
 		case core.Ordinality != nil:
@@ -964,7 +963,7 @@ func NewColOperator(
 					inputs[0], inputs[1], inMemoryHashJoiner.(colexecbase.BufferingInMemoryOperator),
 					hashJoinerMemMonitorName,
 					func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator {
-						monitorNamePrefix := "external-hash-joiner"
+						monitorNamePrefix := fmt.Sprintf("external-hash-joiner-%d", spec.ProcessorID)
 						unlimitedAllocator := colmem.NewAllocator(
 							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
 						)
@@ -1159,7 +1158,7 @@ func NewColOperator(
 					)
 					// NewRelativeRankOperator sometimes returns a constOp when there
 					// are no ordering columns, so we check that the returned operator
-					// is an Closer.
+					// is a Closer.
 					if c, ok := result.Op.(colexecbase.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}

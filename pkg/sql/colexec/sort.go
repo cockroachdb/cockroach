@@ -422,7 +422,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

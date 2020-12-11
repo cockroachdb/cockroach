@@ -118,6 +118,7 @@ go_test(
         "external_distinct_test.go",
         "external_hash_joiner_test.go",
         "external_sort_test.go",
+        "hash_aggregator_test.go",
         "hash_utils_test.go",
         "hashjoiner_test.go",
         "inject_setup_test.go",

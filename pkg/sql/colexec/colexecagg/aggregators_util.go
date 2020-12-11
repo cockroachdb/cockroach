@@ -22,7 +22,9 @@ import (
 // NewAggregatorArgs encompasses all arguments necessary to instantiate either
 // of the aggregators.
 type NewAggregatorArgs struct {
-	Allocator      *colmem.Allocator
+	Allocator *colmem.Allocator
+	// MemAccount should be the same as the one used by Allocator and will be
+	// used by aggregatorHelper to handle DISTINCT clause.
 	MemAccount     *mon.BoundAccount
 	Input          colexecbase.Operator
 	InputTypes     []*types.T

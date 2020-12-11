@@ -237,19 +237,21 @@ func (d *diskSpillerBase) reset(ctx context.Context) {
 	d.spilled = false
 }
 
-// Close closes the diskSpillerBase's input.
-// TODO(asubiotto): Remove this method. It only exists so that we can call Close
-//  from some runTests subtests when not draining the input fully. The test
-//  should pass in the testing.T object used so that the caller can decide to
-//  explicitly close the input after checking the test.
+// Close implements the Closer interface.
 func (d *diskSpillerBase) Close(ctx context.Context) error {
 	if !d.close() {
 		return nil
 	}
-	if c, ok := d.diskBackedOp.(colexecbase.Closer); ok {
-		return c.Close(ctx)
+	var retErr error
+	if c, ok := d.inMemoryOp.(colexecbase.Closer); ok {
+		retErr = c.Close(ctx)
 	}
-	return nil
+	if c, ok := d.diskBackedOp.(colexecbase.Closer); ok {
+		if err := c.Close(ctx); err != nil {
+			retErr = err
+		}
+	}
+	return retErr
 }
 
 func (d *diskSpillerBase) ChildCount(verbose bool) int {
@@ -320,7 +322,7 @@ func (b *bufferExportingOperator) Next(ctx context.Context) coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next(ctx)
 	}
-	batch := b.firstSource.ExportBuffered(b.secondSource)
+	batch := b.firstSource.ExportBuffered(ctx, b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.secondSource.Next(ctx)

@@ -90,7 +90,7 @@ type BufferingInMemoryOperator interface {
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered(input Operator) coldata.Batch
+	ExportBuffered(ctx context.Context, input Operator) coldata.Batch
 }
 
 // Closer is an object that releases resources when Close is called. Note that

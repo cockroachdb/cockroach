@@ -264,7 +264,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {
