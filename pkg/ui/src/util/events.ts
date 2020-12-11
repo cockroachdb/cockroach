@@ -20,7 +20,7 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
  */
 export function getEventDescription(e: Event$Properties): string {
   const info: EventInfo = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
-  const targetId: number = e.target_id ? e.target_id.toNumber() : null;
+  let privs = "";
 
   switch (e.event_type) {
     case eventTypes.CREATE_DATABASE:
@@ -59,21 +59,21 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.DROP_SEQUENCE:
       return `Sequence Dropped: User ${info.User} dropped sequence ${info.SequenceName}`;
     case eventTypes.REVERSE_SCHEMA_CHANGE:
-      return `Schema Change Reversed: Schema change with ID ${info.MutationID} was reversed.`;
+      return `Schema Change Reversed: Schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was reversed.`;
     case eventTypes.FINISH_SCHEMA_CHANGE:
-      return `Schema Change Completed: Schema change with ID ${info.MutationID} was completed.`;
+      return `Schema Change Completed: Schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was completed.`;
     case eventTypes.FINISH_SCHEMA_CHANGE_ROLLBACK:
-      return `Schema Change Rollback Completed: Rollback of schema change with ID ${info.MutationID} was completed.`;
+      return `Schema Change Rollback Completed: Rollback of schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was completed.`;
     case eventTypes.NODE_JOIN:
-      return `Node Joined: Node ${targetId} joined the cluster`;
+      return `Node Joined: Node ${info.NodeID} joined the cluster`;
     case eventTypes.NODE_DECOMMISSIONING:
-      return `Node Decommissioning: Node ${targetId} was marked as decommissioning`;
+      return `Node Decommissioning: Node ${info.TargetNodeID} was marked as decommissioning`;
     case eventTypes.NODE_DECOMMISSIONED:
-      return `Node Decommissioned: Node ${targetId} was decommissioned`;
+      return `Node Decommissioned: Node ${info.TargetNodeID} was decommissioned`;
     case eventTypes.NODE_RECOMMISSIONED:
-      return `Node Recommissioned: Node ${targetId} was recommissioned`;
+      return `Node Recommissioned: Node ${info.TargetNodeID} was recommissioned`;
     case eventTypes.NODE_RESTART:
-      return `Node Rejoined: Node ${targetId} rejoined the cluster`;
+      return `Node Rejoined: Node ${info.TargetNodeID} rejoined the cluster`;
     case eventTypes.SET_CLUSTER_SETTING:
       if (info.Value && info.Value.length > 0) {
         return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
@@ -85,10 +85,38 @@ export function getEventDescription(e: Event$Properties): string {
       return `Zone Config Removed: User ${info.User} removed the zone config for ${info.Target}`;
     case eventTypes.CREATE_STATISTICS:
       return `Table statistics refreshed for ${info.TableName}`;
-    case eventTypes.GRANT_PRIVILEGE:
-      return `Privileges granted: User ${info.User} granted ${info.Privileges} to ${info.Grantees} on ${info.Target}`;
-    case eventTypes.REVOKE_PRIVILEGE:
-      return `Privileges revoked: User ${info.User} revoked ${info.Privileges} from ${info.Grantees} on ${info.Target}`;
+    case eventTypes.CHANGE_TABLE_PRIVILEGE:
+      if (info.GrantedPrivileges && info.GrantedPrivileges.length > 0) {
+        privs += " granted " + info.GrantedPrivileges;
+      }
+      if (info.RevokedPrivileges && info.RevokedPrivileges.length > 0) {
+        privs += " revoked " + info.GrantedPrivileges;
+      }
+      return `Privilege change: User ${info.User}${privs} to ${info.Grantee} on table ${info.TableName}`;
+    case eventTypes.CHANGE_SCHEMA_PRIVILEGE:
+      if (info.GrantedPrivileges && info.GrantedPrivileges.length > 0) {
+        privs += " granted " + info.GrantedPrivileges;
+      }
+      if (info.RevokedPrivileges && info.RevokedPrivileges.length > 0) {
+        privs += " revoked " + info.GrantedPrivileges;
+      }
+      return `Privilege change: User ${info.User}${privs} to ${info.Grantee} on schema ${info.SchemaName}`;
+    case eventTypes.CHANGE_DATABASE_PRIVILEGE:
+      if (info.GrantedPrivileges && info.GrantedPrivileges.length > 0) {
+        privs += " granted " + info.GrantedPrivileges;
+      }
+      if (info.RevokedPrivileges && info.RevokedPrivileges.length > 0) {
+        privs += " revoked " + info.GrantedPrivileges;
+      }
+      return `Privilege change: User ${info.User}${privs} to ${info.Grantee} on database ${info.DatabaseName}`;
+    case eventTypes.CHANGE_TYPE_PRIVILEGE:
+      if (info.GrantedPrivileges && info.GrantedPrivileges.length > 0) {
+        privs += " granted " + info.GrantedPrivileges;
+      }
+      if (info.RevokedPrivileges && info.RevokedPrivileges.length > 0) {
+        privs += " revoked " + info.GrantedPrivileges;
+      }
+      return `Privilege change: User ${info.User}${privs} to ${info.Grantee} on type ${info.TypeName}`;
     case eventTypes.CREATE_SCHEMA:
       return `Schema Created: User ${info.User} created schema ${info.SchemaName} with owner ${info.Owner}`;
     case eventTypes.DROP_SCHEMA:
@@ -98,13 +126,13 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.ALTER_SCHEMA_OWNER:
       return `Schema Owner Altered: User ${info.User} altered the owner of schema ${info.SchemaName} to ${info.Owner}`;
     case eventTypes.CONVERT_TO_SCHEMA:
-      return `Database Converted: User ${info.User} converted database ${info.DatabaseName} to a schema with parent database ${info.NewDatabaseName}`;
+      return `Database Converted: User ${info.User} converted database ${info.DatabaseName} to a schema with parent database ${info.NewDatabaseParent}`;
     case eventTypes.CREATE_ROLE:
       return `Role Created: User ${info.User} created role ${info.RoleName}`;
     case eventTypes.DROP_ROLE:
-      return `Role Dropped: User ${info.User} dropped role(s) ${info.RoleName}`;
+      return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
-      return `Role Altered: User ${info.User} altered role ${info.RoleName}`;
+      return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -113,36 +141,45 @@ export function getEventDescription(e: Event$Properties): string {
 // EventInfo corresponds to the `info` column of the `system.eventlog` table
 // and the `info` field of the `server.serverpb.EventsResponse.Event` proto.
 export interface EventInfo {
-  User: string;
+  CascadeDroppedViews?: string[];
+  Config?: string;
   DatabaseName?: string;
-  NewDatabaseName?: string;
-  TableName?: string;
-  NewTableName?: string;
+  DescriptorID?: string;
+  Grantee?: string;
+  GrantedPrivileges?: string[];
   IndexName?: string;
   MutationID?: string;
-  ViewName?: string;
+  NewDatabaseName?: string;
+  NewSchemaName?: string;
+  NewTableName?: string;
+  NodeID?: string;
+  Options?: string[];
+  Owner?: string;
+  RevokedPrivileges?: string[];
+  RoleName?: string;
+  SchemaName?: string;
   SequenceName?: string;
   SettingName?: string;
-  Value?: string;
-  Target?: string;
-  Config?: string;
   Statement?: string;
-  Grantees?: string;
-  Privileges?: string;
-  SchemaName?: string;
-  NewSchemaName?: string;
-  Owner?: string;
-  RoleName?: string;
+  TableName?: string;
+  Target?: string;
+  TargetNodeID?: string;
+  TypeName?: string;
+  User: string;
+  Value?: string;
+  ViewName?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
   DroppedTables?: string[];
   DroppedTablesAndViews?: string[];
   DroppedSchemaObjects?: string[];
+  Grantees?: string;
+  NewDatabaseParent?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
   const droppedObjects =
-    eventInfo.DroppedSchemaObjects || eventInfo.DroppedTablesAndViews || eventInfo.DroppedTables;
+    eventInfo.DroppedSchemaObjects || eventInfo.DroppedTablesAndViews || eventInfo.DroppedTables || eventInfo.CascadeDroppedViews;
   if (!droppedObjects) {
     return "";
   }

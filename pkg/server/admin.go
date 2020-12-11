@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -896,6 +897,8 @@ func (s *adminServer) Users(
 	return &resp, nil
 }
 
+var eventSetClusterSettingName = eventpb.GetEventTypeName(&eventpb.SetClusterSetting{})
+
 // Events is an endpoint that returns the latest event log entries, with the following
 // optional URL parameters:
 //
@@ -965,13 +968,16 @@ func (s *adminServer) Events(
 		if err := scanner.ScanIndex(row, 4, &event.Info); err != nil {
 			return nil, err
 		}
-		if event.EventType == string(sql.EventLogSetClusterSetting) {
+		if event.EventType == eventSetClusterSettingName {
 			if redactEvents {
 				event.Info = redactSettingsChange(event.Info)
 			}
 		}
 		if err := scanner.ScanIndex(row, 5, &event.UniqueID); err != nil {
 			return nil, err
+		}
+		if redactEvents {
+			event.Info = redactStatement(event.Info)
 		}
 
 		resp.Events = append(resp.Events, event)
@@ -981,11 +987,27 @@ func (s *adminServer) Events(
 
 // make a best-effort attempt at redacting the setting value.
 func redactSettingsChange(info string) string {
-	var s sql.EventLogSetClusterSettingDetail
+	var s eventpb.SetClusterSetting
 	if err := json.Unmarshal([]byte(info), &s); err != nil {
 		return ""
 	}
 	s.Value = "<hidden>"
+	ret, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	return string(ret)
+}
+
+// make a best-effort attempt at redacting the statement details.
+func redactStatement(info string) string {
+	s := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(info), &s); err != nil {
+		return info
+	}
+	if _, ok := s["Statement"]; ok {
+		s["Statement"] = "<hidden>"
+	}
 	ret, err := json.Marshal(s)
 	if err != nil {
 		return ""

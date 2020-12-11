@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -306,7 +305,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_upsert_descriptor",
-					info: `"id":59`,
+					info: `"DescriptorID":59`,
 				},
 			},
 		},
@@ -338,8 +337,8 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op: `SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52, true);`,
 			expEventLogEntries: []eventLogPattern{
 				{
-					typ:  string(sql.EventLogUnsafeUpsertNamespaceEntry),
-					info: `"force":true,"validation_errors":"failed to retrieve descriptor 52: duplicate column name: \\"i\\""`,
+					typ:  "unsafe_upsert_namespace_entry",
+					info: `"Force":true,"FailedValidation":true,"ValidationErrors":"failed to retrieve descriptor 52: duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -363,8 +362,8 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op: `SELECT crdb_internal.unsafe_delete_descriptor(52, true);`,
 			expEventLogEntries: []eventLogPattern{
 				{
-					typ:  string(sql.EventLogUnsafeDeleteDescriptor),
-					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+					typ:  "unsafe_delete_descriptor",
+					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -388,8 +387,8 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op: updateInvalidateDuplicateColumnDescriptorForce,
 			expEventLogEntries: []eventLogPattern{
 				{
-					typ:  string(sql.EventLogUnsafeUpsertDescriptor),
-					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+					typ:  "unsafe_upsert_descriptor",
+					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -413,8 +412,8 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op: `SELECT crdb_internal.unsafe_delete_namespace_entry(50, 29, 'foo', 52, true);`,
 			expEventLogEntries: []eventLogPattern{
 				{
-					typ:  string(sql.EventLogUnsafeDeleteNamespaceEntry),
-					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
+					typ:  "unsafe_delete_namespace_entry",
+					info: `"Force":true,"ForceNotice":"[^"]*duplicate column name: \\"i\\""`,
 				},
 			},
 		},
@@ -449,7 +448,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 						continue outer
 					}
 				}
-				t.Errorf("failed to find log entry matching %s in %s", exp, sqlutils.MatrixToStr(mat))
+				t.Errorf("failed to find log entry matching %+v in:\n%s", exp, sqlutils.MatrixToStr(mat))
 			}
 		})
 	}
