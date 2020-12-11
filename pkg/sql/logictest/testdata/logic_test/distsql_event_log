@@ -21,13 +21,13 @@ statement ok
 CREATE STATISTICS __auto__ FROM a
 
 query IIT
-SELECT "targetID", "reportingID", "info"
+SELECT "targetID", "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'create_statistics'
-ORDER BY "timestamp"
+ORDER BY "timestamp", info
 ----
-53  1  {"TableName":"test.public.a","Statement":"CREATE STATISTICS s1 ON id FROM a"}
-53  1  {"TableName":"test.public.a","Statement":"CREATE STATISTICS __auto__ FROM a"}
+53  1  {"EventType": "create_statistics", "InstanceID": 1, "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "User": "root"}
+53  1  {"EventType": "create_statistics", "InstanceID": 1, "Statement": "CREATE STATISTICS __auto__ FROM test.public.a", "TableName": "test.public.a", "User": "root"}
 
 statement ok
 DROP TABLE a

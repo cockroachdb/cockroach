@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -155,8 +156,8 @@ type Node struct {
 	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
 	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
 	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
-	eventLogger  sql.EventLogger
-	stores       *kvserver.Stores // Access to node-local stores
+	sqlExec      *sql.InternalExecutor    // For event logging
+	stores       *kvserver.Stores         // Access to node-local stores
 	metrics      nodeMetrics
 	recorder     *status.MetricsRecorder
 	startedAt    int64
@@ -284,19 +285,19 @@ func NewNode(
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {
-	var eventLogger sql.EventLogger
+	var sqlExec *sql.InternalExecutor
 	if execCfg != nil {
-		eventLogger = sql.MakeEventLogger(execCfg)
+		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:    cfg,
-		stopper:     stopper,
-		recorder:    recorder,
-		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
-		txnMetrics:  txnMetrics,
-		eventLogger: eventLogger,
-		clusterID:   clusterID,
+		storeCfg:   cfg,
+		stopper:    stopper,
+		recorder:   recorder,
+		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:     kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
+		txnMetrics: txnMetrics,
+		sqlExec:    sqlExec,
+		clusterID:  clusterID,
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -304,7 +305,7 @@ func NewNode(
 
 // InitLogger needs to be called if a nil execCfg was passed to NewNode().
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
-	n.eventLogger = sql.MakeEventLogger(execCfg)
+	n.sqlExec = execCfg.InternalExecutor
 }
 
 // String implements fmt.Stringer.
@@ -771,40 +772,47 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) erro
 // recordJoinEvent begins an asynchronous task which attempts to log a "node
 // join" or "node restart" event. This query will retry until it succeeds or the
 // server stops.
-func (n *Node) recordJoinEvent() {
+func (n *Node) recordJoinEvent(ctx context.Context) {
+	var event eventpb.EventPayload
+	var nodeDetails *eventpb.CommonNodeEventDetails
+	if !n.initialStart {
+		ev := &eventpb.NodeRestart{}
+		event = ev
+		nodeDetails = &ev.CommonNodeEventDetails
+		nodeDetails.LastUp = n.lastUp
+	} else {
+		ev := &eventpb.NodeJoin{}
+		event = ev
+		nodeDetails = &ev.CommonNodeEventDetails
+		nodeDetails.LastUp = n.startedAt
+	}
+	event.CommonDetails().Timestamp = timeutil.Now()
+	nodeDetails.StartedAt = n.startedAt
+	nodeDetails.NodeID = int32(n.Descriptor.NodeID)
+
+	// Ensure that the event goes to log files even if LogRangeEvents is
+	// disabled (which means skip the system.eventlog _table_).
+	log.StructuredEvent(ctx, event)
+
 	if !n.storeCfg.LogRangeEvents {
 		return
 	}
 
-	logEventType := sql.EventLogNodeRestart
-	lastUp := n.lastUp
-	if n.initialStart {
-		logEventType = sql.EventLogNodeJoin
-		lastUp = n.startedAt
-	}
-
-	n.stopper.RunWorker(context.Background(), func(bgCtx context.Context) {
+	n.stopper.RunWorker(ctx, func(bgCtx context.Context) {
 		ctx, span := n.AnnotateCtxWithSpan(bgCtx, "record-join-event")
 		defer span.Finish()
 		retryOpts := base.DefaultRetryOptions()
 		retryOpts.Closer = n.stopper.ShouldStop()
 		for r := retry.Start(retryOpts); r.Next(); {
 			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return n.eventLogger.InsertEventRecord(
-					ctx,
+				return sql.InsertEventRecord(ctx, n.sqlExec,
 					txn,
-					logEventType,
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),
-					struct {
-						Descriptor roachpb.NodeDescriptor
-						ClusterID  uuid.UUID
-						StartedAt  int64
-						LastUp     int64
-					}{n.Descriptor, n.clusterID.Get(), n.startedAt, lastUp},
-				)
+					true, /* skipExternalLog - we already call log.StructuredEvent above */
+					event)
 			}); err != nil {
-				log.Warningf(ctx, "%s: unable to log %s event: %s", n, logEventType, err)
+				log.Warningf(ctx, "%s: unable to log event %v: %v", n, event, err)
 			} else {
 				return
 			}

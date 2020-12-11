@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -116,23 +117,13 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	// Record this index alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogAlterIndex,
-		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName  string
-			IndexName  string
-			Statement  string
-			User       string
-			MutationID uint32
-		}{
-			n.n.Index.Table.FQString(), n.indexDesc.Name, n.n.String(),
-			params.SessionData().User().Normalized(), uint32(mutationID),
-		},
-	)
+	return params.p.logEvent(params.ctx,
+		n.tableDesc.ID,
+		&eventpb.AlterIndex{
+			TableName:  n.n.Index.Table.FQString(),
+			IndexName:  n.indexDesc.Name,
+			MutationID: uint32(mutationID),
+		})
 }
 
 func (n *alterIndexNode) Next(runParams) (bool, error) { return false, nil }

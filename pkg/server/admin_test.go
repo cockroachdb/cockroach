@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -943,26 +942,26 @@ func TestAdminAPIEvents(t *testing.T) {
 
 	const allEvents = ""
 	type testcase struct {
-		eventType  sql.EventLogType
+		eventType  string
 		hasLimit   bool
 		limit      int
 		unredacted bool
 		expCount   int
 	}
 	testcases := []testcase{
-		{sql.EventLogNodeJoin, false, 0, false, 1},
-		{sql.EventLogNodeRestart, false, 0, false, 0},
-		{sql.EventLogDropDatabase, false, 0, false, 0},
-		{sql.EventLogCreateDatabase, false, 0, false, 3},
-		{sql.EventLogDropTable, false, 0, false, 2},
-		{sql.EventLogCreateTable, false, 0, false, 3},
-		{sql.EventLogSetClusterSetting, false, 0, false, 4},
+		{"node_join", false, 0, false, 1},
+		{"node_restart", false, 0, false, 0},
+		{"drop_database", false, 0, false, 0},
+		{"create_database", false, 0, false, 3},
+		{"drop_table", false, 0, false, 2},
+		{"create_table", false, 0, false, 3},
+		{"set_cluster_setting", false, 0, false, 4},
 		// We use limit=true with no limit here because otherwise the
 		// expCount will mess up the expected total count below.
-		{sql.EventLogSetClusterSetting, true, 0, true, 4},
-		{sql.EventLogCreateTable, true, 0, false, 3},
-		{sql.EventLogCreateTable, true, -1, false, 3},
-		{sql.EventLogCreateTable, true, 2, false, 2},
+		{"set_cluster_setting", true, 0, true, 4},
+		{"create_table", true, 0, false, 3},
+		{"create_table", true, -1, false, 3},
+		{"create_table", true, 2, false, 2},
 	}
 	minTotalEvents := 0
 	for _, tc := range testcases {
@@ -975,7 +974,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	for i, tc := range testcases {
 		url := "events"
 		if tc.eventType != allEvents {
-			url += "?type=" + string(tc.eventType)
+			url += "?type=" + tc.eventType
 			if tc.hasLimit {
 				url += fmt.Sprintf("&limit=%d", tc.limit)
 			}
@@ -1009,7 +1008,7 @@ func TestAdminAPIEvents(t *testing.T) {
 				}
 
 				if len(tc.eventType) > 0 {
-					if a, e := e.EventType, string(tc.eventType); a != e {
+					if a, e := e.EventType, tc.eventType; a != e {
 						t.Errorf("%d: event type %s != expected %s", i, a, e)
 					}
 				} else {
@@ -1018,10 +1017,10 @@ func TestAdminAPIEvents(t *testing.T) {
 					}
 				}
 
-				isSettingChange := e.EventType == string(sql.EventLogSetClusterSetting)
-				isRoleChange := e.EventType == string(sql.EventLogCreateRole) ||
-					e.EventType == string(sql.EventLogDropRole) ||
-					e.EventType == string(sql.EventLogAlterRole)
+				isSettingChange := e.EventType == "set_cluster_setting"
+				isRoleChange := e.EventType == "create_role" ||
+					e.EventType == "drop_role" ||
+					e.EventType == "alter_role"
 
 				if e.TargetID == 0 && !isSettingChange && !isRoleChange {
 					t.Errorf("%d: missing/empty TargetID", i)

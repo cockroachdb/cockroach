@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -337,17 +337,14 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	sort.Strings(names)
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogDropRole,
-		0, /* no target */
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			RoleName string
-			User     string
-		}{strings.Join(names, ", "), params.p.User().Normalized()},
-	)
+	for _, name := range names {
+		if err := params.p.logEvent(params.ctx,
+			0, /* no target */
+			&eventpb.DropRole{RoleName: name}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Next implements the planNode interface.

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -257,19 +258,12 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	// Log Rename Table event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogRenameTable,
-		int32(tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName    string
-			Statement    string
-			User         string
-			NewTableName string
-		}{oldTn.FQString(), n.n.String(), params.p.User().Normalized(), newTn.FQString()},
-	)
+	return p.logEvent(ctx,
+		tableDesc.ID,
+		&eventpb.RenameTable{
+			TableName:    oldTn.FQString(),
+			NewTableName: newTn.FQString(),
+		})
 }
 
 func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }

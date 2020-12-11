@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -884,24 +885,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
-		params.ctx,
-		params.p.txn,
-		EventLogAlterTable,
-		int32(n.tableDesc.ID),
-		int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
-		struct {
-			TableName           string
-			Statement           string
-			User                string
-			MutationID          uint32
-			CascadeDroppedViews []string
-		}{
-			params.p.ResolvedName(n.n.Table).FQString(),
-			n.n.String(),
-			params.SessionData().User().Normalized(),
-			uint32(mutationID), droppedViews},
-	)
+	return params.p.logEvent(params.ctx,
+		n.tableDesc.ID,
+		&eventpb.AlterTable{
+			TableName:  params.p.ResolvedName(n.n.Table).FQString(),
+			MutationID: uint32(mutationID),
+			// TODO(knz): This is missing some qualification, see
+			// https://github.com/cockroachdb/cockroach/issues/57735
+			CascadeDroppedViews: droppedViews,
+		})
 }
 
 func (p *planner) setAuditMode(

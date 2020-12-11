@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "eventpb",
+    srcs = [
+        "cluster_events.pb.go",
+        "ddl_events.pb.go",
+        "doc.go",
+        "eventlog_channels_generated.go",
+        "events.go",
+        "events.pb.go",
+        "misc_sql_events.pb.go",
+        "privilege_events.pb.go",
+        "role_events.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log/logpb",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/types",
+    ],
+)
