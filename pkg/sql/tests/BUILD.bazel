@@ -39,6 +39,7 @@ go_test(
         "split_test.go",
         "system_table_test.go",
         "table_split_test.go",
+        "virtual_table_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":tests"],
@@ -89,6 +90,7 @@ go_test(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/kr/pretty",
         "//vendor/github.com/lib/pq",
+        "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )
