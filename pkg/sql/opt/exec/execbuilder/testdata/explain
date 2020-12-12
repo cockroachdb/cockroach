@@ -378,6 +378,18 @@ vectorized: false
       table: session_variables@primary
 
 query T
+SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info NOT LIKE '%size%'
+----
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: variable = 'default_transaction_use_follower_reads'
+│
+└── • virtual table
+      table: session_variables@primary
+
+query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
 ----
 distribution: local

@@ -11,8 +11,8 @@
 package sql
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -22,7 +22,8 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	case tree.SerializableIsolation, tree.UnspecifiedIsolation:
 		// Do nothing. All transactions execute with serializable isolation.
 	default:
-		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Modes.Isolation)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"unsupported default isolation level: %s", n.Modes.Isolation)
 	}
 
 	// Note: We also support SET DEFAULT_TRANSACTION_PRIORITY TO ' .... '.
@@ -40,7 +41,25 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		p.sessionDataMutator.SetDefaultTransactionReadOnly(false)
 	case tree.UnspecifiedReadWriteMode:
 	default:
-		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"unsupported default read write mode: %s", n.Modes.ReadWriteMode)
 	}
+
+	// Note: We also support SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO ' .... '.
+	//
+	// TODO(nvanbenschoten): now that we have a way to set follower_read_timestamp()
+	// as the default AS OF SYSTEM TIME value, do we need a way to unset it using
+	// the same SET SESSION CHARACTERISTICS AS TRANSACTION mechanism? Currently, the
+	// way to do this is SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE;
+	if n.Modes.AsOf.Expr != nil {
+		if tree.IsFollowerReadTimestampFunction(n.Modes.AsOf, p.semaCtx.SearchPath) {
+			p.sessionDataMutator.SetDefaultTransactionUseFollowerReads(true)
+		} else {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+				"unsupported default as of system time expression, only %s() allowed",
+				tree.FollowerReadTimestampFunctionName)
+		}
+	}
+
 	return newZeroNode(nil /* columns */), nil
 }
