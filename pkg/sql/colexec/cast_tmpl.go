@@ -69,11 +69,6 @@ func _R_SET(to, from interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
-// This will be replaced with execgen.SLICE.
-func _L_SLICE(col, i, j interface{}) interface{} {
-	colexecerror.InternalError(errors.AssertionFailedf(""))
-}
-
 // */}}
 
 func GetCastOperator(
@@ -259,7 +254,6 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 	sel = sel[:n]
 	// {{else}}
 	// Remove bounds checks for inputCol[i] and outputCol[i].
-	inputCol = _L_SLICE(inputCol, 0, n)
 	_ = inputCol.Get(n - 1)
 	_ = outputCol.Get(n - 1)
 	// {{end}}

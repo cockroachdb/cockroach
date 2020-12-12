@@ -558,7 +558,6 @@ func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -589,7 +588,6 @@ func (c *castBoolBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -666,7 +664,6 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -707,7 +704,6 @@ func (c *castBoolFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -789,7 +785,6 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -830,7 +825,6 @@ func (c *castBoolInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -912,7 +906,6 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -953,7 +946,6 @@ func (c *castBoolInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1035,7 +1027,6 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1076,7 +1067,6 @@ func (c *castBoolInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1153,7 +1143,6 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1184,7 +1173,6 @@ func (c *castDecimalBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1261,7 +1249,6 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1302,7 +1289,6 @@ func (c *castDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1379,7 +1365,6 @@ func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1410,7 +1395,6 @@ func (c *castInt16Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1484,7 +1468,6 @@ func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1519,7 +1502,6 @@ func (c *castInt16Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1595,7 +1577,6 @@ func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1630,7 +1611,6 @@ func (c *castInt16Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1706,7 +1686,6 @@ func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1741,7 +1720,6 @@ func (c *castInt16BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1821,7 +1799,6 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1864,7 +1841,6 @@ func (c *castInt16DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1944,7 +1920,6 @@ func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -1979,7 +1954,6 @@ func (c *castInt16Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2055,7 +2029,6 @@ func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2090,7 +2063,6 @@ func (c *castInt32Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2164,7 +2136,6 @@ func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2195,7 +2166,6 @@ func (c *castInt32Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2269,7 +2239,6 @@ func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2304,7 +2273,6 @@ func (c *castInt32Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2380,7 +2348,6 @@ func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2415,7 +2382,6 @@ func (c *castInt32BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2495,7 +2461,6 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2538,7 +2503,6 @@ func (c *castInt32DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2618,7 +2582,6 @@ func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2653,7 +2616,6 @@ func (c *castInt32Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2729,7 +2691,6 @@ func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2764,7 +2725,6 @@ func (c *castInt64Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2840,7 +2800,6 @@ func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2875,7 +2834,6 @@ func (c *castInt64Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2949,7 +2907,6 @@ func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -2980,7 +2937,6 @@ func (c *castInt64Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3054,7 +3010,6 @@ func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3089,7 +3044,6 @@ func (c *castInt64BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3169,7 +3123,6 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3212,7 +3165,6 @@ func (c *castInt64DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3292,7 +3244,6 @@ func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3327,7 +3278,6 @@ func (c *castInt64Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3401,7 +3351,6 @@ func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3432,7 +3381,6 @@ func (c *castFloat64Float64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3506,7 +3454,6 @@ func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3541,7 +3488,6 @@ func (c *castFloat64BoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3623,7 +3569,6 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3670,7 +3615,6 @@ func (c *castFloat64DecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3755,7 +3699,6 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3796,7 +3739,6 @@ func (c *castFloat64Int16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3878,7 +3820,6 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -3919,7 +3860,6 @@ func (c *castFloat64Int32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4001,7 +3941,6 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4042,7 +3981,6 @@ func (c *castFloat64Int64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol[0:n]
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4127,7 +4065,6 @@ func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4174,7 +4111,6 @@ func (c *castDatumBoolOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4268,7 +4204,6 @@ func (c *castDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
@@ -4327,7 +4262,6 @@ func (c *castDatumDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				} else {
 					// Remove bounds checks for inputCol[i] and outputCol[i].
-					inputCol = inputCol.Slice(0, n)
 					_ = inputCol.Get(n - 1)
 					_ = outputCol.Get(n - 1)
 					var tupleIdx int
