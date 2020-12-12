@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
 func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
@@ -59,6 +60,17 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 				"unsupported default as of system time expression, only %s() allowed",
 				tree.FollowerReadTimestampFunctionName)
 		}
+	}
+
+	// Note: We do not support SET DEFAULT_TRANSACTION_DEFERRABLE TO ' ... '.
+	switch n.Modes.Deferrable {
+	case tree.NotDeferrable, tree.UnspecifiedDeferrableMode:
+		// Do nothing. All transactions execute in a NOT DEFERRABLE mode.
+	case tree.Deferrable:
+		return nil, unimplemented.NewWithIssue(53432, "DEFERRABLE transactions")
+	default:
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"unsupported default deferrable mode: %s", n.Modes.Deferrable)
 	}
 
 	return newZeroNode(nil /* columns */), nil
