@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -322,7 +321,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = execgen.SLICE(col, 0, n)
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -350,7 +349,7 @@ func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = execgen.SLICE(col, 0, n)
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpIn_TYPE(v, col, pi.filterRow, pi.hasNulls)
