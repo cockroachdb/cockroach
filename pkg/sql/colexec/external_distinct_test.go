@@ -13,8 +13,11 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +84,8 @@ func TestExternalDistinct(t *testing.T) {
 						outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 					}
 					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering, queueCfg, sem,
+						ctx, flowCtx, input, tc.typs, tc.distinctCols,
+						outputOrdering, queueCfg, sem, nil, /* spillingCallbackFn */
 					)
 					// Check that the external distinct and the disk-backed sort
 					// were added as Closers.
@@ -107,6 +112,157 @@ func TestExternalDistinct(t *testing.T) {
 	for _, mon := range monitors {
 		mon.Stop(ctx)
 	}
+}
+
+// TestExternalDistinctSpilling verifies that the external distinct correctly
+// handles the scenario when spilling to disk occurs after some tuples have
+// been emitted in the output by the in-memory unordered distinct.
+func TestExternalDistinctSpilling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// We intentionally instantiate a testing memory monitor with a limit that
+	// resembles a cluster with --max-sql-memory argument of 2GB.
+	const memMonitorLimit = math.MaxInt32
+	memMonitor := mon.NewMonitorWithLimit(
+		"external-distinct-spilling-test",
+		mon.MemoryResource,
+		memMonitorLimit,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		st,
+	)
+	memMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, memMonitor)
+	defer evalCtx.Stop(ctx)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DiskMonitor: testDiskMonitor,
+		},
+	}
+
+	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
+	defer cleanup()
+
+	var (
+		accounts []*mon.BoundAccount
+		monitors []*mon.BytesMonitor
+	)
+
+	rng, _ := randutil.NewPseudoRand()
+	nCols := 2 + rng.Intn(4)
+	typs := make([]*types.T, nCols)
+	distinctCols := make([]uint32, nCols)
+	for i := range typs {
+		typs[i] = types.Int
+		distinctCols[i] = uint32(i)
+	}
+
+	batchMemEstimate := colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
+	// Set the memory limit in such a manner that at least 3 batches of distinct
+	// tuples are emitted by the in-memory unordered distinct before the
+	// spilling occurs.
+	nBatchesOutputByInMemoryOp := 3 + rng.Intn(3)
+	memoryLimitBytes := int64(nBatchesOutputByInMemoryOp * batchMemEstimate)
+	if memoryLimitBytes < mon.DefaultPoolAllocationSize {
+		memoryLimitBytes = mon.DefaultPoolAllocationSize
+		nBatchesOutputByInMemoryOp = int(memoryLimitBytes) / batchMemEstimate
+	}
+	flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimitBytes
+
+	// Calculate the total number of distinct batches at least twice as large
+	// as for the in-memory operator in order to make sure that the external
+	// distinct has enough work to do.
+	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(3))
+	newTupleProbability := rng.Float64()
+	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
+	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
+
+	var numRuns, numSpills int
+	var semsToCheck []semaphore.Semaphore
+	runTestsWithoutAllNullsInjection(
+		t,
+		[]tuples{tups},
+		[][]*types.T{typs},
+		expected,
+		// tups and expected are in an arbitrary order, so we use an unordered
+		// verifier.
+		unorderedVerifier,
+		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			// A sorter should never exceed ExternalSorterMinPartitions, even
+			// during repartitioning. A panic will happen if a sorter requests
+			// more than this number of file descriptors.
+			sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+			semsToCheck = append(semsToCheck, sem)
+			var outputOrdering execinfrapb.Ordering
+			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
+				ctx, flowCtx, input, typs, distinctCols, outputOrdering, queueCfg,
+				sem, func() { numSpills++ },
+			)
+			require.NoError(t, err)
+			// Check that the external distinct and the disk-backed sort
+			// were added as Closers.
+			numExpectedClosers := 2
+			require.Equal(t, numExpectedClosers, len(closers))
+			accounts = append(accounts, newAccounts...)
+			monitors = append(monitors, newMonitors...)
+			numRuns++
+			return distinct, nil
+		},
+	)
+	for i, sem := range semsToCheck {
+		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+	}
+	require.Equal(t, numRuns, numSpills, "the spilling didn't occur in all cases")
+
+	for _, acc := range accounts {
+		acc.Close(ctx)
+	}
+	for _, mon := range monitors {
+		mon.Stop(ctx)
+	}
+}
+
+// generateRandomDataForDistinct is a utility function that generates data to be
+// used in randomized unit test of an unordered distinct operation. Note that
+// tups and expected can be in an arbitrary order (meaning the former is
+// shuffled whereas the latter is not).
+func generateRandomDataForUnorderedDistinct(
+	rng *rand.Rand, nTups, nDistinctCols int, newTupleProbability float64,
+) (tups, expected tuples) {
+	tups = make(tuples, nTups)
+	expected = make(tuples, 1, nTups)
+	tups[0] = make(tuple, nDistinctCols)
+	for j := 0; j < nDistinctCols; j++ {
+		tups[0][j] = 0
+	}
+	expected[0] = tups[0]
+
+	// We will construct the data in an ordered manner, and we'll shuffle it so
+	// that duplicate tuples are distributed randomly and not consequently.
+	newValueProbability := getNewValueProbabilityForDistinct(newTupleProbability, nDistinctCols)
+	for i := 1; i < nTups; i++ {
+		tups[i] = make(tuple, nDistinctCols)
+		isDuplicate := true
+		for j := range tups[i] {
+			tups[i][j] = tups[i-1][j].(int)
+			if rng.Float64() < newValueProbability {
+				tups[i][j] = tups[i][j].(int) + 1
+				isDuplicate = false
+			}
+		}
+		if !isDuplicate {
+			expected = append(expected, tups[i])
+		}
+	}
+
+	rand.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
+	return tups, expected
 }
 
 func convertDistinctColsToOrdering(distinctCols []uint32) execinfrapb.Ordering {
@@ -160,7 +316,8 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					}
 					op, accs, mons, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecbase.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg, &colexecbase.TestingSemaphore{},
+						distinctCols, outputOrdering, queueCfg,
+						&colexecbase.TestingSemaphore{}, nil, /* spillingCallbackFn */
 					)
 					memAccounts = append(memAccounts, accs...)
 					memMonitors = append(memMonitors, mons...)
@@ -195,6 +352,7 @@ func createExternalDistinct(
 	outputOrdering execinfrapb.Ordering,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
+	spillingCallbackFn func(),
 ) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns: distinctCols,
@@ -215,6 +373,7 @@ func createExternalDistinct(
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
+	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	// External sorter relies on different memory accounts to
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
