@@ -1087,3 +1087,11 @@ query T
 SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READ_TIMESTAMP
 ----
 off
+
+# Transaction deferrability can be assigned a default value.
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE
