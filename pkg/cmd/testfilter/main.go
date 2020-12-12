@@ -101,6 +101,14 @@ type testEvent struct {
 	Output  string
 }
 
+func (t *testEvent) json() string {
+	j, err := json.Marshal(t)
+	if err != nil {
+		panic(err)
+	}
+	return string(j)
+}
+
 func main() {
 	flag.Parse()
 	if err := filter(os.Stdin, os.Stdout, modeVar); err != nil {
@@ -109,16 +117,25 @@ func main() {
 	}
 }
 
+const packageLevelTestName = "PackageLevel"
+
+// tup identifies a single test.
+type tup struct {
+	pkg  string
+	test string
+}
+
+type ent struct {
+	first, last     string // RUN and (SKIP|PASS|FAIL)
+	strings.Builder        // output
+
+	// The following fields are set for package-level entries.
+	numActiveTests int // number of tests currently running in package.
+	numTestsFailed int // number of tests failed so far in package.
+}
+
 func filter(in io.Reader, out io.Writer, mode modeT) error {
 	scanner := bufio.NewScanner(in)
-	type tup struct {
-		pkg  string
-		test string
-	}
-	type ent struct {
-		first, last     string // RUN and (SKIP|PASS|FAIL)
-		strings.Builder        // output
-	}
 	m := map[tup]*ent{}
 	ev := &testEvent{}
 	var n int               // number of JSON lines parsed
@@ -151,137 +168,141 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 		}
 
 		if ev.Test == "" {
-			if mode == modeOmit && ev.Action != "fail" {
-				// Skip all regular package output when omitting. There's not much
-				// package output typically (only init functions), so not worth
-				// getting fancy about.
-				continue
-			}
+			// This is a package-level message.
 
-			// Populate a fake test name. We need this because if a
-			// package fails but no test has been marked as failed before,
-			// TC simply omits the package entirely in the overview.
-			ev.Test = "PackageLevel"
-
-			const helpMessage = "\nCheck full_output.txt in artifacts for stray panics or other errors that broke the test process."
-			if ev.Action == "fail" {
-				// Populate a helper annotation, to guide the user towards the right place
-				ev.Output += helpMessage
-			}
-
+			// Populate a fake test name. We need this because TC is blind
+			// to anything without a "Test" field.
+			ev.Test = packageLevelTestName
 			pkey := tup{ev.Package, ev.Test}
-			if m[pkey] == nil {
-				// We are observing the first entry for a package. We are
-				// going to turn the package entry into a pseudo-test entry
-				// below. We also need to synthetize a "run" entry for the
-				// pseudo-test. We need this, because TC does not recognize a
-				// test unless it starts with a "run" entry.
-				evCopy := *ev
-				evCopy.Action = "run"
-				evCopy.Output = ""
-				b, err := json.Marshal(&evCopy)
-				if err != nil {
-					fmt.Fprintf(out, "ERROR: %v\n", err)
-				} else {
-					fakeLine := string(b)
-					buf := &ent{first: fakeLine}
-					if _, err := fmt.Fprintln(buf, fakeLine); err != nil {
-						return err
-					}
-					m[pkey] = buf
+
+			switch ev.Action {
+			case "fail":
+				buf := m[pkey]
+
+				// Is the package failing with some non-terminated tests?
+				hasOpenSubTests := buf != nil && buf.numActiveTests > 0
+
+				// Did the package contain any failing tests?
+				hadSomeFailedTests := buf != nil && buf.numTestsFailed > 0
+
+				// If the package is failing without non-terminated tests,
+				// but it contained some failing tests, then we rely on these
+				// tests' output to explain what happened to the user. In that
+				// case, we are happy to ignore the package-level output.
+				//
+				// (If the package did not have any failing tests at all, we
+				// still want some package-level output: in that case, if it
+				// fails we want some details about that below. If there was
+				// any non-terminating test, we also mandate a package-level
+				// result, which will contain the list of non-terminating
+				// tests.)
+				if !hasOpenSubTests && hadSomeFailedTests {
+					delete(m, pkey)
+					continue
 				}
 			}
 
-			if ev.Action == "fail" {
-				// A package is terminating. Dump all the test scopes so far
-				// in this package, then forget about them. This ensures that
-				// the test failures are reported before the package failure
-				// in the final output.
+			// At this point, either:
+			// - we are starting to see output for a package which
+			//   has not yet terminated processing; or
+			// - we are seeing the last pass/fail entry for a package,
+			//   and there is something "interesting" to report
+			//   for this package.
+			//
+			// In both cases, we are going to emit a test result for the
+			// package itself in the common output processing case below.
+			// For this to be valid/possible, we first need to ensure
+			// the map contains a package-level entry.
+			if err := ensurePackageEntry(m, out, ev, pkey, mode); err != nil {
+				return err
+			}
+
+			// At this point, either we are still processing a package's
+			// output before it completes, or the last package event.
+
+			const helpMessage = "\nCheck full_output.txt in artifacts for stray panics or other errors that broke the test process."
+			if ev.Action != "output" {
+				// This is the final event for the package.
+				//
+				// Dump all the test scopes so far in this package, then
+				// forget about them. This ensures that the test scopes are
+				// closed before the package scope is closed the final output.
 				var testReport strings.Builder
 				for key := range m {
 					if key.pkg == ev.Package && key.test != ev.Test {
 						// We only mention the test scopes without their sub-tests;
 						// otherwise we could get tens of thousands of output lines
 						// for a failed logic test run due to a panic.
-						if !strings.Contains(key.test, "/") {
-							buf := m[key]
+						if strings.Contains(key.test, "/") {
+							// Sub-test. Just forget all about it.
+							delete(m, key)
+						} else {
+							// Not a sub-test.
+
 							// Remember the test's name to report in the
 							// package-level output.
 							testReport.WriteString("\n" + key.test)
 
-							// Synthetize a "skip" message.
+							// Synthetize a "skip" message. We want "something" (and
+							// not nothing) so that we get some timing information
+							// in strip mode.
 							//
 							// We use "skip" and not "fail" to ensure that no issue
 							// gets filed for the open-ended tests by the github
 							// auto-poster: we don't have confidence for any of them
 							// that they are the particular cause of the failure.
-							synthEv := testEvent{Time: ev.Time, Action: "skip", Package: ev.Package, Test: key.test, Elapsed: 0, Output: "unfinished due to package-level failure" + helpMessage}
-							b, err := json.Marshal(&synthEv)
-							if err != nil {
-								fmt.Fprintf(out, "ERROR: %v\n", err)
-							} else {
-								fmt.Fprintln(buf, string(b))
+							syntheticSkipEv := testEvent{
+								Time:    ev.Time,
+								Action:  "skip",
+								Package: ev.Package,
+								Test:    key.test,
+								Elapsed: 0,
+								Output:  "unfinished due to package-level failure" + helpMessage,
 							}
-							fmt.Fprintln(out, buf.String())
+							// Translate the synthetic message back into an output line.
+							syntheticLine := syntheticSkipEv.json()
+							if err := processTestEvent(m, out, &syntheticSkipEv, syntheticLine, mode); err != nil {
+								return err
+							}
 						}
-						// In any case, remove the entries for all the tests
-						// "under" the package. We know they won't get any more
-						// output because the package fail entry can only appear
-						// after all tests have finalized.
-						delete(m, key)
 					}
 				}
 
-				// Report the list of open-ended tests.
-				if testReport.Len() > 0 {
-					ev.Output += "\nThe following tests have not completed and could be the cause of the failure:" + testReport.String()
+				// If the package is failing, tell the user that something was amiss.
+				if ev.Action == "fail" {
+					ev.Output += helpMessage
+					if testReport.Len() > 0 {
+						ev.Output += "\nThe following tests have not completed and could be the cause of the failure:" + testReport.String()
+					}
 				}
 			}
 
-			// Re-populate the line from the JSON payload.
-			b, err := json.Marshal(ev)
-			if err != nil {
-				fmt.Fprintf(out, "ERROR: %v\n", err)
-			} else {
-				line = string(b)
-			}
+			// Re-populate the line from the JSON payload for the
+			// PackageLevel pseudo-test.
+			line = ev.json()
 		}
 
-		key := tup{ev.Package, ev.Test}
-		buf := m[key]
-		if buf == nil {
-			buf = &ent{first: line}
-			m[key] = buf
-		}
-		if _, err := fmt.Fprintln(buf, line); err != nil {
+		// Common output processing.
+		if err := processTestEvent(m, out, ev, line, mode); err != nil {
 			return err
 		}
-		switch ev.Action {
-		case "pass", "skip", "fail":
-			buf.last = line
-			delete(m, key)
-			if ev.Action == "fail" {
-				fmt.Fprint(out, buf.String())
-			} else if mode == modeStrip {
-				// Output only the start and end of test so that we preserve the
-				// timing information. However, the output is omitted.
-				fmt.Fprintln(out, buf.first)
-				fmt.Fprintln(out, buf.last)
-			}
-		case "run", "pause", "cont", "bench", "output":
-		default:
-			// We must have parsed some JSON that wasn't a testData.
-			return fmt.Errorf("unknown input: %s", line)
-		}
 	}
-	// Some scopes might still be open. To the best of my knowledge, this is due
-	// to a panic/premature exit of a test binary. In that case, it seems that
-	// neither is the package scope closed, nor the scopes for any tests that
-	// were running in parallel, so we pass that through if stripping, but not
-	// when omitting.
+	// Some scopes might still be open. To the best of my knowledge,
+	// this is due to a panic/premature exit of a single-package test
+	// binary. In that case, it seems that neither is the package scope
+	// closed, nor the scopes for any tests that were running in
+	// parallel, so we pass that through if stripping, but not when
+	// omitting.
 	if mode == modeStrip {
 		for key := range m {
-			fmt.Fprintln(out, m[key].String())
+			buf := m[key]
+			// Skip over the package-level pseudo-entries. Since we're
+			// single-package, the remainder of the output is sufficient
+			// here.
+			if key.test == packageLevelTestName {
+				continue
+			}
+			fmt.Fprintln(out, buf.String())
 		}
 	}
 	// TODO(tbg): would like to return an error here for sanity, but the
@@ -301,6 +322,92 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 		// for the package, so if we're here then 100% something weird is going
 		// on.
 		return fmt.Errorf("not a single test was parsed, but detected test output: %s", passFailLine)
+	}
+	return nil
+}
+
+// ensurePackageEntry ensures there is a package-level entry in the
+// map for each package.
+//
+// This is necessary because we want to consider package-level
+// results as regular test results. To achieve this
+// successfully, we need to understand how TC processes tests.
+//
+// TC is a bit peculiar and requires all tests to *start* with
+// an event with action "run", then zero or more "output"
+// actions, then one of either "pass", "skip" or "fail".
+//
+// Unfortunately, `go test` does not emit initial "run"
+// entries for package-level outputs. This is arguably a
+// bug. Instead it starts directly with either "output" or
+// "pass"/"fail" at the end. This prevents TC from treating
+// the package as a test. To fix that, We insert a synthetic
+// "run" entry for the package in the map here.
+func ensurePackageEntry(m map[tup]*ent, out io.Writer, ev *testEvent, pkey tup, mode modeT) error {
+	if buf := m[pkey]; buf != nil {
+		return nil
+	}
+	// Package not known yet. Synthetize an entry.
+	packageEvent := *ev
+	packageEvent.Test = packageLevelTestName
+	packageEvent.Action = "run"
+	packageEvent.Output = ""
+	packageLine := packageEvent.json()
+	return processTestEvent(m, out, &packageEvent, packageLine, mode)
+}
+
+func processTestEvent(m map[tup]*ent, out io.Writer, ev *testEvent, line string, mode modeT) error {
+	// The package key.
+	pkey := tup{ev.Package, packageLevelTestName}
+	// The test's key.
+	key := tup{ev.Package, ev.Test}
+
+	// Is this a regular test? In that case, ensure there is a
+	// package-level entry for this test.
+	if ev.Test != packageLevelTestName {
+		if err := ensurePackageEntry(m, out, ev, pkey, mode); err != nil {
+			return err
+		}
+	}
+
+	// Now process the test itself.
+	buf := m[key]
+	if buf == nil {
+		buf = &ent{first: line}
+		m[key] = buf
+		if key != pkey {
+			// Remember how many tests we're seeing.
+			m[pkey].numActiveTests++
+		}
+	}
+	if _, err := fmt.Fprintln(buf, line); err != nil {
+		return err
+	}
+	switch ev.Action {
+	case "pass", "skip", "fail":
+		buf.last = line
+		if ev.Action == "fail" {
+			fmt.Fprint(out, buf.String())
+		} else if mode == modeStrip {
+			// Output only the start and end of test so that we preserve the
+			// timing information. However, the output is omitted.
+			fmt.Fprintln(out, buf.first)
+			fmt.Fprintln(out, buf.last)
+		}
+
+		// Forget the test.
+		delete(m, key)
+		if key != pkey {
+			m[pkey].numActiveTests--
+			if ev.Action == "fail" {
+				m[pkey].numTestsFailed++
+			}
+		}
+
+	case "run", "pause", "cont", "bench", "output":
+	default:
+		// We must have parsed some JSON that wasn't a testData.
+		return fmt.Errorf("unknown input: %s", line)
 	}
 	return nil
 }
