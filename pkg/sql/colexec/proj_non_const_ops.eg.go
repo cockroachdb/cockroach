@@ -3565,12 +3565,6 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -3618,12 +3612,6 @@ func (p projPlusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -3717,12 +3705,6 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -3770,12 +3752,6 @@ func (p projPlusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -3869,12 +3845,6 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -3922,12 +3892,6 @@ func (p projPlusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -4020,12 +3984,6 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -4071,12 +4029,6 @@ func (p projPlusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7565,12 +7517,6 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -7618,12 +7564,6 @@ func (p projMinusDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7717,12 +7657,6 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -7770,12 +7704,6 @@ func (p projMinusDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7869,12 +7797,6 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -7922,12 +7844,6 @@ func (p projMinusDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -8020,12 +7936,6 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -8071,12 +7981,6 @@ func (p projMinusDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -11873,12 +11777,6 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -11926,12 +11824,6 @@ func (p projMultDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12025,12 +11917,6 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -12078,12 +11964,6 @@ func (p projMultDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12177,12 +12057,6 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -12230,12 +12104,6 @@ func (p projMultDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12328,12 +12196,6 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -12379,12 +12241,6 @@ func (p projMultDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12471,12 +12327,6 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -12512,12 +12362,6 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = arg2.MulFloat(f)
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15657,12 +15501,6 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -15718,12 +15556,6 @@ func (p projDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15825,12 +15657,6 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -15886,12 +15712,6 @@ func (p projDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15993,12 +15813,6 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -16054,12 +15868,6 @@ func (p projDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -16160,12 +15968,6 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -16219,12 +16021,6 @@ func (p projDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18649,12 +18445,6 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -18710,12 +18500,6 @@ func (p projFloorDivDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18817,12 +18601,6 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -18878,12 +18656,6 @@ func (p projFloorDivDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18985,12 +18757,6 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -19046,12 +18812,6 @@ func (p projFloorDivDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19152,12 +18912,6 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -19211,12 +18965,6 @@ func (p projFloorDivDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21149,12 +20897,6 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -21210,12 +20952,6 @@ func (p projModDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21317,12 +21053,6 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -21378,12 +21108,6 @@ func (p projModDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21485,12 +21209,6 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -21546,12 +21264,6 @@ func (p projModDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21652,12 +21364,6 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -21711,12 +21417,6 @@ func (p projModDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23645,12 +23345,6 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -23698,12 +23392,6 @@ func (p projPowDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23797,12 +23485,6 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -23850,12 +23532,6 @@ func (p projPowDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23949,12 +23625,6 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -24002,12 +23672,6 @@ func (p projPowDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -24100,12 +23764,6 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -24151,12 +23809,6 @@ func (p projPowDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -30962,12 +30614,6 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -31017,12 +30663,6 @@ func (p projEQDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31118,12 +30758,6 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -31173,12 +30807,6 @@ func (p projEQDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31274,12 +30902,6 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -31329,12 +30951,6 @@ func (p projEQDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31432,12 +31048,6 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -31491,12 +31101,6 @@ func (p projEQDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31588,12 +31192,6 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -31631,12 +31229,6 @@ func (p projEQDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36018,12 +35610,6 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -36073,12 +35659,6 @@ func (p projNEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36174,12 +35754,6 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -36229,12 +35803,6 @@ func (p projNEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36330,12 +35898,6 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -36385,12 +35947,6 @@ func (p projNEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36488,12 +36044,6 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -36547,12 +36097,6 @@ func (p projNEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36644,12 +36188,6 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -36687,12 +36225,6 @@ func (p projNEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41074,12 +40606,6 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -41129,12 +40655,6 @@ func (p projLTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41230,12 +40750,6 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -41285,12 +40799,6 @@ func (p projLTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41386,12 +40894,6 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -41441,12 +40943,6 @@ func (p projLTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41544,12 +41040,6 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -41603,12 +41093,6 @@ func (p projLTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41700,12 +41184,6 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -41743,12 +41221,6 @@ func (p projLTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46130,12 +45602,6 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -46185,12 +45651,6 @@ func (p projLEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46286,12 +45746,6 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -46341,12 +45795,6 @@ func (p projLEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46442,12 +45890,6 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -46497,12 +45939,6 @@ func (p projLEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46600,12 +46036,6 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -46659,12 +46089,6 @@ func (p projLEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46756,12 +46180,6 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -46799,12 +46217,6 @@ func (p projLEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51186,12 +50598,6 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -51241,12 +50647,6 @@ func (p projGTDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51342,12 +50742,6 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -51397,12 +50791,6 @@ func (p projGTDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51498,12 +50886,6 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -51553,12 +50935,6 @@ func (p projGTDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51656,12 +51032,6 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -51715,12 +51085,6 @@ func (p projGTDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51812,12 +51176,6 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -51855,12 +51213,6 @@ func (p projGTDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56242,12 +55594,6 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -56297,12 +55643,6 @@ func (p projGEDecimalInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56398,12 +55738,6 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -56453,12 +55787,6 @@ func (p projGEDecimalInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56554,12 +55882,6 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -56609,12 +55931,6 @@ func (p projGEDecimalInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56712,12 +56028,6 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -56771,12 +56081,6 @@ func (p projGEDecimalFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56868,12 +56172,6 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 						// We only want to perform the projection operation if both values are not
@@ -56911,12 +56209,6 @@ func (p projGEDecimalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col1 = col1
-				_ = 0
-				_ = n
-				colLen := col1.Len()
-				_ = projCol.Get(colLen - 1)
-				_ = col2.Get(colLen - 1)
 				for i := 0; i < n; i++ {
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)

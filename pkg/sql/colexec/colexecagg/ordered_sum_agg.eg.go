@@ -85,7 +85,7 @@ func (a *sumInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -325,7 +325,7 @@ func (a *sumInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -565,7 +565,7 @@ func (a *sumInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -801,7 +801,7 @@ func (a *sumDecimalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1033,7 +1033,7 @@ func (a *sumFloat64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1245,7 +1245,7 @@ func (a *sumIntervalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 

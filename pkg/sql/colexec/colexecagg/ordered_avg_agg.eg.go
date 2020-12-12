@@ -88,7 +88,7 @@ func (a *avgInt16OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -370,7 +370,7 @@ func (a *avgInt32OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -652,7 +652,7 @@ func (a *avgInt64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -930,7 +930,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1204,7 +1204,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 
@@ -1432,7 +1432,7 @@ func (a *avgIntervalOrderedAgg) Compute(
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
-			_ = col.Get(inputLen - 1)
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 

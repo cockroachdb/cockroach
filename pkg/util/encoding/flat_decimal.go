@@ -151,6 +151,15 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 		appendTo = append(appendTo, coeffBytes...)
 	}
 
+	nonAlignedness := uintptr(totalLen) % decimalAlign
+	if nonAlignedness != 0 {
+		appendTo = append(appendTo, make([]byte, decimalAlign-nonAlignedness)...)
+	}
+
+	// TODO(jordan): make sure that we write some empty bytes after writing the
+	// coefficient slice, enough that we're back at an "aligned" memory slot for
+	// later when we are going to treat these byte slices as apd.Decimals directly.
+
 	/*
 		if !reflect.DeepEqual(returned, decimal) {
 			panic(fmt.Sprintf("Hmm... %v != %v", *returned, *decimal))
@@ -159,6 +168,8 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 
 	return appendTo
 }
+
+const decimalAlign = unsafe.Alignof(apd.Decimal{})
 
 // unsafeSetNat sets the backing slice of the input big.Int to the input []big.Word
 func unsafeSetNat(b *big.Int, words []big.Word) {
@@ -171,13 +182,16 @@ func unsafeSetNat(b *big.Int, words []big.Word) {
 // is serialized to the network or to disk, we can perform all slice accesses
 // without worrying about out-of-bounds, since we've indubitably allocated
 // sufficient space in the input byte slice in an earlier call to EncodeFlatDecimal.
+//
+// N.B.: it's critically important to ensure that the input decodeInto pointer
+// is empty (or, at least has a nil big.Int slice).
 func DecodeFlatDecimal(toDecode []byte, decodeInto *apd.Decimal) {
-	coeffBytes := toDecode[decimalSize:]
-	d := UnsafeCastDecimal(toDecode)
-	nCoeffBytes := len(coeffBytes)
+	decimalPtr := unsafe.Pointer(decodeInto)
+	targetByteSlice := (*(*[decimalSize]byte)(decimalPtr))[:]
+	copy(targetByteSlice, toDecode[:decimalSize])
 
-	*decodeInto = *d
-	if nCoeffBytes > 0 {
+	coeffBytes := toDecode[decimalSize:]
+	if len(coeffBytes) > 0 {
 		unsafeSetNat(&decodeInto.Coeff, WordSliceFromByteSlice(coeffBytes))
 	}
 }
