@@ -15,6 +15,8 @@ CREATE TABLE t_idx (
 )
 ----
 
+# -- SELECT tests --
+
 # Column v should be produced.
 build
 SELECT * FROM t
@@ -63,9 +65,8 @@ project
       └── projections
            └── a:1 + b:2 [as=v:3]
 
-# TODO(radu): we should remove the virtual column from the insert mapping if it
-# is not used by any indexes (so that it can be pruned in the input). This is
-# not trivial because it can still be used by a RETURNING clause.
+# -- INSERT tests --
+
 build
 INSERT INTO t VALUES (1, 1)
 ----
@@ -144,3 +145,213 @@ insert t_idx
       │    └── (1, 1)
       └── projections
            └── column1:5 + column2:6 [as=column7:7]
+
+# -- DELETE tests --
+
+build
+DELETE FROM t WHERE a > 1
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── a:5 > 1
+
+build
+DELETE FROM t WHERE a > 1 RETURNING v
+----
+project
+ ├── columns: v:3
+ └── delete t
+      ├── columns: a:1!null b:2 v:3
+      ├── fetch columns: a:5 b:6 v:7
+      └── select
+           ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+           ├── project
+           │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    ├── scan t
+           │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    └── computed column expressions
+           │    │         └── v:7
+           │    │              └── a:5 + b:6
+           │    └── projections
+           │         └── a:5 + b:6 [as=v:7]
+           └── filters
+                └── a:5 > 1
+
+build
+DELETE FROM t WHERE v = 1
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── v:7 = 1
+
+build
+DELETE FROM t WHERE a+b = 1
+----
+delete t
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── (a:5 + b:6) = 1
+
+build
+DELETE FROM t WHERE v = 1 RETURNING v
+----
+project
+ ├── columns: v:3!null
+ └── delete t
+      ├── columns: a:1!null b:2 v:3!null
+      ├── fetch columns: a:5 b:6 v:7
+      └── select
+           ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+           ├── project
+           │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    ├── scan t
+           │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    └── computed column expressions
+           │    │         └── v:7
+           │    │              └── a:5 + b:6
+           │    └── projections
+           │         └── a:5 + b:6 [as=v:7]
+           └── filters
+                └── v:7 = 1
+
+build
+DELETE FROM t_idx WHERE a > 1
+----
+delete t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t_idx
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── a:5 > 1
+
+build
+DELETE FROM t_idx WHERE a > 1 RETURNING v
+----
+project
+ ├── columns: v:3
+ └── delete t_idx
+      ├── columns: a:1!null b:2 v:3
+      ├── fetch columns: a:5 b:6 v:7
+      └── select
+           ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+           ├── project
+           │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    ├── scan t_idx
+           │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    └── computed column expressions
+           │    │         └── v:7
+           │    │              └── a:5 + b:6
+           │    └── projections
+           │         └── a:5 + b:6 [as=v:7]
+           └── filters
+                └── a:5 > 1
+
+build
+DELETE FROM t_idx WHERE v = 1
+----
+delete t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t_idx
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── v:7 = 1
+
+build
+DELETE FROM t_idx WHERE a+b = 1
+----
+delete t_idx
+ ├── columns: <none>
+ ├── fetch columns: a:5 b:6 v:7
+ └── select
+      ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      ├── project
+      │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    ├── scan t_idx
+      │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    └── computed column expressions
+      │    │         └── v:7
+      │    │              └── a:5 + b:6
+      │    └── projections
+      │         └── a:5 + b:6 [as=v:7]
+      └── filters
+           └── (a:5 + b:6) = 1
+
+build
+DELETE FROM t_idx WHERE v = 1 RETURNING v
+----
+project
+ ├── columns: v:3!null
+ └── delete t_idx
+      ├── columns: a:1!null b:2 v:3!null
+      ├── fetch columns: a:5 b:6 v:7
+      └── select
+           ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+           ├── project
+           │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    ├── scan t_idx
+           │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    └── computed column expressions
+           │    │         └── v:7
+           │    │              └── a:5 + b:6
+           │    └── projections
+           │         └── a:5 + b:6 [as=v:7]
+           └── filters
+                └── v:7 = 1
