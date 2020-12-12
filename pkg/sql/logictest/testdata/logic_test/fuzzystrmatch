@@ -54,4 +54,3 @@ query TTT
 SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL);
 ----
 A500 · ·
-

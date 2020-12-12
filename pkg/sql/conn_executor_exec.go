@@ -1023,12 +1023,16 @@ func (ex *connExecutor) execWithDistSQLEngine(
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
 // ReadWriteMode to be used for the associated transaction state based on the
-// values of the statement's Modes. Note that this method may reset the
-// connExecutor's planner in order to compute the timestamp for the AsOf clause
-// if it exists. The timestamps correspond to the timestamps passed to
-// makeEventTxnStartPayload; txnSQLTimestamp propagates to become the
-// TxnTimestamp while historicalTimestamp populated with a non-nil value only
-// if the BeginTransaction statement has a non-nil AsOf clause expression. A
+// values of the BeginTransaction statement's Modes, along with the session's
+// default transaction settings. If no BeginTransaction statement is provided
+// then the session's defaults are consulted alone.
+//
+// Note that this method may reset the connExecutor's planner in order to
+// compute the timestamp for the AsOf clause if it exists. The timestamps
+// correspond to the timestamps passed to makeEventTxnStartPayload;
+// txnSQLTimestamp propagates to become the TxnTimestamp while
+// historicalTimestamp populated with a non-nil value only if the
+// BeginTransaction statement has a non-nil AsOf clause expression. A
 // non-nil historicalTimestamp implies a ReadOnly rwMode.
 func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	ctx context.Context, s *tree.BeginTransaction,
@@ -1039,14 +1043,19 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	err error,
 ) {
 	now := ex.server.cfg.Clock.PhysicalTime()
-	if s.Modes.AsOf.Expr == nil {
-		rwMode = ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode)
+	var modes tree.TransactionModes
+	if s != nil {
+		modes = s.Modes
+	}
+	asOf := ex.asOfClauseWithSessionDefault(modes.AsOf)
+	if asOf.Expr == nil {
+		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now)
-	ts, err := p.EvalAsOfTimestamp(ctx, s.Modes.AsOf)
+	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
 	}
@@ -1055,7 +1064,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	// AOST clause and is ReadWrite but performing a check decouples this code
 	// from that and hopefully adds clarity that the returning of ReadOnly with
 	// a historical timestamp is intended.
-	if s.Modes.ReadWriteMode == tree.ReadWrite {
+	if modes.ReadWriteMode == tree.ReadWrite {
 		return 0, time.Time{}, nil, tree.ErrAsOfSpecifiedWithReadWrite
 	}
 	return tree.ReadOnly, ts.GoTime(), &ts, nil
@@ -1096,15 +1105,21 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
-		// NB: Implicit transactions are created without a historical timestamp even
-		// though the statement might contain an AOST clause. In these cases the
-		// clause is evaluated and applied execStmtInOpenState.
+		// NB: Implicit transactions are created with the session's default
+		// historical timestamp even though the statement itself might contain
+		// an AOST clause. In these cases the clause is evaluated and applied
+		// execStmtInOpenState.
+		noBeginStmt := (*tree.BeginTransaction)(nil)
+		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+		if err != nil {
+			return ex.makeErrEvent(err, s)
+		}
 		return eventTxnStart{ImplicitTxn: fsm.True},
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
-				ex.readWriteModeWithSessionDefault(tree.UnspecifiedReadWriteMode),
-				ex.server.cfg.Clock.PhysicalTime(),
-				nil, /* historicalTimestamp */
+				mode,
+				sqlTs,
+				historicalTs,
 				ex.transitionCtx)
 	}
 }

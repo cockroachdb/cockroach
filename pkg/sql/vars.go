@@ -369,6 +369,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`default_transaction_use_follower_reads`: {
+		GetStringVal: makePostgresBoolGetStringValFn("default_transaction_use_follower_reads"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("default_transaction_use_follower_reads", s)
+			if err != nil {
+				return err
+			}
+			m.SetDefaultTransactionUseFollowerReads(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultTxnUseFollowerReads)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.DistSQLExecModeFromString(s)

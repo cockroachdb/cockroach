@@ -11,3 +11,84 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 
 statement error pq: relation "t" does not exist
 SELECT * FROM t AS OF SYSTEM TIME experimental_follower_read_timestamp()
+
+statement error pq: relation "t" does not exist
+BEGIN; SET TRANSACTION AS OF SYSTEM TIME follower_read_timestamp(); SELECT * FROM t
+
+statement ok
+ROLLBACK
+
+statement error pq: relation "t" does not exist
+BEGIN AS OF SYSTEM TIME follower_read_timestamp(); SELECT * FROM t
+
+statement ok
+ROLLBACK
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+CREATE DATABASE IF NOT EXISTS d2
+
+statement error pq: relation "t" does not exist
+BEGIN; SELECT * FROM t
+
+statement ok
+ROLLBACK
+
+statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
+BEGIN READ WRITE
+
+statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+BEGIN; CREATE DATABASE IF NOT EXISTS d2
+
+statement ok
+ROLLBACK
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+statement ok
+SELECT * FROM t
+
+statement ok
+CREATE DATABASE IF NOT EXISTS d2
+
+statement ok
+BEGIN; SELECT * FROM t; COMMIT
+
+statement ok
+BEGIN READ WRITE; COMMIT
+
+statement ok
+BEGIN; CREATE DATABASE IF NOT EXISTS d2; COMMIT
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+CREATE DATABASE IF NOT EXISTS d2
+
+statement error pq: relation "t" does not exist
+BEGIN; SELECT * FROM t
+
+statement ok
+ROLLBACK
+
+statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
+BEGIN READ WRITE
+
+statement error pq: cannot execute CREATE DATABASE in a read-only transaction
+BEGIN; CREATE DATABASE IF NOT EXISTS d2
+
+statement ok
+ROLLBACK
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE

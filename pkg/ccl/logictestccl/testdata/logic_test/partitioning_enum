@@ -55,4 +55,3 @@ ALTER TABLE partitioned_table_3 PARTITION BY RANGE (place)
 
 statement ok
 SELECT * FROM crdb_internal.tables
-

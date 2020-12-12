@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,6 +38,20 @@ const FollowerReadTimestampExperimentalFunctionName = "experimental_follower_rea
 var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expressions or " +
 	FollowerReadTimestampFunctionName + " are allowed")
 
+// IsFollowerReadTimestampFunction determines whether the AS OF SYSTEM TIME
+// clause contains a simple invocation of the follower_read_timestamp function.
+func IsFollowerReadTimestampFunction(asOf AsOfClause, searchPath sessiondata.SearchPath) bool {
+	fe, ok := asOf.Expr.(*FuncExpr)
+	if !ok {
+		return false
+	}
+	def, err := fe.Func.Resolve(searchPath)
+	if err != nil {
+		return false
+	}
+	return def.Name == FollowerReadTimestampFunctionName || def.Name == FollowerReadTimestampExperimentalFunctionName
+}
+
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
 	ctx context.Context, asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
@@ -49,21 +64,18 @@ func EvalAsOfTimestamp(
 	scalarProps.Require("AS OF SYSTEM TIME", RejectSpecial|RejectSubqueries)
 
 	// In order to support the follower reads feature we permit this expression
-	// to be a simple invocation of the `FollowerReadTimestampFunction`.
+	// to be a simple invocation of the follower_read_timestamp function.
 	// Over time we could expand the set of allowed functions or expressions.
 	// All non-function expressions must be const and must TypeCheck into a
 	// string.
 	var te TypedExpr
-	if fe, ok := asOf.Expr.(*FuncExpr); ok {
-		def, err := fe.Func.Resolve(semaCtx.SearchPath)
+	if _, ok := asOf.Expr.(*FuncExpr); ok {
+		if !IsFollowerReadTimestampFunction(asOf, semaCtx.SearchPath) {
+			return hlc.Timestamp{}, errInvalidExprForAsOf
+		}
+		var err error
+		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.TimestampTZ)
 		if err != nil {
-			return hlc.Timestamp{}, errInvalidExprForAsOf
-		}
-		if def.Name != FollowerReadTimestampFunctionName &&
-			def.Name != FollowerReadTimestampExperimentalFunctionName {
-			return hlc.Timestamp{}, errInvalidExprForAsOf
-		}
-		if te, err = fe.TypeCheck(ctx, semaCtx, types.TimestampTZ); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	} else {
