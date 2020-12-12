@@ -73,12 +73,6 @@ func FlatDecimalLen(decimal *apd.Decimal) int {
 
 const decimalSize = unsafe.Sizeof(apd.Decimal{})
 
-// UnsafeCastDecimal interprets an arbitrary byte slice as an apd.Decimal pointer.
-// Use with caution
-func UnsafeCastDecimal(b []byte) *apd.Decimal {
-	return (*apd.Decimal)(unsafe.Pointer(&b[0]))
-}
-
 // absOffset is essentially unsafe.OffsetOf(big.Int{}.abs).
 var absOffset uintptr
 
@@ -164,8 +158,8 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 	return appendTo
 }
 
-// unsafeSetNat sets the backing slice of the input big.Int to the input []big.Word
-func unsafeSetNat(b *big.Int, words []big.Word) {
+// unsafeSetAbs sets the backing slice of the input big.Int to the input []big.Word
+func unsafeSetAbs(b *big.Int, words []big.Word) {
 	ptrToWords := (*[]big.Word)(UnsafeGetAbsPtr(b))
 	*ptrToWords = words
 }
@@ -185,6 +179,6 @@ func DecodeFlatDecimal(toDecode []byte, decodeInto *apd.Decimal) {
 
 	coeffBytes := toDecode[decimalSize:]
 	if len(coeffBytes) > 0 {
-		unsafeSetNat(&decodeInto.Coeff, WordSliceFromByteSlice(coeffBytes))
+		unsafeSetAbs(&decodeInto.Coeff, WordSliceFromByteSlice(coeffBytes))
 	}
 }
