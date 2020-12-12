@@ -31,6 +31,7 @@ func NewExternalDistinct(
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	createDiskBackedSorter DiskBackedSorterConstructor,
+	inMemUnorderedDistinct colexecbase.Operator,
 	diskAcc *mon.BoundAccount,
 ) colexecbase.Operator {
 	distinctSpec := args.Spec.Core.Distinct
@@ -75,6 +76,13 @@ func NewExternalDistinct(
 			colexecerror.InternalError(err)
 		}
 		return diskBackedFallbackOp
+	}
+	// We have to be careful to not emit duplicates of already emitted by the
+	// in-memory operator tuples, so we plan a special filterer operator to
+	// remove all such tuples.
+	input = &unorderedDistinctFilterer{
+		OneInputNode: NewOneInputNode(input),
+		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
 	}
 	numRequiredActivePartitions := ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(
