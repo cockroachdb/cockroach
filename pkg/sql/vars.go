@@ -369,6 +369,39 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	//
+	// TODO DURING REVIEW: I'm happy to bikeshed the name of this setting if people
+	// would like to. Other options I considered were:
+	// - default_transaction_use_follower_reads
+	// - default_transaction_read_from_followers
+	//
+	// I also considered making the setting only impact transactions that are
+	// already READ ONLY, instead of having it also mandate that all transactions
+	// are READ ONLY. This would mean that a client would need to set this option
+	// and default_transaction_read_only in its connection string if it didn't want
+	// to configure anything else per-txn and wanted all txns to read from
+	// followers. The benefit of this is that a user could then opt-out of this
+	// default by running a READ WRITE transaction when
+	// default_transaction_read_from_followers is set to READ ONLY. Or they could
+	// opt-in to this behavior by running a READ ONLY transaction when
+	// default_transaction_read_from_followers is not set.
+	`default_transaction_use_follower_read_timestamp`: {
+		GetStringVal: makePostgresBoolGetStringValFn("default_transaction_use_follower_read_timestamp"),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("default_transaction_use_follower_read_timestamp", s)
+			if err != nil {
+				return err
+			}
+			m.SetDefaultTransactionUseFollowerReads(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DefaultTxnUseFollowerReads)
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			mode, ok := sessiondata.DistSQLExecModeFromString(s)

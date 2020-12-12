@@ -161,6 +161,11 @@ type LocalOnlySessionData struct {
 	// DefaultTxnReadOnly indicates the default read-only status of newly
 	// created transactions.
 	DefaultTxnReadOnly bool
+	// DefaultTxnUseFollowerReads indicates whether transactions should be
+	// created by default using an AS OF SYSTEM TIME clause far enough in the
+	// past to facilitate reads against followers. If true, transactions will
+	// also default to being read-only.
+	DefaultTxnUseFollowerReads bool
 	// PartiallyDistributedPlansDisabled indicates whether the partially
 	// distributed plans produced by distSQLSpecExecFactory are disabled. It
 	// should be set to 'true' only in tests that verify that the old and the

@@ -2043,6 +2043,10 @@ func (m *sessionDataMutator) SetDefaultTransactionReadOnly(val bool) {
 	m.data.DefaultTxnReadOnly = val
 }
 
+func (m *sessionDataMutator) SetDefaultTransactionUseFollowerReads(val bool) {
+	m.data.DefaultTxnUseFollowerReads = val
+}
+
 func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
 	m.data.EnableSeqScan = val
 }
