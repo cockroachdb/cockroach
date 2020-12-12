@@ -40,7 +40,6 @@ func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
-	s = strings.ReplaceAll(s, "_R_SLICE", "execgen.SLICE")
 	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
 	s = strings.ReplaceAll(s, "_HAS_NULLS", "$hasNulls")

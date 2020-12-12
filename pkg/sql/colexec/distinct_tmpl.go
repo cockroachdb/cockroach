@@ -303,19 +303,18 @@ func (p partitioner_TYPE) partitionWithOrder(
 	}
 
 	col := colVec.TemplateType()
-	col = execgen.SLICE(col, 0, n)
-	outputCol = outputCol[:n]
-	// Eliminate bounds checks for outputcol[outputIdx].
-	_ = outputCol[len(order)-1]
-	// Eliminate bounds checks for col[outputIdx].
-	_ = col.Get(len(order) - 1)
+	// Eliminate bounds checks.
+	_ = col.Get(n - 1)
+	_ = outputCol[n-1]
 	outputCol[0] = true
 	if nulls != nil {
-		for outputIdx, checkIdx := range order {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			checkIdx := order[outputIdx]
 			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
 		}
 	} else {
-		for outputIdx, checkIdx := range order {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			checkIdx := order[outputIdx]
 			lastVal = checkDistinct(checkIdx, outputIdx, lastVal, col, outputCol)
 		}
 	}

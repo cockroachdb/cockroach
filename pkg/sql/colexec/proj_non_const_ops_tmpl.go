@@ -162,15 +162,9 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
 	} else {
-		// {{if not (eq .Left.VecMethod "Bytes")}}
-		// {{/* Slice is a noop for Bytes type, so colLen below might contain an
-		// incorrect value. In order to keep bounds check elimination for all other
-		// types, we simply omit this code snippet for Bytes. */}}
-		col1 = execgen.SLICE(col1, 0, n)
-		colLen := col1.Len()
-		_ = projCol.Get(colLen - 1)
-		_ = col2.Get(colLen - 1)
-		// {{end}}
+		_ = projCol.Get(n - 1)
+		_ = col1.Get(n - 1)
+		_ = col2.Get(n - 1)
 		for i := 0; i < n; i++ {
 			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
 		}
