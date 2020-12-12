@@ -43,3 +43,26 @@ SELECT * FROM t
 a  b  v
 1  1  2
 2  2  4
+
+statement ok
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  INDEX (v)
+)
+
+statement ok
+INSERT INTO t_idx VALUES (1, 1), (2, 8), (3, 3), (4, 6), (5, 2)
+
+query I rowsort
+SELECT a FROM t_idx WHERE a+b=10
+----
+2
+4
+
+query I rowsort
+SELECT a FROM t_idx WHERE v=10
+----
+2
+4
