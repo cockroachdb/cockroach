@@ -37,9 +37,35 @@ INSERT INTO t(a,b) VALUES (2, 2)
 statement error cannot write directly to computed column
 INSERT INTO t(a,b,v) VALUES (2, 2, 0)
 
+# Ensure that the virtual column is produced.
 query III colnames,rowsort
 SELECT * FROM t
 ----
 a  b  v
 1  1  2
 2  2  4
+
+statement ok
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  INDEX (v)
+)
+
+statement ok
+INSERT INTO t_idx VALUES (1, 1), (2, 8), (3, 3), (4, 6), (5, 2)
+
+# Queries which should use the index on v. Note that there are corresponding
+# execbuilder tests which verify the query plans.
+query I rowsort
+SELECT a FROM t_idx WHERE a+b=10
+----
+2
+4
+
+query I rowsort
+SELECT a FROM t_idx WHERE v=10
+----
+2
+4
