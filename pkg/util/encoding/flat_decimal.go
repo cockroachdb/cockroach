@@ -151,11 +151,6 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 		appendTo = append(appendTo, coeffBytes...)
 	}
 
-	nonAlignedness := uintptr(totalLen) % decimalAlign
-	if nonAlignedness != 0 {
-		appendTo = append(appendTo, make([]byte, decimalAlign-nonAlignedness)...)
-	}
-
 	// TODO(jordan): make sure that we write some empty bytes after writing the
 	// coefficient slice, enough that we're back at an "aligned" memory slot for
 	// later when we are going to treat these byte slices as apd.Decimals directly.
@@ -168,8 +163,6 @@ func EncodeFlatDecimal(decimal *apd.Decimal, appendTo []byte) []byte {
 
 	return appendTo
 }
-
-const decimalAlign = unsafe.Alignof(apd.Decimal{})
 
 // unsafeSetNat sets the backing slice of the input big.Int to the input []big.Word
 func unsafeSetNat(b *big.Int, words []big.Word) {
