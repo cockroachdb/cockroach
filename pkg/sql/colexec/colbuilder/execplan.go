@@ -878,6 +878,7 @@ func NewColOperator(
 							input,
 							result.ColumnTypes,
 							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
+							inMemoryUnorderedDistinct,
 							diskAccount,
 						)
 						result.ToClose = append(result.ToClose, ed.(colexecbase.Closer))
