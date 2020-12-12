@@ -11,6 +11,8 @@
 package colexec
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -31,6 +33,7 @@ func NewExternalDistinct(
 	input colexecbase.Operator,
 	inputTypes []*types.T,
 	createDiskBackedSorter DiskBackedSorterConstructor,
+	inMemUnorderedDistinct colexecbase.Operator,
 	diskAcc *mon.BoundAccount,
 ) colexecbase.Operator {
 	distinctSpec := args.Spec.Core.Distinct
@@ -38,10 +41,12 @@ func NewExternalDistinct(
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to process using the in-memory unordered distinct fit under the
-		// limit, so we use an unlimited allocator.
+		// limit, so we use an unlimited allocator with an unbounded memory
+		// limit.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
+		memoryLimit := int64(math.MaxInt64)
 		return NewUnorderedDistinct(
-			unlimitedAllocator, partitionedInputs[0], distinctCols, inputTypes,
+			unlimitedAllocator, partitionedInputs[0], distinctCols, inputTypes, memoryLimit,
 		)
 	}
 	diskBackedFallbackOpConstructor := func(
@@ -75,6 +80,13 @@ func NewExternalDistinct(
 			colexecerror.InternalError(err)
 		}
 		return diskBackedFallbackOp
+	}
+	// We have to be careful to not emit duplicates of already emitted by the
+	// in-memory operator tuples, so we plan a special filterer operator to
+	// remove all such tuples.
+	input = &unorderedDistinctFilterer{
+		OneInputNode: NewOneInputNode(input),
+		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
 	}
 	numRequiredActivePartitions := ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(

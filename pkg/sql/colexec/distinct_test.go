@@ -191,7 +191,7 @@ func TestDistinct(t *testing.T) {
 		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return NewUnorderedDistinct(
-					testAllocator, input[0], tc.distinctCols, tc.typs,
+					testAllocator, input[0], tc.distinctCols, tc.typs, defaultMemoryLimit,
 				), nil
 			})
 		if tc.isOrderedOnDistinctCols {
@@ -204,7 +204,7 @@ func TestDistinct(t *testing.T) {
 				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return newPartiallyOrderedDistinct(
-							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
+							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, defaultMemoryLimit,
 						)
 					})
 			}
@@ -215,6 +215,46 @@ func TestDistinct(t *testing.T) {
 				})
 		}
 	}
+}
+
+func TestUnorderedDistinctRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewPseudoRand()
+	nCols := 2 + rng.Intn(4)
+	typs := make([]*types.T, nCols)
+	distinctCols := make([]uint32, nCols)
+	for i := range typs {
+		typs[i] = types.Int
+		distinctCols[i] = uint32(i)
+	}
+	nDistinctBatches := 2 + rng.Intn(2)
+	newTupleProbability := rng.Float64()
+	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
+	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
+	runTestsWithTyps(
+		t,
+		[]tuples{tups},
+		[][]*types.T{typs},
+		expected,
+		// tups and expected are in an arbitrary order, so we use an unordered
+		// verifier.
+		unorderedVerifier,
+		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, defaultMemoryLimit), nil
+		},
+	)
+}
+
+// getNewValueProbabilityForDistinct returns the probability that we need to use
+// a new value for a single element in a tuple when overall the tuples need to
+// be distinct with newTupleProbability and they consists of nCols columns.
+func getNewValueProbabilityForDistinct(newTupleProbability float64, nCols int) float64 {
+	// We have the following equation:
+	//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
+	// so applying some manipulations we get:
+	//   newValueProbability = 1 - (1 - newTupleProbability) ^ (1 / nCols).
+	return 1.0 - math.Pow(1-newTupleProbability, 1.0/float64(nCols))
 }
 
 // runDistinctBenchmarks runs the benchmarks of a distinct operator variant on
@@ -251,11 +291,7 @@ func runDistinctBenchmarks(
 					}
 					distinctCols := []uint32{0, 1, 2, 3}[:nCols]
 					numOrderedCols := getNumOrderedCols(nCols)
-					// We have the following equation:
-					//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
-					// so applying some manipulations we get:
-					//   newValueProbability = 1 - (1 - newTupleProbability) ^ (1 / nCols).
-					newValueProbability := 1.0 - math.Pow(1-newTupleProbability, 1.0/float64(nCols))
+					newValueProbability := getNewValueProbabilityForDistinct(newTupleProbability, nCols)
 					for i := range distinctCols {
 						col := cols[i].Int64()
 						col[0] = 0
@@ -307,10 +343,10 @@ func BenchmarkDistinct(b *testing.B) {
 
 	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewUnorderedDistinct(allocator, input, distinctCols, typs), nil
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs, defaultMemoryLimit), nil
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
+			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, defaultMemoryLimit)
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return NewOrderedDistinct(input, distinctCols, typs)

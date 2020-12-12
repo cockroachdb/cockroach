@@ -616,7 +616,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.used+mm.reserved.used-x {
 		if err := mm.increaseBudget(ctx, x); err != nil {
-			return err
+			return errors.Wrapf(err, "%s", mm.name)
 		}
 	}
 	mm.mu.curAllocated += x
