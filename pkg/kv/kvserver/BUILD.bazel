@@ -42,6 +42,7 @@ go_library(
         "replica_eval_context.go",
         "replica_eval_context_span.go",
         "replica_evaluate.go",
+        "replica_exit.go",
         "replica_follower_read.go",
         "replica_gc_queue.go",
         "replica_gossip.go",
