@@ -373,8 +373,8 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind.IsVirtual() {
-			// #2: Don't consider system or virtual columns.
+		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.VirtualInverted {
+			// #2: Don't consider system or virtual inverted columns.
 			continue
 		}
 		insertColID := mb.insertColIDs[i]
@@ -617,7 +617,7 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// may depend on non-computed columns.
 	mb.addSynthesizedCols(
 		mb.insertColIDs,
-		func(colOrd int) bool { return !mb.tab.Column(colOrd).IsComputed() },
+		func(col *cat.Column) bool { return !col.IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related columns containing insertion values (whether
@@ -627,7 +627,7 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// Now add all computed columns.
 	mb.addSynthesizedCols(
 		mb.insertColIDs,
-		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
+		func(col *cat.Column) bool { return col.IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.
