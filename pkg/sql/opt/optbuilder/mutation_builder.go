@@ -556,7 +556,9 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 //
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to outScope.
-func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(colOrd int) bool) {
+func (mb *mutationBuilder) addSynthesizedCols(
+	colIDs opt.ColList, addCol func(col *cat.Column) bool,
+) {
 	var projectionsScope *scope
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
@@ -567,8 +569,8 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 		if kind == cat.DeleteOnly {
 			continue
 		}
-		// Skip system and virtual columns.
-		if kind == cat.System || kind.IsVirtual() {
+		// Skip system and virtual inverted columns.
+		if kind == cat.System || kind == cat.VirtualInverted {
 			continue
 		}
 		// Skip columns that are already specified.
@@ -577,7 +579,7 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 		}
 
 		// Invoke addCol to determine whether column should be added.
-		if !addCol(i) {
+		if !addCol(tabCol) {
 			continue
 		}
 
@@ -946,7 +948,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	if needResults {
 		private.ReturnCols = make(opt.ColList, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if mb.tab.Column(i).Kind() != cat.Ordinary {
+			if kind := mb.tab.Column(i).Kind(); kind != cat.Ordinary {
 				// Only non-mutation and non-system columns are output columns.
 				continue
 			}

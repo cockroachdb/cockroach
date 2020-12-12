@@ -625,7 +625,7 @@ func (tt *Table) addIndexWithVersion(
 		}
 		// Add the rest of the columns in the table.
 		for i, col := range tt.Columns {
-			if !pkOrdinals.Contains(i) && !col.Kind().IsVirtual() {
+			if !pkOrdinals.Contains(i) && col.Kind() != cat.VirtualInverted && !col.IsVirtualComputed() {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
@@ -810,8 +810,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	exprStr := serializeTableDefExpr(expr)
 	// Find an existing virtual computed column with the same expression.
 	for _, col := range tt.Columns {
-		if col.Kind() == cat.VirtualComputed &&
-			col.ComputedExprStr() == exprStr {
+		if col.IsVirtualComputed() && col.ComputedExprStr() == exprStr {
 			return col
 		}
 	}

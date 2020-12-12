@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -306,8 +307,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// set by the backfiller.
 	mb.addSynthesizedCols(
 		mb.updateColIDs,
-		func(colOrd int) bool {
-			col := mb.tab.Column(colOrd)
+		func(col *cat.Column) bool {
 			return !col.IsComputed() && col.IsMutation()
 		},
 	)
@@ -324,7 +324,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// Add all computed columns in case their values have changed.
 	mb.addSynthesizedCols(
 		mb.updateColIDs,
-		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
+		func(col *cat.Column) bool { return col.IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.

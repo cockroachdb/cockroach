@@ -1137,7 +1137,7 @@ func (oi *optIndex) init(
 			pkCols.Add(int(desc.ColumnIDs[i]))
 		}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if col := tab.Column(i); !col.Kind().IsVirtual() {
+			if col := tab.Column(i); col.Kind() != cat.VirtualInverted && !col.IsVirtualComputed() {
 				if id := col.ColID(); !pkCols.Contains(int(id)) {
 					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
 				}
