@@ -107,7 +107,11 @@ func FormatColumnForDisplay(
 			return "", err
 		}
 		f.WriteString(compExpr)
-		f.WriteString(") STORED")
+		if desc.Virtual {
+			f.WriteString(") VIRTUAL")
+		} else {
+			f.WriteString(") STORED")
+		}
 	}
 	return f.CloseAndGetString(), nil
 }

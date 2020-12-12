@@ -219,6 +219,12 @@ type LocalOnlySessionData struct {
 	// TODO(mgartner): remove this once multi-column inverted indexes are fully
 	// supported.
 	EnableMultiColumnInvertedIndexes bool
+
+	// VirtualColumnsEnabled indicates whether we allow virtual (non-stored)
+	// computed columns.
+	// TODO(radu): remove this once the feature is stable.
+	VirtualColumnsEnabled bool
+
 	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
 	// constraints without an index is allowed.
 	// TODO(rytaft): remove this once unique without index constraints are fully

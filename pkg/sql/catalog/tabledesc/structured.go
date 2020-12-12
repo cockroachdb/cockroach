@@ -1316,6 +1316,10 @@ func (desc *Mutable) allocateColumnFamilyIDs(columnNames map[string]descpb.Colum
 	}
 
 	ensureColumnInFamily := func(col *descpb.ColumnDescriptor) {
+		if col.Virtual {
+			// Virtual columns don't need to be part of families.
+			return
+		}
 		if columnsInFamilies.Contains(col.ID) {
 			return
 		}
@@ -1944,7 +1948,7 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 	}
 
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
-	columnIDs := make(map[descpb.ColumnID]string, len(desc.Columns))
+	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
 	if err := desc.validateColumns(columnNames, columnIDs); err != nil {
 		return err
 	}
@@ -1959,7 +1963,7 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 					"mutation in state %s, direction %s, col %q, id %v",
 					errors.Safe(m.State), errors.Safe(m.Direction), col.Name, errors.Safe(col.ID))
 			}
-			columnIDs[col.ID] = col.Name
+			columnIDs[col.ID] = col
 		case *descpb.DescriptorMutation_Index:
 			if unSetEnums {
 				idx := desc.Index
@@ -2080,9 +2084,12 @@ func (desc *Immutable) ValidateTable(ctx context.Context) error {
 }
 
 func (desc *Immutable) validateColumns(
-	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]string,
+	columnNames map[string]descpb.ColumnID, columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
 ) error {
-	for _, column := range desc.AllNonDropColumns() {
+	colDescs := desc.AllNonDropColumns()
+	for colIdx := range colDescs {
+		column := &colDescs[colIdx]
+
 		if err := catalog.ValidateName(column.Name, "column"); err != nil {
 			return err
 		}
@@ -2108,9 +2115,9 @@ func (desc *Immutable) validateColumns(
 
 		if other, ok := columnIDs[column.ID]; ok {
 			return fmt.Errorf("column %q duplicate ID of column %q: %d",
-				column.Name, other, column.ID)
+				column.Name, other.Name, column.ID)
 		}
-		columnIDs[column.ID] = column.Name
+		columnIDs[column.ID] = column
 
 		if column.ID >= desc.NextColumnID {
 			return errors.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
@@ -2131,12 +2138,16 @@ func (desc *Immutable) validateColumns(
 				return fmt.Errorf("computed column %q refers to unknown columns in expression: %s",
 					column.Name, *column.ComputeExpr)
 			}
+		} else if column.Virtual {
+			return fmt.Errorf("virtual column %q is not computed", column.Name)
 		}
 	}
 	return nil
 }
 
-func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]string) error {
+func (desc *Immutable) validateColumnFamilies(
+	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
+) error {
 	if len(desc.Families) < 1 {
 		return fmt.Errorf("at least 1 column family must be specified")
 	}
@@ -2184,13 +2195,16 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 		}
 
 		for i, colID := range family.ColumnIDs {
-			name, ok := columnIDs[colID]
+			col, ok := columnIDs[colID]
 			if !ok {
 				return fmt.Errorf("family %q contains unknown column \"%d\"", family.Name, colID)
 			}
-			if name != family.ColumnNames[i] {
+			if col.Name != family.ColumnNames[i] {
 				return fmt.Errorf("family %q column %d should have name %q, but found name %q",
-					family.Name, colID, name, family.ColumnNames[i])
+					family.Name, colID, col.Name, family.ColumnNames[i])
+			}
+			if col.Virtual {
+				return fmt.Errorf("virtual computed column %q cannot be part of a family", col.Name)
 			}
 		}
 
@@ -2201,9 +2215,11 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 			colIDToFamilyID[colID] = family.ID
 		}
 	}
-	for colID := range columnIDs {
-		if _, ok := colIDToFamilyID[colID]; !ok {
-			return fmt.Errorf("column %d is not in any column family", colID)
+	for colID, colDesc := range columnIDs {
+		if !colDesc.Virtual {
+			if _, ok := colIDToFamilyID[colID]; !ok {
+				return fmt.Errorf("column %q is not in any column family", colDesc.Name)
+			}
 		}
 	}
 	return nil
@@ -2212,7 +2228,9 @@ func (desc *Immutable) validateColumnFamilies(columnIDs map[descpb.ColumnID]stri
 // validateCheckConstraints validates that check constraints are well formed.
 // Checks include validating the column IDs and verifying that check expressions
 // do not reference non-existent columns.
-func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]string) error {
+func (desc *Immutable) validateCheckConstraints(
+	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
+) error {
 	for _, chk := range desc.AllActiveAndInactiveChecks() {
 		// Verify that the check's column IDs are valid.
 		for _, colID := range chk.ColumnIDs {
@@ -2243,7 +2261,7 @@ func (desc *Immutable) validateCheckConstraints(columnIDs map[descpb.ColumnID]st
 // constraints are well formed. Checks include validating the column IDs and
 // column names.
 func (desc *Immutable) validateUniqueWithoutIndexConstraints(
-	columnIDs map[descpb.ColumnID]string,
+	columnIDs map[descpb.ColumnID]*descpb.ColumnDescriptor,
 ) error {
 	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
 		if err := catalog.ValidateName(c.Name, "unique without index constraint"); err != nil {

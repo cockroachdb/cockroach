@@ -1263,7 +1263,9 @@ func ColumnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 			if def.HasColumnFamily() {
 				return false
 			}
-			columns = append(columns, def.Name)
+			if !def.Computed.Virtual {
+				columns = append(columns, def.Name)
+			}
 		}
 	}
 
