@@ -115,10 +115,6 @@ func (a *anyNotNullBoolHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -232,10 +228,6 @@ func (a *anyNotNullBytesHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -352,10 +344,6 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -469,10 +457,6 @@ func (a *anyNotNullInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -586,10 +570,6 @@ func (a *anyNotNullInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -703,10 +683,6 @@ func (a *anyNotNullInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -820,10 +796,6 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -937,10 +909,6 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1054,10 +1022,6 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1174,10 +1138,6 @@ func (a *anyNotNullDatumHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {

@@ -28,13 +28,13 @@ const relativeRankTmpl = "pkg/sql/colexec/relative_rank_tmpl.go"
 func genRelativeRankOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_RELATIVE_RANK_STRING", "{{.String}}")
 
-	computePartitionsSizesRe := makeFunctionRegex("_COMPUTE_PARTITIONS_SIZES", 0)
-	s = computePartitionsSizesRe.ReplaceAllString(s, `{{template "computePartitionsSizes"}}`)
-	computePeerGroupsSizesRe := makeFunctionRegex("_COMPUTE_PEER_GROUPS_SIZES", 0)
-	s = computePeerGroupsSizesRe.ReplaceAllString(s, `{{template "computePeerGroupsSizes"}}`)
+	computePartitionsSizesRe := makeFunctionRegex("_COMPUTE_PARTITIONS_SIZES", 1)
+	s = computePartitionsSizesRe.ReplaceAllString(s, `{{template "computePartitionsSizes" buildDict "HasSel" $1}}`)
+	computePeerGroupsSizesRe := makeFunctionRegex("_COMPUTE_PEER_GROUPS_SIZES", 1)
+	s = computePeerGroupsSizesRe.ReplaceAllString(s, `{{template "computePeerGroupsSizes" buildDict "HasSel" $1}}`)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("relative_rank_op").Parse(s)
+	tmpl, err := template.New("relative_rank_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}

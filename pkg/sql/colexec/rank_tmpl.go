@@ -105,9 +105,12 @@ type rankInitFields struct {
 // {{/*
 // _COMPUTE_RANK is a code snippet that computes the rank for a single tuple at
 // index i.
-func _COMPUTE_RANK() { // */}}
+func _COMPUTE_RANK(_HAS_SEL bool) { // */}}
 	// {{define "computeRank" -}}
 	// {{if $.HasPartition}}
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if partitionCol[i] {
 		// We need to reset the internal state because of the new partition.
 		// Note that the beginning of new partition necessarily starts a new
@@ -117,10 +120,19 @@ func _COMPUTE_RANK() { // */}}
 		r.rankIncrement = 1
 	}
 	// {{end}}
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if peersCol[i] {
 		_UPDATE_RANK()
+		// {{if not $.HasSel}}
+		//gcassert:bce
+		// {{end}}
 		rankCol[i] = r.rank
 	} else {
+		// {{if not $.HasSel}}
+		//gcassert:bce
+		// {{end}}
 		rankCol[i] = r.rank
 		_UPDATE_RANK_INCREMENT()
 	}
@@ -171,11 +183,16 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	if sel != nil {
 		for _, i := range sel[:n] {
-			_COMPUTE_RANK()
+			_COMPUTE_RANK(true)
 		}
 	} else {
-		for i := range rankCol[:n] {
-			_COMPUTE_RANK()
+		// {{if .HasPartition}}
+		_ = partitionCol[n-1]
+		// {{end}}
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
+			_COMPUTE_RANK(false)
 		}
 	}
 	return batch

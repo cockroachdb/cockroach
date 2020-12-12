@@ -291,17 +291,20 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
 				// There is a single partition in the whole input, and
 				// r.numTuplesInPartition already contains the correct number.
 
+				//gcassert:bce
 				if peersCol[i] {
 					r.rank += r.rankIncrement
 					r.rankIncrement = 0
@@ -311,8 +314,10 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 				// tuple.
 				if r.numTuplesInPartition == 1 {
 					// There is a single tuple in the partition, so we return 0, per spec.
+					//gcassert:bce
 					relativeRankOutputCol[i] = 0
 				} else {
+					//gcassert:bce
 					relativeRankOutputCol[i] = float64(r.rank-1) / float64(r.numTuplesInPartition-1)
 				}
 				r.rankIncrement++
@@ -515,7 +520,9 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numTuplesInPartition++
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					if partitionCol[i] {
 						// We have encountered a start of a new partition, so we
 						// need to save the computed size of the previous one
@@ -583,15 +590,19 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
+				//gcassert:bce
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
 						if r.partitionsState.dequeuedSizes, err = r.partitionsState.dequeue(ctx); err != nil {
@@ -607,6 +618,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.rankIncrement = 1
 				}
 
+				//gcassert:bce
 				if peersCol[i] {
 					r.rank += r.rankIncrement
 					r.rankIncrement = 0
@@ -616,8 +628,10 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 				// tuple.
 				if r.numTuplesInPartition == 1 {
 					// There is a single tuple in the partition, so we return 0, per spec.
+					//gcassert:bce
 					relativeRankOutputCol[i] = 0
 				} else {
+					//gcassert:bce
 					relativeRankOutputCol[i] = float64(r.rank-1) / float64(r.numTuplesInPartition-1)
 				}
 				r.rankIncrement++
@@ -821,7 +835,9 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numPeers++
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					if peersCol[i] {
 						// We have encountered a start of a new peer group, so we
 						// need to save the computed size of the previous one
@@ -888,17 +904,20 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
 				// There is a single partition in the whole input, and
 				// r.numTuplesInPartition already contains the correct number.
 
+				//gcassert:bce
 				if peersCol[i] {
 					// We have encountered a new peer group, and we need to update the
 					// number of preceding tuples and get the number of tuples in
@@ -916,6 +935,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 				// Now we can compute the value of the window function for i'th
 				// tuple.
+				//gcassert:bce
 				relativeRankOutputCol[i] = float64(r.numPrecedingTuples+r.numPeers) / float64(r.numTuplesInPartition)
 			}
 			r.output.SetLength(n)
@@ -1140,7 +1160,9 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numTuplesInPartition++
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					if partitionCol[i] {
 						// We have encountered a start of a new partition, so we
 						// need to save the computed size of the previous one
@@ -1208,7 +1230,9 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numPeers++
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					if peersCol[i] {
 						// We have encountered a start of a new peer group, so we
 						// need to save the computed size of the previous one
@@ -1283,15 +1307,19 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
+				//gcassert:bce
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
 						if r.partitionsState.dequeuedSizes, err = r.partitionsState.dequeue(ctx); err != nil {
@@ -1307,6 +1335,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numPeers = 0
 				}
 
+				//gcassert:bce
 				if peersCol[i] {
 					// We have encountered a new peer group, and we need to update the
 					// number of preceding tuples and get the number of tuples in
@@ -1324,6 +1353,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 				// Now we can compute the value of the window function for i'th
 				// tuple.
+				//gcassert:bce
 				relativeRankOutputCol[i] = float64(r.numPrecedingTuples+r.numPeers) / float64(r.numTuplesInPartition)
 			}
 			r.output.SetLength(n)

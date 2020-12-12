@@ -90,8 +90,8 @@ func genSumAgg(inputFileContents string, wr io.Writer, isSumInt bool) error {
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 
-	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 4)
-	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4}}`)
+	accumulateSum := makeFunctionRegex("_ACCUMULATE_SUM", 5)
+	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateSum" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
 
 	s = replaceManipulationFuncs(s)
 

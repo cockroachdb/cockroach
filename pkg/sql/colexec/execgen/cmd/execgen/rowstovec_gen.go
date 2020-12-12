@@ -62,10 +62,15 @@ func (i rowsToVecWidthTmplInfo) Set(col, idx, castV string) string {
 	return set(i.canonicalTypeFamily, col, idx, castV)
 }
 
+func (i rowsToVecWidthTmplInfo) Sliceable() bool {
+	return sliceable(i.canonicalTypeFamily)
+}
+
 // Remove unused warnings.
 var _ = rowsToVecWidthTmplInfo{}.Prelude
 var _ = rowsToVecWidthTmplInfo{}.Convert
 var _ = rowsToVecWidthTmplInfo{}.Set
+var _ = rowsToVecWidthTmplInfo{}.Sliceable
 
 type familyWidthPair struct {
 	family types.Family

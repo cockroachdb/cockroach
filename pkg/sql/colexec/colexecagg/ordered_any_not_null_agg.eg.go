@@ -109,15 +109,16 @@ func (a *anyNotNullBoolOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -146,6 +147,7 @@ func (a *anyNotNullBoolOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -305,15 +307,16 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -342,6 +345,7 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -504,15 +508,16 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -541,6 +546,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -700,15 +706,16 @@ func (a *anyNotNullInt16OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -737,6 +744,7 @@ func (a *anyNotNullInt16OrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -896,15 +904,16 @@ func (a *anyNotNullInt32OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -933,6 +942,7 @@ func (a *anyNotNullInt32OrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1092,15 +1102,16 @@ func (a *anyNotNullInt64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1129,6 +1140,7 @@ func (a *anyNotNullInt64OrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1288,15 +1300,16 @@ func (a *anyNotNullFloat64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1325,6 +1338,7 @@ func (a *anyNotNullFloat64OrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1484,15 +1498,16 @@ func (a *anyNotNullTimestampOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1521,6 +1536,7 @@ func (a *anyNotNullTimestampOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1680,15 +1696,16 @@ func (a *anyNotNullIntervalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1717,6 +1734,7 @@ func (a *anyNotNullIntervalOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1879,15 +1897,16 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the
@@ -1916,6 +1935,7 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							// If this is a new group, check if any non-nulls have been found for the

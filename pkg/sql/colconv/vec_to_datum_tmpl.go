@@ -209,6 +209,9 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
@@ -228,6 +231,9 @@ func ColVecToDatumAndDeselect(
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
@@ -250,6 +256,7 @@ func ColVecToDatum(
 func _SET_DEST_IDX(destIdx, idx int, sel []int, _HAS_SEL bool, _DESELECT bool) { // */}}
 	// {{define "setDestIdx" -}}
 	// {{if and (.HasSel) (not .Deselect)}}
+	//gcassert:bce
 	destIdx = sel[idx]
 	// {{else}}
 	destIdx = idx
@@ -264,6 +271,7 @@ func _SET_DEST_IDX(destIdx, idx int, sel []int, _HAS_SEL bool, _DESELECT bool) {
 func _SET_SRC_IDX(srcIdx, idx int, sel []int, _HAS_SEL bool) { // */}}
 	// {{define "setSrcIdx" -}}
 	// {{if .HasSel}}
+	//gcassert:bce
 	srcIdx = sel[idx]
 	// {{else}}
 	srcIdx = idx
@@ -292,8 +300,11 @@ func _VEC_TO_DATUM(
 	_DESELECT bool,
 ) { // */}}
 	// {{define "vecToDatum" -}}
+	// {{if or (not _HAS_SEL) (_DESELECT)}}
+	_ = converted[length-1]
+	// {{end}}
 	// {{if .HasSel}}
-	sel = sel[:length]
+	_ = sel[length-1]
 	// {{end}}
 	var idx, destIdx, srcIdx int
 	switch ct := col.Type(); ct.Family() {
@@ -315,11 +326,18 @@ func _VEC_TO_DATUM(
 				_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 				// {{if .HasNulls}}
 				if nulls.NullAt(srcIdx) {
+					// {{if or (not _HAS_SEL) (_DESELECT)}}
+					//gcassert:bce
+					// {{end}}
 					converted[destIdx] = tree.DNull
 					continue
 				}
 				// {{end}}
-				converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+				v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+				// {{if or (not _HAS_SEL) (_DESELECT)}}
+				//gcassert:bce
+				// {{end}}
+				converted[destIdx] = v
 			}
 			return
 		}
@@ -328,11 +346,18 @@ func _VEC_TO_DATUM(
 			_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 			// {{if .HasNulls}}
 			if nulls.NullAt(srcIdx) {
+				// {{if or (not _HAS_SEL) (_DESELECT)}}
+				//gcassert:bce
+				// {{end}}
 				converted[destIdx] = tree.DNull
 				continue
 			}
 			// {{end}}
-			converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+			v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+			// {{if or (not _HAS_SEL) (_DESELECT)}}
+			//gcassert:bce
+			// {{end}}
+			converted[destIdx] = v
 		}
 	// {{range .Global}}
 	case _TYPE_FAMILY:
@@ -340,16 +365,30 @@ func _VEC_TO_DATUM(
 		// {{range .Widths}}
 		case _TYPE_WIDTH:
 			typedCol := col._VEC_METHOD()
+			// {{if and (.Sliceable) (not _HAS_SEL)}}
+			_ = typedCol.Get(length - 1)
+			// {{end}}
 			for idx = 0; idx < length; idx++ {
 				_SET_DEST_IDX(destIdx, idx, sel, _HAS_SEL, _DESELECT)
 				_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 				// {{if _HAS_NULLS}}
 				if nulls.NullAt(srcIdx) {
+					// {{if or (not _HAS_SEL) (_DESELECT)}}
+					//gcassert:bce
+					// {{end}}
 					converted[destIdx] = tree.DNull
 					continue
 				}
 				// {{end}}
-				_ASSIGN_CONVERTED(converted[destIdx], typedCol, srcIdx, da)
+				// {{if and (.Sliceable) (not _HAS_SEL)}}
+				//gcassert:bce
+				// {{end}}
+				v := typedCol.Get(srcIdx)
+				_ASSIGN_CONVERTED(_converted, v, da)
+				// {{if or (not _HAS_SEL) (_DESELECT)}}
+				//gcassert:bce
+				// {{end}}
+				converted[destIdx] = _converted
 			}
 			// {{end}}
 		}

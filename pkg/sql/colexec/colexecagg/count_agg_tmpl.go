@@ -72,6 +72,8 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	// {{end}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
@@ -83,13 +85,13 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 			// {{if not (eq .CountKind "Rows")}}
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_COUNT(a, nulls, i, true)
+					_ACCUMULATE_COUNT(a, nulls, i, true, false)
 				}
 			} else
 			// {{end}}
 			{
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_COUNT(a, nulls, i, false)
+					_ACCUMULATE_COUNT(a, nulls, i, false, false)
 				}
 			}
 		} else
@@ -98,7 +100,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 			// {{if not (eq .CountKind "Rows")}}
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel[:inputLen] {
-					_ACCUMULATE_COUNT(a, nulls, i, true)
+					_ACCUMULATE_COUNT(a, nulls, i, true, true)
 				}
 			} else
 			// {{end}}
@@ -111,7 +113,7 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 				a.curAgg += int64(inputLen)
 				// {{else}}
 				for _, i := range sel[:inputLen] {
-					_ACCUMULATE_COUNT(a, nulls, i, false)
+					_ACCUMULATE_COUNT(a, nulls, i, false, true)
 				}
 				// {{end}}
 			}
@@ -176,10 +178,15 @@ func (a *count_COUNTKIND_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 // {{/*
 // _ACCUMULATE_COUNT aggregates the value at index i into the count aggregate.
 // _COL_WITH_NULLS indicates whether we should be paying attention to NULLs.
-func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool) { // */}}
+func _ACCUMULATE_COUNT(
+	a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS bool, _HAS_SEL bool,
+) { // */}}
 	// {{define "accumulateCount" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
+	// {{if not .HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
 			a.col[a.curIdx] = a.curAgg

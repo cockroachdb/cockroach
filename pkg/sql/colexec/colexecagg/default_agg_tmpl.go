@@ -70,9 +70,13 @@ func (a *default_AGGKINDAgg) Compute(
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
 		if sel == nil {
+			_ = groups[inputLen-1]
 			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
-				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx)
+				_ADD_TUPLE(a, groups, a.nulls, tupleIdx, false)
 			}
 		} else
 		// {{end}}
@@ -86,7 +90,7 @@ func (a *default_AGGKINDAgg) Compute(
 			// deselection - so converted values are at the same positions as
 			// the original ones.
 			for _, tupleIdx := range sel[:inputLen] {
-				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx)
+				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx, true)
 			}
 		}
 	})
@@ -214,11 +218,16 @@ func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
 // {{/*
 // _ADD_TUPLE aggregates the tuple that is at position 'tupleIdx' in the
 // original batch and has the converted tree.Datum values at the same position.
-func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int) { // */}}
+func _ADD_TUPLE(
+	a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupleIdx int, _HAS_SEL bool,
+) { // */}}
 	// {{define "addTuple" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[tupleIdx] {
+	// {{if not .HasSel}}
+	//gcassert:bce
+	// {{end}}
+	if groups[tupleIdx] {
 		if !a.isFirstGroup {
 			res, err := a.fn.Result()
 			if err != nil {

@@ -205,13 +205,17 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
-		sel = sel[:length]
+		_ = converted[length-1]
+		_ = sel[length-1]
 		var idx, destIdx, srcIdx int
 		switch ct := col.Type(); ct.Family() {
 		case types.StringFamily:
@@ -221,23 +225,31 @@ func ColVecToDatumAndDeselect(
 			if ct.Oid() == oid.T_name {
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+					//gcassert:bce
+					converted[destIdx] = v
 				}
 				return
 			}
 			for idx = 0; idx < length; idx++ {
 				destIdx = idx
+				//gcassert:bce
 				srcIdx = sel[idx]
 				if nulls.NullAt(srcIdx) {
+					//gcassert:bce
 					converted[destIdx] = tree.DNull
 					continue
 				}
-				converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+				v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+				//gcassert:bce
+				converted[destIdx] = v
 			}
 		case types.BoolFamily:
 			switch ct.Width() {
@@ -246,12 +258,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bool()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := tree.MakeDBool(tree.DBool(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.IntFamily:
@@ -260,35 +277,50 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Int16()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			case 32:
 				typedCol := col.Int32()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			case -1:
 			default:
 				typedCol := col.Int64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.FloatFamily:
@@ -298,12 +330,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Float64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDFloat(tree.DFloat(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.DecimalFamily:
@@ -313,17 +350,21 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Decimal()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
-					d.Coeff = big.Int{}
-					d.Coeff.Set(&typedCol[srcIdx].Coeff)
-					converted[destIdx] = d
+					_converted.Coeff = big.Int{}
+					_converted.Coeff.Set(&v.Coeff)
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.DateFamily:
@@ -333,12 +374,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Int64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.BytesFamily:
@@ -348,14 +394,19 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bytes()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
+					v := typedCol.Get(srcIdx)
 					// Note that there is no need for a copy since DBytes uses a string
 					// as underlying storage, which will perform the copy for us.
-					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+					_converted := da.NewDBytes(tree.DBytes(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.UuidFamily:
@@ -365,18 +416,23 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bytes()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
+					v := typedCol.Get(srcIdx)
 					// Note that there is no need for a copy because uuid.FromBytes
 					// will perform a copy.
-					id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+					id, err := uuid.FromBytes(v)
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+					_converted := da.NewDUuid(tree.DUuid{UUID: id})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.TimestampFamily:
@@ -386,12 +442,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Timestamp()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.TimestampTZFamily:
@@ -401,12 +462,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Timestamp()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.IntervalFamily:
@@ -416,12 +482,17 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Interval()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInterval(tree.DInterval{Duration: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -432,17 +503,23 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Datum()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+					v := typedCol.Get(srcIdx)
+					_converted := v.(*coldataext.Datum).Datum
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		}
 	} else {
-		sel = sel[:length]
+		_ = converted[length-1]
+		_ = sel[length-1]
 		var idx, destIdx, srcIdx int
 		switch ct := col.Type(); ct.Family() {
 		case types.StringFamily:
@@ -452,15 +529,21 @@ func ColVecToDatumAndDeselect(
 			if ct.Oid() == oid.T_name {
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+					//gcassert:bce
+					converted[destIdx] = v
 				}
 				return
 			}
 			for idx = 0; idx < length; idx++ {
 				destIdx = idx
+				//gcassert:bce
 				srcIdx = sel[idx]
-				converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+				v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+				//gcassert:bce
+				converted[destIdx] = v
 			}
 		case types.BoolFamily:
 			switch ct.Width() {
@@ -469,8 +552,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bool()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := tree.MakeDBool(tree.DBool(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.IntFamily:
@@ -479,23 +566,35 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Int16()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			case 32:
 				typedCol := col.Int32()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			case -1:
 			default:
 				typedCol := col.Int64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInt(tree.DInt(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.FloatFamily:
@@ -505,8 +604,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Float64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDFloat(tree.DFloat(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.DecimalFamily:
@@ -516,13 +619,16 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Decimal()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
-					d.Coeff = big.Int{}
-					d.Coeff.Set(&typedCol[srcIdx].Coeff)
-					converted[destIdx] = d
+					_converted.Coeff = big.Int{}
+					_converted.Coeff.Set(&v.Coeff)
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.DateFamily:
@@ -532,8 +638,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Int64()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.BytesFamily:
@@ -543,10 +653,14 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bytes()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
+					v := typedCol.Get(srcIdx)
 					// Note that there is no need for a copy since DBytes uses a string
 					// as underlying storage, which will perform the copy for us.
-					converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+					_converted := da.NewDBytes(tree.DBytes(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.UuidFamily:
@@ -556,14 +670,18 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Bytes()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
+					v := typedCol.Get(srcIdx)
 					// Note that there is no need for a copy because uuid.FromBytes
 					// will perform a copy.
-					id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+					id, err := uuid.FromBytes(v)
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
-					converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+					_converted := da.NewDUuid(tree.DUuid{UUID: id})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.TimestampFamily:
@@ -573,8 +691,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Timestamp()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.TimestampTZFamily:
@@ -584,8 +706,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Timestamp()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case types.IntervalFamily:
@@ -595,8 +721,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Interval()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					_converted := da.NewDInterval(tree.DInterval{Duration: v})
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -607,8 +737,12 @@ func ColVecToDatumAndDeselect(
 				typedCol := col.Datum()
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+					v := typedCol.Get(srcIdx)
+					_converted := v.(*coldataext.Datum).Datum
+					//gcassert:bce
+					converted[destIdx] = _converted
 				}
 			}
 		}
@@ -622,10 +756,13 @@ func ColVecToDatumAndDeselect(
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
-			sel = sel[:length]
+			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -634,24 +771,30 @@ func ColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						converted[destIdx] = v
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
+					//gcassert:bce
 					destIdx = sel[idx]
+					//gcassert:bce
 					srcIdx = sel[idx]
 					if nulls.NullAt(srcIdx) {
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					converted[destIdx] = v
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -659,13 +802,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := tree.MakeDBool(tree.DBool(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntFamily:
@@ -673,36 +820,48 @@ func ColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.FloatFamily:
@@ -711,13 +870,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDFloat(tree.DFloat(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DecimalFamily:
@@ -726,18 +889,21 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
-						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
-						converted[destIdx] = d
+						_converted.Coeff = big.Int{}
+						_converted.Coeff.Set(&v.Coeff)
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DateFamily:
@@ -746,13 +912,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.BytesFamily:
@@ -761,15 +931,19 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+						_converted := da.NewDBytes(tree.DBytes(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.UuidFamily:
@@ -778,19 +952,23 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+						id, err := uuid.FromBytes(v)
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+						_converted := da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampFamily:
@@ -799,13 +977,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampTZFamily:
@@ -814,13 +996,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntervalFamily:
@@ -829,13 +1015,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInterval(tree.DInterval{Duration: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -845,17 +1035,22 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
 						if nulls.NullAt(srcIdx) {
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+						v := typedCol.Get(srcIdx)
+						_converted := v.(*coldataext.Datum).Datum
+						converted[destIdx] = _converted
 					}
 				}
 			}
 		} else {
+			_ = converted[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -867,10 +1062,13 @@ func ColVecToDatum(
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						//gcassert:bce
+						converted[destIdx] = v
 					}
 					return
 				}
@@ -878,61 +1076,88 @@ func ColVecToDatum(
 					destIdx = idx
 					srcIdx = idx
 					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					//gcassert:bce
+					converted[destIdx] = v
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
 				case -1:
 				default:
 					typedCol := col.Bool()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := tree.MakeDBool(tree.DBool(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					typedCol := col.Int16()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				case 32:
 					typedCol := col.Int32()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.FloatFamily:
@@ -940,14 +1165,20 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Float64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDFloat(tree.DFloat(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DecimalFamily:
@@ -955,19 +1186,24 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Decimal()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
-						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
-						converted[destIdx] = d
+						_converted.Coeff = big.Int{}
+						_converted.Coeff.Set(&v.Coeff)
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DateFamily:
@@ -975,14 +1211,20 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Int64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.BytesFamily:
@@ -994,12 +1236,16 @@ func ColVecToDatum(
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.UuidFamily:
@@ -1011,16 +1257,20 @@ func ColVecToDatum(
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+						id, err := uuid.FromBytes(v)
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+						_converted := da.NewDUuid(tree.DUuid{UUID: id})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampFamily:
@@ -1028,14 +1278,20 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Timestamp()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampTZFamily:
@@ -1043,14 +1299,20 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Timestamp()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntervalFamily:
@@ -1058,14 +1320,20 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Interval()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInterval(tree.DInterval{Duration: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -1078,17 +1346,21 @@ func ColVecToDatum(
 						destIdx = idx
 						srcIdx = idx
 						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+						v := typedCol.Get(srcIdx)
+						_converted := v.(*coldataext.Datum).Datum
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			}
 		}
 	} else {
 		if sel != nil {
-			sel = sel[:length]
+			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -1097,16 +1369,22 @@ func ColVecToDatum(
 				bytes := col.Bytes()
 				if ct.Oid() == oid.T_name {
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						converted[destIdx] = v
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
+					//gcassert:bce
 					destIdx = sel[idx]
+					//gcassert:bce
 					srcIdx = sel[idx]
-					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					converted[destIdx] = v
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
@@ -1114,9 +1392,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bool()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := tree.MakeDBool(tree.DBool(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntFamily:
@@ -1124,24 +1406,36 @@ func ColVecToDatum(
 				case 16:
 					typedCol := col.Int16()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				case 32:
 					typedCol := col.Int32()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.FloatFamily:
@@ -1150,9 +1444,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Float64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDFloat(tree.DFloat(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DecimalFamily:
@@ -1161,14 +1459,17 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Decimal()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
-						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
-						converted[destIdx] = d
+						_converted.Coeff = big.Int{}
+						_converted.Coeff.Set(&v.Coeff)
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DateFamily:
@@ -1177,9 +1478,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Int64()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.BytesFamily:
@@ -1188,11 +1493,15 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+						_converted := da.NewDBytes(tree.DBytes(v))
+						converted[destIdx] = _converted
 					}
 				}
 			case types.UuidFamily:
@@ -1201,15 +1510,19 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Bytes()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+						id, err := uuid.FromBytes(v)
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+						_converted := da.NewDUuid(tree.DUuid{UUID: id})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampFamily:
@@ -1218,9 +1531,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampTZFamily:
@@ -1229,9 +1546,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Timestamp()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntervalFamily:
@@ -1240,9 +1561,13 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Interval()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInterval(tree.DInterval{Duration: v})
+						converted[destIdx] = _converted
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -1252,13 +1577,18 @@ func ColVecToDatum(
 				default:
 					typedCol := col.Datum()
 					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
 						destIdx = sel[idx]
+						//gcassert:bce
 						srcIdx = sel[idx]
-						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+						v := typedCol.Get(srcIdx)
+						_converted := v.(*coldataext.Datum).Datum
+						converted[destIdx] = _converted
 					}
 				}
 			}
 		} else {
+			_ = converted[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -1269,49 +1599,73 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						//gcassert:bce
+						converted[destIdx] = v
 					}
 					return
 				}
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
 					srcIdx = idx
-					converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					v := da.NewDString(tree.DString(bytes.Get(srcIdx)))
+					//gcassert:bce
+					converted[destIdx] = v
 				}
 			case types.BoolFamily:
 				switch ct.Width() {
 				case -1:
 				default:
 					typedCol := col.Bool()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = tree.MakeDBool(tree.DBool(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := tree.MakeDBool(tree.DBool(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntFamily:
 				switch ct.Width() {
 				case 16:
 					typedCol := col.Int16()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				case 32:
 					typedCol := col.Int32()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				case -1:
 				default:
 					typedCol := col.Int64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDInt(tree.DInt(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInt(tree.DInt(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.FloatFamily:
@@ -1319,10 +1673,15 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Float64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDFloat(tree.DFloat(typedCol[srcIdx]))
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDFloat(tree.DFloat(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DecimalFamily:
@@ -1330,15 +1689,19 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Decimal()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
-						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
-						converted[destIdx] = d
+						_converted.Coeff = big.Int{}
+						_converted.Coeff.Set(&v.Coeff)
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.DateFamily:
@@ -1346,10 +1709,15 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Int64()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(typedCol[srcIdx])})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDDate(tree.DDate{Date: pgdate.MakeCompatibleDateFromDisk(v)})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.BytesFamily:
@@ -1360,9 +1728,12 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
-						converted[destIdx] = da.NewDBytes(tree.DBytes(typedCol.Get(srcIdx)))
+						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.UuidFamily:
@@ -1373,13 +1744,16 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
+						v := typedCol.Get(srcIdx)
 						// Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
-						id, err := uuid.FromBytes(typedCol.Get(srcIdx))
+						id, err := uuid.FromBytes(v)
 						if err != nil {
 							colexecerror.InternalError(err)
 						}
-						converted[destIdx] = da.NewDUuid(tree.DUuid{UUID: id})
+						_converted := da.NewDUuid(tree.DUuid{UUID: id})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampFamily:
@@ -1387,10 +1761,15 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Timestamp()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDTimestamp(tree.DTimestamp{Time: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestamp(tree.DTimestamp{Time: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.TimestampTZFamily:
@@ -1398,10 +1777,15 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Timestamp()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDTimestampTZ(tree.DTimestampTZ{Time: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDTimestampTZ(tree.DTimestampTZ{Time: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case types.IntervalFamily:
@@ -1409,10 +1793,15 @@ func ColVecToDatum(
 				case -1:
 				default:
 					typedCol := col.Interval()
+					_ = typedCol.Get(length - 1)
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = da.NewDInterval(tree.DInterval{Duration: typedCol[srcIdx]})
+						//gcassert:bce
+						v := typedCol.Get(srcIdx)
+						_converted := da.NewDInterval(tree.DInterval{Duration: v})
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
@@ -1424,7 +1813,10 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						converted[destIdx] = typedCol.Get(srcIdx).(*coldataext.Datum).Datum
+						v := typedCol.Get(srcIdx)
+						_converted := v.(*coldataext.Datum).Datum
+						//gcassert:bce
+						converted[destIdx] = _converted
 					}
 				}
 			}

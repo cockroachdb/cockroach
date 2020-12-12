@@ -23,8 +23,8 @@ const countAggTmpl = "pkg/sql/colexec/colexecagg/count_agg_tmpl.go"
 func genCountAgg(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_COUNTKIND", "{{.CountKind}}")
 
-	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 4)
-	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4}}`)
+	accumulateSum := makeFunctionRegex("_ACCUMULATE_COUNT", 5)
+	s = accumulateSum.ReplaceAllString(s, `{{template "accumulateCount" buildDict "Global" . "ColWithNulls" $4 "HasSel" $5}}`)
 
 	s = replaceManipulationFuncs(s)
 

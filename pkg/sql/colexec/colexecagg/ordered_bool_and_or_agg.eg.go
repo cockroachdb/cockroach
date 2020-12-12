@@ -50,12 +50,16 @@ func (a *boolAndOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							if !a.sawNonNull {
@@ -73,13 +77,15 @@ func (a *boolAndOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
 						a.curAgg = a.curAgg && col[i]
 						a.sawNonNull = true
 					}
 
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							if !a.sawNonNull {
@@ -97,6 +103,7 @@ func (a *boolAndOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
 						a.curAgg = a.curAgg && col[i]
 						a.sawNonNull = true
 					}
@@ -232,12 +239,16 @@ func (a *boolOrOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							if !a.sawNonNull {
@@ -255,13 +266,15 @@ func (a *boolOrOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
 						a.curAgg = a.curAgg || col[i]
 						a.sawNonNull = true
 					}
 
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							if !a.sawNonNull {
@@ -279,6 +292,7 @@ func (a *boolOrOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
 						a.curAgg = a.curAgg || col[i]
 						a.sawNonNull = true
 					}

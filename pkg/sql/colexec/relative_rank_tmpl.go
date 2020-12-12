@@ -134,8 +134,11 @@ const (
 // partitions. It looks at i'th partitionCol value to check whether a new
 // partition begins at index i, and if so, it records the already computed
 // size of the previous partition into partitionsState.runningSizes vector.
-func _COMPUTE_PARTITIONS_SIZES() { // */}}
+func _COMPUTE_PARTITIONS_SIZES(_HAS_SEL bool) { // */}}
 	// {{define "computePartitionsSizes" -}}
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if partitionCol[i] {
 		// We have encountered a start of a new partition, so we
 		// need to save the computed size of the previous one
@@ -172,8 +175,11 @@ func _COMPUTE_PARTITIONS_SIZES() { // */}}
 // peer groups. It looks at i'th peersCol value to check whether a new
 // peer group begins at index i, and if so, it records the already computed
 // size of the previous peer group into peerGroupsState.runningSizes vector.
-func _COMPUTE_PEER_GROUPS_SIZES() { // */}}
+func _COMPUTE_PEER_GROUPS_SIZES(_HAS_SEL bool) { // */}}
 	// {{define "computePeerGroupsSizes" -}}
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if peersCol[i] {
 		// We have encountered a start of a new peer group, so we
 		// need to save the computed size of the previous one
@@ -439,11 +445,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 			if sel != nil {
 				for _, i := range sel[:n] {
-					_COMPUTE_PARTITIONS_SIZES()
+					_COMPUTE_PARTITIONS_SIZES(true)
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
-					_COMPUTE_PARTITIONS_SIZES()
+					_COMPUTE_PARTITIONS_SIZES(false)
 				}
 			}
 			// {{else}}
@@ -460,11 +467,12 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			}
 			if sel != nil {
 				for _, i := range sel[:n] {
-					_COMPUTE_PEER_GROUPS_SIZES()
+					_COMPUTE_PEER_GROUPS_SIZES(true)
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
-					_COMPUTE_PEER_GROUPS_SIZES()
+					_COMPUTE_PEER_GROUPS_SIZES(false)
 				}
 			}
 			// {{end}}
@@ -517,18 +525,22 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			// {{if .HasPartition}}
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			// {{end}}
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
 				// {{if .HasPartition}}
+				//gcassert:bce
 				if partitionCol[i] {
 					if r.partitionsState.idx == r.partitionsState.dequeuedSizes.Length() {
 						if r.partitionsState.dequeuedSizes, err = r.partitionsState.dequeue(ctx); err != nil {
@@ -556,6 +568,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				// r.numTuplesInPartition already contains the correct number.
 				// {{end}}
 
+				//gcassert:bce
 				if peersCol[i] {
 					// {{if .IsPercentRank}}
 					r.rank += r.rankIncrement
@@ -582,13 +595,16 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				// {{if .IsPercentRank}}
 				if r.numTuplesInPartition == 1 {
 					// There is a single tuple in the partition, so we return 0, per spec.
+					//gcassert:bce
 					relativeRankOutputCol[i] = 0
 				} else {
+					//gcassert:bce
 					relativeRankOutputCol[i] = float64(r.rank-1) / float64(r.numTuplesInPartition-1)
 				}
 				r.rankIncrement++
 				// {{end}}
 				// {{if .IsCumeDist}}
+				//gcassert:bce
 				relativeRankOutputCol[i] = float64(r.numPrecedingTuples+r.numPeers) / float64(r.numTuplesInPartition)
 				// {{end}}
 			}
