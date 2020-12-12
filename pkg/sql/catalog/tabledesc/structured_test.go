@@ -202,6 +202,8 @@ func TestValidateTableDesc(t *testing.T) {
 
 	ctx := context.Background()
 
+	computedExpr := "1 + 1"
+
 	testData := []struct {
 		err  string
 		desc descpb.TableDescriptor
@@ -231,6 +233,18 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 0},
 				},
 				NextColumnID: 2,
+			}},
+		{`virtual column "virt" is not computed`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "virt", Virtual: true},
+				},
+				NextColumnID: 3,
 			}},
 		{`invalid column ID 0`,
 			descpb.TableDescriptor{
@@ -400,7 +414,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`column 1 is not in any column family`,
+		{`column "bar" is not in any column family`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -429,6 +443,23 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 1, Name: "qux", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
 				},
 				NextColumnID: 2,
+				NextFamilyID: 2,
+			}},
+		{`virtual computed column "virt" cannot be part of a family`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "virt", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "fam1", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+					{ID: 1, Name: "fam2", ColumnIDs: []descpb.ColumnID{2}, ColumnNames: []string{"virt"}},
+				},
+				NextColumnID: 3,
 				NextFamilyID: 2,
 			}},
 		{`table must contain a primary key`,

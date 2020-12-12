@@ -49,11 +49,11 @@ func (c *Column) Ordinal() int {
 // dropped and then re-added with the same name; the new column will have a
 // different ID. See the comment for StableID for more detail.
 //
-// Virtual columns don't have stable IDs; for these columns ColID() must not be
-// called.
+// Virtual inverted columns don't have stable IDs; for these columns ColID()
+// must not be called.
 func (c *Column) ColID() StableID {
-	if c.kind.IsVirtual() {
-		panic(errors.AssertionFailedf("virtual columns have no StableID"))
+	if c.kind == VirtualInverted {
+		panic(errors.AssertionFailedf("virtual inverted columns have no StableID"))
 	}
 	return c.stableID
 }
