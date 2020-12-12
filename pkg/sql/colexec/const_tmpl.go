@@ -121,12 +121,12 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			col := col
 			if sel := batch.Selection(); sel != nil {
 				for _, i := range sel[:n] {
-					execgen.SET(col, i, c.constVal)
+					execgen.SET(col, i, c.constVal, false)
 				}
 			} else {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					execgen.SET(col, i, c.constVal)
+					execgen.SET(col, i, c.constVal, true)
 				}
 			}
 		},

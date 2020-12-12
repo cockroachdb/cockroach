@@ -47,6 +47,7 @@ func _ROWS_TO_COL_VEC(
 ) { // */}}
 	// {{define "rowsToColVec" -}}
 	col := vec.TemplateType()
+	_ = col.Get(len(rows) - 1)
 	var v interface{}
 	for i := range rows {
 		row := rows[i]
@@ -62,7 +63,7 @@ func _ROWS_TO_COL_VEC(
 			_PRELUDE(datum)
 			v = _CONVERT(datum)
 			castV := v.(_GOTYPE)
-			_SET(col, i, castV)
+			_SET(col, i, castV, true)
 		}
 	}
 	// {{end}}
@@ -81,6 +82,9 @@ func EncDatumRowsToColVec(
 	t *types.T,
 	alloc *rowenc.DatumAlloc,
 ) error {
+	if len(rows) == 0 {
+		return nil
+	}
 	var err error
 	allocator.PerformOperation(
 		[]coldata.Vec{vec},

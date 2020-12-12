@@ -124,6 +124,9 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 		// phase.
 		copy(c.buffered[nRows], row)
 	}
+	if nRows == 0 {
+		return coldata.ZeroBatch
+	}
 
 	// Check if we have buffered more rows than the current allocation size
 	// and increase it if so.

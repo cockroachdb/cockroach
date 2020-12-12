@@ -171,7 +171,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 							srcCol := vec._TYPE()
 							outCol := o.out_TYPECols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							execgen.SET(outCol, outputIdx, v)
+							execgen.SET(outCol, outputIdx, v, false)
 							// {{end}}
 						}
 						// {{end}}

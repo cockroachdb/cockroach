@@ -40,7 +40,7 @@ func COPYVAL(dest, src interface{}) {
 }
 
 // SET is a template function.
-func SET(target, i, new interface{}) {
+func SET(target, i, new, assertBCE interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
 }
 

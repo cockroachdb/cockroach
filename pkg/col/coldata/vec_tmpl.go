@@ -112,11 +112,11 @@ func _COPY_WITH_SEL(
 				// {{if .SelOnDest}}
 				m.nulls.UnsetNull(selIdx)
 				// {{with .Global}}
-				execgen.SET(toCol, selIdx, v)
+				execgen.SET(toCol, selIdx, v, false)
 				// {{end}}
 				// {{else}}
 				// {{with .Global}}
-				execgen.SET(toCol, i+args.DestIdx, v)
+				execgen.SET(toCol, i+args.DestIdx, v, false)
 				// {{end}}
 				// {{end}}
 			}
@@ -131,11 +131,11 @@ func _COPY_WITH_SEL(
 		// {{end}}
 		// {{if .SelOnDest}}
 		// {{with .Global}}
-		execgen.SET(toCol, selIdx, v)
+		execgen.SET(toCol, selIdx, v, false)
 		// {{end}}
 		// {{else}}
 		// {{with .Global}}
-		execgen.SET(toCol, i+args.DestIdx, v)
+		execgen.SET(toCol, i+args.DestIdx, v, false)
 		// {{end}}
 		// {{end}}
 	}
@@ -215,7 +215,7 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 		case _TYPE_WIDTH:
 			target := v.TemplateType()
 			newVal := elem.(_GOTYPE)
-			execgen.SET(target, rowIdx, newVal)
+			execgen.SET(target, rowIdx, newVal, false)
 			// {{end}}
 		}
 		// {{end}}

@@ -727,7 +727,7 @@ func _LEFT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 						} else {
 							val = srcCol.Get(srcStartIdx)
 							for i := 0; i < toAppend; i++ {
-								execgen.SET(outCol, outStartIdx, val)
+								execgen.SET(outCol, outStartIdx, val, false)
 								outStartIdx++
 							}
 						}
@@ -908,7 +908,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
 								} else {
 									val = srcCol.Get(srcStartIdx)
 									for i := 0; i < toAppend; i++ {
-										execgen.SET(outCol, outStartIdx, val)
+										execgen.SET(outCol, outStartIdx, val, false)
 										outStartIdx++
 									}
 								}
@@ -1043,7 +1043,7 @@ func _RIGHT_SWITCH(_JOIN_TYPE joinTypeInfo, _HAS_SELECTION bool) { // */}}
 								outNulls.SetNull(outStartIdx)
 							} else {
 								v := srcCol.Get(srcIdx)
-								execgen.SET(outCol, outStartIdx, v)
+								execgen.SET(outCol, outStartIdx, v, false)
 							}
 						} else {
 							out.Copy(
@@ -1199,7 +1199,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
 										outNulls.SetNull(outStartIdx)
 									} else {
 										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
-										execgen.SET(outCol, outStartIdx, v)
+										execgen.SET(outCol, outStartIdx, v, false)
 									}
 								} else {
 									out.Copy(

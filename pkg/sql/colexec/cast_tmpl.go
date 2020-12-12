@@ -65,7 +65,7 @@ func _CAST(to, from, fromCol, toType interface{}) {
 }
 
 // This will be replaced with execgen.SET.
-func _R_SET(to, from interface{}) {
+func _R_SET(toCol, toIdx, value, assertBCE interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(""))
 }
 
@@ -272,7 +272,11 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 		v := inputCol.Get(tupleIdx)
 		var r _R_GO_TYPE
 		_CAST(r, v, inputCol, c.toType)
-		_R_SET(outputCol, tupleIdx, r)
+		// {{if $hasSel}}
+		_R_SET(outputCol, tupleIdx, r, false)
+		// {{else}}
+		_R_SET(outputCol, tupleIdx, r, true)
+		// {{end}}
 		// {{if eq .Right.VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on
 		// non-null tuple, so we need to check that case after the cast was

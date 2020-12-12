@@ -281,7 +281,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 				r = append(r, %s...)
 				%s
 			}
-			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r"))
+			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r", "false" /* assertBCE */))
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -770,7 +770,7 @@ func executeBinOpOnDatums(prelude, targetElem, leftColdataExtDatum, rightDatumEl
 			}
 			%s
 		`, prelude, leftColdataExtDatum, rightDatumElem, idxVariable,
-		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res"),
+		set(typeconv.DatumVecCanonicalTypeFamily, vecVariable, idxVariable, "_res", "false" /* assertBCE */),
 	)
 }
 

@@ -31,7 +31,7 @@ var dataManipulationReplacementInfos = []dataManipulationReplacementInfo{
 	},
 	{
 		templatePlaceholder: "execgen.SET",
-		numArgs:             3,
+		numArgs:             4,
 		replaceWith:         "Set",
 	},
 	{

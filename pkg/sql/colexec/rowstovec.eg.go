@@ -42,6 +42,9 @@ func EncDatumRowsToColVec(
 	t *types.T,
 	alloc *rowenc.DatumAlloc,
 ) error {
+	if len(rows) == 0 {
+		return nil
+	}
 	var err error
 	allocator.PerformOperation(
 		[]coldata.Vec{vec},
@@ -52,6 +55,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bool()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -67,6 +71,7 @@ func EncDatumRowsToColVec(
 
 							v = bool(*datum.(*tree.DBool))
 							castV := v.(bool)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -75,6 +80,7 @@ func EncDatumRowsToColVec(
 				switch t.Width() {
 				case 16:
 					col := vec.Int16()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -90,11 +96,13 @@ func EncDatumRowsToColVec(
 
 							v = int16(*datum.(*tree.DInt))
 							castV := v.(int16)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
 				case 32:
 					col := vec.Int32()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -110,12 +118,14 @@ func EncDatumRowsToColVec(
 
 							v = int32(*datum.(*tree.DInt))
 							castV := v.(int32)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
 				case -1:
 				default:
 					col := vec.Int64()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -131,6 +141,7 @@ func EncDatumRowsToColVec(
 
 							v = int64(*datum.(*tree.DInt))
 							castV := v.(int64)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -140,6 +151,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Float64()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -155,6 +167,7 @@ func EncDatumRowsToColVec(
 
 							v = float64(*datum.(*tree.DFloat))
 							castV := v.(float64)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -164,6 +177,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Decimal()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -188,6 +202,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Int64()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -203,6 +218,7 @@ func EncDatumRowsToColVec(
 
 							v = datum.(*tree.DDate).UnixEpochDaysWithOrig()
 							castV := v.(int64)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -212,6 +228,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Timestamp()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -227,6 +244,7 @@ func EncDatumRowsToColVec(
 
 							v = datum.(*tree.DTimestamp).Time
 							castV := v.(time.Time)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -236,6 +254,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Interval()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -251,6 +270,7 @@ func EncDatumRowsToColVec(
 
 							v = datum.(*tree.DInterval).Duration
 							castV := v.(duration.Duration)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -260,6 +280,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -288,6 +309,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -312,6 +334,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Timestamp()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -327,6 +350,7 @@ func EncDatumRowsToColVec(
 
 							v = datum.(*tree.DTimestampTZ).Time
 							castV := v.(time.Time)
+							//gcassert:bce
 							col[i] = castV
 						}
 					}
@@ -336,6 +360,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]
@@ -361,6 +386,7 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Datum()
+					_ = col.Get(len(rows) - 1)
 					var v interface{}
 					for i := range rows {
 						row := rows[i]

@@ -58,8 +58,8 @@ func (i rowsToVecWidthTmplInfo) Convert(datum string) string {
 	return fmt.Sprintf(i.ConversionTmpl, datum)
 }
 
-func (i rowsToVecWidthTmplInfo) Set(col, idx, castV string) string {
-	return set(i.canonicalTypeFamily, col, idx, castV)
+func (i rowsToVecWidthTmplInfo) Set(col, idx, castV, assertBCE string) string {
+	return set(i.canonicalTypeFamily, col, idx, castV, assertBCE)
 }
 
 // Remove unused warnings.
@@ -117,8 +117,8 @@ func genRowsToVec(inputFileContents string, wr io.Writer) error {
 	s = preludeRe.ReplaceAllString(s, makeTemplateFunctionCall("Prelude", 1))
 	convertRe := makeFunctionRegex("_CONVERT", 1)
 	s = convertRe.ReplaceAllString(s, makeTemplateFunctionCall("Convert", 1))
-	setRe := makeFunctionRegex("_SET", 3)
-	s = setRe.ReplaceAllString(s, makeTemplateFunctionCall("Set", 3))
+	setRe := makeFunctionRegex("_SET", 4)
+	s = setRe.ReplaceAllString(s, makeTemplateFunctionCall("Set", 4))
 
 	tmpl, err := template.New("rowsToVec").Parse(s)
 	if err != nil {
