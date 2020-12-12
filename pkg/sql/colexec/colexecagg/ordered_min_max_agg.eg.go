@@ -118,10 +118,10 @@ func (a *minBoolOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -147,11 +147,13 @@ func (a *minBoolOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -196,11 +198,13 @@ func (a *minBoolOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -397,10 +401,10 @@ func (a *minBytesOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -647,10 +651,10 @@ func (a *minDecimalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -676,11 +680,13 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -717,11 +723,13 @@ func (a *minDecimalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -894,10 +902,10 @@ func (a *minInt16OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -923,11 +931,13 @@ func (a *minInt16OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -975,11 +985,13 @@ func (a *minInt16OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1185,10 +1197,10 @@ func (a *minInt32OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -1214,11 +1226,13 @@ func (a *minInt32OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1266,11 +1280,13 @@ func (a *minInt32OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1476,10 +1492,10 @@ func (a *minInt64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -1505,11 +1521,13 @@ func (a *minInt64OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1557,11 +1575,13 @@ func (a *minInt64OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1767,10 +1787,10 @@ func (a *minFloat64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -1796,11 +1816,13 @@ func (a *minFloat64OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -1856,11 +1878,13 @@ func (a *minFloat64OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2090,10 +2114,10 @@ func (a *minTimestampOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -2119,11 +2143,13 @@ func (a *minTimestampOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2167,11 +2193,13 @@ func (a *minTimestampOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2365,10 +2393,10 @@ func (a *minIntervalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -2394,11 +2422,13 @@ func (a *minIntervalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2435,11 +2465,13 @@ func (a *minIntervalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2616,10 +2648,10 @@ func (a *minDatumOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -2880,10 +2912,10 @@ func (a *maxBoolOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -2909,11 +2941,13 @@ func (a *maxBoolOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -2958,11 +2992,13 @@ func (a *maxBoolOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -3159,10 +3195,10 @@ func (a *maxBytesOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -3409,10 +3445,10 @@ func (a *maxDecimalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -3438,11 +3474,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -3479,11 +3517,13 @@ func (a *maxDecimalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg.Set(&val)
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -3656,10 +3696,10 @@ func (a *maxInt16OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -3685,11 +3725,13 @@ func (a *maxInt16OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -3737,11 +3779,13 @@ func (a *maxInt16OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -3947,10 +3991,10 @@ func (a *maxInt32OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -3976,11 +4020,13 @@ func (a *maxInt32OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4028,11 +4074,13 @@ func (a *maxInt32OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4238,10 +4286,10 @@ func (a *maxInt64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -4267,11 +4315,13 @@ func (a *maxInt64OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4319,11 +4369,13 @@ func (a *maxInt64OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4529,10 +4581,10 @@ func (a *maxFloat64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -4558,11 +4610,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4618,11 +4672,13 @@ func (a *maxFloat64OrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4852,10 +4908,10 @@ func (a *maxTimestampOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -4881,11 +4937,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -4929,11 +4987,13 @@ func (a *maxTimestampOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -5127,10 +5187,10 @@ func (a *maxIntervalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)
@@ -5156,11 +5216,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -5197,11 +5259,13 @@ func (a *maxIntervalOrderedAgg) Compute(
 					isNull = false
 					if !isNull {
 						if !a.foundNonNullForCurrentGroup {
+							//gcassert:bce
 							val := col.Get(i)
 							a.curAgg = val
 							a.foundNonNullForCurrentGroup = true
 						} else {
 							var cmp bool
+							//gcassert:bce
 							candidate := col.Get(i)
 
 							{
@@ -5378,10 +5442,10 @@ func (a *maxDatumOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
 			_ = col.Get(inputLen - 1)

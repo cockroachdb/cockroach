@@ -392,10 +392,6 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 bool
@@ -432,6 +428,10 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -486,10 +486,6 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 bool
@@ -863,10 +859,6 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 []byte
@@ -895,6 +887,10 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -941,10 +937,6 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 []byte
@@ -1278,10 +1270,6 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 apd.Decimal
@@ -1310,6 +1298,10 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1356,10 +1348,6 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 apd.Decimal
@@ -1704,10 +1692,6 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 int16
@@ -1747,6 +1731,10 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -1804,10 +1792,6 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int16
@@ -2207,10 +2191,6 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 int32
@@ -2250,6 +2230,10 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2307,10 +2291,6 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int32
@@ -2710,10 +2690,6 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 int64
@@ -2753,6 +2729,10 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -2810,10 +2790,6 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 int64
@@ -3221,10 +3197,6 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 float64
@@ -3272,6 +3244,10 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -3337,10 +3313,6 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 float64
@@ -3776,10 +3748,6 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 time.Time
@@ -3815,6 +3783,10 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -3868,10 +3840,6 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 time.Time
@@ -4240,10 +4208,6 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 duration.Duration
@@ -4272,6 +4236,10 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -4318,10 +4286,6 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 duration.Duration
@@ -4657,10 +4621,6 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				{
 					var __retval_0 interface{}
@@ -4691,6 +4651,10 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				{
@@ -4739,10 +4703,6 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				{
 					var __retval_0 interface{}

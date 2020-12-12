@@ -25,7 +25,11 @@ func populateEqChains(
 	op *hashAggregator, batchLength int, sel []int, headToEqChainsID []int, useSel bool,
 ) int {
 	eqChainsCount := 0
-	for i, headID := range op.ht.probeScratch.headID[:batchLength] {
+	_ = op.ht.probeScratch.headID[batchLength-1]
+	if useSel {
+		_ = sel[batchLength-1]
+	}
+	for i := 0; i < batchLength; i++ {
 		// Since we're essentially probing the batch against itself, headID
 		// cannot be 0, so we don't need to check that. What we have here is
 		// the tuple at position i belongs to the same equality chain as the
@@ -35,6 +39,7 @@ func populateEqChains(
 		// eqChainsID = i + 1. headToEqChainsID is a mapping from headID to
 		// eqChainsID that we're currently building in which eqChainsID
 		// indicates that the current tuple is the head of its equality chain.
+		headID := op.ht.probeScratch.headID[i]
 		if eqChainsID := headToEqChainsID[headID-1]; eqChainsID == 0 {
 			// This tuple is the head of the new equality chain, so we include
 			// it in updated selection vector. We also compact the hash buffer
@@ -74,6 +79,9 @@ func (op *hashAggregator) populateEqChains(
 	b coldata.Batch,
 ) (eqChainsCount int, eqChainsHeadsSel []int) {
 	batchLength := b.Length()
+	if batchLength == 0 {
+		return
+	}
 	headIDToEqChainsID := op.scratch.intSlice[:batchLength]
 	copy(headIDToEqChainsID, zeroIntColumn)
 	sel := b.Selection()

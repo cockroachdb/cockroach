@@ -174,7 +174,12 @@ func (r *_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			_COMPUTE_RANK()
 		}
 	} else {
-		for i := range rankCol[:n] {
+		// {{if .HasPartition}}
+		_ = partitionCol[n-1]
+		// {{end}}
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
 			_COMPUTE_RANK()
 		}
 	}

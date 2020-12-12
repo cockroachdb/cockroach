@@ -58,7 +58,8 @@ func (a *boolAndHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curAgg = a.curAgg && col[i]
+						v := col[i]
+						a.curAgg = a.curAgg && v
 						a.sawNonNull = true
 					}
 
@@ -69,7 +70,8 @@ func (a *boolAndHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curAgg = a.curAgg && col[i]
+						v := col[i]
+						a.curAgg = a.curAgg && v
 						a.sawNonNull = true
 					}
 
@@ -152,7 +154,8 @@ func (a *boolOrHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curAgg = a.curAgg || col[i]
+						v := col[i]
+						a.curAgg = a.curAgg || v
 						a.sawNonNull = true
 					}
 
@@ -163,7 +166,8 @@ func (a *boolOrHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curAgg = a.curAgg || col[i]
+						v := col[i]
+						a.curAgg = a.curAgg || v
 						a.sawNonNull = true
 					}
 

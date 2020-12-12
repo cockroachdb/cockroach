@@ -291,11 +291,13 @@ func (r *percentRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
@@ -515,6 +517,7 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numTuplesInPartition++
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
 					if partitionCol[i] {
 						// We have encountered a start of a new partition, so we
@@ -583,12 +586,15 @@ func (r *percentRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
@@ -821,6 +827,7 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numPeers++
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
 					if peersCol[i] {
 						// We have encountered a start of a new peer group, so we
@@ -888,11 +895,13 @@ func (r *cumeDistNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
@@ -1140,6 +1149,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numTuplesInPartition++
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
 					if partitionCol[i] {
 						// We have encountered a start of a new partition, so we
@@ -1208,6 +1218,7 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 					r.numPeers++
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
 					if peersCol[i] {
 						// We have encountered a start of a new peer group, so we
@@ -1283,12 +1294,15 @@ func (r *cumeDistWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).

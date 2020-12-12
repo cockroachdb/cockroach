@@ -72,6 +72,8 @@ func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	// {{end}}
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing

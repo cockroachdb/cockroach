@@ -46,6 +46,8 @@ func (a *concatOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]

@@ -70,9 +70,13 @@ func (a *default_AGGKINDAgg) Compute(
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
 		if sel == nil {
+			_ = groups[inputLen-1]
 			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
-				_ADD_TUPLE(a, a.groups, a.nulls, tupleIdx)
+				_ADD_TUPLE(a, groups, a.nulls, tupleIdx)
 			}
 		} else
 		// {{end}}
@@ -211,7 +215,7 @@ func _ADD_TUPLE(a *default_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, tupl
 	// {{define "addTuple" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[tupleIdx] {
+	if groups[tupleIdx] {
 		if !a.isFirstGroup {
 			res, err := a.fn.Result()
 			if err != nil {

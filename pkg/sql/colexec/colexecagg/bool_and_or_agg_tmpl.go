@@ -84,7 +84,10 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
 		// hash aggregation because the hash aggregator always uses non-nil
@@ -92,14 +95,14 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
-					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true, false)
 				}
 			} else {
-				for i := range col {
-					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+				for i := 0; i < inputLen; i++ {
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false, false)
 				}
 			}
 		} else
@@ -108,11 +111,11 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Compute(
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
-					_ACCUMULATE_BOOLEAN(a, nulls, i, true)
+					_ACCUMULATE_BOOLEAN(a, nulls, i, true, true)
 				}
 			} else {
 				for _, i := range sel {
-					_ACCUMULATE_BOOLEAN(a, nulls, i, false)
+					_ACCUMULATE_BOOLEAN(a, nulls, i, false, true)
 				}
 			}
 		}
@@ -169,7 +172,9 @@ func (a *bool_OP_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 
 // {{/*
 // _ACCUMULATE_BOOLEAN aggregates the boolean value at index i into the boolean aggregate.
-func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _ACCUMULATE_BOOLEAN(
+	a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool, _HAS_SEL bool,
+) { // */}}
 	// {{define "accumulateBoolean" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
@@ -197,8 +202,12 @@ func _ACCUMULATE_BOOLEAN(a *bool_OP_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	isNull = false
 	// {{end}}
 	if !isNull {
+		// {{if not .HasSel}}
+		//gcassert:bce
+		// {{end}}
+		v := col[i]
 		// {{with .Global}}
-		_ASSIGN_BOOL_OP(a.curAgg, a.curAgg, col[i])
+		_ASSIGN_BOOL_OP(a.curAgg, a.curAgg, v)
 		// {{end}}
 		a.sawNonNull = true
 	}

@@ -82,7 +82,8 @@ func (r *rowNumberNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			rowNumberCol[i] = r.rowNumber
 		}
 	} else {
-		for i := range rowNumberCol[:n] {
+		_ = rowNumberCol[n-1]
+		for i := 0; i < n; i++ {
 			r.rowNumber++
 			rowNumberCol[i] = r.rowNumber
 		}
@@ -121,7 +122,9 @@ func (r *rowNumberWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			rowNumberCol[i] = r.rowNumber
 		}
 	} else {
-		for i := range rowNumberCol[:n] {
+		_ = partitionCol[n-1]
+		_ = rowNumberCol[n-1]
+		for i := 0; i < n; i++ {
 			if partitionCol[i] {
 				r.rowNumber = 0
 			}

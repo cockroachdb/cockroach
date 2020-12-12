@@ -497,11 +497,13 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 	// {{define "updateSelBody" -}}
 	batchLength := b.Length()
+	_ = ht.probeScratch.headID[batchLength-1]
+	_ = ht.probeScratch.hashBuffer[batchLength-1]
 	// Reuse the buffer allocated for distinct.
 	visited := ht.probeScratch.distinct
 	copy(visited, zeroBoolColumn)
-	for i, headID := range ht.probeScratch.headID[:batchLength] {
-		if headID != 0 {
+	for i := 0; i < batchLength; i++ {
+		if headID := ht.probeScratch.headID[i]; headID != 0 {
 			if hasVisited := visited[headID-1]; !hasVisited {
 				// {{if .UseSel}}
 				sel[distinctCount] = sel[headID-1]
@@ -529,6 +531,9 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 // key index will be used. The duplicated keyIDs will be discarded. The
 // hashBuffer will also compact and discard hash values of duplicated keys.
 func (ht *hashTable) updateSel(b coldata.Batch) {
+	if b.Length() == 0 {
+		return
+	}
 	distinctCount := 0
 	if sel := b.Selection(); sel != nil {
 		_UPDATE_SEL_BODY(true)

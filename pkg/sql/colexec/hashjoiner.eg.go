@@ -180,7 +180,7 @@ func collectLeftAnti_false(
 	hj *hashJoiner, batchSize int, nResults int, batch coldata.Batch, sel []int) int {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		if currentID == 0 {
 			{
@@ -205,7 +205,7 @@ func collectLeftAnti_true(
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
 	_ = sel[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		if currentID == 0 {
 			{
@@ -232,7 +232,7 @@ func collectLeftAnti_true(
 func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
 			hj.probeState.buildRowMatched[currentID-1] = true
@@ -249,7 +249,7 @@ func distinctCollectProbeOuter_false(hj *hashJoiner, batchSize int, sel []int) {
 	_ = hj.probeState.probeRowUnmatched[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
@@ -282,7 +282,7 @@ func distinctCollectProbeOuter_true(hj *hashJoiner, batchSize int, sel []int) {
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
 	_ = sel[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
@@ -316,7 +316,7 @@ func distinctCollectProbeNoOuter_false(
 	_ = hj.ht.probeScratch.groupID[batchSize-1]
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		if hj.ht.probeScratch.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = int(hj.ht.probeScratch.groupID[i] - 1)
@@ -342,7 +342,7 @@ func distinctCollectProbeNoOuter_true(
 	_ = hj.probeState.buildIdx[batchSize-1]
 	_ = hj.probeState.probeIdx[batchSize-1]
 	_ = sel[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		if hj.ht.probeScratch.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = int(hj.ht.probeScratch.groupID[i] - 1)
@@ -365,7 +365,7 @@ func distinctCollectProbeNoOuter_true(
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	nResults := 0
 
 	if hj.spec.joinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)
@@ -401,7 +401,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	nResults := 0
 
 	if hj.spec.joinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)

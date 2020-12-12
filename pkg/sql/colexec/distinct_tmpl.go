@@ -256,24 +256,20 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for _, idx := range sel {
 				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 			}
 		}
 	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
 				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
 			}
 		} else {
-			// Eliminate bounds checks for outputCol[idx].
-			_ = outputCol[n-1]
-			// Eliminate bounds checks for col[idx].
-			_ = col.Get(n - 1)
 			for idx := 0; idx < n; idx++ {
 				lastVal = checkDistinct(idx, idx, lastVal, col, outputCol)
 			}

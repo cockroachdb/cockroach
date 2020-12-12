@@ -165,7 +165,10 @@ func (p *windowPeerGrouperWithPartitionOp) Next(ctx context.Context) coldata.Bat
 		// The new peer group begins either when a new partition begins (in which
 		// case partitionCol[i] is 'true') or when i'th tuple is different from
 		// i-1'th (in which case p.distinctCol[i] is 'true').
-		for i := range peersCol[:n] {
+		_ = peersCol[n-1]
+		_ = partitionCol[n-1]
+		_ = p.distinctCol[n-1]
+		for i := 0; i < n; i++ {
 			peersCol[i] = partitionCol[i] || p.distinctCol[i]
 		}
 	}

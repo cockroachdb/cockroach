@@ -66,15 +66,15 @@ func (a *sumIntInt16OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -109,7 +109,7 @@ func (a *sumIntInt16OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -286,15 +286,15 @@ func (a *sumIntInt32OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -329,7 +329,7 @@ func (a *sumIntInt32OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -506,15 +506,15 @@ func (a *sumIntInt64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -549,7 +549,7 @@ func (a *sumIntInt64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {

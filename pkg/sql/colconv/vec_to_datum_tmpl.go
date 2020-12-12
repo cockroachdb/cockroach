@@ -209,6 +209,9 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
@@ -228,6 +231,9 @@ func ColVecToDatumAndDeselect(
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
@@ -292,8 +298,9 @@ func _VEC_TO_DATUM(
 	_DESELECT bool,
 ) { // */}}
 	// {{define "vecToDatum" -}}
+	_ = converted[length-1]
 	// {{if .HasSel}}
-	sel = sel[:length]
+	_ = sel[length-1]
 	// {{end}}
 	var idx, destIdx, srcIdx int
 	switch ct := col.Type(); ct.Family() {

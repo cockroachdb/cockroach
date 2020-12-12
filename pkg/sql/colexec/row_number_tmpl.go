@@ -114,7 +114,11 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			_COMPUTE_ROW_NUMBER()
 		}
 	} else {
-		for i := range rowNumberCol[:n] {
+		// {{if .HasPartition}}
+		_ = partitionCol[n-1]
+		// {{end}}
+		_ = rowNumberCol[n-1]
+		for i := 0; i < n; i++ {
 			_COMPUTE_ROW_NUMBER()
 		}
 	}

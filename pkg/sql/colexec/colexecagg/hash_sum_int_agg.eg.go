@@ -66,9 +66,6 @@ func (a *sumIntInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -175,9 +172,6 @@ func (a *sumIntInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -284,9 +278,6 @@ func (a *sumIntInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {

@@ -125,11 +125,11 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
 		// hash aggregation because the hash aggregator always uses non-nil
@@ -137,13 +137,13 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_SUM(a, nulls, i, true)
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_SUM(a, nulls, i, false)
 				}
 			}

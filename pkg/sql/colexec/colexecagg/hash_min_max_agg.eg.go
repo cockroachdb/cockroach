@@ -118,9 +118,6 @@ func (a *minBoolHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -260,9 +257,6 @@ func (a *minBytesHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -389,9 +383,6 @@ func (a *minDecimalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -515,9 +506,6 @@ func (a *minInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -663,9 +651,6 @@ func (a *minInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -811,9 +796,6 @@ func (a *minInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -959,9 +941,6 @@ func (a *minFloat64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1123,9 +1102,6 @@ func (a *minTimestampHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1263,9 +1239,6 @@ func (a *minIntervalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1393,9 +1366,6 @@ func (a *minDatumHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1532,9 +1502,6 @@ func (a *maxBoolHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1674,9 +1641,6 @@ func (a *maxBytesHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1803,9 +1767,6 @@ func (a *maxDecimalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1929,9 +1890,6 @@ func (a *maxInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2077,9 +2035,6 @@ func (a *maxInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2225,9 +2180,6 @@ func (a *maxInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2373,9 +2325,6 @@ func (a *maxFloat64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2537,9 +2486,6 @@ func (a *maxTimestampHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Timestamp(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2677,9 +2623,6 @@ func (a *maxIntervalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -2807,9 +2750,6 @@ func (a *maxDatumHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Datum(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {

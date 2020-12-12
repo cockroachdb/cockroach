@@ -485,15 +485,23 @@ func (b *argWidthOverloadBase) Set(target, i, new string) string {
 func (b *argWidthOverloadBase) Slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
 	case types.BytesFamily:
-		// Slice is a noop for Bytes. We also add a few lines to address "unused
-		// variable" compiler errors.
-		return fmt.Sprintf(`%s
-_ = %s
-_ = %s`, target, start, end)
+		// Bytes vector doesn't support slicing.
+		colexecerror.InternalError(errors.AssertionFailedf("Slice method is attempted to be generated on Bytes vector"))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
 	}
 	return fmt.Sprintf("%s[%s:%s]", target, start, end)
+}
+
+// Sliceable returns whether the vector of b.CanonicalTypeFamily can be sliced
+// (i.e. whether it is a Golang's slice).
+func (b *argWidthOverloadBase) Sliceable() bool {
+	switch b.CanonicalTypeFamily {
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
+		return false
+	default:
+		return true
+	}
 }
 
 // CopySlice is a function that should only be used in templates.
@@ -637,6 +645,7 @@ var (
 	_    = awob.CopyVal
 	_    = awob.Set
 	_    = awob.Slice
+	_    = awob.Sliceable
 	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal

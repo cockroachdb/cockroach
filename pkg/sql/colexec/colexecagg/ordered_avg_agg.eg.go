@@ -82,15 +82,15 @@ func (a *avgInt16OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -117,11 +117,13 @@ func (a *avgInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -132,7 +134,7 @@ func (a *avgInt16OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -158,11 +160,13 @@ func (a *avgInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -203,11 +207,12 @@ func (a *avgInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -244,11 +249,12 @@ func (a *avgInt16OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -342,15 +348,15 @@ func (a *avgInt32OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -377,11 +383,13 @@ func (a *avgInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -392,7 +400,7 @@ func (a *avgInt32OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -418,11 +426,13 @@ func (a *avgInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -463,11 +473,12 @@ func (a *avgInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -504,11 +515,12 @@ func (a *avgInt32OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -602,15 +614,15 @@ func (a *avgInt64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -637,11 +649,13 @@ func (a *avgInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -652,7 +666,7 @@ func (a *avgInt64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -678,11 +692,13 @@ func (a *avgInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -723,11 +739,12 @@ func (a *avgInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -764,11 +781,12 @@ func (a *avgInt64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -858,15 +876,15 @@ func (a *avgDecimalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -893,10 +911,12 @@ func (a *avgDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -907,7 +927,7 @@ func (a *avgDecimalOrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -933,10 +953,12 @@ func (a *avgDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -977,10 +999,11 @@ func (a *avgDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1017,10 +1040,11 @@ func (a *avgDecimalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curSum, &a.curSum, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -1110,15 +1134,15 @@ func (a *avgFloat64OrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -1141,10 +1165,12 @@ func (a *avgFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(v)
 						}
 
 						a.curCount++
@@ -1152,7 +1178,7 @@ func (a *avgFloat64OrderedAgg) Compute(
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -1174,10 +1200,12 @@ func (a *avgFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						//gcassert:bce
+						v := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(v)
 						}
 
 						a.curCount++
@@ -1211,10 +1239,11 @@ func (a *avgFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(v)
 						}
 
 						a.curCount++
@@ -1244,10 +1273,11 @@ func (a *avgFloat64OrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							a.curSum = float64(a.curSum) + float64(col[i])
+							a.curSum = float64(a.curSum) + float64(v)
 						}
 
 						a.curCount++
@@ -1330,15 +1360,15 @@ func (a *avgIntervalOrderedAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
+		// Capture groups and col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
-		col := col
 		groups := a.groups
+		col := col
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -1361,13 +1391,15 @@ func (a *avgIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						//gcassert:bce
+						v := col.Get(i)
+						a.curSum = a.curSum.Add(v)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 
 					if groups[i] {
 						if !a.isFirstGroup {
@@ -1389,7 +1421,9 @@ func (a *avgIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						//gcassert:bce
+						v := col.Get(i)
+						a.curSum = a.curSum.Add(v)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}
@@ -1421,7 +1455,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						v := col.Get(i)
+						a.curSum = a.curSum.Add(v)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}
@@ -1449,7 +1484,8 @@ func (a *avgIntervalOrderedAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curSum = a.curSum.Add(col[i])
+						v := col.Get(i)
+						a.curSum = a.curSum.Add(v)
 						a.curCount++
 						a.foundNonNullForCurrentGroup = true
 					}

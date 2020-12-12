@@ -124,7 +124,9 @@ func (r *rankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := range rankCol[:n] {
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
 			if peersCol[i] {
 				r.rank += r.rankIncrement
 				r.rankIncrement = 1
@@ -195,7 +197,10 @@ func (r *rankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := range rankCol[:n] {
+		_ = partitionCol[n-1]
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
 			if partitionCol[i] {
 				// We need to reset the internal state because of the new partition.
 				// Note that the beginning of new partition necessarily starts a new
@@ -264,7 +269,9 @@ func (r *denseRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := range rankCol[:n] {
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
 			if peersCol[i] {
 				r.rank++
 				rankCol[i] = r.rank
@@ -333,7 +340,10 @@ func (r *denseRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
 			}
 		}
 	} else {
-		for i := range rankCol[:n] {
+		_ = partitionCol[n-1]
+		_ = peersCol[n-1]
+		_ = rankCol[n-1]
+		for i := 0; i < n; i++ {
 			if partitionCol[i] {
 				// We need to reset the internal state because of the new partition.
 				// Note that the beginning of new partition necessarily starts a new

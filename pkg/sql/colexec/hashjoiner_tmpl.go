@@ -97,7 +97,7 @@ func collectLeftAnti(
 	if useSel {
 		_ = sel[batchSize-1]
 	}
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		if currentID == 0 {
 			// currentID of 0 indicates that ith probing row didn't have a match, so
@@ -116,7 +116,7 @@ func collectLeftAnti(
 func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 	// Early bounds checks.
 	_ = hj.ht.probeScratch.headID[batchSize-1]
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
 			hj.probeState.buildRowMatched[currentID-1] = true
@@ -135,7 +135,7 @@ func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel 
 	if useSel {
 		_ = sel[batchSize-1]
 	}
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		id := hj.ht.probeScratch.groupID[i]
 		rowUnmatched := id == 0
@@ -164,7 +164,7 @@ func distinctCollectProbeNoOuter(
 	if useSel {
 		_ = sel[batchSize-1]
 	}
-	for i := int(0); i < batchSize; i++ {
+	for i := 0; i < batchSize; i++ {
 		if hj.ht.probeScratch.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = int(hj.ht.probeScratch.groupID[i] - 1)
@@ -179,7 +179,7 @@ func distinctCollectProbeNoOuter(
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
 func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	nResults := 0
 
 	if hj.spec.joinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)
@@ -215,7 +215,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
-	nResults := int(0)
+	nResults := 0
 
 	if hj.spec.joinType.IsRightSemiOrRightAnti() {
 		collectRightSemiAnti(hj, batchSize)

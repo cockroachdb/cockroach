@@ -79,9 +79,6 @@ func (a *sumInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -194,9 +191,6 @@ func (a *sumInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -309,9 +303,6 @@ func (a *sumInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -420,9 +411,6 @@ func (a *sumDecimalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -529,9 +517,6 @@ func (a *sumFloat64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -632,9 +617,6 @@ func (a *sumIntervalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {

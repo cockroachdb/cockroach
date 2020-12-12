@@ -205,13 +205,17 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 func ColVecToDatumAndDeselect(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
-		sel = sel[:length]
+		_ = converted[length-1]
+		_ = sel[length-1]
 		var idx, destIdx, srcIdx int
 		switch ct := col.Type(); ct.Family() {
 		case types.StringFamily:
@@ -442,7 +446,8 @@ func ColVecToDatumAndDeselect(
 			}
 		}
 	} else {
-		sel = sel[:length]
+		_ = converted[length-1]
+		_ = sel[length-1]
 		var idx, destIdx, srcIdx int
 		switch ct := col.Type(); ct.Family() {
 		case types.StringFamily:
@@ -622,10 +627,14 @@ func ColVecToDatumAndDeselect(
 func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *rowenc.DatumAlloc,
 ) {
+	if length == 0 {
+		return
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
-			sel = sel[:length]
+			_ = converted[length-1]
+			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -856,6 +865,7 @@ func ColVecToDatum(
 				}
 			}
 		} else {
+			_ = converted[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -1088,7 +1098,8 @@ func ColVecToDatum(
 		}
 	} else {
 		if sel != nil {
-			sel = sel[:length]
+			_ = converted[length-1]
+			_ = sel[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:
@@ -1259,6 +1270,7 @@ func ColVecToDatum(
 				}
 			}
 		} else {
+			_ = converted[length-1]
 			var idx, destIdx, srcIdx int
 			switch ct := col.Type(); ct.Family() {
 			case types.StringFamily:

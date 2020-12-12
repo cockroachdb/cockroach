@@ -269,6 +269,9 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 			continue
 		}
 		// {{end}}
+		// {{if not $hasSel}}
+		//gcassert:bce
+		// {{end}}
 		v := inputCol.Get(tupleIdx)
 		var r _R_GO_TYPE
 		_CAST(r, v, inputCol, c.toType)

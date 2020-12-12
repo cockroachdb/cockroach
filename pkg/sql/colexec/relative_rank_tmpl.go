@@ -442,6 +442,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					_COMPUTE_PARTITIONS_SIZES()
 				}
 			} else {
+				_ = partitionCol[n-1]
 				for i := 0; i < n; i++ {
 					_COMPUTE_PARTITIONS_SIZES()
 				}
@@ -463,6 +464,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					_COMPUTE_PEER_GROUPS_SIZES()
 				}
 			} else {
+				_ = peersCol[n-1]
 				for i := 0; i < n; i++ {
 					_COMPUTE_PEER_GROUPS_SIZES()
 				}
@@ -517,14 +519,17 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 
 			// Now we will populate the output column.
 			relativeRankOutputCol := r.output.ColVec(r.outputColIdx).Float64()
+			_ = relativeRankOutputCol[n-1]
 			// {{if .HasPartition}}
 			partitionCol := r.scratch.ColVec(r.partitionColIdx).Bool()
+			_ = partitionCol[n-1]
 			// {{end}}
 			peersCol := r.scratch.ColVec(r.peersColIdx).Bool()
+			_ = peersCol[n-1]
 			// We don't need to think about the selection vector since all the
 			// buffered up tuples have been "deselected" during the buffering
 			// stage.
-			for i := range relativeRankOutputCol[:n] {
+			for i := 0; i < n; i++ {
 				// We need to set r.numTuplesInPartition to the size of the
 				// partition that i'th tuple belongs to (which we have already
 				// computed).
