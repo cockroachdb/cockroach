@@ -87,8 +87,8 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -115,8 +115,8 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -188,8 +188,8 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -216,8 +216,8 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -289,8 +289,8 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -317,8 +317,8 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -390,8 +390,8 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -418,8 +418,8 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -491,8 +491,8 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -519,8 +519,8 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -592,8 +592,8 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -620,8 +620,8 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -693,8 +693,8 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -721,8 +721,8 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -794,8 +794,8 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -822,8 +822,8 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -895,8 +895,8 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -923,8 +923,8 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1003,8 +1003,8 @@ func (p projBitandDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1045,8 +1045,8 @@ func (p projBitandDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1125,8 +1125,8 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1153,8 +1153,8 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1226,8 +1226,8 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1254,8 +1254,8 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1327,8 +1327,8 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1355,8 +1355,8 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1428,8 +1428,8 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1456,8 +1456,8 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1529,8 +1529,8 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1557,8 +1557,8 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1630,8 +1630,8 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1658,8 +1658,8 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1731,8 +1731,8 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1759,8 +1759,8 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1832,8 +1832,8 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1860,8 +1860,8 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -1933,8 +1933,8 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1961,8 +1961,8 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2041,8 +2041,8 @@ func (p projBitorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2083,8 +2083,8 @@ func (p projBitorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2163,8 +2163,8 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2191,8 +2191,8 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2264,8 +2264,8 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2292,8 +2292,8 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2365,8 +2365,8 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2393,8 +2393,8 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2466,8 +2466,8 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2494,8 +2494,8 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2567,8 +2567,8 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2595,8 +2595,8 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2668,8 +2668,8 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2696,8 +2696,8 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2769,8 +2769,8 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2797,8 +2797,8 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2870,8 +2870,8 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2898,8 +2898,8 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -2971,8 +2971,8 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -2999,8 +2999,8 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3079,8 +3079,8 @@ func (p projBitxorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3121,8 +3121,8 @@ func (p projBitxorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3208,8 +3208,8 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3250,8 +3250,8 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3337,8 +3337,8 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3379,8 +3379,8 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3466,8 +3466,8 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3508,8 +3508,8 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3594,8 +3594,8 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3634,8 +3634,8 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3719,8 +3719,8 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3759,8 +3759,8 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3844,8 +3844,8 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -3884,8 +3884,8 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -3969,8 +3969,8 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4009,8 +4009,8 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4096,8 +4096,8 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4140,8 +4140,8 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4234,8 +4234,8 @@ func (p projPlusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4288,8 +4288,8 @@ func (p projPlusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4380,8 +4380,8 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4420,8 +4420,8 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4505,8 +4505,8 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4545,8 +4545,8 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4630,8 +4630,8 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4670,8 +4670,8 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4757,8 +4757,8 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4801,8 +4801,8 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -4895,8 +4895,8 @@ func (p projPlusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -4949,8 +4949,8 @@ func (p projPlusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5041,8 +5041,8 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5081,8 +5081,8 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5166,8 +5166,8 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5206,8 +5206,8 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5291,8 +5291,8 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5331,8 +5331,8 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5418,8 +5418,8 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5462,8 +5462,8 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5556,8 +5556,8 @@ func (p projPlusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5610,8 +5610,8 @@ func (p projPlusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5699,8 +5699,8 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5733,8 +5733,8 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -5807,8 +5807,8 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5831,8 +5831,8 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 					projCol[i] = duration.Add(p.constArg, arg)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = duration.Add(p.constArg, arg)
@@ -5900,8 +5900,8 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -5924,8 +5924,8 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 					projCol[i] = duration.Add(arg, p.constArg)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = duration.Add(arg, p.constArg)
@@ -5993,8 +5993,8 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6017,8 +6017,8 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 					projCol[i] = p.constArg.Add(arg)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Add(arg)
@@ -6101,8 +6101,8 @@ func (p projPlusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6155,8 +6155,8 @@ func (p projPlusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6252,8 +6252,8 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6302,8 +6302,8 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6397,8 +6397,8 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6447,8 +6447,8 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6542,8 +6542,8 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6592,8 +6592,8 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6687,8 +6687,8 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6737,8 +6737,8 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6828,8 +6828,8 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6870,8 +6870,8 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -6957,8 +6957,8 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -6999,8 +6999,8 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7086,8 +7086,8 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7128,8 +7128,8 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7214,8 +7214,8 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7254,8 +7254,8 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7339,8 +7339,8 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7379,8 +7379,8 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7464,8 +7464,8 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7504,8 +7504,8 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7589,8 +7589,8 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7629,8 +7629,8 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7716,8 +7716,8 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7760,8 +7760,8 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -7854,8 +7854,8 @@ func (p projMinusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -7908,8 +7908,8 @@ func (p projMinusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8000,8 +8000,8 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8040,8 +8040,8 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8125,8 +8125,8 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8165,8 +8165,8 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8250,8 +8250,8 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8290,8 +8290,8 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8377,8 +8377,8 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8421,8 +8421,8 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8515,8 +8515,8 @@ func (p projMinusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8569,8 +8569,8 @@ func (p projMinusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8661,8 +8661,8 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8701,8 +8701,8 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8786,8 +8786,8 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8826,8 +8826,8 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -8911,8 +8911,8 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -8951,8 +8951,8 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9038,8 +9038,8 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9082,8 +9082,8 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9176,8 +9176,8 @@ func (p projMinusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9230,8 +9230,8 @@ func (p projMinusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9319,8 +9319,8 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9353,8 +9353,8 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9430,8 +9430,8 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9460,8 +9460,8 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9532,8 +9532,8 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9556,8 +9556,8 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 					projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
@@ -9625,8 +9625,8 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9649,8 +9649,8 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 					projCol[i] = p.constArg.Sub(arg)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Sub(arg)
@@ -9733,8 +9733,8 @@ func (p projMinusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9787,8 +9787,8 @@ func (p projMinusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -9880,8 +9880,8 @@ func (p projMinusDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -9922,8 +9922,8 @@ func (p projMinusDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10013,8 +10013,8 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10063,8 +10063,8 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10158,10 +10158,8 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10210,10 +10208,8 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10307,8 +10303,8 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10357,8 +10353,8 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10452,8 +10448,8 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10502,8 +10498,8 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10597,8 +10593,8 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10647,8 +10643,8 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10738,8 +10734,8 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10780,8 +10776,8 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10867,8 +10863,8 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -10909,8 +10905,8 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -10996,8 +10992,8 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11038,8 +11034,8 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11124,8 +11120,8 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11164,8 +11160,8 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11246,8 +11242,8 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11280,8 +11276,8 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = arg.MulFloat(f)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11370,8 +11366,8 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11426,8 +11422,8 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11527,8 +11523,8 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11583,8 +11579,8 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11684,8 +11680,8 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11740,8 +11736,8 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11835,8 +11831,8 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11879,8 +11875,8 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -11958,8 +11954,8 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -11982,8 +11978,8 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
@@ -12067,8 +12063,8 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12123,8 +12119,8 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -12224,8 +12220,8 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12280,8 +12276,8 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -12381,8 +12377,8 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12437,8 +12433,8 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -12532,8 +12528,8 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12576,8 +12572,8 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -12655,8 +12651,8 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12679,8 +12675,8 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
@@ -12764,8 +12760,8 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12820,8 +12816,8 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -12921,8 +12917,8 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -12977,8 +12973,8 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -13078,8 +13074,8 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13134,8 +13130,8 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -13229,8 +13225,8 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13273,8 +13269,8 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -13352,8 +13348,8 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13376,8 +13372,8 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
@@ -13450,8 +13446,8 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13484,8 +13480,8 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -13558,8 +13554,8 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13582,8 +13578,8 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = arg.MulFloat(float64(p.constArg))
@@ -13651,8 +13647,8 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13675,8 +13671,8 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
@@ -13744,8 +13740,8 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13768,8 +13764,8 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
@@ -13837,8 +13833,8 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13861,8 +13857,8 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
@@ -13930,8 +13926,8 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -13954,8 +13950,8 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.MulFloat(float64(arg))
@@ -14028,8 +14024,8 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14062,8 +14058,8 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = p.constArg.MulFloat(f)
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14149,8 +14145,8 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14199,8 +14195,8 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14294,8 +14290,8 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14344,8 +14340,8 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14439,8 +14435,8 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14489,8 +14485,8 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14583,8 +14579,8 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14631,8 +14627,8 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14724,8 +14720,8 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14772,8 +14768,8 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -14865,8 +14861,8 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -14913,8 +14909,8 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15006,8 +15002,8 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15054,8 +15050,8 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15149,8 +15145,8 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15201,8 +15197,8 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15296,8 +15292,8 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15344,8 +15340,8 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15437,8 +15433,8 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15485,8 +15481,8 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15578,8 +15574,8 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15626,8 +15622,8 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15721,8 +15717,8 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15773,8 +15769,8 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -15868,8 +15864,8 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -15916,8 +15912,8 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16009,8 +16005,8 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16057,8 +16053,8 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16150,8 +16146,8 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16198,8 +16194,8 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16293,8 +16289,8 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16345,8 +16341,8 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16437,8 +16433,8 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16479,8 +16475,8 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16561,8 +16557,8 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16593,8 +16589,8 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.Div(int64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16670,8 +16666,8 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16702,8 +16698,8 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.DivFloat(float64(arg))
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16788,8 +16784,8 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16838,8 +16834,8 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -16933,8 +16929,8 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -16983,8 +16979,8 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17078,8 +17074,8 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17128,8 +17124,8 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17222,8 +17218,8 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17270,8 +17266,8 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17358,8 +17354,8 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17396,8 +17392,8 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17479,8 +17475,8 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17517,8 +17513,8 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17600,8 +17596,8 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17638,8 +17634,8 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17728,8 +17724,8 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17780,8 +17776,8 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17870,8 +17866,8 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -17908,8 +17904,8 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -17991,8 +17987,8 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18029,8 +18025,8 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18112,8 +18108,8 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18150,8 +18146,8 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18240,8 +18236,8 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18292,8 +18288,8 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18382,8 +18378,8 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18420,8 +18416,8 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18503,8 +18499,8 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18541,8 +18537,8 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18624,8 +18620,8 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18662,8 +18658,8 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18752,8 +18748,8 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18804,8 +18800,8 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -18896,8 +18892,8 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -18938,8 +18934,8 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19029,8 +19025,8 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19079,8 +19075,8 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19174,8 +19170,8 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19224,8 +19220,8 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19319,8 +19315,8 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19369,8 +19365,8 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19463,8 +19459,8 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19511,8 +19507,8 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19599,8 +19595,8 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19637,8 +19633,8 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19720,8 +19716,8 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19758,8 +19754,8 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19841,8 +19837,8 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -19879,8 +19875,8 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -19969,8 +19965,8 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20021,8 +20017,8 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20111,8 +20107,8 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20149,8 +20145,8 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20232,8 +20228,8 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20270,8 +20266,8 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20353,8 +20349,8 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20391,8 +20387,8 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20481,8 +20477,8 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20533,8 +20529,8 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20623,8 +20619,8 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20661,8 +20657,8 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20744,8 +20740,8 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20782,8 +20778,8 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20865,8 +20861,8 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -20903,8 +20899,8 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -20993,8 +20989,8 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21045,8 +21041,8 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21137,8 +21133,8 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21179,8 +21175,8 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21266,8 +21262,8 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21308,8 +21304,8 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21395,8 +21391,8 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21437,8 +21433,8 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21524,8 +21520,8 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21566,8 +21562,8 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21652,8 +21648,8 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21692,8 +21688,8 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21783,8 +21779,8 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21835,8 +21831,8 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -21932,8 +21928,8 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -21984,8 +21980,8 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22081,8 +22077,8 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22133,8 +22129,8 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22226,8 +22222,8 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22270,8 +22266,8 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22363,8 +22359,8 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22415,8 +22411,8 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22512,8 +22508,8 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22564,8 +22560,8 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22661,8 +22657,8 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22713,8 +22709,8 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22806,8 +22802,8 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22850,8 +22846,8 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -22943,8 +22939,8 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -22995,8 +22991,8 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23092,8 +23088,8 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23144,8 +23140,8 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23241,8 +23237,8 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23293,8 +23289,8 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23386,8 +23382,8 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23430,8 +23426,8 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23514,8 +23510,8 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23548,8 +23544,8 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23629,10 +23625,8 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23669,10 +23663,8 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23756,8 +23748,8 @@ func (p projConcatDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23798,8 +23790,8 @@ func (p projConcatDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -23884,8 +23876,8 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -23924,8 +23916,8 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24009,8 +24001,8 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24049,8 +24041,8 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24134,8 +24126,8 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24174,8 +24166,8 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24259,8 +24251,8 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24299,8 +24291,8 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24384,8 +24376,8 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24424,8 +24416,8 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24509,8 +24501,8 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24549,8 +24541,8 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24634,8 +24626,8 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24674,8 +24666,8 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24759,8 +24751,8 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24799,8 +24791,8 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -24884,8 +24876,8 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -24924,8 +24916,8 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25014,8 +25006,8 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25064,8 +25056,8 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25159,8 +25151,8 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25209,8 +25201,8 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25304,8 +25296,8 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25354,8 +25346,8 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25444,8 +25436,8 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25484,8 +25476,8 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25569,8 +25561,8 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25609,8 +25601,8 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25694,8 +25686,8 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25734,8 +25726,8 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25819,8 +25811,8 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25859,8 +25851,8 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -25944,8 +25936,8 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -25984,8 +25976,8 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26069,8 +26061,8 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26109,8 +26101,8 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26194,8 +26186,8 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26234,8 +26226,8 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26319,8 +26311,8 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26359,8 +26351,8 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26444,8 +26436,8 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26484,8 +26476,8 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26574,8 +26566,8 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26624,8 +26616,8 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26719,8 +26711,8 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26769,8 +26761,8 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -26864,8 +26856,8 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -26914,8 +26906,8 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -27009,10 +27001,8 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -27061,10 +27051,8 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -27158,8 +27146,8 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -27208,8 +27196,8 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -27303,8 +27291,8 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -27353,8 +27341,8 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -27448,8 +27436,8 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 					}
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -27498,8 +27486,8 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 
 				}
 			} else {
-				col = col[0:n]
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
@@ -27589,8 +27577,8 @@ func (p projJSONFetchValPathDatumConstDatumOp) Next(ctx context.Context) coldata
 					}
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -27631,8 +27619,8 @@ func (p projJSONFetchValPathDatumConstDatumOp) Next(ctx context.Context) coldata
 
 				}
 			} else {
-				col = col.Slice(0, n)
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
