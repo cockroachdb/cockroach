@@ -50,7 +50,7 @@ var (
 	eventLogTTL = settings.RegisterPublicDurationSetting(
 		"server.eventlog.ttl",
 		fmt.Sprintf(
-			"if nonzero, event log entries older than this duration are deleted every %s. "+
+			"if nonzero, entries in system.eventlog older than this duration are deleted every %s. "+
 				"Should not be lowered below 24 hours.",
 			systemLogGCPeriod,
 		),
