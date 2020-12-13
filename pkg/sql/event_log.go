@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -105,6 +106,12 @@ func logEventInternalForSQLStatements(
 		event)
 }
 
+var eventLogEnabled = settings.RegisterPublicBoolSetting(
+	"server.eventlog.enabled",
+	"if set, logged notable events are also stored in the table system.eventlog",
+	true,
+)
+
 // InsertEventRecord inserts a single event into the event log as part
 // of the provided transaction, using the provided internal executor.
 //
@@ -141,6 +148,11 @@ func InsertEventRecord(
 	txn.AddCommitTrigger(func(ctx context.Context) {
 		log.StructuredEvent(ctx, info)
 	})
+
+	// If writes to the event log table are disabled, take a shortcut.
+	if !eventLogEnabled.Get(&ex.s.cfg.Settings.SV) {
+		return nil
+	}
 
 	const insertEventTableStmt = `
 INSERT INTO system.eventlog (
