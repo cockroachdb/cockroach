@@ -595,6 +595,7 @@ routines                               NULL
 schema_privileges                      NULL
 schemata                               NULL
 sequences                              NULL
+session_variables                      NULL
 statistics                             NULL
 table_constraints                      NULL
 table_privileges                       NULL

@@ -90,6 +90,7 @@ test           information_schema  routines                               public
 test           information_schema  schema_privileges                      public   SELECT
 test           information_schema  schemata                               public   SELECT
 test           information_schema  sequences                              public   SELECT
+test           information_schema  session_variables                      public   SELECT
 test           information_schema  statistics                             public   SELECT
 test           information_schema  table_constraints                      public   SELECT
 test           information_schema  table_privileges                       public   SELECT
