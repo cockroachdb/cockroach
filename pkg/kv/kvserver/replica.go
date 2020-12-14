@@ -865,7 +865,7 @@ func maxReplicaIDOfAny(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
 		return 0
 	}
 	var maxID roachpb.ReplicaID
-	for _, repl := range desc.Replicas().All() {
+	for _, repl := range desc.Replicas().Descriptors() {
 		if repl.ReplicaID > maxID {
 			maxID = repl.ReplicaID
 		}
@@ -1066,7 +1066,7 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 	if desc := ri.ReplicaState.Desc; desc != nil {
 		// Learner replicas don't serve follower reads, but they still receive
 		// closed timestamp updates, so include them here.
-		allReplicas := desc.Replicas().All()
+		allReplicas := desc.Replicas().Descriptors()
 		for i := range allReplicas {
 			replDesc := &allReplicas[i]
 			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
