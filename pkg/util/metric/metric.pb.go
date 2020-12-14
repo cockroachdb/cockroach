@@ -9,7 +9,6 @@ import math "math"
 import _go "github.com/prometheus/client_model/go"
 
 import io "io"
-
 import github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
 
 // Reference imports to suppress errors if they are not otherwise used.
