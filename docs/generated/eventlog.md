@@ -127,7 +127,6 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 # SQL Logical Schema Changes
@@ -162,7 +161,6 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_index`
@@ -185,7 +183,6 @@ An event of type `alter_index` is recorded when an index is altered.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_schema_owner`
@@ -207,7 +204,6 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_sequence`
@@ -228,7 +224,6 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_table`
@@ -251,7 +246,6 @@ An event of type `alter_table` is recorded when a table is altered.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_type`
@@ -272,7 +266,6 @@ EventAlterType is recorded when a user-defined type is altered.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `alter_type_owner`
@@ -294,7 +287,6 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `comment_on_column`
@@ -318,7 +310,6 @@ An event of type `comment_on_column` is recorded when a column is commented.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `comment_on_database`
@@ -341,7 +332,6 @@ CommentOnTable is recorded when a database is commented.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `comment_on_index`
@@ -365,7 +355,6 @@ An event of type `comment_on_index` is recorded when an index is commented.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `comment_on_table`
@@ -388,7 +377,6 @@ An event of type `comment_on_table` is recorded when a table is commented.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `convert_to_schema`
@@ -410,7 +398,6 @@ An event of type `convert_to_schema` is recorded when a database is converted to
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_database`
@@ -431,7 +418,6 @@ An event of type `create_database` is recorded when a database is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_index`
@@ -454,7 +440,6 @@ An event of type `create_index` is recorded when an index is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_schema`
@@ -476,7 +461,6 @@ An event of type `create_schema` is recorded when a schema is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_sequence`
@@ -498,7 +482,6 @@ An event of type `create_sequence` is recorded when a sequence is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_statistics`
@@ -520,7 +503,6 @@ table.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_table`
@@ -542,7 +524,6 @@ An event of type `create_table` is recorded when a table is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_type`
@@ -564,7 +545,6 @@ An event of type `create_type` is recorded when a user-defined type is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_view`
@@ -587,7 +567,6 @@ An event of type `create_view` is recorded when a view is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_database`
@@ -609,7 +588,6 @@ An event of type `drop_database` is recorded when a database is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_index`
@@ -633,7 +611,6 @@ An event of type `drop_index` is recorded when an index is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_schema`
@@ -654,7 +631,6 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_sequence`
@@ -675,7 +651,6 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_table`
@@ -697,7 +672,6 @@ An event of type `drop_table` is recorded when a table is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_type`
@@ -718,7 +692,6 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_view`
@@ -740,7 +713,6 @@ An event of type `drop_view` is recorded when a view is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `finish_schema_change`
@@ -794,7 +766,6 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Target` | The target object of the zone config change. |
 | `Config` | The applied zone config in YAML format. |
@@ -819,7 +790,6 @@ An event of type `rename_database` is recorded when a database is renamed.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `rename_schema`
@@ -841,7 +811,6 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `rename_table`
@@ -863,7 +832,6 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `rename_type`
@@ -885,7 +853,6 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `reverse_schema_change`
@@ -925,7 +892,6 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Target` | The target object of the zone config change. |
 | `Config` | The applied zone config in YAML format. |
@@ -949,7 +915,6 @@ An event of type `truncate_table` is recorded when a table is truncated.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `unsafe_delete_descriptor`
@@ -978,7 +943,6 @@ patch releases without advance notice.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `unsafe_delete_namespace_entry`
@@ -1007,7 +971,6 @@ patch releases without advance notice.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `unsafe_upsert_descriptor`
@@ -1032,7 +995,6 @@ using crdb_internal.unsafe_upsert_descriptor().
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `unsafe_upsert_namespace_entry`
@@ -1063,7 +1025,6 @@ patch releases without advance notice.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 # SQL Privilege changes
@@ -1098,7 +1059,6 @@ added to / removed from a user for a database object.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Grantee` | The user/role affected by the grant or revoke operation. |
 | `GrantedPrivileges` | The privileges being granted to the grantee. |
@@ -1123,7 +1083,6 @@ removed from a user for a schema object.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Grantee` | The user/role affected by the grant or revoke operation. |
 | `GrantedPrivileges` | The privileges being granted to the grantee. |
@@ -1148,7 +1107,6 @@ from a user for a table, sequence or view object.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Grantee` | The user/role affected by the grant or revoke operation. |
 | `GrantedPrivileges` | The privileges being granted to the grantee. |
@@ -1173,7 +1131,6 @@ removed from a user for a type object.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `Grantee` | The user/role affected by the grant or revoke operation. |
 | `GrantedPrivileges` | The privileges being granted to the grantee. |
@@ -1210,7 +1167,6 @@ An event of type `alter_role` is recorded when a role is altered.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `create_role`
@@ -1231,7 +1187,6 @@ An event of type `create_role` is recorded when a role is created.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 ## `drop_role`
@@ -1252,7 +1207,6 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
-| `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
 
