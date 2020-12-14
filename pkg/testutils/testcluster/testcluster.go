@@ -775,8 +775,8 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	} else {
 		hint = &roachpb.ReplicationTarget{
-			NodeID:  rangeDesc.Replicas().All()[0].NodeID,
-			StoreID: rangeDesc.Replicas().All()[0].StoreID}
+			NodeID:  rangeDesc.Replicas().Descriptors()[0].NodeID,
+			StoreID: rangeDesc.Replicas().Descriptors()[0].StoreID}
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
@@ -851,7 +851,7 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 				startKey, desc.StartKey)
 		}
 		// Once we've verified the split, make sure that replicas exist.
-		for _, rDesc := range desc.Replicas().All() {
+		for _, rDesc := range desc.Replicas().Descriptors() {
 			store, err := tc.findMemberStore(rDesc.StoreID)
 			if err != nil {
 				return err

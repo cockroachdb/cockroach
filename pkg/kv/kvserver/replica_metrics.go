@@ -164,7 +164,7 @@ func calcRangeCounter(
 	// It seems unlikely that a learner replica would be the first live one, but
 	// there's no particular reason to exclude them. Note that `All` returns the
 	// voters first.
-	for _, rd := range desc.Replicas().All() {
+	for _, rd := range desc.Replicas().Descriptors() {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
 			break
@@ -193,7 +193,7 @@ func calcRangeCounter(
 // considered.
 func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
 	var live int
-	for _, rd := range desc.Replicas().Voters() {
+	for _, rd := range desc.Replicas().VoterDescriptors() {
 		if livenessMap[rd.NodeID].IsLive {
 			live++
 		}
@@ -207,7 +207,7 @@ func calcBehindCount(
 	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap,
 ) int64 {
 	var behindCount int64
-	for _, rd := range desc.Replicas().All() {
+	for _, rd := range desc.Replicas().Descriptors() {
 		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {

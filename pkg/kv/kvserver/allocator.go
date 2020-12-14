@@ -345,7 +345,7 @@ func (a *Allocator) ComputeAction(
 	// On the other hand if we get the race where a leaseholder starts adding a
 	// replica in the replicate queue and during this loses its lease, it should
 	// probably not retry.
-	if learners := desc.Replicas().Learners(); len(learners) > 0 {
+	if learners := desc.Replicas().LearnerDescriptors(); len(learners) > 0 {
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
@@ -355,7 +355,7 @@ func (a *Allocator) ComputeAction(
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
 	}
 	// computeAction expects to operate only on voters.
-	return a.computeAction(ctx, zone, desc.Replicas().Voters())
+	return a.computeAction(ctx, zone, desc.Replicas().VoterDescriptors())
 }
 
 func (a *Allocator) computeAction(

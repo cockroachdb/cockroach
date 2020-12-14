@@ -592,7 +592,7 @@ func (r *Replica) AdminMerge(
 		// replica of the RHS too early. The comment on
 		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
 		if err := waitForReplicasInit(
-			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().All(),
+			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().Descriptors(),
 		); err != nil {
 			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
 		}
@@ -629,16 +629,16 @@ func (r *Replica) AdminMerge(
 		predFullVoter := func(rDesc roachpb.ReplicaDescriptor) bool {
 			return rDesc.GetType() == roachpb.VOTER_FULL
 		}
-		if len(lReplicas.Filter(predFullVoter)) != len(lReplicas.All()) {
+		if len(lReplicas.FilterToDescriptors(predFullVoter)) != len(lReplicas.Descriptors()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on lhs: %s", lReplicas)
 		}
-		if len(rReplicas.Filter(predFullVoter)) != len(rReplicas.All()) {
+		if len(rReplicas.FilterToDescriptors(predFullVoter)) != len(rReplicas.Descriptors()) {
 			return errors.Errorf("cannot merge range with non-voter replicas on rhs: %s", rReplicas)
 		}
-		if !replicaSetsEqual(lReplicas.All(), rReplicas.All()) {
+		if !replicaSetsEqual(lReplicas.Descriptors(), rReplicas.Descriptors()) {
 			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
-		mergeReplicas := lReplicas.All()
+		mergeReplicas := lReplicas.Descriptors()
 
 		updatedLeftDesc := *origLeftDesc
 		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
@@ -991,7 +991,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 		// Queue the replica up into the raft snapshot queue so that the non-voters
 		// that were added receive their first snapshot relatively soon. See the
-		// comment block above ReplicaDescriptors.NonVoters() for why we do this.
+		// comment block above ReplicaSet.NonVoterDescriptors() for why we do this.
 		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
 	}
 
@@ -1031,7 +1031,7 @@ func (r *Replica) changeReplicasImpl(
 		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
 		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
 		// don't introduce fragility into the system). For details see:
-		_ = roachpb.ReplicaDescriptors.Learners
+		_ = roachpb.ReplicaSet.LearnerDescriptors
 		var err error
 		desc, err = addRaftLearners(ctx, r.store, desc, reason, details, adds, internalChangeTypeAddLearner)
 		if err != nil {
@@ -1109,7 +1109,7 @@ func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	// Now the config isn't joint any more, but we may have demoted some voters
 	// into learners. These learners should go as well.
 
-	learners := desc.Replicas().Learners()
+	learners := desc.Replicas().LearnerDescriptors()
 	if len(learners) == 0 {
 		return desc, nil
 	}
@@ -1177,7 +1177,7 @@ func validateReplicationChanges(
 	// Then, check that we're not adding a second replica on nodes that already
 	// have one, or "re-add" an existing replica. We delete from byNodeAndStoreID so that
 	// after this loop, it contains only Nodes that we haven't seen in desc.
-	for _, rDesc := range desc.Replicas().All() {
+	for _, rDesc := range desc.Replicas().Descriptors() {
 		byStoreID, ok := byNodeAndStoreID[rDesc.NodeID]
 		if !ok {
 			continue
@@ -1230,7 +1230,7 @@ func validateReplicationChanges(
 			// We're adding a replica that's already there. This isn't allowed, even
 			// when the newly added one would be on a different store.
 			if chg.ChangeType.IsAddition() {
-				if len(desc.Replicas().All()) > 1 {
+				if len(desc.Replicas().Descriptors()) > 1 {
 					return errors.Mark(
 						errors.Errorf("unable to add replica %v; node already has a replica in %s", chg.Target.StoreID, desc),
 						errMarkInvalidReplicationChange)
@@ -1625,7 +1625,7 @@ func prepareChangeReplicasTrigger(
 		var isJoint bool
 		// NB: the DeepCopy is needed or we'll skip over an entry every time we
 		// call RemoveReplica below.
-		for _, rDesc := range updatedDesc.Replicas().DeepCopy().All() {
+		for _, rDesc := range updatedDesc.Replicas().DeepCopy().Descriptors() {
 			switch rDesc.GetType() {
 			case roachpb.VOTER_INCOMING:
 				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.VOTER_FULL)
@@ -1762,7 +1762,7 @@ func execChangeReplicasTxn(
 			// See:
 			// https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
 			replicas := crt.Desc.Replicas()
-			liveReplicas, _ := args.liveAndDeadReplicas(replicas.All())
+			liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors())
 			if !replicas.CanMakeProgress(
 				func(rDesc roachpb.ReplicaDescriptor) bool {
 					for _, inner := range liveReplicas {
@@ -2361,8 +2361,8 @@ func (s *Store) AdminRelocateRange(
 func (s *Store) relocateOne(
 	ctx context.Context, desc *roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
-	rangeReplicas := desc.Replicas().All()
-	if len(rangeReplicas) != len(desc.Replicas().Voters()) {
+	rangeReplicas := desc.Replicas().Descriptors()
+	if len(rangeReplicas) != len(desc.Replicas().VoterDescriptors()) {
 		// The caller removed all the learners, so there shouldn't be anything but
 		// voters.
 		return nil, nil, errors.AssertionFailedf(
@@ -2599,8 +2599,8 @@ func (r *Replica) adminScatter(
 	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().Now()) {
 		desc := r.Desc()
 		// Learner replicas aren't allowed to become the leaseholder or raft leader,
-		// so only consider the `Voters` replicas.
-		voterReplicas := desc.Replicas().Voters()
+		// so only consider the `VoterDescriptors` replicas.
+		voterReplicas := desc.Replicas().VoterDescriptors()
 		newLeaseholderIdx := rand.Intn(len(voterReplicas))
 		targetStoreID := voterReplicas[newLeaseholderIdx].StoreID
 		if targetStoreID != r.store.StoreID() {

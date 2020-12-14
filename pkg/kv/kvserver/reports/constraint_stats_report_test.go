@@ -809,8 +809,8 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 		storeDescs = append(storeDescs, sds...)
 	}
 	storeResolver := func(r *roachpb.RangeDescriptor) []roachpb.StoreDescriptor {
-		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().Voters()))
-		for i, rep := range r.Replicas().Voters() {
+		stores := make([]roachpb.StoreDescriptor, len(r.Replicas().VoterDescriptors()))
+		for i, rep := range r.Replicas().VoterDescriptors() {
 			for _, desc := range storeDescs {
 				if rep.StoreID == desc.StoreID {
 					stores[i] = desc

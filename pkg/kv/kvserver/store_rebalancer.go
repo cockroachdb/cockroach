@@ -325,7 +325,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 		// TODO(a-robinson): This just updates the copies used locally by the
 		// storeRebalancer. We may also want to update the copies in the StorePool
 		// itself.
-		replicasBeforeRebalance := descBeforeRebalance.Replicas().All()
+		replicasBeforeRebalance := descBeforeRebalance.Replicas().Descriptors()
 		for i := range replicasBeforeRebalance {
 			if storeDesc := storeMap[replicasBeforeRebalance[i].StoreID]; storeDesc != nil {
 				storeDesc.Capacity.RangeCount--
@@ -397,7 +397,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// Check all the other replicas in order of increasing qps. Learner replicas
 		// aren't allowed to become the leaseholder or raft leader, so only consider
 		// the `Voters` replicas.
-		candidates := desc.Replicas().DeepCopy().Voters()
+		candidates := desc.Replicas().DeepCopy().VoterDescriptors()
 		sort.Slice(candidates, func(i, j int) bool {
 			var iQPS, jQPS float64
 			if desc := storeMap[candidates[i].StoreID]; desc != nil {
@@ -505,7 +505,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		desiredReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
-		currentReplicas := desc.Replicas().All()
+		currentReplicas := desc.Replicas().Descriptors()
 
 		// Check the range's existing diversity score, since we want to ensure we
 		// don't hurt locality diversity just to improve QPS.
