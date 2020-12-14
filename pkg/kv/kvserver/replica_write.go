@@ -252,7 +252,7 @@ func rangeUnavailableMessage(
 	dur time.Duration,
 ) {
 	var liveReplicas, otherReplicas []roachpb.ReplicaDescriptor
-	for _, rDesc := range desc.Replicas().All() {
+	for _, rDesc := range desc.Replicas().Descriptors() {
 		if lm[rDesc.NodeID].IsLive {
 			liveReplicas = append(liveReplicas, rDesc)
 		} else {
@@ -263,7 +263,7 @@ func rangeUnavailableMessage(
 	// Ensure that these are going to redact nicely.
 	var _ redact.SafeFormatter = ba
 	var _ redact.SafeFormatter = desc
-	var _ redact.SafeFormatter = roachpb.ReplicaDescriptors{}
+	var _ redact.SafeFormatter = roachpb.ReplicaSet{}
 
 	s.Printf(`have been waiting %.2fs for proposing command %s.
 This range is likely unavailable.
@@ -284,8 +284,8 @@ support contract. Otherwise, please open an issue at:
 		dur.Seconds(),
 		ba,
 		desc,
-		roachpb.MakeReplicaDescriptors(liveReplicas),
-		roachpb.MakeReplicaDescriptors(otherReplicas),
+		roachpb.MakeReplicaSet(liveReplicas),
+		roachpb.MakeReplicaSet(otherReplicas),
 		redact.Safe(rs), // raft status contains no PII
 		desc.RangeID,
 	)

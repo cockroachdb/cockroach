@@ -286,7 +286,7 @@ func (mq *mergeQueue) process(
 			return false, err
 		}
 	}
-	lhsReplicas, rhsReplicas := lhsDesc.Replicas().All(), rhsDesc.Replicas().All()
+	lhsReplicas, rhsReplicas := lhsDesc.Replicas().Descriptors(), rhsDesc.Replicas().Descriptors()
 
 	// Defensive sanity check that everything is now a voter.
 	for i := range lhsReplicas {
