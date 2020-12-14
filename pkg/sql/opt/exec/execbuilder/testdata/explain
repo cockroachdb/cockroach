@@ -1340,19 +1340,6 @@ vectorized: false
 ·
 • explain
 
-query T
-EXPLAIN (VERBOSE) EXPLAIN ANALYZE (DISTSQL) SELECT 1
-----
-distribution: local
-vectorized: false
-·
-• project
-│ columns: (automatic, url)
-│
-└── • explain
-      columns: (automatic, url, json)
-      estimated row count: 10 (missing stats)
-
 # Test a case with many spans.
 query T
 EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)
