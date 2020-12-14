@@ -342,77 +342,109 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 		intTyps[i] = types.Int
 	}
 
-	for run := 0; run < nRuns; run++ {
-		for nCols := 1; nCols <= maxCols; nCols++ {
-			for nDistinctCols := 1; nDistinctCols <= nCols; nDistinctCols++ {
-				for nOrderedCols := 0; nOrderedCols <= nDistinctCols; nOrderedCols++ {
-					var (
-						rows       rowenc.EncDatumRows
-						inputTypes []*types.T
-						ordCols    []execinfrapb.Ordering_Column
-					)
-					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-					} else {
-						inputTypes = intTyps[:nCols]
-						rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-					}
-					distinctCols := make([]uint32, nDistinctCols)
-					for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
-						distinctCols[i] = uint32(distinctCol)
-					}
-					orderedCols := make([]uint32, nOrderedCols)
-					for i, orderedColIdx := range rng.Perm(nDistinctCols)[:nOrderedCols] {
-						// From the set of distinct columns we need to choose nOrderedCols
-						// to be in the ordered columns set.
-						orderedCols[i] = distinctCols[orderedColIdx]
-					}
-					ordCols = make([]execinfrapb.Ordering_Column, nOrderedCols)
-					for i, col := range orderedCols {
-						ordCols[i] = execinfrapb.Ordering_Column{
-							ColIdx: col,
+	for _, spillForced := range []bool{false, true} {
+		for run := 0; run < nRuns; run++ {
+			for nCols := 1; nCols <= maxCols; nCols++ {
+				for nDistinctCols := 1; nDistinctCols <= nCols; nDistinctCols++ {
+					for nOrderedCols := 0; nOrderedCols <= nDistinctCols; nOrderedCols++ {
+						if spillForced && nOrderedCols == nDistinctCols {
+							// The ordered distinct is a streaming operator that
+							// doesn't support spilling to disk (nor does it
+							// need to), so we'll skip the config where we're
+							// trying to spill to disk the ordered distinct.
+							continue
 						}
-					}
-					sort.Slice(rows, func(i, j int) bool {
-						cmp, err := rows[i].Compare(
-							inputTypes, &da,
-							execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}),
-							&evalCtx, rows[j],
+						var (
+							rows       rowenc.EncDatumRows
+							inputTypes []*types.T
+							ordCols    []execinfrapb.Ordering_Column
 						)
-						if err != nil {
+						if rng.Float64() < randTypesProbability {
+							inputTypes = generateRandomSupportedTypes(rng, nCols)
+							rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						} else {
+							inputTypes = intTyps[:nCols]
+							rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						}
+						distinctCols := make([]uint32, nDistinctCols)
+						for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
+							distinctCols[i] = uint32(distinctCol)
+						}
+						orderedCols := make([]uint32, nOrderedCols)
+						for i, orderedColIdx := range rng.Perm(nDistinctCols)[:nOrderedCols] {
+							// From the set of distinct columns we need to choose nOrderedCols
+							// to be in the ordered columns set.
+							orderedCols[i] = distinctCols[orderedColIdx]
+						}
+						ordCols = make([]execinfrapb.Ordering_Column, nOrderedCols)
+						for i, col := range orderedCols {
+							ordCols[i] = execinfrapb.Ordering_Column{
+								ColIdx: col,
+							}
+						}
+						var outputOrdering execinfrapb.Ordering
+						if spillForced && rng.Float64() < 0.5 {
+							// In order to produce deterministic output
+							// ordering, we will include all input columns into
+							// ordCols. Note that orderedCols (used in the spec)
+							// still has the desired number of columns set
+							// above.
+							for inputCol := 0; inputCol < nCols; inputCol++ {
+								found := false
+								for _, orderedCol := range orderedCols {
+									if inputCol == int(orderedCol) {
+										found = true
+										break
+									}
+								}
+								if !found {
+									ordCols = append(ordCols, execinfrapb.Ordering_Column{
+										ColIdx: uint32(inputCol),
+									})
+								}
+							}
+							outputOrdering.Columns = ordCols
+						}
+						sort.Slice(rows, func(i, j int) bool {
+							cmp, err := rows[i].Compare(
+								inputTypes, &da,
+								execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}),
+								&evalCtx, rows[j],
+							)
+							if err != nil {
+								t.Fatal(err)
+							}
+							return cmp < 0
+						})
+
+						spec := &execinfrapb.DistinctSpec{
+							DistinctColumns: distinctCols,
+							OrderedColumns:  orderedCols,
+							OutputOrdering:  outputOrdering,
+						}
+						pspec := &execinfrapb.ProcessorSpec{
+							Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+							Core:        execinfrapb.ProcessorCoreUnion{Distinct: spec},
+							ResultTypes: inputTypes,
+						}
+						args := verifyColOperatorArgs{
+							// If we spilled the unordered distinct to disk and
+							// didn't require the output ordering on all input
+							// columns, we can get the output in an arbitrary
+							// order.
+							anyOrder:       spillForced && len(outputOrdering.Columns) == 0,
+							inputTypes:     [][]*types.T{inputTypes},
+							inputs:         []rowenc.EncDatumRows{rows},
+							pspec:          pspec,
+							forceDiskSpill: spillForced,
+						}
+						if err := verifyColOperator(t, args); err != nil {
+							fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v spilled = %t ---\n",
+								seed, run, nCols, distinctCols, orderedCols, spillForced)
+							prettyPrintTypes(inputTypes, "t" /* tableName */)
+							prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 							t.Fatal(err)
 						}
-						return cmp < 0
-					})
-
-					var outputOrdering execinfrapb.Ordering
-					if rng.Float64() < 0.5 {
-						outputOrdering = execinfrapb.Ordering{Columns: ordCols}
-					}
-
-					spec := &execinfrapb.DistinctSpec{
-						DistinctColumns: distinctCols,
-						OrderedColumns:  orderedCols,
-						OutputOrdering:  outputOrdering,
-					}
-					pspec := &execinfrapb.ProcessorSpec{
-						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-						Core:        execinfrapb.ProcessorCoreUnion{Distinct: spec},
-						ResultTypes: inputTypes,
-					}
-					args := verifyColOperatorArgs{
-						anyOrder:   false,
-						inputTypes: [][]*types.T{inputTypes},
-						inputs:     []rowenc.EncDatumRows{rows},
-						pspec:      pspec,
-					}
-					if err := verifyColOperator(t, args); err != nil {
-						fmt.Printf("--- seed = %d run = %d nCols = %d distinct cols = %v ordered cols = %v ---\n",
-							seed, run, nCols, distinctCols, orderedCols)
-						prettyPrintTypes(inputTypes, "t" /* tableName */)
-						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-						t.Fatal(err)
 					}
 				}
 			}
