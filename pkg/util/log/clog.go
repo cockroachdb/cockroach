@@ -197,9 +197,6 @@ func (l *loggingT) signalFatalCh() {
 }
 
 // SetClusterID stores the Cluster ID for further reference.
-//
-// TODO(knz): This should not be configured per-logger.
-// See: https://github.com/cockroachdb/cockroach/issues/40983
 func SetClusterID(clusterID string) {
 	// Ensure that the clusterID is logged with the same format as for
 	// new log files, even on the first log file. This ensures that grep
