@@ -3855,40 +3855,41 @@ project
       └── filters
            └── col2:2 > 1
 
-# This case is broken (#57496).
-## Add projection on top to ensure the default NULL values are set correctly.
-#build
-#SELECT count(DISTINCT col1), count(*), array_agg(col1 ORDER BY col2) FROM tab
-#----
-#project
-# ├── columns: count:6 count:7 array_agg:8
-# └── project
-#      ├── columns: count:6 count_rows:7 col1:1 col2:2 col3:3 rowid:4 crdb_internal_mvcc_timestamp:5 array_agg:8
-#      ├── scalar-group-by
-#      │    ├── columns: array_agg:8 count:9 count_rows:10
-#      │    ├── window partition=() ordering=+2
-#      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7 array_agg:8
-#      │    │    ├── window partition=()
-#      │    │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7
-#      │    │    │    ├── scan tab
-#      │    │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
-#      │    │    │    └── windows
-#      │    │    │         ├── count [as=count:6, frame="range from unbounded to unbounded"]
-#      │    │    │         │    └── col1:1
-#      │    │    │         └── count-rows [as=count_rows:7, frame="range from unbounded to unbounded"]
-#      │    │    └── windows
-#      │    │         └── array-agg [as=array_agg:8, frame="range from unbounded to unbounded"]
-#      │    │              └── col1:1
-#      │    └── aggregations
-#      │         ├── const-agg [as=count:9]
-#      │         │    └── count:6
-#      │         ├── const-agg [as=count_rows:10]
-#      │         │    └── count_rows:7
-#      │         └── const-agg [as=array_agg:8]
-#      │              └── array_agg:8
-#      └── projections
-#           ├── CASE WHEN count:9 IS NULL THEN 0 ELSE count:9 END [as=count:6]
-#           └── CASE WHEN count_rows:10 IS NULL THEN 0 ELSE count_rows:10 END [as=count_rows:7]
+# Add projection on top to ensure the default NULL values are set correctly.
+# Regression test for #57496: Ensure that non-input columns are not passed
+# through by the Project.
+build
+SELECT count(DISTINCT col1), count(*), array_agg(col1 ORDER BY col2) FROM tab
+----
+project
+ ├── columns: count:6 count:7 array_agg:8
+ └── project
+      ├── columns: count:6 count_rows:7 array_agg:8
+      ├── scalar-group-by
+      │    ├── columns: array_agg:8 count:9 count_rows:10
+      │    ├── window partition=() ordering=+2
+      │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7 array_agg:8
+      │    │    ├── window partition=()
+      │    │    │    ├── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5 count:6 count_rows:7
+      │    │    │    ├── scan tab
+      │    │    │    │    └── columns: col1:1!null col2:2!null col3:3 rowid:4!null crdb_internal_mvcc_timestamp:5
+      │    │    │    └── windows
+      │    │    │         ├── count [as=count:6, frame="range from unbounded to unbounded"]
+      │    │    │         │    └── col1:1
+      │    │    │         └── count-rows [as=count_rows:7, frame="range from unbounded to unbounded"]
+      │    │    └── windows
+      │    │         └── array-agg [as=array_agg:8, frame="range from unbounded to unbounded"]
+      │    │              └── col1:1
+      │    └── aggregations
+      │         ├── const-agg [as=count:9]
+      │         │    └── count:6
+      │         ├── const-agg [as=count_rows:10]
+      │         │    └── count_rows:7
+      │         └── const-agg [as=array_agg:8]
+      │              └── array_agg:8
+      └── projections
+           ├── CASE WHEN count:9 IS NULL THEN 0 ELSE count:9 END [as=count:6]
+           └── CASE WHEN count_rows:10 IS NULL THEN 0 ELSE count_rows:10 END [as=count_rows:7]
 
 # Testing aggregations as window when group by has a projection.
 build

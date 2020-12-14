@@ -3084,12 +3084,11 @@ array_agg   array_agg   col3
 {-3,-2,-1}  {-1,-2,-3}  a
 {0,1,2}     {1,2,0}     b
 
-# This case is broken (#57496).
-#query TTII colnames
-#SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), count(col3), count(*) FROM tab
-#----
-#array_agg         array_agg         count  count
-#{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  6      6
+query TTII colnames
+SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col2, col1), count(col3), count(*) FROM tab
+----
+array_agg         array_agg         count  count
+{-3,-2,-1,0,1,2}  {-1,1,-2,2,-3,0}  6      6
 
 query TT colnames
 SELECT array_agg(col1 ORDER BY col1), array_agg(col1 ORDER BY col1) FILTER (WHERE col1 < 0) FROM tab
@@ -3103,11 +3102,10 @@ SELECT array_agg(col1 ORDER BY col3, col1) FILTER (WHERE col1 < 0), array_agg(co
 array_agg   array_agg
 {-3,-2,-1}  {-3,-2,-1,0,1,2}
 
-# This case is broken (#57496).
-#query IT
-#SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
-#----
-#6  aaabbb
+query IT
+SELECT count(1), concat_agg(col3 ORDER BY col1) from tab
+----
+6  aaabbb
 
 # Testing pre-projections. Tests when the GroupBy clause has a projection.
 query IIIT colnames
