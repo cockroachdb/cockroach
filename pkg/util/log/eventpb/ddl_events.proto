@@ -432,6 +432,9 @@ message RemoveZoneConfig {
 
 // CreateStatistics is recorded when statistics are collected for a
 // table.
+//
+// Events of this type are only collected when the cluster setting
+// `sql.stats.post_events.enabled` is set.
 message CreateStatistics {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

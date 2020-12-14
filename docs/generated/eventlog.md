@@ -506,6 +506,9 @@ An event of type `create_sequence` is recorded when a sequence is created.
 An event of type `create_statistics` is recorded when statistics are collected for a
 table.
 
+Events of this type are only collected when the cluster setting
+`sql.stats.post_events.enabled` is set.
+
 
 | Field | Description |
 |--|--|

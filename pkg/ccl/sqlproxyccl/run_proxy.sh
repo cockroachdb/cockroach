@@ -8,16 +8,17 @@
 # The password for `bob` is `builder`.
 #
 # WARNING: directory `~/.cockroach-certs` will be DELETED.
-# WARNING: all cockroach processes will be killed.
+# WARNING: all cockroach and sqlproxy processes will be killed.
 
 COCKROACH=${1:-'./cockroach'}
-SQLPROXY=${2:-$COCKROACH mt start-proxy}
+SQLPROXY=${2:-$COCKROACH mt start-proxy --target-addr 127.0.0.1:36257}
 
 set -euxo pipefail
 
 # Prep work.
 rm -rf ~/.cockroach-certs cockroach-data
 killall -9 cockroach || true
+killall -9 sqlproxy || true
 
 # Create certificates.
 export CERTSDIR=$HOME/.cockroach-certs
@@ -40,11 +41,11 @@ sleep 1
 $COCKROACH sql --port 36257 -e "create user bob with password 'builder';"
 
 # Spawn the proxy on :46257, forwarding to tenant SQL server (:36257)
-$SQLPROXY --listen-cert $CERTSDIR/node.crt --listen-key $CERTSDIR/node.key --target-addr 127.0.0.1:36257 &
+$SQLPROXY --listen-addr 127.0.0.1:46257 --listen-cert $CERTSDIR/node.crt --listen-key $CERTSDIR/node.key &
 
 sleep 2
 
 # Connect to proxy to `defaultdb`. Note the need to prefix the db name with the
 # magic phrase 'prancing-pony'.
 # Password for user `bob` is `builder`.
-$COCKROACH sql --url "postgresql://bob@127.0.0.1:46257/prancing-pony.defaultdb"
+$COCKROACH sql --url "postgresql://bob:builder@127.0.0.1:46257/prancing-pony.defaultdb"

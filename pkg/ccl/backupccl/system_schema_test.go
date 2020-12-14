@@ -38,3 +38,20 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigurationDetailsOnlySetForIncludedTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for systemTable, configuration := range systemTableBackupConfiguration {
+		if configuration.customRestoreFunc != nil {
+			// If some restore options were specified, we probably want to also
+			// include in in the set of system tables that are looked at by cluster
+			// backup/restore.
+			if optInToClusterBackup != configuration.includeInClusterBackup {
+				t.Fatalf("custom restore function specified for table %q, but it's not included in cluster backups",
+					systemTable)
+			}
+		}
+	}
+}

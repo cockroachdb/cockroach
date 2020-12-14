@@ -8,7 +8,16 @@
 
 package backupccl
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+import (
+	"context"
+	fmt "fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+)
 
 // clusterBackupInclusion is an enum that specifies whether a system table
 // should be included in a cluster backup.
@@ -35,6 +44,92 @@ const (
 //    cluster so there is no need to rewrite system table data.
 type systemBackupConfiguration struct {
 	includeInClusterBackup clusterBackupInclusion
+	// customRestoreFunc is responsible for restoring the data from a table that
+	// holds the restore system table data into the given system table. If none
+	// is provided then `defaultRestoreFunc` is used.
+	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string) error
+}
+
+// defaultSystemTableRestoreFunc is how system table data is restored. This can
+// be overwritten with the system table's
+// systemBackupConfiguration.customRestoreFunc.
+func defaultSystemTableRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	executor := execCfg.InternalExecutor
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+
+	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
+		systemTableName, tempTableName)
+	opName = systemTableName + "-data-insert"
+	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+	return nil
+}
+
+// Custom restore functions for different system tables.
+
+// When restoring the jobs table we don't want to remove existing jobs, since
+// that includes the restore that we're running.
+func jobsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	executor := execCfg.InternalExecutor
+
+	// When restoring jobs, don't clear the existing table.
+
+	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
+		systemTableName, tempTableName)
+	opName := systemTableName + "-data-insert"
+	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+	return nil
+}
+
+// When restoring the settings table, we want to make sure to not override the
+// version.
+func settingsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) error {
+	executor := execCfg.InternalExecutor
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+
+	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s WHERE name <> 'version');",
+		systemTableName, tempTableName)
+	opName = systemTableName + "-data-insert"
+	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+	return nil
 }
 
 // systemTableBackupConfiguration is a map from every systemTable present in the
@@ -50,6 +145,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.SettingsTable.Name: {
 		includeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:      settingsRestoreFunc,
 	},
 	systemschema.LocationsTable.Name: {
 		includeInClusterBackup: optInToClusterBackup,
@@ -68,6 +164,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.JobsTable.Name: {
 		includeInClusterBackup: optInToClusterBackup,
+		customRestoreFunc:      jobsRestoreFunc,
 	},
 	systemschema.ScheduledJobsTable.Name: {
 		includeInClusterBackup: optInToClusterBackup,
