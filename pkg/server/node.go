@@ -1071,12 +1071,12 @@ func (n *Node) ResetQuorum(
 	// Increment the generation so that the various caches will recognize this descriptor as newer.
 	desc.IncrementGeneration()
 
-	log.Infof(ctx, "starting recovery using desc %+v", desc)
+	log.Infof(ctx, "initiating recovery process using %s", desc)
+
 	// Update the meta2 entry. Note that we're intentionally
 	// eschewing updateRangeAddressing since the copy of the
 	// descriptor that resides on the range itself has lost quorum.
 	metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
-
 	if err := n.storeCfg.DB.CPut(ctx, metaKey, &desc, expValue.TagAndDataBytes()); err != nil {
 		return nil, err
 	}
