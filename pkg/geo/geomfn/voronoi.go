@@ -31,9 +31,9 @@ func VoronoiDiagram(
 	if err != nil {
 		return geo.Geometry{}, err
 	}
-	gm, gmErr := geo.ParseGeometryFromEWKB(paths)
-	if gmErr != nil {
-		return geo.Geometry{}, gmErr
+	gm, err := geo.ParseGeometryFromEWKB(paths)
+	if err != nil {
+		return geo.Geometry{}, err
 	}
 	return gm, nil
 }

@@ -1017,3 +1017,18 @@ func VoronoiDiagram(a, env geopb.EWKB, tolerance float64, onlyEdges bool) (geopb
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// MinimumRotatedRectangle Returns a minimum rotated rectangle enclosing a geometry
+func MinimumRotatedRectangle(ewkb geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_MinimumRotatedRectangle(g, goToCSlice(ewkb), &cEWKB),
+	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}

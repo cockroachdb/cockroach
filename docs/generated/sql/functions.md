@@ -1995,6 +1995,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_orderingequals"></a><code>st_orderingequals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is exactly equal to geometry_b, having all coordinates in the same order, as well as the same type, SRID, bounding box, and so on.</p>
 </span></td></tr>
+<tr><td><a name="st_orientedenvelope"></a><code>st_orientedenvelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a minimum rotated rectangle enclosing a geometry.
+Note that more than one minimum rotated rectangle may exist.
+May return a Point or LineString in the case of degenerate inputs.</p>
+</span></td></tr>
 <tr><td><a name="st_overlaps"></a><code>st_overlaps(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a intersects but does not completely contain geometry_b, or vice versa. “Does not completely” implies ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = false.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
