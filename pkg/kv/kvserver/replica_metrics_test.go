@@ -28,7 +28,7 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	// https://github.com/cockroachdb/cockroach/pull/39936#pullrequestreview-359059629
 
 	desc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
-		roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
+		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
 			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeVoterFull()},

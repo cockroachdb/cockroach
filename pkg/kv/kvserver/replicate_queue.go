@@ -222,7 +222,7 @@ func (rq *replicateQueue) shouldQueue(
 	if action == AllocatorRemoveLearner {
 		return true, priority
 	}
-	voterReplicas := desc.Replicas().Voters()
+	voterReplicas := desc.Replicas().VoterDescriptors()
 
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
@@ -321,7 +321,7 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	voterReplicas := desc.Replicas().Voters()
+	voterReplicas := desc.Replicas().VoterDescriptors()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
 
 	// NB: the replication layer ensures that the below operations don't cause
@@ -710,7 +710,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	ctx context.Context, repl *Replica, dryRun bool,
 ) (requeue bool, _ error) {
 	desc, _ := repl.DescAndZone()
-	decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.Replicas().All())
+	decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.Replicas().Descriptors())
 	if len(decommissioningReplicas) == 0 {
 		log.VEventf(ctx, 1, "range of replica %s was identified as having decommissioning replicas, "+
 			"but no decommissioning replicas were found", repl)
@@ -784,7 +784,7 @@ func (rq *replicateQueue) removeLearner(
 	ctx context.Context, repl *Replica, dryRun bool,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
-	learnerReplicas := desc.Replicas().Learners()
+	learnerReplicas := desc.Replicas().LearnerDescriptors()
 	if len(learnerReplicas) == 0 {
 		log.VEventf(ctx, 1, "range of replica %s was identified as having learner replicas, "+
 			"but no learner replicas were found", repl)
@@ -961,11 +961,11 @@ func (rq *replicateQueue) shedLease(
 	opts transferLeaseOptions,
 ) (leaseTransferOutcome, error) {
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
-	// so only consider the `Voters` replicas.
+	// so only consider the `VoterDescriptors` replicas.
 	target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone,
-		desc.Replicas().Voters(),
+		desc.Replicas().VoterDescriptors(),
 		repl.store.StoreID(),
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,

@@ -87,7 +87,7 @@ func TestResetQuorum(t *testing.T) {
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(n2)))
 		desc, err = tc.RemoveVoters(k, tc.Target(n1))
 		require.NoError(t, err)
-		require.Len(t, desc.Replicas().All(), 3)
+		require.Len(t, desc.Replicas().Descriptors(), 3)
 
 		srv := tc.Server(n1)
 
@@ -153,11 +153,11 @@ func TestResetQuorum(t *testing.T) {
 			}
 			return errors.Errorf("range id %v not found after resetting quorum", rangeID)
 		}))
-		if len(updatedDesc.Replicas().All()) != 1 {
-			t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().All()))
+		if len(updatedDesc.Replicas().Descriptors()) != 1 {
+			t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().Descriptors()))
 		}
-		if updatedDesc.Replicas().All()[0].NodeID != srv.NodeID() {
-			t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().All()[0].NodeID, srv.NodeID())
+		if updatedDesc.Replicas().Descriptors()[0].NodeID != srv.NodeID() {
+			t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().Descriptors()[0].NodeID, srv.NodeID())
 		}
 	}
 
