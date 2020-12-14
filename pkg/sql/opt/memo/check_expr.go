@@ -22,15 +22,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CheckExpr does sanity checking on an Expr. This code is called in testrace
-// builds (which gives us test/CI coverage but elides this code in regular
-// builds).
+// CheckExpr does sanity checking on an Expr. This function is only defined in
+// crdb_test builds so that checks are run for tests while keeping the check
+// code out of non-test builds, since it can be expensive to run.
 //
 // This function does not assume that the expression has been fully normalized.
-//
-// This function is only defined in race builds, so that checks are run on every
-// PR (as part of make testrace) while keeping the check code out of non-test
-// builds, since it can be expensive to run.
 func (m *Memo) CheckExpr(e opt.Expr) {
 	// Check properties.
 	switch t := e.(type) {
