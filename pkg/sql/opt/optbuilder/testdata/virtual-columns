@@ -2,36 +2,145 @@ exec-ddl
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
-  c INT AS (a+b) VIRTUAL
+  v INT AS (a+b) VIRTUAL
 )
 ----
 
+exec-ddl
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  INDEX (v)
+)
+----
+
+# Column v should be produced.
 build
 SELECT * FROM t
 ----
 project
- ├── columns: a:1!null b:2 c:3
+ ├── columns: a:1!null b:2 v:3
  └── project
-      ├── columns: c:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      ├── columns: v:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:4
       │    └── computed column expressions
-      │         └── c:3
+      │         └── v:3
       │              └── a:1 + b:2
       └── projections
-           └── a:1 + b:2 [as=c:3]
+           └── a:1 + b:2 [as=v:3]
 
+# Column v can be selected explicitly.
 build
-SELECT c FROM t
+SELECT v FROM t
 ----
 project
- ├── columns: c:3
+ ├── columns: v:3
  └── project
-      ├── columns: c:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      ├── columns: v:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
       ├── scan t
       │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:4
       │    └── computed column expressions
-      │         └── c:3
+      │         └── v:3
       │              └── a:1 + b:2
       └── projections
-           └── a:1 + b:2 [as=c:3]
+           └── a:1 + b:2 [as=v:3]
+
+# The projection for v will be removed by norm rules.
+build
+SELECT b FROM t
+----
+project
+ ├── columns: b:2
+ └── project
+      ├── columns: v:3 a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      ├── scan t
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:4
+      │    └── computed column expressions
+      │         └── v:3
+      │              └── a:1 + b:2
+      └── projections
+           └── a:1 + b:2 [as=v:3]
+
+# TODO(radu): we should remove the virtual column from the insert mapping if it
+# is not used by any indexes (so that it can be pruned in the input). This is
+# not trivial because it can still be used by a RETURNING clause.
+build
+INSERT INTO t VALUES (1, 1)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => v:3
+ └── project
+      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    └── (1, 1)
+      └── projections
+           └── column1:5 + column2:6 [as=column7:7]
+
+build
+INSERT INTO t(a) VALUES (1)
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column6:6 => b:2
+ │    └── column7:7 => v:3
+ └── project
+      ├── columns: column7:7 column1:5!null column6:6
+      ├── project
+      │    ├── columns: column6:6 column1:5!null
+      │    ├── values
+      │    │    ├── columns: column1:5!null
+      │    │    └── (1,)
+      │    └── projections
+      │         └── NULL::INT8 [as=column6:6]
+      └── projections
+           └── column1:5 + column6:6 [as=column7:7]
+
+build
+INSERT INTO t(a, b, v) VALUES (1, 1, 1)
+----
+error (55000): cannot write directly to computed column "v"
+
+build
+INSERT INTO t VALUES (1, 1) RETURNING v
+----
+project
+ ├── columns: v:3!null
+ └── insert t
+      ├── columns: a:1!null b:2!null v:3!null
+      ├── insert-mapping:
+      │    ├── column1:5 => a:1
+      │    ├── column2:6 => b:2
+      │    └── column7:7 => v:3
+      └── project
+           ├── columns: column7:7!null column1:5!null column2:6!null
+           ├── values
+           │    ├── columns: column1:5!null column2:6!null
+           │    └── (1, 1)
+           └── projections
+                └── column1:5 + column2:6 [as=column7:7]
+
+build
+INSERT INTO t_idx VALUES (1, 1)
+----
+insert t_idx
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column7:7 => v:3
+ └── project
+      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── values
+      │    ├── columns: column1:5!null column2:6!null
+      │    └── (1, 1)
+      └── projections
+           └── column1:5 + column2:6 [as=column7:7]
