@@ -259,7 +259,7 @@ func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 	ctx := context.Background()
 	return func(key roachpb.Key) []roachpb.ReplicationTarget {
 		desc := getRangeDesc(ctx, key, dbs...)
-		replicas := desc.Replicas().All()
+		replicas := desc.Replicas().Descriptors()
 		targets := make([]roachpb.ReplicationTarget, len(replicas))
 		for i, replica := range replicas {
 			targets[i] = roachpb.ReplicationTarget{

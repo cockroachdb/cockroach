@@ -56,7 +56,7 @@ func requireDescMembers(
 	sort.Slice(targets, func(i, j int) bool { return targets[i].StoreID < targets[j].StoreID })
 
 	have := make([]roachpb.ReplicationTarget, 0, len(targets))
-	for _, rDesc := range desc.Replicas().All() {
+	for _, rDesc := range desc.Replicas().Descriptors() {
 		have = append(have, roachpb.ReplicationTarget{
 			NodeID:  rDesc.NodeID,
 			StoreID: rDesc.StoreID,

@@ -199,7 +199,7 @@ func splitPostApply(
 	if rightReplOrNil != nil {
 		r.store.splitQueue.MaybeAddAsync(ctx, rightReplOrNil, now)
 		r.store.replicateQueue.MaybeAddAsync(ctx, rightReplOrNil, now)
-		if len(split.RightDesc.Replicas().All()) == 1 {
+		if len(split.RightDesc.Replicas().Descriptors()) == 1 {
 			// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 			// the split (the new range) for Raft processing so that the corresponding
 			// Raft group is created. This shouldn't be necessary for correctness, but

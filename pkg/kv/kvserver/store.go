@@ -1119,7 +1119,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 
 					// Learner replicas aren't allowed to become the leaseholder or raft
 					// leader, so only consider the `Voters` replicas.
-					needsLeaseTransfer := len(r.Desc().Replicas().Voters()) > 1 &&
+					needsLeaseTransfer := len(r.Desc().Replicas().VoterDescriptors()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
 						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
 

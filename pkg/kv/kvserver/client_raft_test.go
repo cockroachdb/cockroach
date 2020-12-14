@@ -3173,19 +3173,19 @@ func TestDecommission(t *testing.T) {
 	requireNoReplicas := func(storeID roachpb.StoreID, repFactor int) {
 		testutils.SucceedsSoon(t, func() error {
 			desc := tc.LookupRangeOrFatal(t, k)
-			for _, rDesc := range desc.Replicas().Voters() {
+			for _, rDesc := range desc.Replicas().VoterDescriptors() {
 				store, err := tc.Servers[int(rDesc.NodeID-1)].Stores().GetStore(rDesc.StoreID)
 				require.NoError(t, err)
 				if err := store.ForceReplicationScanAndProcess(); err != nil {
 					return err
 				}
 			}
-			if sl := desc.Replicas().Filter(func(rDesc roachpb.ReplicaDescriptor) bool {
+			if sl := desc.Replicas().FilterToDescriptors(func(rDesc roachpb.ReplicaDescriptor) bool {
 				return rDesc.StoreID == storeID
 			}); len(sl) > 0 {
 				return errors.Errorf("still a replica on s%d: %s", storeID, &desc)
 			}
-			if len(desc.Replicas().Voters()) != repFactor {
+			if len(desc.Replicas().VoterDescriptors()) != repFactor {
 				return errors.Errorf("expected %d replicas: %s", repFactor, &desc)
 			}
 			return nil

@@ -151,8 +151,8 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	// added.
 	<-blockUntilSnapshotCh
 	desc := tc.LookupRangeOrFatal(t, k)
-	require.Len(t, desc.Replicas().Voters(), 1)
-	require.Len(t, desc.Replicas().Learners(), 1)
+	require.Len(t, desc.Replicas().VoterDescriptors(), 1)
+	require.Len(t, desc.Replicas().LearnerDescriptors(), 1)
 
 	// Enqueue the replica in the raftsnapshot queue. We use SucceedsSoon
 	// because it may take a bit for raft to figure out that we need to be
