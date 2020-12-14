@@ -3120,13 +3120,15 @@ project
            └── col2:2 > 1
 
 # Add projection on top to ensure the default NULL values are set correctly.
+# Regression test for #57496: Ensure that non-input columns are not passed
+# through by the Project.
 build
 SELECT count(DISTINCT col1), count(*), array_agg(col1 ORDER BY col2) FROM tab
 ----
 project
  ├── columns: count:5 count:6 array_agg:7
  └── project
-      ├── columns: count:5 count_rows:6 col1:1 col2:2 col3:3 rowid:4 array_agg:7
+      ├── columns: count:5 count_rows:6 array_agg:7
       ├── scalar-group-by
       │    ├── columns: array_agg:7 count:8 count_rows:9
       │    ├── window partition=() ordering=+2
