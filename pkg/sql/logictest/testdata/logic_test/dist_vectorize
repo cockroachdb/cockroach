@@ -49,14 +49,61 @@ NULL       /1       {5}       5
 
 # Verify that EXPLAIN ANALYZE (DISTSQL) works in a distributed setting.
 query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT count(*) FROM kv]
+EXPLAIN ANALYZE (DISTSQL) SELECT count(*) FROM kv
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVdtO20AQfe9XrOYpVBslvgSCn0hpKkUNCY1Db8hCiz1KLcyuu7vmUpTP6g_0yyrbMY2B2kZVRVMed8bHM-ecmd0bUF8jcMAdjof7c5LIiLyZTQ_I8fDj4XgwmpDBZDD-9HlIWq9H7tx9N94iq099kXDdermVf3924QEFLgKcsHNU4ByDARRMoGABBRso9MCjEEvho1JCpp_cZIBRcAVOl0LI40SnYY-CLySCcwM61BGCA3N2GuEMWYCy0wUKAWoWRlmZs4u9WIbnTF4DBTdmXDmk3UkLTxPtkIngCBTevic6PEeHdH98V_nZF1wj16Hg91I6iSNURCILHGLksdNrfRvqk1dA4ZRp_wsqIhIdp6XSxlbIImSAt6SQn1bUlGYLBMdY0ub0B4uFxAXTQnZ6Zfb706PJ_GQ2_eC2toACXqGf3Kf0R52av-30V4MJFzJAiUGpO29ZzcW4Y6V7dHAymsxbe8bf4mKVuBjNh86oH7qO2e5YmzV2NQKsWbX9xGNnNrfKbGCV1e7Ym2VVjQBrVu08sVVWc6usBlbZ7ezO2yCragRYs6r_xFbZza2yG1jVa2-WUTX014za_Yde3Qc6naGKBVd45_V9-M_d9FXGYIH5E65EIn08lMLPyuTHaYbLAgEqnWeN_DDieSptcB1sVILNEti4CzarK9eUtirRdjXYfkzfmYqZoMBRXwp5RiKmkfvXt7YX8UsW6vJABKhQhiwKv7H701LAbrfAx_ACV5tQJIt1KHKPW4ky714l7-1q0bafqWg7lbz71aL1n6lou9XL3a25V6pvpf9INm_54mcAAAD__-ZmLts=
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• group (scalar)
+│ actual row count: 1
+│
+└── • scan
+      actual row count: 5
+      KV rows read: 5
+      KV bytes read: 40 B
+      missing stats
+      table: kv@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkVd1u2kwQvf-eYjVXyadFxj8Q4qu0USqhNlABaS8qFC32iFqYXXd3TUIRj9UX6JNVtjHFkNqOqorSXO6Mj2fOOTO7K1BfQnBhePPu5npEPBFzffb_OXkz6N-S2QIocOFjj81RgfsJTKBgAQUbKDhAoQVjCpEUHiolZPLJKgV0_UdwmxQCHsU6CY8peEIiuCvQgQ4RXBixSYgDZD5KowkUfNQsCNMys8VVJIM5k0ugMIwYVy5pGEnhfqxd0hMcgcLbD0QHc3RJ8_s3lZ09wTVyHQh-kNJxFKIiEpnvEjOLTZZ6G-qQ10BhwrT3GRURsY6SUkljG2QeMmG8ppCdNtSUZlME11zT-vRfTacSp0wLabSK7K_7d73R_aD_cXh2DhTwEb34kNJvdWr9stOfDcZcSB8l-oXuxutyLuaelcO72_tub3R2Zf4pLnaBi1l_6MzqoTOshmGf1thVCLBjVfvIY2fVt8qqYZXdMJzTsqpCgB2rLo5slV3fKruGVU4jvfNOyKoKAXas6hzZKqe-VU4Nq1qN0zKqgv6OUZd_0av7RKcDVJHgCvde36f_3ExeZfSnmD3hSsTSw_dSeGmZ7NhPcWnAR6WzrJkdujxLJQ3ugs1SsFUAm_tgq7xyRWm7FO2Ug53n9J2qmAoKHPWDkDMSMo3cW25tz-MPLNDFgfBRoQxYGHxlh9OSw7Zb4GGwwM0m5Ml8HfLc81aiyLtVyrtdLlr7hYp2Ucq7Uy5a54WKdlm-3M2Ke6X8VvqHZBuv__sRAAD__64PIoI=
+·
+WARNING: this statement is experimental!
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv JOIN kw ON kv.k = kw.k]
+EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv JOIN kw ON kv.k = kw.k
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzkmt9u4kYUxu_7FKNztds1a8aGbGJpJdI2lbLNwjaJqrYrLib2abAwNp0ZQmiUx-oL9Mkq4yW7QDwYS87Ywx22Z7B_3_njjxkeQPwdgQdXZxdnP16TGY_Iz5eDj-Tz2e-fLk7P--S0f3rxx59n5NVP51fXV79evCZfhn6fDRzfkQ-D8z4Zz8mgT8Z3b8fkPRnP346HYEGcBNhnExTgfQYKFjhggQsWdMCCLgwtmPLERyESng55WE44D-7Ba1sQxtOZTE8PLfATjuA9gAxlhODBNbuJ8BJZgNxugwUBShZGy9uM73pTHk4YX4AFV1MWC4-07PTGv_xGZDhBj7T_-1dkx34SS4xlmMRbl-RsGqEgHFngEZqdu1nIp1PH5Aew4IZJf4SCJDM5nUmPpA_zZebqFIXhowXZUUa5orhZkBETo_Xn76XjhxYIyW4RPPpolZPlaEOW-bYsNm2wME6uMF-_J-EBcgw2v-dNeuNCo57R-CPyW_yQhDFym27kXoR_yVc9-ub1ex7ejrKPYMEgpe1Rq-dYPdfqpcmP9-jPtuWdsHsywUnCF4RFUeIziYFH2ktF02vC56muJAjFeHtECc2_6ukW0HMWP6fVszL1k1YytWl3XaAc7AIP3s198M7ag9PiFUJ3Nw7badluUyuElhXmXYHW0WRhnFxhXrB1UFNbh1M80ZwCFei27E5TE42WFea4QAU2WRgnV5gXrEDH1Ap0iyeaW6ACOy2729REo2WFOSlQgU0WxskV5gUr0DW1AjvFE61ToAK7raamGS0rS3d3_bVsSlgcEEoSOULeVImcXIlesBI7plbijhWTSxTTJBa48YP2-W9upzJicItZcEQy4z5-4om_vE12OFjOW_6qCFDI7KqTHZzHq0tCMqn6QVy5fO0sc4ojHOUixCjnCR-TiEmM_cUTw-r8nIVynS5AgTxkUfgP20ZfTXuqTh_DuyXbNxdXZfp0rTLuE-3cVMG9X4vah5vm56zZAaddY8HpHk3KqWeTUiMc5SKYHboT7dxVNSk1N83PWbMDvtGkTAJ3NsHb34K76815c7KrnEzX-0O7ni2uU9JKNj3wau58_9mY0Om3knpCZ7CV3AGu30pW9V7ulrSSTQ-4mjvff9aoSakR9FtJPaEz2EruANdvJatqUkf7WEmDuN8dqINUc5u7gqnmzredNXopqRFq4CD11GoNHGRVSXt8oA5SzW3uCqaaO9921qhJqRFq4CCralI7wPU7yKqS9uRAHSQtu5_d9IDvANfvITVF3Ny1yx3gCutZozfTLghzbSQtu6ltOLh-I1lZp6r7XrimiCv8Z5061cFubNO9drZNKtitXfmamUlN4PrNZGWprgY32EyqwWuwjqmLPN-B1unltM9_b4zyVPv8-caol_I-f9k5IPAaLGbqIs93oHXqVFub-qaayeHjd_8HAAD__6LdGiI=
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• merge join
+│ actual row count: 5
+│ equality: (k) = (k)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     actual row count: 5
+│     KV rows read: 5
+│     KV bytes read: 40 B
+│     missing stats
+│     table: kv@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      actual row count: 5
+      KV rows read: 5
+      KV bytes read: 40 B
+      missing stats
+      table: kw@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkmt9u4kYUxu_7FKNz1XbNmrEhm1haCbXaStl2Q5Vd9abiYmKfBgvjoTNDCI3yWH2BPlllvGQDxGNjyRl7uMMeD_bvO3_8McMDyL8TCODzh98-_PyF_Eh-uR5_IrM78nF8eUVmKzK-IrO7tzPynsxWb2fgQMojvGJzlBD8CRQc8MABHxwYgANDmDiwEDxEKbnILnnYTLiM7iHoOxCni6XKTk8cCLlACB5AxSpBCOALu0nwGlmEwu2DAxEqFieb28zuRgsRz5lYgwOfFyyVAem52Y1__YOoeI4B6f_3r8yPQ54qTFXM04MhtVwkKIlAFgWE5udu1urp1Dn5CRy4YSqcoiR8qRZLFZDsYb7O3J6iMHl0ID_KKbcUN2syZXK6-_yj7PqJA1KxW4SAPjr1ZDnbk2V1KItLOyyMVyjMt-_hIkKB0f73vMluXOmqFzT-hOIWP_I4ReHSvdxL8C_1_Yi--eG9iG-n-UdwYJzRjqgz8pyR74yy5Md7DJeH8s7ZPZnjnIs1YUnCQ6YwCkh_o2g2JkOR6UqiWM4Or6ih-Tc9_Qp6LtOXtHpRpive4wuXDncFKsCu8ODDwgcf7Dw4rV4htLxxuF7P9btaIbSuMO8qtI4uC-MVCvOKrYPa2jq86onmVahAv-cOuppotK4w5xUqsMvCeIXCvGIFerZWoF890fwKFTjoucOuJhqtK8xFhQrssjBeoTCvWIG-rRU4qJ5ogwoVOOx1Nc1oXVmG5fXXcylhaUQo4WqKoqsSeYUSvWIlDmytxJIVk2uUC55K3PtB-_I39zMZMbrFPDiSL0WIvwsebm6TH4438za_KiKUKh_18oPLdDskFVO6H8SNy9fPM6c6wlkhQopqxcWMJExhGq6fGLbnVyxWu3QRShQxS-J_2CH6dtpTdYYY323Yng1uy_RprDHuC-PcVMN9XIs6hpsW56zdAadDa8HpEU3Ka2eT0iOcFSLYHboL49xNNSk9Ny3OWbsDvtekbAL39sH7z8H93ea8P9nXTqa7_aHfzhY3qGklux54PXex_-xM6MxbSTOhs9hKloCbt5JNvZeHNa1k1wOu5y72ny1qUnoE81bSTOgstpIl4OatZFNN6uwYK2kR97sTdZB6bntXMPXcxbazRS8lPUILHKSZWm2Bg2wqac9P1EHque1dwdRzF9vOFjUpPUILHGRTTaoE3LyDbCppL07UQdK6-9ldD3gJuHkPaSji9q5dloBrrGeL3kxlEPbaSFp3U9tycPNGsrFO1fa9cEMR1_jPNnWqk93YpkftbNtUsAe78i0zk4bAzZvJxlJdD26xmdSDt2Ad0xR5sQNt08vpmP_eWOWpjvnzjVUv5WP-snNC4C1YzDRFXuxA29SpDjb1bTWTk8fv_g8AAP__IgoNyQ==
+·
+WARNING: this statement is experimental!
 
 # Verify execution.
 statement ok

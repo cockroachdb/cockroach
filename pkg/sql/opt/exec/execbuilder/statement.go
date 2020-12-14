@@ -119,7 +119,6 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 
 	node, err := b.factory.ConstructExplain(
 		&explain.Options,
-		explain.Analyze,
 		explain.StmtType,
 		func(ef exec.ExplainFactory) (exec.Plan, error) {
 			// Create a separate builder for the explain query.

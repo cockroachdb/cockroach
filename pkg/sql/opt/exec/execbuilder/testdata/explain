@@ -1340,18 +1340,8 @@ vectorized: false
 ·
 • explain
 
-query T
+statement error EXPLAIN ANALYZE can only be used as a top-level statement
 EXPLAIN (VERBOSE) EXPLAIN ANALYZE (DISTSQL) SELECT 1
-----
-distribution: local
-vectorized: false
-·
-• project
-│ columns: (automatic, url)
-│
-└── • explain
-      columns: (automatic, url, json)
-      estimated row count: 10 (missing stats)
 
 # Test a case with many spans.
 query T

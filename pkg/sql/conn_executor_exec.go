@@ -334,6 +334,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
+		ev, payload := ex.makeErrEvent(err, ast)
+		return ev, payload, nil
+	}
+
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
@@ -342,16 +347,26 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if e, ok := ast.(*tree.ExplainAnalyze); ok &&
-		(e.Mode == tree.ExplainDebug || e.Mode == tree.ExplainPlan) {
-		if e.Mode == tree.ExplainDebug {
+	if e, ok := ast.(*tree.ExplainAnalyze); ok {
+		switch e.Mode {
+		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
 			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
-		} else {
+
+		case tree.ExplainPlan:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
 			flags.MakeDeterministic = ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze
 			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
+
+		case tree.ExplainDistSQL:
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeDistSQLUseCounter)
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.MakeDeterministic = ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze
+			ih.SetOutputMode(explainAnalyzeDistSQLOutput, flags)
+
+		default:
+			return makeErrEvent(errors.AssertionFailedf("unsupported EXPLAIN ANALYZE mode %s", e.Mode))
 		}
 		// Strip off the explain node to execute the inner statement.
 		stmt.AST = e.Statement
@@ -377,11 +392,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context = ctx
-	}
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, ast)
-		return ev, payload, nil
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
@@ -959,7 +969,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.stmtType = recv.stmtType
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-	} else if planner.instrumentation.ShouldCollectBundle() {
+	} else if planner.instrumentation.ShouldSaveFlows() {
 		planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
 	}
 	planCtx.traceMetadata = planner.instrumentation.traceMetadata
