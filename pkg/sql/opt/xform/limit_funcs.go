@@ -54,7 +54,8 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 		return false
 	}
 
-	if scanPrivate.Constraint == nil && !scanPrivate.UsesPartialIndex(c.e.mem.Metadata()) {
+	md := c.e.mem.Metadata()
+	if scanPrivate.Constraint == nil && scanPrivate.PartialIndexPredicate(md) == nil {
 		// This is not a constrained scan nor a partial index scan, so skip it.
 		// The GenerateLimitedScans rule is responsible for limited
 		// unconstrained scans on non-partial indexes.

@@ -513,7 +513,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -541,7 +541,7 @@ func (pi *projectInOpBool) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInBool(v, col, pi.filterRow, pi.hasNulls)
@@ -743,9 +743,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col
-			_ = 0
-			_ = n
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -773,9 +771,7 @@ func (pi *projectInOpBytes) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col
-			_ = 0
-			_ = n
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInBytes(v, col, pi.filterRow, pi.hasNulls)
@@ -977,9 +973,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col
-			_ = 0
-			_ = n
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1007,9 +1001,7 @@ func (pi *projectInOpDecimal) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col
-			_ = 0
-			_ = n
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInDecimal(v, col, pi.filterRow, pi.hasNulls)
@@ -1222,7 +1214,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1250,7 +1242,7 @@ func (pi *projectInOpInt16) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInInt16(v, col, pi.filterRow, pi.hasNulls)
@@ -1463,7 +1455,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1491,7 +1483,7 @@ func (pi *projectInOpInt32) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInInt32(v, col, pi.filterRow, pi.hasNulls)
@@ -1704,7 +1696,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1732,7 +1724,7 @@ func (pi *projectInOpInt64) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInInt64(v, col, pi.filterRow, pi.hasNulls)
@@ -1953,7 +1945,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -1981,7 +1973,7 @@ func (pi *projectInOpFloat64) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInFloat64(v, col, pi.filterRow, pi.hasNulls)
@@ -2190,7 +2182,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -2218,7 +2210,7 @@ func (pi *projectInOpTimestamp) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInTimestamp(v, col, pi.filterRow, pi.hasNulls)
@@ -2420,7 +2412,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -2448,7 +2440,7 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col[0:n]
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
@@ -2652,7 +2644,7 @@ func (pi *projectInOpDatum) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col.Slice(0, n)
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				if nulls.NullAt(i) {
 					projNulls.SetNull(i)
@@ -2680,7 +2672,7 @@ func (pi *projectInOpDatum) Next(ctx context.Context) coldata.Batch {
 				}
 			}
 		} else {
-			col = col.Slice(0, n)
+			_ = col.Get(n - 1)
 			for i := 0; i < n; i++ {
 				v := col.Get(i)
 				cmpRes := cmpInDatum(v, col, pi.filterRow, pi.hasNulls)

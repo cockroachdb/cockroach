@@ -512,6 +512,7 @@ func TestFailedReplicaChange(t *testing.T) {
 // We can truncate the old log entries and a new replica will be brought up from a snapshot.
 func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 57537, "flaky test")
 	defer log.Scope(t).Close(t)
 	mtc := &multiTestContext{
 		// This test was written before the multiTestContext started creating many

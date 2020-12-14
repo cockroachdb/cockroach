@@ -124,7 +124,6 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 					execgen.SET(col, i, c.constVal)
 				}
 			} else {
-				col = execgen.SLICE(col, 0, n)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					execgen.SET(col, i, c.constVal)

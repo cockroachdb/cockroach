@@ -147,10 +147,8 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -173,10 +171,8 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasPrefix(arg, p.constArg)
@@ -336,10 +332,8 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -362,10 +356,8 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.HasSuffix(arg, p.constArg)
@@ -525,10 +517,8 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -551,10 +541,8 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = bytes.Contains(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = bytes.Contains(arg, p.constArg)
@@ -714,10 +702,8 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -740,10 +726,8 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 					projCol[i] = p.constArg.Match(arg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Match(arg)
@@ -903,10 +887,8 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -929,10 +911,8 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasPrefix(arg, p.constArg)
@@ -1092,10 +1072,8 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1118,10 +1096,8 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.HasSuffix(arg, p.constArg)
@@ -1281,10 +1257,8 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1307,10 +1281,8 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 					projCol[i] = !bytes.Contains(arg, p.constArg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !bytes.Contains(arg, p.constArg)
@@ -1470,10 +1442,8 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					}
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
@@ -1496,10 +1466,8 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 					projCol[i] = !p.constArg.Match(arg)
 				}
 			} else {
-				col = col
-				_ = 0
-				_ = n
 				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 					projCol[i] = !p.constArg.Match(arg)
