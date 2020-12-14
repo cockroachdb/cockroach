@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
@@ -35,9 +36,16 @@ type Channel = logpb.Channel
 func logfDepth(
 	ctx context.Context, depth int, sev Severity, ch Channel, format string, args ...interface{},
 ) {
-	if sev == severity.FATAL && MaybeSendCrashReport != nil {
-		err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
-		MaybeSendCrashReport(ctx, err)
+	if sev == severity.FATAL {
+		if MaybeSendCrashReport != nil {
+			err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
+			MaybeSendCrashReport(ctx, err)
+		}
+		if ch != channel.OPS {
+			// Tell the OPS channel about this termination.
+			logfDepth(ctx, depth+1, severity.INFO, channel.OPS,
+				"the server is terminating due to a fatal error (see the %s channel for details)", ch)
+		}
 	}
 
 	logger := logging.getLogger(ch)
