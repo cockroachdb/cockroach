@@ -854,7 +854,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	).WillDistribute()
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
 	subqueryPlanCtx.stmtType = tree.Rows
-	if planner.instrumentation.ShouldCollectBundle() {
+	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
 	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
@@ -1146,7 +1146,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
-	if planner.instrumentation.ShouldCollectBundle() {
+	if planner.instrumentation.ShouldSaveFlows() {
 		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
 	}
 	postqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata

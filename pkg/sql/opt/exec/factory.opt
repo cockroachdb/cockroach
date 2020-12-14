@@ -329,7 +329,6 @@ define ExplainOpt {
 # to construct the plan against that factory.
 define Explain {
     Options *tree.ExplainOptions
-    Analyze bool
     StmtType tree.StatementType
     BuildFn exec.BuildPlanForExplainFn
 }
