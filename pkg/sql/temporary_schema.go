@@ -164,6 +164,11 @@ func cleanupSessionTempObjects(
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Explicitly set the system config trigger, since we may write to the
+		// namespace table first.
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		dbIDs, err := GetAllDatabaseDescriptorIDs(ctx, txn)
