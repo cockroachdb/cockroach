@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -39,7 +40,7 @@ import (
 //
 //  - Setup() is called before query execution.
 //
-//  - SetDiscardRows(), ShouldDiscardRows(), ShouldCollectBundle(),
+//  - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
 //    ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
 //    PlanForStats() can be called at any point during execution.
 //
@@ -47,7 +48,8 @@ import (
 //
 type instrumentationHelper struct {
 	outputMode outputMode
-	// explainFlags is used when outputMode is explainAnalyzePlanOutput.
+	// explainFlags is used when outputMode is explainAnalyzePlanOutput or
+	// explainAnalyzeDistSQLOutput.
 	explainFlags explain.Flags
 
 	// Query fingerprint (anonymized statement).
@@ -94,6 +96,7 @@ const (
 	unmodifiedOutput outputMode = iota
 	explainAnalyzeDebugOutput
 	explainAnalyzePlanOutput
+	explainAnalyzeDistSQLOutput
 )
 
 // SetOutputMode can be called before Setup, if we are running an EXPLAIN
@@ -129,7 +132,7 @@ func (ih *instrumentationHelper) Setup(
 		// bundle.
 		ih.discardRows = true
 
-	case explainAnalyzePlanOutput:
+	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
 		ih.discardRows = true
 
 	default:
@@ -202,11 +205,12 @@ func (ih *instrumentationHelper) Finish(
 		stmtStats.mu.Unlock()
 	}
 
+	var bundle diagnosticsBundle
 	if ih.collectBundle {
 		ie := p.extendedEvalCtx.InternalExecutor.(*InternalExecutor)
 		placeholders := p.extendedEvalCtx.Placeholders
 		planStr := ih.planStringForBundle(&statsCollector.phaseTimes)
-		bundle := buildStatementBundle(
+		bundle = buildStatementBundle(
 			ih.origCtx, cfg.DB, ie, &p.curPlan, planStr, trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
@@ -222,12 +226,27 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
-	if ih.outputMode == explainAnalyzePlanOutput && retErr == nil {
-		phaseTimes := &statsCollector.phaseTimes
-		retErr = ih.setExplainAnalyzePlanResult(ctx, res, phaseTimes)
+	// If there was a communication error already, no point in setting any
+	// results.
+	if retErr != nil {
+		return retErr
 	}
 
-	return retErr
+	switch ih.outputMode {
+	case explainAnalyzeDebugOutput:
+		return setExplainBundleResult(ctx, res, bundle, cfg)
+
+	case explainAnalyzePlanOutput, explainAnalyzeDistSQLOutput:
+		phaseTimes := &statsCollector.phaseTimes
+		var flows []flowInfo
+		if ih.outputMode == explainAnalyzeDistSQLOutput {
+			flows = p.curPlan.distSQLFlowInfos
+		}
+		return ih.setExplainAnalyzeResult(ctx, res, phaseTimes, flows, trace)
+
+	default:
+		return nil
+	}
 }
 
 // SetDiscardRows should be called when we want to discard rows for a
@@ -242,9 +261,10 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 	return ih.discardRows
 }
 
-// ShouldCollectBundle is true if we are collecting a support bundle.
-func (ih *instrumentationHelper) ShouldCollectBundle() bool {
-	return ih.collectBundle
+// ShouldSaveFlows is true if we should save the flow specifications (to be able
+// to generate diagrams).
+func (ih *instrumentationHelper) ShouldSaveFlows() bool {
+	return ih.collectBundle || ih.outputMode == explainAnalyzeDistSQLOutput
 }
 
 // ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
@@ -252,13 +272,14 @@ func (ih *instrumentationHelper) ShouldCollectBundle() bool {
 // EXPLAIN ANALYZE, in which case we want to run the CREATE STATISTICS plan
 // directly.
 func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
-	return ih.outputMode != explainAnalyzePlanOutput && ih.outputMode != explainAnalyzeDebugOutput
+	return ih.outputMode == unmodifiedOutput
 }
 
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
-	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput
+	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput ||
+		ih.outputMode == explainAnalyzeDistSQLOutput
 }
 
 // RecordExplainPlan records the explain.Plan for this query.
@@ -311,7 +332,7 @@ func (ih *instrumentationHelper) planStringForBundle(phaseTimes *phaseTimes) str
 
 // planRowsForExplainAnalyze generates the plan tree as a list of strings (one
 // for each line).
-// Used in explainAnalyzePlanOutput mode.
+// Used in explainAnalyzePlanOutput and explainAnalyzeDistSQLOutput modes.
 func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTimes) []string {
 	if ih.explainPlan == nil {
 		return nil
@@ -325,11 +346,16 @@ func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTime
 	return ob.BuildStringRows()
 }
 
-// setExplainAnalyzePlanResult sets the result for an EXPLAIN ANALYZE (PLAN)
-// statement. It returns an error only if there was an error adding rows to the
-// result.
-func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
-	ctx context.Context, res RestrictedCommandResult, phaseTimes *phaseTimes,
+// setExplainAnalyzeResult sets the result for an EXPLAIN ANALYZE or EXPLAIN
+// ANALYZE (DISTSQL) statement (in the former case, distSQLFlowInfos and trace
+// are nil).
+// Returns an error only if there was an error adding rows to the result.
+func (ih *instrumentationHelper) setExplainAnalyzeResult(
+	ctx context.Context,
+	res RestrictedCommandResult,
+	phaseTimes *phaseTimes,
+	distSQLFlowInfos []flowInfo,
+	trace tracing.Recording,
 ) (commErr error) {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
 	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
@@ -340,6 +366,25 @@ func (ih *instrumentationHelper) setExplainAnalyzePlanResult(
 	}
 
 	rows := ih.planRowsForExplainAnalyze(phaseTimes)
+	if distSQLFlowInfos != nil {
+		rows = append(rows, "")
+		for i, d := range distSQLFlowInfos {
+			var buf bytes.Buffer
+			if len(distSQLFlowInfos) > 1 {
+				fmt.Fprintf(&buf, "Diagram %d (%s): ", i+1, d.typ)
+			} else {
+				buf.WriteString("Diagram: ")
+			}
+			d.diagram.AddSpans(trace)
+			_, url, err := d.diagram.ToURL()
+			if err != nil {
+				buf.WriteString(err.Error())
+			} else {
+				buf.WriteString(url.String())
+			}
+			rows = append(rows, buf.String())
+		}
+	}
 	rows = append(rows, "")
 	rows = append(rows, "WARNING: this statement is experimental!")
 	for _, row := range rows {
