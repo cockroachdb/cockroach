@@ -21,12 +21,16 @@ import {
   trackPaginate,
   trackSearch,
   trackTableSort,
+  trackDownloadDiagnosticsBundle,
+  trackSubnavSelection,
 } from "src/util/analytics";
 import {
   TRACK_STATEMENTS_SEARCH,
   TRACK_STATEMENTS_PAGINATION,
   TRACK_TABLE_SORT,
   TableSortActionPayload,
+  TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
+  TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
 } from "./analyticsActions";
 
 export function* trackActivateStatementsDiagnostics(action: PayloadAction<DiagnosticsReportPayload>) {
@@ -52,6 +56,14 @@ export function* trackTableSortChange(action: PayloadAction<TableSortActionPaylo
   yield call(trackTableSort, tableName, columnName, ascending);
 }
 
+export function* trackDownloadDiagnosticBundleSaga(action: PayloadAction<string>) {
+  yield call(trackDownloadDiagnosticsBundle, action.payload);
+}
+
+export function* trackStatementDetailsSubnavSelectionSaga(action: PayloadAction<string>) {
+  yield call(trackSubnavSelection, action.payload);
+}
+
 export function* analyticsSaga() {
   yield all([
     takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, trackActivateStatementsDiagnostics),
@@ -59,5 +71,7 @@ export function* analyticsSaga() {
     takeEvery(TRACK_STATEMENTS_SEARCH, trackStatementsSearch),
     takeEvery(TRACK_STATEMENTS_PAGINATION, trackStatementsPagination),
     takeEvery(TRACK_TABLE_SORT, trackTableSortChange),
+    takeEvery(TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE, trackDownloadDiagnosticBundleSaga),
+    takeEvery(TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION, trackStatementDetailsSubnavSelectionSaga),
   ]);
 }
