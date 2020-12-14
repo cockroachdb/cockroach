@@ -111,9 +111,6 @@ func (m *FinishSchemaChange) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *FinishSchemaChangeRollback) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *RenameDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
@@ -127,9 +124,6 @@ func (m *RenameType) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *ReverseSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *SetZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *TruncateTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
@@ -166,4 +160,10 @@ func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *SetZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
