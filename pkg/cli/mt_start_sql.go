@@ -97,7 +97,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		tempStorageMaxSizeBytes,
 	)
 
-	addr, httpAddr, err := server.StartTenant(
+	addr, httpAddr, instanceID, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -107,6 +107,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Register the server's identifiers so that log events are
+	// decorated with the server's identity. This helps when gathering
+	// log events from multiple servers into the same log collector.
+	log.SetTenantIDs(serverCfg.SQLConfig.TenantID.String(), int32(instanceID))
+
 	log.Infof(ctx, "SQL server for tenant %s listening at %s, http at %s", serverCfg.SQLConfig.TenantID, addr, httpAddr)
 
 	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
