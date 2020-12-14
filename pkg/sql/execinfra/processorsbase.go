@@ -359,7 +359,7 @@ type ProcessorConstructor func(
 //     FlowCtx *FlowCtx, l RowSource, r RowSource, post *PostProcessSpec, output RowReceiver,
 //   ) (*concatProcessor, error) {
 //     p := &concatProcessor{l: l, r: r}
-//     if err := p.init(
+//     if err := p.Init(
 //       post, l.OutputTypes(), FlowCtx, output,
 //       // We pass the inputs to the helper, to be consumed by DrainHelper() later.
 //       ProcStateOpts{
@@ -383,11 +383,11 @@ type ProcessorConstructor func(
 //   }
 //
 //   // Next is part of the RowSource interface.
-//   func (p *concatProcessor) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+//   func (p *concatProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 //     // Loop while we haven't produced a row or a metadata record. We loop around
 //     // in several cases, including when the filtering rejected a row coming.
 //     for p.State == StateRunning {
-//       var row sqlbase.EncDatumRow
+//       var row rowenc.EncDatumRow
 //       var meta *ProducerMetadata
 //       if !p.leftConsumed {
 //         row, meta = p.l.Next()
