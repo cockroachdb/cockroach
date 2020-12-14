@@ -14,7 +14,34 @@ import (
 	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	"github.com/gogo/protobuf/vanity"
 	"github.com/gogo/protobuf/vanity/command"
+	"regexp"
+	"strings"
 )
+
+var builtinRegex *regexp.Regexp = regexp.MustCompile("github.com/cockroachdb/cockroach/pkg/(?P<capture>(bytes|context|encoding/binary|errors|fmt|io|math|github\\.com|(google\\.)?golang\\.org)([^a-z]|$$))")
+
+func fixImports(s string) string {
+	lines := strings.Split(s, "\n")
+	var builder strings.Builder
+	for _, line := range lines {
+		if strings.Contains(line, "import _ ") ||
+			strings.Contains(line, "import fmt \"github.com/cockroachdb/cockroach/pkg/fmt\"") ||
+			strings.Contains(line, "import math \"github.com/cockroachdb/cockroach/pkg/math\"") {
+			continue
+		}
+
+		line = strings.Replace(line, "github.com/cockroachdb/cockroach/pkg/etcd", "go.etcd.io/etcd", 1)
+		line = strings.Replace(line, "github.com/cockroachdb/cockroach/pkg/errorspb", "github.com/cockroachdb/errors/errorspb", 1)
+		// TODO(benesch): Remove these after https://github.com/grpc/grpc-go/issues/711.
+		line = strings.Replace(line, "golang.org/x/net/context", "context", 1)
+		if builtinRegex.MatchString(line) {
+			line = builtinRegex.ReplaceAllString(line, "$1")
+		}
+		builder.WriteString(line)
+		builder.WriteByte('\n')
+	}
+	return builder.String()
+}
 
 func main() {
 	req := command.Read()
@@ -92,5 +119,8 @@ func main() {
 	}
 
 	resp := command.Generate(req)
+	for i := 0; i < len(resp.File); i++ {
+		*resp.File[i].Content = fixImports(*resp.File[i].Content)
+	}
 	command.Write(resp)
 }
