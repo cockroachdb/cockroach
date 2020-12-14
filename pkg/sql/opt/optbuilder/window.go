@@ -482,7 +482,7 @@ func (b *Builder) constructWindowGroup(
 ) memo.RelExpr {
 	if groupingColSet.Empty() {
 		// Construct a scalar GroupBy wrapped around the appropriate projections.
-		return b.constructScalarWindowGroup(input, groupingColSet, aggInfos, outScope)
+		return b.constructScalarWindowGroup(input, aggInfos, outScope)
 	}
 
 	// Construct a GroupBy using the groupingColSet. Use the ConstAgg aggregate for
@@ -534,10 +534,8 @@ func (b *Builder) overrideDefaultNullValue(agg aggregateInfo) (opt.ScalarExpr, b
 // The expression may be wrapped with a projection so ensure the default NULL
 // values of the aggregates are respected when no rows are returned.
 func (b *Builder) constructScalarWindowGroup(
-	input memo.RelExpr, groupingColSet opt.ColSet, aggInfos []aggregateInfo, outScope *scope,
+	input memo.RelExpr, aggInfos []aggregateInfo, outScope *scope,
 ) memo.RelExpr {
-	private := memo.GroupingPrivate{GroupingCols: groupingColSet}
-	private.Ordering.FromOrderingWithOptCols(nil, groupingColSet)
 	aggs := make(memo.AggregationsExpr, 0, len(aggInfos))
 
 	// Create a projection here to replace the NULL values with pre-defined
@@ -555,7 +553,7 @@ func (b *Builder) constructScalarWindowGroup(
 	projections := make(memo.ProjectionsExpr, 0, len(aggInfos))
 
 	// Create an appropriate passthrough for the projection.
-	passthrough := input.Relational().OutputCols.Copy()
+	var passthrough opt.ColSet
 	for i := range aggInfos {
 		varExpr := b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggInfos[i].col.id))
 
@@ -568,10 +566,9 @@ func (b *Builder) constructScalarWindowGroup(
 		}
 
 		aggs = append(aggs, b.factory.ConstructAggregationsItem(varExpr, aggregateCol.id))
-		passthrough.Add(aggInfos[i].col.id)
 
-		// Add projection to replace default NULL value.
 		if requiresProjection {
+			// Add projection to replace default NULL value.
 			projections = append(projections, b.factory.ConstructProjectionsItem(
 				b.replaceDefaultReturn(
 					b.factory.ConstructVariable(aggregateCol.id),
@@ -579,11 +576,13 @@ func (b *Builder) constructScalarWindowGroup(
 					defaultNullVal),
 				aggInfos[i].col.id,
 			))
-			passthrough.Remove(aggInfos[i].col.id)
+		} else {
+			// Pass through the aggregate column directly.
+			passthrough.Add(aggInfos[i].col.id)
 		}
 	}
 
-	scalarAggExpr := b.factory.ConstructScalarGroupBy(input, aggs, &private)
+	scalarAggExpr := b.factory.ConstructScalarGroupBy(input, aggs, &memo.GroupingPrivate{})
 	if len(projections) != 0 {
 		return b.factory.ConstructProject(scalarAggExpr, projections, passthrough)
 	}
