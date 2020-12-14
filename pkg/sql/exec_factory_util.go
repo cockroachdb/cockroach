@@ -112,11 +112,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 }
 
 func constructExplainDistSQLOrVecNode(
-	options *tree.ExplainOptions,
-	analyze bool,
-	stmtType tree.StatementType,
-	p *planComponents,
-	planner *planner,
+	options *tree.ExplainOptions, stmtType tree.StatementType, p *planComponents, planner *planner,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
@@ -127,7 +123,6 @@ func constructExplainDistSQLOrVecNode(
 		return &explainDistSQLNode{
 			options:  options,
 			plan:     *p,
-			analyze:  analyze,
 			stmtType: stmtType,
 		}, nil
 

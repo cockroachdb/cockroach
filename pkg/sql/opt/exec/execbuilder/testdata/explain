@@ -1340,6 +1340,9 @@ vectorized: false
 ·
 • explain
 
+statement error EXPLAIN ANALYZE can only be used as a top-level statement
+EXPLAIN (VERBOSE) EXPLAIN ANALYZE (DISTSQL) SELECT 1
+
 # Test a case with many spans.
 query T
 EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)

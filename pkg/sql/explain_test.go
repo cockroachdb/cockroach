@@ -97,7 +97,6 @@ func TestStatementReuses(t *testing.T) {
 		`UPSERT INTO a VALUES (1)`,
 		`UPDATE a SET b = 1`,
 
-		`EXPLAIN ANALYZE (DISTSQL) SELECT 1`,
 		`EXPLAIN SELECT 1`,
 
 		// TODO(knz): backup/restore planning tests really should be

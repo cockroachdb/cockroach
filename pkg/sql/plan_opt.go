@@ -50,7 +50,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 	opc := &p.optPlanningCtx
 	opc.reset()
 
-	switch n := stmt.AST.(type) {
+	switch stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterTable, *tree.AlterSequence,
 		*tree.Analyze,
 		*tree.BeginTransaction,
@@ -79,15 +79,13 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		return opc.flags, nil
 
 	case *tree.ExplainAnalyze:
-		if n.Mode == tree.ExplainDebug {
-			// This statement returns result columns but does not support placeholders,
-			// and we don't want to do anything during prepare.
-			if len(p.semaCtx.Placeholders.Types) != 0 {
-				return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
-			}
-			stmt.Prepared.Columns = colinfo.ExplainPlanColumns
-			return opc.flags, nil
+		// This statement returns result columns but does not support placeholders,
+		// and we don't want to do anything during prepare.
+		if len(p.semaCtx.Placeholders.Types) != 0 {
+			return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
 		}
+		stmt.Prepared.Columns = colinfo.ExplainPlanColumns
+		return opc.flags, nil
 	}
 
 	if opc.useCache {

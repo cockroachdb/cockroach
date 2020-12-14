@@ -36,19 +36,82 @@ statement ok
 SET distsql = on
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT a FROM a]
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFK80AUhff_Uwxn9QsjJi5czKpVI4TGtjZF1JLFNLnUQDozzkzAUvJYvoBPJslEQURweb5z5ty59wj30kAgT7Lkas1a27Cb1eKWbZKHZTZN52w6n2aPTwn7f53m6_wuO2FjVIagLMChdEVzuScHsUGMgsNYXZJz2vboOATS6hUi4qiVaX2PC45SW4I4wte-IQis5bahFcmK7FkEjoq8rJuhVk6MrffSHsCRG6mcYKfgWLResEkMjtk98_WeBIve31zQpVaelK-1-mH51jTkmCVZCXbOo2is2B78F44v2Ky-BMdW-vKZHNOtN_28_mtjwScKFUXHEci4oPNyRxBxx_9-hBU5o5Wjb_v_1hx1BQdVOwqHdrq1JS2tLocxQS6GdwOoyPngxkGkKlhd0f37CAAA__81VadX
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• scan
+  actual row count: 2,001
+  KV rows read: 2,001
+  KV bytes read: 16 KiB
+  missing stats
+  table: a@primary
+  spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkMFKKzEUhvf3KcK_zuXO3IWLrIpSoVSttMWNzCKdHGpgmsScM2Ap81i-gE8mM6mCiODy__6Z7-ScE_i5g8FmfjO_2iqrrterW2WhEaKjO3sghnlEjUYj5dgSc8wjOk0fLNwLTKXhQ-plxI1GGzPBnCBeOoLB1u46WpN1lP9V0HAk1neT1s5S9gebj9DYJBvYqL_QWPVi1KyGxvJBiT-QUdXbK5fcxiAUxMfwrZI-dcQqk3VG_ddVdVbsjvKJ6wu19JfQ2Flpn4hV7CWN88annQUfqCiaQaOQ84Isdk8w9aB_f4Q1cYqB6cv-P5mrodEgt6dyaI59buk-x3YaU-Jq-m8CjlhKW5ewCKUamuHPewAAAP__3R6a_g==
+·
+WARNING: this statement is experimental!
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b]
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c JOIN d ON d.b = c.b
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJykUk2P0zAQvfMrRnMCyZSmBw6WkFqgSFlCsrQVAlY5OPZoCaS28Ye0q6o_iz_AL0OJDaJUIGCP8-Y9v3lPPqD_PCDH7bpaP9tBdAO82DSv4Gr99rJalTWs6lX17v0a7j8vt7vt6-oBZKqciUSVcNGUNShoalCzDp6AnHUtMtRGUS325JFfYYEtQ-uMJO-NG6HDRCjVDfI5w17bGEa4ZSiNI-QHDH0YCDnuRDfQhoQi92iODBUF0Q_Ts3LpSSLDrRXac3iIDJsYOCwLtlwgw5dvIPR74jD_-sWnWRodSIfe6LNViHYgD46E4pDl3W34ARWP4Sky7ESQH8iDicGOZuNNWfodWmB7ZJimnMoHcU3IiyP7--QXptc5eHEaXC2t6_fC3SLDyphP0cJH02swmsOUPNeA2SBnS7ES4oMYhvMO_rOu0YluSMZz6p36WvxLXxvy1mhPJ1397uX5sWVI6prSb_QmOkmXzsjJJo3NpJsART6kbZGGUqfVeODP4uKP4sUv4vZ471sAAAD__xsxI9k=
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• lookup join
+│ actual row count: 2
+│ KV rows read: 1
+│ table: d@primary
+│ equality: (b) = (b)
+│
+└── • scan
+      actual row count: 2
+      KV rows read: 2
+      KV bytes read: 16 B
+      estimated row count: 1
+      table: c@sec
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykUk2LFDEUvPsrHnWO43QfPASERllh1nVaZhcv0od08lijPUlM0rDL0D_LP-Avk-604joofhyrXurVqyInpE8DJK4vri5e3JDeKHp5aF-Tpst2tydD7Z7MpqdnpDc9BJw3vFdHTpDvUKETCNFrTsnHmTotD3bmDnIrYF0Y80x3AtpHhjwh2zwwJG5UP_CBleH4ZAsBw1nZYVmrm8QaAtdBuSTpMQTaMUtqKtHUEHj1lrI9sqTtl8-pYO1dZpetd2ejPIaBE0VWRtIq7-_zd6p6Ss8h0Kus33MiP-Ywm803rdJvVI1uEihoTZWyumXIahJ_nvzSW7cGrx4GN02I9qjiPQSuvP84BvrgrSPvJC3J1xqwGqzZSqzCpKyG4byDf6xrduI71uP50__qq_6bvg6cgneJH3T1q83bqRNgc8vlNyY_Rs1voteLTYHtolsIwymXaVXAzpXRfOCP4uq34voncTc9-hoAAP__oYoXgA==
+·
+WARNING: this statement is experimental!
 
 query T
-SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
+EXPLAIN ANALYZE (DISTSQL) SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMUt1u0zAUvucpjs7VJsyWZBIXliatQEAZbTLSCgFTLlz70EUkdrAdqVXVx-IFeDKUpPxkHUODG-5yvh873-ezRfe5Qo7zeBo_X0BrK3iZZzO4jt9dTSdJCpN0Mn3_IYajF8l8MX8zPYa9VJ6IQSohSdM4h1mcv4rhMktSUJClveAc1MmyQIbaKEpFTQ75NYZYMGyskeScsR207QWJWiMPGJa6aX0HFwylsYR8i770FSHHhVhWlJNQZE8DZKjIi7Lqj5UXjS1rYTfIcN4I7Tg8QYZZ6zlchMjw9VvwZU0cgq9f3DBLoz1pXxp9QPm2qciBJaE4RAO23PgfUPgUniHDpfDyhhyY1jfdTd1P7a3foQiLHcNh2sdyXqwIebhjfxc9HEdX90WP_svo0W-j_0zcamMVWVKjtEXn_JPkjv5mZFd0aUpN9jQa91fRR390ET4-Prfl6mb4HK0OrUm2h13VYg011cZuQFSVkcKT4hD07XSck7brCFTpPh0q_qm_s4esTk6uMdrR7R7vPDnoyiO1ouExnGmtpCtrZH_NMGa9rwcUOT-w0TAkuqf63f7VHD7AHN02R_eaz0bmYFfsHn0LAAD__4kxkjU=
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+·
+• merge join
+│ actual row count: 2
+│ equality: (a) = (b)
+│
+├── • scan
+│     actual row count: 2
+│     KV rows read: 2
+│     KV bytes read: 16 B
+│     estimated row count: 1
+│     table: c@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      actual row count: 2
+      KV rows read: 2
+      KV bytes read: 16 B
+      missing stats
+      table: d@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMks9u1DAQxu88xWhOIEybpBIHS5VWoIC2sAlKKy4oB689bC0SO9iOtKvVPhYvwJOh2OVPuqWocOGW-WY-O9_Ps0f_uUOOl-Xb8uUVyBMBr5p6BRKWVVU2sCqb1yVc1MsKFNRVHDgHdbJGhsYqqkRPHvkHzLFlODgryXvrJmkfB5ZqizxjqM0whkluGUrrCPkegw4dIccrse6oIaHInWbIUFEQuovHysXgdC_cDhleDsJ4Ds-QYT0GDoscGb55D0H3xCH7-sWnWloTyARtzVErjENHHhwJxaFI2noXfkj5c3iBDNciyGvyYMcwTDdNP3Vj_S4V2B4Ypuomlg9iQ8jzA_u76Pk8urovevFfRi9-G_1n4tFYp8iRmqVtJ-efRu7gtyK3oQurDbnTYs6vo4_h8SJ_-uTc6c11-pytDm1JjseserGFnnrrdiC6zkoRSHHIIp2p56WbGIHS_tPxxD_xO3vI6jTkB2s83eZ458nZBI_UhtJjeDs6Se-clfGaVNbRFwVFPqRukYqlia2427-a8weYi9vm4l7z2cycHdrDo28BAAD__50-hdw=
+·
+WARNING: this statement is experimental!
 
 statement ok
 RESET vectorize; RESET distsql
