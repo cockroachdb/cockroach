@@ -81,7 +81,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		cpy := *tc.repl.Desc()
 		cpy.StartKey = test.start
 		cpy.EndKey = test.end
-		repl, err := newReplica(ctx, &cpy, tc.store, cpy.Replicas().Voters()[0].ReplicaID)
+		repl, err := newReplica(ctx, &cpy, tc.store, cpy.Replicas().VoterDescriptors()[0].ReplicaID)
 		if err != nil {
 			t.Fatal(err)
 		}

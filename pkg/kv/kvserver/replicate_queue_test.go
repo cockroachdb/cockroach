@@ -85,7 +85,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 		// queue is already hard at work.
 		testutils.SucceedsSoon(t, func() error {
 			desc := tc.LookupRangeOrFatal(t, splitKey)
-			if i > 0 && len(desc.Replicas().Voters()) > 3 {
+			if i > 0 && len(desc.Replicas().VoterDescriptors()) > 3 {
 				// Some system ranges have five replicas but user ranges only three,
 				// so we'll see downreplications early in the startup process which
 				// we want to ignore. Delay the splits so that we don't create
@@ -146,7 +146,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
 	require.NoError(t, err)
 	for _, info := range infos {
-		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().Voters()) <= 3 {
+		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
 			continue
 		}
 		// If we have atomic changes enabled, we expect to never see four replicas
@@ -270,7 +270,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	// starts up with 5 replicas. Since it's not a system range, its default zone
 	// config asks for 3x replication, and the replication queue will
 	// down-replicate it.
-	require.Len(t, desc.Replicas().All(), 5)
+	require.Len(t, desc.Replicas().Descriptors(), 5)
 	// Re-enable the replication queue.
 	tc.ToggleReplicateQueues(true)
 

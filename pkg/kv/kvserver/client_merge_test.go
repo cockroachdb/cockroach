@@ -1985,11 +1985,11 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 		`|cannot merge range with non-voter replicas`
 	if mergeErr == nil && kvserver.IsRetriableReplicationChangeError(addErr) {
 		// Merge won the race, no add happened.
-		require.Len(t, afterDesc.Replicas().Voters(), 1)
+		require.Len(t, afterDesc.Replicas().VoterDescriptors(), 1)
 		require.Equal(t, origDesc.EndKey, afterDesc.EndKey)
 	} else if addErr == nil && testutils.IsError(mergeErr, acceptableMergeErr) {
 		// Add won the race, no merge happened.
-		require.Len(t, afterDesc.Replicas().Voters(), 2)
+		require.Len(t, afterDesc.Replicas().VoterDescriptors(), 2)
 		require.Equal(t, beforeDesc.EndKey, afterDesc.EndKey)
 	} else {
 		t.Fatalf(`expected exactly one of merge or add to succeed got: [merge] %v [add] %v`,
@@ -2025,7 +2025,7 @@ func TestStoreRangeMergeResplitAddReplicaRace(t *testing.T) {
 	assert.Equal(t, origDesc.RangeID, resplitDesc.RangeID)
 	assert.Equal(t, origDesc.StartKey, resplitDesc.StartKey)
 	assert.Equal(t, origDesc.EndKey, resplitDesc.EndKey)
-	assert.Equal(t, origDesc.Replicas().All(), resplitDesc.Replicas().All())
+	assert.Equal(t, origDesc.Replicas().Descriptors(), resplitDesc.Replicas().Descriptors())
 	assert.NotEqual(t, origDesc.Generation, resplitDesc.Generation)
 
 	_, err := tc.Server(0).DB().AdminChangeReplicas(

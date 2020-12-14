@@ -586,7 +586,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().Voters()[1]
+	recognizedLeaseHolder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[1]
 	unrecognizedLeaseHolder := roachpb.ReplicaDescriptor{
 		NodeID:  99,
 		StoreID: 999,
@@ -642,7 +642,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 			g := makeGossip(t, stopper, rpcContext)
-			for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+			for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 				require.NoError(t, g.AddInfoProto(
 					gossip.MakeNodeIDKey(n.NodeID),
 					newNodeDesc(n.NodeID),
@@ -823,7 +823,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
-	for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 		require.NoError(t, g.AddInfoProto(
 			gossip.MakeNodeIDKey(n.NodeID),
 			newNodeDesc(n.NodeID),
@@ -4329,17 +4329,17 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 		br := &roachpb.BatchResponse{}
 		switch call {
 		case 0:
-			expRepl := desc1.Replicas().All()[0]
+			expRepl := desc1.Replicas().Descriptors()[0]
 			require.Equal(t, expRepl, ba.Replica)
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc1.Replicas().All()[1]},
+				Lease: &roachpb.Lease{Replica: desc1.Replicas().Descriptors()[1]},
 			})
 		case 1:
-			expRep := desc1.Replicas().All()[1]
+			expRep := desc1.Replicas().Descriptors()[1]
 			require.Equal(t, ba.Replica, expRep)
 			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
 		case 2:
-			expRep := desc2.Replicas().All()[0]
+			expRep := desc2.Replicas().Descriptors()[0]
 			require.Equal(t, ba.Replica, expRep)
 			br = ba.CreateReply()
 		default:
@@ -4420,7 +4420,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 		br := &roachpb.BatchResponse{}
 		if call == 0 {
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
-				Lease: &roachpb.Lease{Replica: desc.Replicas().All()[1]},
+				Lease: &roachpb.Lease{Replica: desc.Replicas().Descriptors()[1]},
 			})
 		} else {
 			br.Error = roachpb.NewError(&roachpb.ConditionFailedError{})
@@ -4449,7 +4449,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc: desc,
 		Lease: roachpb.Lease{
-			Replica: desc.Replicas().All()[0],
+			Replica: desc.Replicas().Descriptors()[0],
 		},
 	})
 	var ba roachpb.BatchRequest

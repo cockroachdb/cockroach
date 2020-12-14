@@ -375,7 +375,7 @@ func (v *criticalLocalitiesVisitor) countRange(
 	// "region:us-east,dc=new-york", we collect both "region:us-east" and
 	// "region:us-east,dc=new-york".
 	dedupLocal := make(map[string]roachpb.Locality)
-	for _, rep := range r.Replicas().All() {
+	for _, rep := range r.Replicas().Descriptors() {
 		for s, loc := range v.allLocalities[rep.NodeID] {
 			if _, ok := dedupLocal[s]; ok {
 				continue
@@ -405,7 +405,7 @@ func processLocalityForRange(
 	// Compute the required quorum and the number of live nodes. If the number of
 	// live nodes gets lower than the required quorum then the range is already
 	// unavailable.
-	quorumCount := len(r.Replicas().Voters())/2 + 1
+	quorumCount := len(r.Replicas().VoterDescriptors())/2 + 1
 	liveNodeCount := len(storeDescs)
 	for _, storeDesc := range storeDescs {
 		isStoreLive := nodeChecker(storeDesc.Node.NodeID)

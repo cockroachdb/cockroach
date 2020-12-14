@@ -1711,7 +1711,7 @@ func TestChangeReplicasTrigger_String(t *testing.T) {
 	crt.InternalRemovedReplicas = nil
 	crt.InternalAddedReplicas = nil
 	repl1.Type = ReplicaTypeVoterFull()
-	crt.Desc.SetReplicas(MakeReplicaDescriptors([]ReplicaDescriptor{repl1, learner}))
+	crt.Desc.SetReplicas(MakeReplicaSet([]ReplicaDescriptor{repl1, learner}))
 	act = crt.String()
 	require.Empty(t, crt.Added())
 	require.Empty(t, crt.Removed())
@@ -1760,7 +1760,7 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 		m.ChangeReplicasTrigger.InternalAddedReplicas = in.add
 		m.ChangeReplicasTrigger.InternalRemovedReplicas = in.del
 		m.Desc = &RangeDescriptor{}
-		m.Desc.SetReplicas(MakeReplicaDescriptors(in.repls))
+		m.Desc.SetReplicas(MakeReplicaSet(in.repls))
 		return m
 	}
 
