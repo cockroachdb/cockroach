@@ -188,3 +188,16 @@ func SharedPaths(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	}
 	return gm, nil
 }
+
+// MinimumRotatedRectangle Returns a minimum rotated rectangle enclosing a geometry
+func MinimumRotatedRectangle(g geo.Geometry) (geo.Geometry, error) {
+	paths, err := geos.MinimumRotatedRectangle(g.EWKB())
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	gm, err := geo.ParseGeometryFromEWKB(paths)
+	if err != nil {
+		return geo.Geometry{}, err
+	}
+	return gm, nil
+}
