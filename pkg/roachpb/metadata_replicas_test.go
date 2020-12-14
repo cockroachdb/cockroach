@@ -61,9 +61,9 @@ func TestVotersLearnersAll(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			r := MakeReplicaDescriptors(test)
+			r := MakeReplicaSet(test)
 			seen := map[ReplicaDescriptor]struct{}{}
-			for _, voter := range r.Voters() {
+			for _, voter := range r.VoterDescriptors() {
 				typ := voter.GetType()
 				switch typ {
 				case VOTER_FULL, VOTER_INCOMING:
@@ -72,14 +72,14 @@ func TestVotersLearnersAll(t *testing.T) {
 					assert.FailNow(t, "unexpectedly got a %s as Voter()", typ)
 				}
 			}
-			for _, learner := range r.Learners() {
+			for _, learner := range r.LearnerDescriptors() {
 				seen[learner] = struct{}{}
 				assert.Equal(t, LEARNER, learner.GetType())
 			}
 
-			all := r.All()
+			all := r.Descriptors()
 			// Make sure that VOTER_OUTGOING is the only type that is skipped both
-			// by Learners() and Voters()
+			// by LearnerDescriptors() and VoterDescriptors()
 			for _, rd := range all {
 				typ := rd.GetType()
 				if _, seen := seen[rd]; !seen {
@@ -126,21 +126,21 @@ func TestReplicaDescriptorsRemove(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		r := MakeReplicaDescriptors(test.replicas)
-		lenBefore := len(r.All())
+		r := MakeReplicaSet(test.replicas)
+		lenBefore := len(r.Descriptors())
 		removedDesc, ok := r.RemoveReplica(test.remove.NodeID, test.remove.StoreID)
 		assert.Equal(t, test.expected, ok, "testcase %d", i)
 		if ok {
 			assert.Equal(t, test.remove.NodeID, removedDesc.NodeID, "testcase %d", i)
 			assert.Equal(t, test.remove.StoreID, removedDesc.StoreID, "testcase %d", i)
-			assert.Equal(t, lenBefore-1, len(r.All()), "testcase %d", i)
+			assert.Equal(t, lenBefore-1, len(r.Descriptors()), "testcase %d", i)
 		} else {
-			assert.Equal(t, lenBefore, len(r.All()), "testcase %d", i)
+			assert.Equal(t, lenBefore, len(r.Descriptors()), "testcase %d", i)
 		}
-		for _, voter := range r.Voters() {
+		for _, voter := range r.VoterDescriptors() {
 			assert.Equal(t, VOTER_FULL, voter.GetType(), "testcase %d", i)
 		}
-		for _, learner := range r.Learners() {
+		for _, learner := range r.LearnerDescriptors() {
 			assert.Equal(t, LEARNER, learner.GetType(), "testcase %d", i)
 		}
 	}
@@ -153,16 +153,16 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 	}{
 		{
 			[]ReplicaDescriptor{rd(v, 1)},
-			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+			"VoterDescriptors:[1] VotersOutgoing:[] LearnerDescriptors:[] LearnersNext:[] AutoLeave:false",
 		},
 		// Make sure nil is treated like VoterFull.
 		{
 			[]ReplicaDescriptor{rd(vn, 1)},
-			"Voters:[1] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false",
+			"VoterDescriptors:[1] VotersOutgoing:[] LearnerDescriptors:[] LearnersNext:[] AutoLeave:false",
 		},
 		{
 			[]ReplicaDescriptor{rd(l, 1), rd(vn, 2)},
-			"Voters:[2] VotersOutgoing:[] Learners:[1] LearnersNext:[] AutoLeave:false",
+			"VoterDescriptors:[2] VotersOutgoing:[] LearnerDescriptors:[1] LearnersNext:[] AutoLeave:false",
 		},
 		// First joint case. We're adding n3 (via atomic replication changes), so the outgoing
 		// config we have to get rid of consists only of n2 (even though n2 remains a voter).
@@ -202,7 +202,7 @@ func TestReplicaDescriptorsConfState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			r := MakeReplicaDescriptors(test.in)
+			r := MakeReplicaSet(test.in)
 			cs := r.ConfState()
 			require.Equal(t, test.out, raft.DescribeConfState(cs))
 		})

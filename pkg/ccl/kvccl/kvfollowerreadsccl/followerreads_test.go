@@ -275,7 +275,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 2, StoreID: 2, ReplicaID: 2},
-	}, entry.Desc().Replicas().All())
+	}, entry.Desc().Replicas().Descriptors())
 
 	// Relocate the follower. n2 will no longer have a replica.
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,3], 1)`)
@@ -296,7 +296,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
 		{NodeID: 3, StoreID: 3, ReplicaID: 3},
-	}, entry.Desc().Replicas().All())
+	}, entry.Desc().Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was
 	// incremented.

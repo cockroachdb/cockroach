@@ -103,7 +103,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			// hands.
 			r.mu.proposalQuota = quotapool.NewIntPool(r.rangeStr.String(), uint64(r.store.cfg.RaftProposalQuota))
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
-			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().All(), timeutil.Now())
+			r.mu.lastUpdateTimes.updateOnBecomeLeader(r.mu.state.Desc.Replicas().Descriptors(), timeutil.Now())
 		} else if r.mu.proposalQuota != nil {
 			// We're becoming a follower.
 			// We unblock all ongoing and subsequent quota acquisition goroutines
