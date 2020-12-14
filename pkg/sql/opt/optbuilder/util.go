@@ -704,11 +704,11 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 		cat.DeleteOnly:      k.includeMutations,
 		cat.System:          k.includeSystem,
 		cat.VirtualInverted: k.includeVirtualInverted,
-		cat.VirtualComputed: k.includeVirtualComputed,
 	}
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {
-		if shouldInclude[tab.Column(i).Kind()] {
+		col := tab.Column(i)
+		if shouldInclude[col.Kind()] && (k.includeVirtualComputed || !col.IsVirtualComputed()) {
 			ordinals = append(ordinals, i)
 		}
 	}

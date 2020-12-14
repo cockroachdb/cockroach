@@ -460,24 +460,24 @@ func (b *Builder) buildScan(
 
 	// We collect VirtualComputed columns separately; these cannot be scanned,
 	// they can only be projected afterward.
-	var tabColIDs, virtualColIDs opt.ColSet
+	var scanColIDs, virtualColIDs opt.ColSet
 	outScope.cols = make([]scopeColumn, len(ordinals))
 	for i, ord := range ordinals {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		name := col.ColName()
-		kind := col.Kind()
-		if kind != cat.VirtualComputed {
-			tabColIDs.Add(colID)
-		} else {
+		if col.IsVirtualComputed() {
 			virtualColIDs.Add(colID)
+		} else {
+			scanColIDs.Add(colID)
 		}
+		kind := col.Kind()
 		outScope.cols[i] = scopeColumn{
 			id:           colID,
 			name:         name,
 			table:        tabMeta.Alias,
 			typ:          col.DatumType(),
-			hidden:       col.IsHidden() || (kind != cat.Ordinary && kind != cat.VirtualComputed),
+			hidden:       col.IsHidden() || kind != cat.Ordinary,
 			kind:         kind,
 			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
 			tableOrdinal: ord,
@@ -493,14 +493,14 @@ func (b *Builder) buildScan(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s not allowed with virtual tables", locking.get().Strength))
 		}
-		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
+		private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 		outScope.expr = b.factory.ConstructScan(&private)
 
 		// Note: virtual tables should not be collected as view dependencies.
 		return outScope
 	}
 
-	private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
+	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 	if indexFlags != nil {
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
@@ -548,12 +548,12 @@ func (b *Builder) buildScan(
 		proj := make(memo.ProjectionsExpr, 0, virtualColIDs.Len())
 		virtualColIDs.ForEach(func(col opt.ColumnID) {
 			item := b.factory.ConstructProjectionsItem(tabMeta.ComputedCols[col], col)
-			if !item.ScalarProps().OuterCols.SubsetOf(tabColIDs) {
+			if !item.ScalarProps().OuterCols.SubsetOf(scanColIDs) {
 				panic(errors.AssertionFailedf("scanned virtual column depends on non-scanned column"))
 			}
 			proj = append(proj, item)
 		})
-		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, tabColIDs)
+		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
 	}
 
 	if b.trackViewDeps {

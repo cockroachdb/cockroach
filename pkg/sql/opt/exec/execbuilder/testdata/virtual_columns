@@ -64,3 +64,115 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
+
+statement ok
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  INDEX (v),
+  FAMILY (a),
+  FAMILY (b)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE a+b=1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 10 (missing stats)
+  table: t_idx@t_idx_v_idx
+  spans: /1-/2
+
+query T
+EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE v=1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a)
+  estimated row count: 10 (missing stats)
+  table: t_idx@t_idx_v_idx
+  spans: /1-/2
+
+# TODO(radu): allow retrieving the virtual column from the index.
+query T
+EXPLAIN (VERBOSE) SELECT a, v FROM t_idx WHERE v=1
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (a, v)
+│ estimated row count: 333 (missing stats)
+│ render 0: a + b
+│ render 1: a
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 333 (missing stats)
+    │ table: t_idx@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 10 (missing stats)
+          table: t_idx@t_idx_v_idx
+          spans: /1-/2
+
+# TODO(radu): we shouldn't need to synthesize v here.
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1)
+----
+distribution: local
+vectorized: false
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t(a, b, v)
+  auto commit
+  size: 3 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 0, expr 2: 2
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 1) RETURNING v
+----
+distribution: local
+vectorized: false
+·
+• project
+│ columns: (v)
+│ estimated row count: 1
+│
+└── • insert fast path
+      columns: (a, v)
+      estimated row count: 1
+      into: t(a, b, v)
+      auto commit
+      size: 3 columns, 1 row
+      row 0, expr 0: 1
+      row 0, expr 1: 1
+      row 0, expr 2: 2
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1)
+----
+distribution: local
+vectorized: false
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t_idx(a, b, v)
+  auto commit
+  size: 3 columns, 1 row
+  row 0, expr 0: 1
+  row 0, expr 1: 1
+  row 0, expr 2: 2

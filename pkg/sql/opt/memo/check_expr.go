@@ -79,7 +79,10 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *ProjectExpr:
 		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
-			panic(errors.AssertionFailedf("projection passes through column not in input"))
+			panic(errors.AssertionFailedf(
+				"projection passes through columns not in input: %v",
+				t.Input.Relational().OutputCols.Difference(t.Passthrough),
+			))
 		}
 		for _, item := range t.Projections {
 			// Check that column id is set.
@@ -210,8 +213,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			if (kind == cat.Ordinary || kind == cat.WriteOnly) && t.InsertCols[i] == 0 {
 				panic(errors.AssertionFailedf("insert values not provided for all table columns"))
 			}
-			if (kind == cat.System || kind.IsVirtual()) && t.InsertCols[i] != 0 {
-				panic(errors.AssertionFailedf("system or virtual column found in insertion columns"))
+			if t.InsertCols[i] != 0 {
+				switch kind {
+				case cat.System:
+					panic(errors.AssertionFailedf("system column found in insertion columns"))
+				case cat.VirtualInverted:
+					panic(errors.AssertionFailedf("virtual inverted column found in insertion columns"))
+				}
 			}
 		}
 
