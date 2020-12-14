@@ -211,10 +211,26 @@ func (p *planner) SetSequenceValue(
 		return err
 	}
 
-	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
-	// according to comments on Inc operation. Switch to Inc if `desired-current`
-	// overflows correctly.
-	return p.txn.Put(ctx, seqValueKey, newVal)
+	if descriptor.GetSequenceOpts().CacheSize <= 1 {
+		// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
+		// according to comments on Inc operation. Switch to Inc if `desired-current`
+		// overflows correctly.
+		return p.txn.Put(ctx, seqValueKey, newVal)
+	}
+
+	// If there are cached values, changing the value of the sequence should invalidate the cache.
+	// For simplicity, the cache invalidates implicitly when it sees new descriptor versions. Thus,
+	// a schema change is triggered here to make sure the cache gets invalidated.
+	mutableDescriptor, err := resolver.ResolveMutableExistingTableObject(ctx, p, seqName, true, tree.ResolveRequireSequenceDesc)
+
+	if err := p.txn.Put(ctx, seqValueKey, newVal); err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+	return p.writeSchemaChange(ctx, mutableDescriptor, descpb.InvalidMutationID, fmt.Sprintf("setval('%s')", seqName.String()))
 }
 
 // MakeSequenceKeyVal returns the key and value of a sequence being set

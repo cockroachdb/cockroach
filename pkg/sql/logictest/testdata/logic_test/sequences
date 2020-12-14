@@ -1327,5 +1327,23 @@ SELECT last_value FROM cache_test
 ----
 70
 
+# Verify that setval() will invalidate the cache.
+
+query I
+SELECT setval('cache_test', 81, false)
+----
+81
+
+# 10 new values (81,82,...,90) are cached.
+query I
+SELECT nextval('cache_test')
+----
+81
+
+query I
+SELECT last_value FROM cache_test
+----
+90
+
 statement ok
 DROP SEQUENCE cache_test
