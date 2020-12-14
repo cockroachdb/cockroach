@@ -677,7 +677,7 @@ If problems persist, please see %s.`
 
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
-			log.SetClusterID(clusterID)
+			log.SetNodeIDs(int32(nodeID), clusterID)
 			buf.Printf("clusterID:\t%s\n", clusterID)
 			buf.Printf("nodeID:\t%d\n", nodeID)
 
