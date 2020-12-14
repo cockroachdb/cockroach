@@ -170,7 +170,7 @@ func WriteInitialClusterData(
 				ReplicaID: 1,
 			},
 		}
-		desc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+		desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 		if err := desc.Validate(); err != nil {
 			return err
 		}

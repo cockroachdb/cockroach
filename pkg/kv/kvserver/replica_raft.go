@@ -1805,7 +1805,7 @@ func maybeCampaignAfterConfChange(
 	// If the leader is no longer in the descriptor but we are the first voter,
 	// campaign.
 	_, leaderStillThere := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(st.Lead))
-	if !leaderStillThere && storeID == desc.Replicas().Voters()[0].StoreID {
+	if !leaderStillThere && storeID == desc.Replicas().VoterDescriptors()[0].StoreID {
 		log.VEventf(ctx, 3, "leader got removed by conf change; campaigning")
 		_ = raftGroup.Campaign()
 	}
