@@ -35,14 +35,17 @@ import {
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 
-import { StatementsPage, AggregateStatistics } from "@cockroachlabs/admin-ui-components";
+import {
+  StatementsPage,
+  AggregateStatistics,
+} from "@cockroachlabs/admin-ui-components";
 import { createOpenDiagnosticsModalAction, createStatementDiagnosticsReportAction } from "src/redux/statements";
 import {
+  trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
   trackStatementsSearchAction,
   trackTableSortAction,
 } from "src/redux/analyticsActions";
-import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -169,8 +172,7 @@ export const selectLastReset = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
-const StatementsPageConnected = withRouter(connect(
+export default withRouter(connect(
   (state: AdminUIState, props: RouteComponentProps) => ({
     statements: selectStatements(state, props),
     statementsError: state.cachedData.statements.lastError,
@@ -187,8 +189,6 @@ const StatementsPageConnected = withRouter(connect(
     onSearchComplete: (results: AggregateStatistics[]) => trackStatementsSearchAction(results.length),
     onPageChanged: trackStatementsPaginationAction,
     onSortingChange: trackTableSortAction,
-    onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) => trackDownloadDiagnosticsBundle(report.statement_fingerprint),
+    onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) => trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
   },
 )(StatementsPage));
-
-export default StatementsPageConnected;
