@@ -292,7 +292,8 @@ func (b *Builder) buildStmt(
 		return b.buildExplain(stmt, inScope)
 
 	case *tree.ExplainAnalyze:
-		return b.buildExplainAnalyze(stmt, inScope)
+		// This statement should have been handled by the executor.
+		panic(pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE can only be used as a top-level statement"))
 
 	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)

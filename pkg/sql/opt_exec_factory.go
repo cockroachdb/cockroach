@@ -1868,10 +1868,7 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions,
-	analyze bool,
-	stmtType tree.StatementType,
-	buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
@@ -1887,7 +1884,7 @@ func (ef *execFactory) ConstructExplain(
 	}
 	if options.Mode != tree.ExplainPlan {
 		wrappedPlan := plan.(*explain.Plan).WrappedPlan.(*planComponents)
-		return constructExplainDistSQLOrVecNode(options, analyze, stmtType, wrappedPlan, ef.planner)
+		return constructExplainDistSQLOrVecNode(options, stmtType, wrappedPlan, ef.planner)
 	}
 	flags := explain.MakeFlags(options)
 	n := &explainPlanNode{
