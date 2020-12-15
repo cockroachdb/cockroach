@@ -106,11 +106,11 @@ func logEventInternalForSQLStatements(
 		event)
 }
 
-var eventLogEnabled = settings.RegisterPublicBoolSetting(
+var eventLogEnabled = settings.RegisterBoolSetting(
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,
-)
+).WithPublic()
 
 // InsertEventRecord inserts a single event into the event log as part
 // of the provided transaction, using the provided internal executor.

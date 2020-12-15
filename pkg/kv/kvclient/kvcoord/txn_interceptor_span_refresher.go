@@ -34,11 +34,11 @@ const (
 // MaxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
-var MaxTxnRefreshSpansBytes = settings.RegisterPublicIntSetting(
+var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
-)
+).WithPublic()
 
 // txnSpanRefresher is a txnInterceptor that collects the read spans of a
 // serializable transaction in the event it gets a serializable retry error. It

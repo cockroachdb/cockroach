@@ -32,10 +32,11 @@ var errNoInboundStreamConnection = errors.New("no inbound stream connection")
 
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
-var SettingFlowStreamTimeout = settings.RegisterNonNegativeDurationSetting(
+var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // expectedConnectionTime is the expected time taken by a flow to connect to its

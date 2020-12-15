@@ -53,23 +53,23 @@ const (
 	fieldNameShadowType = prefixTracerState + "shadowtype"
 )
 
-var enableNetTrace = settings.RegisterPublicBoolSetting(
+var enableNetTrace = settings.RegisterBoolSetting(
 	"trace.debug.enable",
 	"if set, traces for recent requests can be seen at https://<ui>/debug/requests",
 	false,
-)
+).WithPublic()
 
-var lightstepToken = settings.RegisterPublicStringSetting(
+var lightstepToken = settings.RegisterStringSetting(
 	"trace.lightstep.token",
 	"if set, traces go to Lightstep using this token",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
-)
+).WithPublic()
 
-var zipkinCollector = settings.RegisterPublicStringSetting(
+var zipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
 	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
-)
+).WithPublic()
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
 //

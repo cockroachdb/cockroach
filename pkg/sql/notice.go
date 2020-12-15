@@ -21,11 +21,11 @@ import (
 
 // NoticesEnabled is the cluster setting that allows users
 // to enable notices.
-var NoticesEnabled = settings.RegisterPublicBoolSetting(
+var NoticesEnabled = settings.RegisterBoolSetting(
 	"sql.notices.enabled",
 	"enable notices in the server/client protocol being sent",
 	true,
-)
+).WithPublic()
 
 // noticeSender is a subset of RestrictedCommandResult which allows
 // sending notices.

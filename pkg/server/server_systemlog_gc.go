@@ -35,7 +35,7 @@ const (
 var (
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
-	rangeLogTTL = settings.RegisterPublicDurationSetting(
+	rangeLogTTL = settings.RegisterDurationSetting(
 		"server.rangelog.ttl",
 		fmt.Sprintf(
 			"if nonzero, range log entries older than this duration are deleted every %s. "+
@@ -43,11 +43,11 @@ var (
 			systemLogGCPeriod,
 		),
 		30*24*time.Hour, // 30 days
-	)
+	).WithPublic()
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
 	// entries are periodically garbage collected.
-	eventLogTTL = settings.RegisterPublicDurationSetting(
+	eventLogTTL = settings.RegisterDurationSetting(
 		"server.eventlog.ttl",
 		fmt.Sprintf(
 			"if nonzero, entries in system.eventlog older than this duration are deleted every %s. "+
@@ -55,7 +55,7 @@ var (
 			systemLogGCPeriod,
 		),
 		90*24*time.Hour, // 90 days
-	)
+	).WithPublic()
 )
 
 // gcSystemLog deletes entries in the given system log table between
@@ -83,7 +83,7 @@ func (s *Server) gcSystemLog(
 	}
 
 	deleteStmt := fmt.Sprintf(
-		`SELECT count(1), max(timestamp) FROM 
+		`SELECT count(1), max(timestamp) FROM
 [DELETE FROM system.%s WHERE timestamp >= $1 AND timestamp <= $2 LIMIT 1000 RETURNING timestamp]`,
 		table,
 	)

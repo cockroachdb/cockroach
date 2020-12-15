@@ -26,11 +26,11 @@ import (
 // reads. The closed timestamp machinery is unaffected by this, i.e. the same
 // information is collected and passed around, regardless of the value of this
 // setting.
-var FollowerReadsEnabled = settings.RegisterPublicBoolSetting(
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
 	true,
-)
+).WithPublic()
 
 // canServeFollowerRead tests, when a range lease could not be acquired, whether
 // the batch can be served as a follower read despite the error. Only
