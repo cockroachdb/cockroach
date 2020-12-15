@@ -93,6 +93,11 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
+	if setting.SystemOnly() && !p.execCfg.Codec.ForSystemTenant() {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"setting %s is only setable in the system tenant", name)
+	}
+
 	var value tree.TypedExpr
 	if n.Value != nil {
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.

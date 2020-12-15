@@ -10,6 +10,7 @@ package serverccl
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"testing"
@@ -17,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,13 +76,11 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer db.Close()
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.vectorize=off`)
 	require.NoError(t, err)
-	/* TODO(dt): re-introduce when system-settings are prevented in tenants.
 	_, err = db.Exec(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '2MiB';`)
 	var pqErr *pq.Error
 	ok := errors.As(err, &pqErr)
 	require.True(t, ok, "expected err to be a *pq.Error but is of type %T. error is: %v", err)
 	require.Equal(t, pq.ErrorCode(pgcode.InsufficientPrivilege.String()), pqErr.Code, "err %v has unexpected code", err)
-	*/
 }
 
 func TestTenantUnauthenticatedAccess(t *testing.T) {
