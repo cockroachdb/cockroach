@@ -94,7 +94,7 @@ func UnderStressRace(t SkippableTest, args ...interface{}) {
 // run with the metamorphic build tag.
 func UnderMetamorphic(t SkippableTest, args ...interface{}) {
 	t.Helper()
-	if util.MetamorphicBuild {
+	if util.IsMetamorphicBuild() {
 		t.Skip(append([]interface{}{"disabled under metamorphic"}, args...))
 	}
 }
