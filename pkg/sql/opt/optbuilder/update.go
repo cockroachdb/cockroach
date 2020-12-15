@@ -348,6 +348,8 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	// Project partial index PUT and DEL boolean columns.
 	mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
 
+	mb.buildUniqueChecksForUpdate()
+
 	mb.buildFKChecksForUpdate()
 
 	private := mb.makeMutationPrivate(returning != nil)

@@ -2585,8 +2585,96 @@ upsert checks
            ├── upsert_b:16 > 10 [as=check2:18, outer=(16)]
            └── column2:7 > upsert_b:16 [as=check3:19, outer=(7,16)]
 
-# TODO(rytaft): test that columns needed for unique checks are not pruned
-# from updates.
+exec-ddl
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT UNIQUE WITHOUT INDEX,
+  x INT,
+  y INT,
+  z INT UNIQUE,
+  UNIQUE WITHOUT INDEX (x, y)
+)
+----
+
+# Do not prune columns from updates that are needed for unique checks.
+norm expect=PruneMutationInputCols
+UPDATE uniq SET w = 1, x = 2 WHERE k = 3
+----
+update uniq
+ ├── columns: <none>
+ ├── fetch columns: uniq.k:8 v:9 w:10 x:11 uniq.y:12 z:13
+ ├── update-mapping:
+ │    ├── w_new:15 => w:3
+ │    └── x_new:16 => x:4
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(8-13,15,16)
+ │    ├── select
+ │    │    ├── columns: uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8-13)
+ │    │    ├── scan uniq
+ │    │    │    ├── columns: uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9-13), (13)~~>(8-12)
+ │    │    └── filters
+ │    │         └── uniq.k:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
+ │    └── projections
+ │         ├── 1 [as=w_new:15]
+ │         └── 2 [as=x_new:16]
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── semi-join (hash)
+      │         ├── columns: w_new:17!null k:18!null
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(17,18)
+      │         ├── with-scan &1
+      │         │    ├── columns: w_new:17!null k:18!null
+      │         │    ├── mapping:
+      │         │    │    ├──  w_new:15 => w_new:17
+      │         │    │    └──  uniq.k:8 => k:18
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(17,18)
+      │         ├── scan uniq
+      │         │    ├── columns: uniq.k:19!null w:21
+      │         │    ├── key: (19)
+      │         │    └── fd: (19)-->(21)
+      │         └── filters
+      │              ├── w_new:17 = w:21 [outer=(17,21), constraints=(/17: (/NULL - ]; /21: (/NULL - ]), fd=(17)==(21), (21)==(17)]
+      │              └── k:18 != uniq.k:19 [outer=(18,19), constraints=(/18: (/NULL - ]; /19: (/NULL - ])]
+      └── unique-checks-item: uniq(x,y)
+           └── semi-join (hash)
+                ├── columns: x_new:26!null y:27 k:28!null
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(26-28)
+                ├── with-scan &1
+                │    ├── columns: x_new:26!null y:27 k:28!null
+                │    ├── mapping:
+                │    │    ├──  x_new:16 => x_new:26
+                │    │    ├──  uniq.y:12 => y:27
+                │    │    └──  uniq.k:8 => k:28
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(26-28)
+                ├── scan uniq
+                │    ├── columns: uniq.k:29!null x:32 uniq.y:33
+                │    ├── key: (29)
+                │    └── fd: (29)-->(32,33)
+                └── filters
+                     ├── x_new:26 = x:32 [outer=(26,32), constraints=(/26: (/NULL - ]; /32: (/NULL - ]), fd=(26)==(32), (32)==(26)]
+                     ├── y:27 = uniq.y:33 [outer=(27,33), constraints=(/27: (/NULL - ]; /33: (/NULL - ]), fd=(27)==(33), (33)==(27)]
+                     └── k:28 != uniq.k:29 [outer=(28,29), constraints=(/28: (/NULL - ]; /29: (/NULL - ])]
+
 
 # ------------------------------------------------------------------------------
 # PruneMutationReturnCols
