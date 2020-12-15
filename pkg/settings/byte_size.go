@@ -33,23 +33,32 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return humanizeutil.IBytes(b.Get(sv))
 }
 
-// RegisterByteSizeSetting defines a new setting with type bytesize.
-func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
-	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+// WithPublic sets public visibility and can be chained.
+func (b *ByteSizeSetting) WithPublic() *ByteSizeSetting {
+	b.SetVisibility(Public)
+	return b
 }
 
-// RegisterPublicByteSizeSetting defines a new setting with type bytesize and makes it public.
-func RegisterPublicByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
-	s := RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
-	s.SetVisibility(Public)
-	return s
-}
-
-// RegisterValidatedByteSizeSetting defines a new setting with type bytesize
-// with a validation function.
-func RegisterValidatedByteSizeSetting(
-	key, desc string, defaultValue int64, validateFn func(int64) error,
+// RegisterByteSizeSetting defines a new setting with type bytesize and any
+// supplied validation function(s).
+func RegisterByteSizeSetting(
+	key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *ByteSizeSetting {
+
+	var validateFn func(int64) error
+	if len(validateFns) == 1 {
+		validateFn = validateFns[0]
+	} else if len(validateFns) > 1 {
+		validateFn = func(v int64) error {
+			for _, fn := range validateFns {
+				if err := fn(v); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
 	if validateFn != nil {
 		if err := validateFn(defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
@@ -61,14 +70,4 @@ func RegisterValidatedByteSizeSetting(
 	}}
 	register(key, desc, setting)
 	return setting
-}
-
-// RegisterPublicValidatedByteSizeSetting defines a new setting with type
-// bytesize with a validation function and makes it public.
-func RegisterPublicValidatedByteSizeSetting(
-	key, desc string, defaultValue int64, validateFn func(int64) error,
-) *ByteSizeSetting {
-	s := RegisterValidatedByteSizeSetting(key, desc, defaultValue, validateFn)
-	s.SetVisibility(Public)
-	return s
 }

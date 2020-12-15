@@ -143,10 +143,10 @@ var strFooA = settings.RegisterStringSetting("str.foo", "desc", "")
 var strBarA = settings.RegisterStringSetting("str.bar", "desc", "bar")
 var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
 var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
-var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
-var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
-var duA = settings.RegisterPublicNonNegativeDurationSettingWithExplicitUnit("d_with_explicit_unit", "desc", time.Second)
-var _ = settings.RegisterPublicNonNegativeDurationSettingWithMaximum("d_with_maximum", "desc", time.Second, time.Hour)
+var fA = settings.RegisterFloatSetting("f", "desc", 5.4, nil)
+var dA = settings.RegisterDurationSetting("d", "desc", time.Second, nil)
+var duA = settings.RegisterPublicDurationSettingWithExplicitUnit("d_with_explicit_unit", "desc", time.Second, settings.NonNegativeDuration)
+var _ = settings.RegisterDurationSettingWithMaximum("d_with_maximum", "desc", time.Second, time.Hour, settings.NonNegativeDuration)
 var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
 var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.TestingRegisterVersionSetting("v.1", "desc", &dummyVersionSettingImpl{})
@@ -165,16 +165,16 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "desc", time.Second)
-var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "desc", 5.4)
-var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
+var dVal = settings.RegisterDurationSetting("dVal", "desc", time.Second, settings.NonNegativeDuration)
+var fVal = settings.RegisteFloatSetting("fVal", "desc", 5.4, settings.NonNegativeFloat)
+var byteSizeVal = settings.RegisterByteSizeSetting(
 	"byteSize.Val", "desc", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
 		}
 		return nil
 	})
-var iVal = settings.RegisterValidatedIntSetting(
+var iVal = settings.RegisterIntSetting(
 	"i.Val", "desc", 0, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
@@ -727,15 +727,15 @@ func batchRegisterSettings(t *testing.T, keyPrefix string, count int) (name stri
 	}()
 	for i := 0; i < count; i++ {
 		name = fmt.Sprintf("%s_%3d", keyPrefix, i)
-		settings.RegisterValidatedIntSetting(name, "desc", 0, nil)
+		settings.RegisterIntSetting(name, "desc", 0, nil)
 	}
 	return name, err
 }
 
 var overrideBool = settings.RegisterBoolSetting("override.bool", "desc", true)
 var overrideInt = settings.RegisterIntSetting("override.int", "desc", 0)
-var overrideDuration = settings.RegisterDurationSetting("override.duration", "desc", time.Second)
-var overrideFloat = settings.RegisterFloatSetting("override.float", "desc", 1.0)
+var overrideDuration = settings.RegisterDurationSetting("override.duration", "desc", time.Second, nil)
+var overrideFloat = settings.RegisterFloatSetting("override.float", "desc", 1.0, nil)
 
 func TestOverride(t *testing.T) {
 	sv := &settings.Values{}

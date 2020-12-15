@@ -71,10 +71,11 @@ const (
 )
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
-var featureRestoreEnabled = settings.RegisterPublicBoolSetting(
+var featureRestoreEnabled = settings.RegisterBoolSetting(
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
-	featureflag.FeatureFlagEnabledDefault)
+	featureflag.FeatureFlagEnabledDefault,
+).WithPublic()
 
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
 // non-empty db qualifiers with `newDB`.
