@@ -109,6 +109,15 @@ func (e *EnumSetting) WithPublic() *EnumSetting {
 	return e
 }
 
+// WithSystemOnly indicates system-usage only and can be chained.
+func (e *EnumSetting) WithSystemOnly() *EnumSetting {
+	e.common.systemOnly = true
+	return e
+}
+
+// Defeat the linter.
+var _ = (*EnumSetting).WithSystemOnly
+
 // RegisterEnumSetting defines a new setting with type int.
 func RegisterEnumSetting(
 	key, desc string, defaultValue string, enumValues map[int64]string,
