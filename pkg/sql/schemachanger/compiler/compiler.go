@@ -210,6 +210,9 @@ func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*Schem
 		g.initialTargetStates = append(g.initialTargetStates,
 			g.getOrCreateTargetState(ts.Target, ts.State))
 	}
+	// TODO(ajwerner): Generate the stages for all of the phases as it will make
+	// debugging easier.
+
 	for _, ts := range initialStates {
 		if err := generateOpEdges(&g, ts.Target, ts.State, flags); err != nil {
 			return nil, err
@@ -337,9 +340,6 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 		}
 	}
 	return nil
-}
-
-type CompiledSchemaChange struct {
 }
 
 func Compile(t []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
