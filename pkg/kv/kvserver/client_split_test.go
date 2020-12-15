@@ -2098,6 +2098,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	storeConfig := kvserver.TestStoreConfig(nil)
+	storeConfig.TestingKnobs.DisableReplicateQueue = true
 	storeConfig.TestingKnobs.DisableMergeQueue = true
 	storeConfig.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
