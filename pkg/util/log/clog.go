@@ -93,9 +93,16 @@ type loggingT struct {
 			hideStack bool                   // hides stack trace; only in effect when f is not nil
 		}
 
-		// the Cluster ID is reported on every new log file so as to ease the correlation
-		// of panic reports with self-reported log files.
+		// the Cluster ID is reported on every new log file so as to ease
+		// the correlation of panic reports with self-reported log files.
 		clusterID string
+		// the node ID is reported like the cluster ID, for the same reasons.
+		// We avoid using roahcpb.NodeID to avoid a circular reference.
+		nodeID int32
+		// ditto for the tenant ID.
+		tenantID string
+		// ditto for the SQL instance ID.
+		sqlInstanceID int32
 
 		// fatalCh is closed on fatal errors.
 		fatalCh chan struct{}
@@ -196,16 +203,14 @@ func (l *loggingT) signalFatalCh() {
 	}
 }
 
-// SetClusterID stores the Cluster ID for further reference.
-//
-// TODO(knz): This should not be configured per-logger.
-// See: https://github.com/cockroachdb/cockroach/issues/40983
-func SetClusterID(clusterID string) {
-	// Ensure that the clusterID is logged with the same format as for
+// SetNodeIDs stores the Node and Cluster ID for further reference.
+func SetNodeIDs(clusterID string, nodeID int32) {
+	// Ensure that the IDs are logged with the same format as for
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, "clusterID: %s", clusterID) // TODO(knz): Use OPS here.
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "nodeID: n%s", nodeID)      // TODO(knz): Use OPS here.
 
 	// Perform the change proper.
 	logging.mu.Lock()
@@ -216,6 +221,28 @@ func SetClusterID(clusterID string) {
 	}
 
 	logging.mu.clusterID = clusterID
+	logging.mu.nodeID = nodeID
+}
+
+// SetTenantIDs stores the tenant ID and instance ID for further reference.
+func SetTenantIDs(tenantID string, sqlInstanceID int32) {
+	// Ensure that the IDs are logged with the same format as for
+	// new log files, even on the first log file. This ensures that grep
+	// will always find it.
+	ctx := logtags.AddTag(context.Background(), "config", nil)
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "tenantID: %s", tenantID)        // TODO(knz): Use OPS here.
+	logfDepth(ctx, 1, severity.INFO, channel.DEV, "instanceID: %d", sqlInstanceID) // TODO(knz): Use OPS here.
+
+	// Perform the change proper.
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	if logging.mu.tenantID != "" {
+		panic("tenantID already set")
+	}
+
+	logging.mu.tenantID = tenantID
+	logging.mu.sqlInstanceID = sqlInstanceID
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes

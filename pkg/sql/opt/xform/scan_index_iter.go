@@ -69,6 +69,15 @@ type scanIndexIter struct {
 	// rejectFlags is a set of flags that designate which types of indexes to
 	// skip during iteration.
 	rejectFlags indexRejectFlags
+
+	// filtersMutateChecker is used to assert that filters are not mutated by
+	// enumerateIndexFunc callbacks. This check is a no-op in non-test builds.
+	filtersMutateChecker memo.FiltersExprMutateChecker
+
+	// originalFiltersMutateChecker is used to assert that originalFilters are
+	// not mutated by enumerateIndexFunc callbacks. This check is a no-op in
+	// non-test builds.
+	originalFiltersMutateChecker memo.FiltersExprMutateChecker
 }
 
 // Init initializes a new scanIndexIter.
@@ -85,6 +94,7 @@ func (it *scanIndexIter) Init(
 	it.scanPrivate = scanPrivate
 	it.filters = filters
 	it.rejectFlags = rejectFlags
+	it.filtersMutateChecker.Init(it.filters)
 }
 
 // SetOriginalFilters specifies an optional, non-reduced, original set of
@@ -138,6 +148,7 @@ func (it *scanIndexIter) SetOriginalFilters(filters memo.FiltersExpr) {
 		panic(errors.AssertionFailedf("cannot specify originalFilters with nil filters"))
 	}
 	it.originalFilters = filters
+	it.originalFiltersMutateChecker.Init(it.originalFilters)
 }
 
 // enumerateIndexFunc defines the callback function for the ForEach and
@@ -241,6 +252,13 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		isCovering := it.scanPrivate.Cols.SubsetOf(indexCols)
 
 		f(index, filters, indexCols, isCovering)
+
+		// Verify that f did not mutate filters or originalFilters (in test
+		// builds only).
+		it.filtersMutateChecker.CheckForMutation(it.filters)
+		if it.originalFilters != nil {
+			it.originalFiltersMutateChecker.CheckForMutation(it.originalFilters)
+		}
 	}
 }
 

@@ -558,7 +558,6 @@ func (r *createStatsResumer) Resume(
 	// See: https://github.com/cockroachdb/cockroach/issues/57739
 	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
-			evalCtx.NodeID.SQLInstanceID(),
 			details.Table.ID,
 			evalCtx.SessionData.User(),
 			details.Statement,
