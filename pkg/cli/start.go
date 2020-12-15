@@ -678,7 +678,7 @@ If problems persist, please see %s.`
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetClusterID(clusterID)
-			buf.Printf("clusterID:\t%s\n", clusterID)
+			buf.Printf("clusterID:\t%s\n", redact.Safe(clusterID))
 			buf.Printf("nodeID:\t%d\n", nodeID)
 
 			// Collect the formatted string and show it to the user.
@@ -1031,7 +1031,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Infof(ctx, "%s", info.Short())
+	log.Info(ctx, info.Short())
 
 	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
 	initBlockProfile()
