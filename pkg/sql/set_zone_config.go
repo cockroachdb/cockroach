@@ -106,7 +106,7 @@ func loadYAML(dst interface{}, yamlString string) {
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CONFIGURE ZONE",
 	); err != nil {
 		return nil, err

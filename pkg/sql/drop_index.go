@@ -45,7 +45,7 @@ type dropIndexNode struct {
 func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP INDEX",
 	); err != nil {
 		return nil, err

@@ -47,7 +47,7 @@ type createIndexNode struct {
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE INDEX",
 	); err != nil {
 		return nil, err

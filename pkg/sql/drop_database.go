@@ -47,7 +47,7 @@ type dropDatabaseNode struct {
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP DATABASE",
 	); err != nil {
 		return nil, err

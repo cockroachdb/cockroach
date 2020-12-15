@@ -35,7 +35,7 @@ type dropSequenceNode struct {
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"DROP SEQUENCE",
 	); err != nil {
 		return nil, err

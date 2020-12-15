@@ -37,7 +37,7 @@ type createSequenceNode struct {
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"CREATE SEQUENCE",
 	); err != nil {
 		return nil, err
