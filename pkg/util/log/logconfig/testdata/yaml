@@ -58,7 +58,7 @@ sinks: { stderr: { channels: 'all except DEV,SESSIONS' } }
 ----
 sinks:
   stderr:
-    channels: STORAGE,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+    channels: STORAGE,SQL_SCHEMA,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
 
 
 # Try populating all the fields.
