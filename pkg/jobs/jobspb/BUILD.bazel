@@ -1,15 +1,16 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg/build:util.bzl", "go_proto_lib", "proto_lib")
 
 go_library(
     name = "jobspb",
     srcs = [
         "jobs.pb.go",
-        "schedule.pb.go",
         "wrap.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
     visibility = ["//visibility:public"],
     deps = [
+        ":schedule_go_proto",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/catalog/descpb",
@@ -23,4 +24,21 @@ go_library(
         "//vendor/github.com/gogo/protobuf/sortkeys",
         "//vendor/github.com/gogo/protobuf/types",
     ],
+)
+
+proto_lib(
+    name = "schedule_proto",
+    srcs = ["schedule.proto"],
+    deps = [
+        "//vendor/github.com/gogo/protobuf/gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_lib(
+    name = "schedule_go_proto",
+    protos = [":schedule_proto"],
+    deps = [
+        "//vendor/github.com/gogo/protobuf/gogoproto",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
 )

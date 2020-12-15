@@ -80,3 +80,11 @@ git_repository(
 )
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
+
+
+# Extra dependencies for Go proto compilation.
+git_repository(
+    name = "org_golang_google_grpc",
+    commit = "2cf12a82ed4381ce0b0f7d487ee2eca772ee18e3",
+    remote = "https://github.com/grpc/grpc-go",
+)

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//proto:compiler.bzl", "go_proto_compiler")
 
 go_library(
     name = "protoc-gen-gogoroach_lib",
@@ -15,5 +16,25 @@ go_library(
 go_binary(
     name = "protoc-gen-gogoroach",
     embed = [":protoc-gen-gogoroach_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_proto_compiler(
+    name = "protoc-gen-gogoroach_compiler",
+    options = [
+        "plugins=grpc",
+        "Mgoogle/api/annotations.proto=github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis/google/api",
+        "Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types",
+        "Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types",
+    ],
+    deps = [
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/types",
+    ],
+    valid_archive = True,
+    plugin = ":protoc-gen-gogoroach",
     visibility = ["//visibility:public"],
 )
