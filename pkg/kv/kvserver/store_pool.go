@@ -45,26 +45,28 @@ const (
 // DeclinedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have rejected a reservation a
 // viable target.
-var DeclinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
+var DeclinedReservationsTimeout = settings.RegisterDurationSetting(
 	"server.declined_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
 	1*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // FailedReservationsTimeout specifies a duration during which the local
 // replicate queue will not consider stores which have failed a reservation a
 // viable target.
-var FailedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
+var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	"server.failed_reservation_timeout",
 	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 	5*time.Second,
+	settings.NonNegativeDuration,
 )
 
 const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
 
 // TimeUntilStoreDead wraps "server.time_until_store_dead".
 var TimeUntilStoreDead = func() *settings.DurationSetting {
-	s := settings.RegisterValidatedDurationSetting(
+	s := settings.RegisterDurationSetting(
 		timeUntilStoreDeadSettingName,
 		"the time after which if there is no new gossiped information about a store, it is considered dead",
 		5*time.Minute,

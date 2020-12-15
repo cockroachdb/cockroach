@@ -45,10 +45,11 @@ const (
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
 // between processing replicas.
-var MergeQueueInterval = settings.RegisterNonNegativeDurationSetting(
+var MergeQueueInterval = settings.RegisterDurationSetting(
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
 	time.Second,
+	settings.NonNegativeDuration,
 )
 
 // mergeQueue manages a queue of ranges slated to be merged with their right-

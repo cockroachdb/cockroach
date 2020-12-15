@@ -48,8 +48,9 @@ func ResetMaxBatchSizeForTests() {
 // MutationsTestingMaxBatchSize is a testing cluster setting that sets the
 // default max mutation batch size. A low max batch size is useful to test
 // batching logic of the mutations.
-var MutationsTestingMaxBatchSize = settings.RegisterNonNegativeIntSetting(
+var MutationsTestingMaxBatchSize = settings.RegisterIntSetting(
 	"sql.testing.mutations.max_batch_size",
 	"the max number of rows that are processed by a single KV batch when performing a mutation operation (0=default)",
 	0,
+	settings.NonNegativeInt,
 )

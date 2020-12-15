@@ -35,17 +35,18 @@ import (
 
 // GCInterval specifies duration between attempts to delete extant
 // sessions that have expired.
-var GCInterval = settings.RegisterNonNegativeDurationSetting(
+var GCInterval = settings.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	20*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // GCJitter specifies the jitter fraction on the interval between attempts to
 // delete extant sessions that have expired.
 //
 // [(1-GCJitter) * GCInterval, (1+GCJitter) * GCInterval]
-var GCJitter = settings.RegisterValidatedFloatSetting(
+var GCJitter = settings.RegisterFloatSetting(
 	"server.sqlliveness.gc_jitter",
 	"jitter fraction on the duration between attempts to delete extant sessions that have expired",
 	.15,

@@ -171,7 +171,7 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // VectorizeTestingBatchSize is a testing cluster setting that sets the default
 // batch size used by the vectorized execution engine. A low batch size is
 // useful to test batch reuse.
-var VectorizeTestingBatchSize = settings.RegisterValidatedIntSetting(
+var VectorizeTestingBatchSize = settings.RegisterIntSetting(
 	"sql.testing.vectorize.batch_size",
 	fmt.Sprintf("the size of a batch of rows in the vectorized engine (0=default, value must be less than %d)", coldata.MaxBatchSize),
 	0,
