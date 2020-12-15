@@ -281,10 +281,11 @@ func TestSchemaChanger(t *testing.T) {
 				compiler.PostStatementPhase,
 				compiler.PreCommitPhase,
 			} {
-				stages, err := compiler.Compile(targetStates, compiler.CompileFlags{
+				sc, err := compiler.Compile(targetStates, compiler.CompileFlags{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
+				stages := sc.Stages()
 				for _, s := range stages {
 					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
@@ -296,9 +297,10 @@ func TestSchemaChanger(t *testing.T) {
 		ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			stages, err := compiler.Compile(ts, compiler.CompileFlags{
+			sc, err := compiler.Compile(ts, compiler.CompileFlags{
 				ExecutionPhase: compiler.PostCommitPhase,
 			})
+			stages := sc.Stages()
 			require.NoError(t, err)
 			for _, s := range stages {
 				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
@@ -366,10 +368,11 @@ func TestSchemaChanger(t *testing.T) {
 				compiler.PostStatementPhase,
 				compiler.PreCommitPhase,
 			} {
-				stages, err := compiler.Compile(targetStates, compiler.CompileFlags{
+				sc, err := compiler.Compile(targetStates, compiler.CompileFlags{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
+				stages := sc.Stages()
 				for _, s := range stages {
 					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
@@ -381,10 +384,11 @@ func TestSchemaChanger(t *testing.T) {
 		ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			stages, err := compiler.Compile(ts, compiler.CompileFlags{
+			sc, err := compiler.Compile(ts, compiler.CompileFlags{
 				ExecutionPhase: compiler.PostCommitPhase,
 			})
 			require.NoError(t, err)
+			stages := sc.Stages()
 			for _, s := range stages {
 				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
 				//after = s.NextTargets

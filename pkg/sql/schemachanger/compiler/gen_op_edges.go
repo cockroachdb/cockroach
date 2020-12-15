@@ -12,9 +12,7 @@ import (
 // TODO(ajwerner): Deal with the flags to indicate whether things should be done
 // in the current transaction.
 
-func generateOpEdges(
-	g *targetStateGraph, t targets.Target, s targets.State, flags CompileFlags,
-) error {
+func generateOpEdges(g *SchemaChange, t targets.Target, s targets.State, flags CompileFlags) error {
 	switch t := t.(type) {
 	case *targets.AddColumn:
 		return generateAddColumnOpEdges(g, t, s, flags)
@@ -32,7 +30,7 @@ func generateOpEdges(
 }
 
 func generateDropColumnOpEdges(
-	g *targetStateGraph, t *targets.DropColumn, s targets.State, flags CompileFlags,
+	g *SchemaChange, t *targets.DropColumn, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -77,7 +75,7 @@ func generateDropColumnOpEdges(
 }
 
 func generateAddIndexOpEdges(
-	g *targetStateGraph, t *targets.AddIndex, s targets.State, flags CompileFlags,
+	g *SchemaChange, t *targets.AddIndex, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -148,7 +146,7 @@ func generateAddIndexOpEdges(
 }
 
 func generateDropIndexOpEdges(
-	g *targetStateGraph, t *targets.DropIndex, s targets.State, flags CompileFlags,
+	g *SchemaChange, t *targets.DropIndex, s targets.State, flags CompileFlags,
 ) error {
 	for {
 		switch s {
@@ -199,13 +197,13 @@ func generateDropIndexOpEdges(
 }
 
 func generateAddCheckConstraintOpEdges(
-	g *targetStateGraph, t *targets.AddCheckConstraint, s targets.State, flags CompileFlags,
+	g *SchemaChange, t *targets.AddCheckConstraint, s targets.State, flags CompileFlags,
 ) error {
 	panic("unimplemented")
 }
 
 func generateAddColumnOpEdges(
-	g *targetStateGraph, t *targets.AddColumn, s targets.State, flags CompileFlags,
+	g *SchemaChange, t *targets.AddColumn, s targets.State, flags CompileFlags,
 ) (_ error) {
 	for {
 		switch s {

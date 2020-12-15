@@ -87,7 +87,7 @@ func (b *Builder) alterTableCmd(
 
 	case tree.ColumnMutationCmd:
 
-	case *tree.AlterTablePartitionBy:
+	case *tree.AlterTablePartitionByTable:
 
 	case *tree.AlterTableSetAudit:
 
@@ -360,7 +360,7 @@ func (b *Builder) maybeAddPrimaryIndexTargetsForColumnChange(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.
-			_, _, err := table.FindIndexByName(name)
+			_, err := table.FindIndexWithName(name)
 			return err == nil
 		},
 	)

@@ -91,7 +91,8 @@ type edge interface {
 	end() *targets.TargetState
 }
 
-type targetStateGraph struct {
+type SchemaChange struct {
+	flags               CompileFlags
 	initialTargetStates []*targets.TargetState
 
 	targets      []targets.Target
@@ -107,13 +108,12 @@ type targetStateGraph struct {
 	// reached before or concurrently with this targetState.
 	targetStateDepEdges map[*targets.TargetState][]*depEdge
 
-	// TODO(ajwerner): Store the set of targets and intern the TargetState values
 	edges []edge
 
 	stages []stage
 }
 
-func (g *targetStateGraph) getOrCreateTargetState(
+func (g *SchemaChange) getOrCreateTargetState(
 	t targets.Target, s targets.State,
 ) *targets.TargetState {
 	targetStates := g.getTargetStatesMap(t)
@@ -128,29 +128,38 @@ func (g *targetStateGraph) getOrCreateTargetState(
 	return ts
 }
 
-func (g *targetStateGraph) getTargetStatesMap(
-	t targets.Target,
-) map[targets.State]*targets.TargetState {
+func (g *SchemaChange) getTargetStatesMap(t targets.Target) map[targets.State]*targets.TargetState {
 	return g.targetStates[g.targetIdxMap[t]]
-
 }
 
-func (g *targetStateGraph) String() string {
-	drawn, err := drawGraph(g.edges)
+// DrawStageGraph returns a graphviz string of the stages of the compiled
+// SchemaChange.
+func (g *SchemaChange) DrawStageGraph() (string, error) {
+	gv, err := g.drawStages()
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return drawn
+	return gv.String(), nil
 }
 
-func (g *targetStateGraph) containsTarget(target targets.Target) bool {
+// D returns a graphviz string of the stages of the compiled
+// SchemaChange.
+func (g *SchemaChange) DrawDepGraph() (string, error) {
+	gv, err := g.drawDeps()
+	if err != nil {
+		return "", err
+	}
+	return gv.String(), nil
+}
+
+func (g *SchemaChange) containsTarget(target targets.Target) bool {
 	_, exists := g.targetIdxMap[target]
 	return exists
 }
 
 // addOpEdge adds an opEdge for the given target with the provided op.
 // Returns the next state (for convenience).
-func (g *targetStateGraph) addOpEdge(
+func (g *SchemaChange) addOpEdge(
 	t targets.Target, cur, next targets.State, op ops.Op,
 ) targets.State {
 	oe := &opEdge{
@@ -167,7 +176,7 @@ func (g *targetStateGraph) addOpEdge(
 	return next
 }
 
-func (g *targetStateGraph) addDepEdge(
+func (g *SchemaChange) addDepEdge(
 	fromTarget targets.Target,
 	fromState targets.State,
 	toTarget targets.Target,
@@ -181,10 +190,8 @@ func (g *targetStateGraph) addDepEdge(
 	g.targetStateDepEdges[de.from] = append(g.targetStateDepEdges[de.from], de)
 }
 
-func buildGraph(
-	initialStates []targets.TargetState, flags CompileFlags,
-) (*targetStateGraph, error) {
-	g := targetStateGraph{
+func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
+	g := SchemaChange{
 		targetIdxMap:        map[targets.Target]int{},
 		targetStateOpEdges:  map[*targets.TargetState]*opEdge{},
 		targetStateDepEdges: map[*targets.TargetState][]*depEdge{},
@@ -222,7 +229,7 @@ type stage struct {
 	next []*targets.TargetState
 }
 
-func buildStages(g *targetStateGraph, flags CompileFlags) error {
+func buildStages(g *SchemaChange, flags CompileFlags) error {
 	// TODO(ajwerner): deal with the case where the target state was
 	// fulfilled by something that preceded the initial state.
 	fulfilled := map[*targets.TargetState]struct{}{}
@@ -332,7 +339,10 @@ func buildStages(g *targetStateGraph, flags CompileFlags) error {
 	return nil
 }
 
-func Compile(t []targets.TargetState, flags CompileFlags) ([]Stage, error) {
+type CompiledSchemaChange struct {
+}
+
+func Compile(t []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
 	// We want to create a sequence of TargetStates and ops along the edges.
 
 	// We'll start with a process of producing a graph of edges.
@@ -342,10 +352,10 @@ func Compile(t []targets.TargetState, flags CompileFlags) ([]Stage, error) {
 	// We want to walk the states and add edges to the current stage
 	// so long as they have their dependencies met or can have all of
 	// their dependencies met.
-	g, err := buildGraph(t, flags)
-	if err != nil {
-		return nil, err
-	}
+	return buildGraph(t, flags)
+}
+
+func (g *SchemaChange) Stages() []Stage {
 	ret := make([]Stage, 0, len(g.stages))
 	for i := range g.stages {
 		ret = append(ret, Stage{
@@ -359,10 +369,10 @@ func Compile(t []targets.TargetState, flags CompileFlags) ([]Stage, error) {
 			}(),
 		})
 	}
-	return ret, nil
+	return ret
 }
 
-func generateDepEdges(g *targetStateGraph) error {
+func generateDepEdges(g *SchemaChange) error {
 	// We want to generate the dependencies between target states.
 
 	// TODO(ajwerner): refactor, this initial pass is incredibly imperative.

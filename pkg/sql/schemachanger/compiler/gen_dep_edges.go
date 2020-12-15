@@ -2,7 +2,7 @@ package compiler
 
 import "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 
-func generateTargetStateDepEdges(g *targetStateGraph, t targets.Target, s targets.State) (_ error) {
+func generateTargetStateDepEdges(g *SchemaChange, t targets.Target, s targets.State) (_ error) {
 	switch t := t.(type) {
 	case *targets.AddColumn:
 		generateAddColumnDepEdges(g, t, s)
@@ -16,7 +16,7 @@ func generateTargetStateDepEdges(g *targetStateGraph, t targets.Target, s target
 	return nil
 }
 
-func generateAddColumnDepEdges(g *targetStateGraph, t *targets.AddColumn, s targets.State) {
+func generateAddColumnDepEdges(g *SchemaChange, t *targets.AddColumn, s targets.State) {
 	switch s {
 	case targets.State_DELETE_AND_WRITE_ONLY, targets.State_PUBLIC:
 		for _, ot := range g.targets {
@@ -34,7 +34,7 @@ func generateAddColumnDepEdges(g *targetStateGraph, t *targets.AddColumn, s targ
 	}
 }
 
-func generateDropIndexDepEdges(g *targetStateGraph, t *targets.DropIndex, s targets.State) {
+func generateDropIndexDepEdges(g *SchemaChange, t *targets.DropIndex, s targets.State) {
 	switch s {
 	case targets.State_DELETE_AND_WRITE_ONLY:
 		for _, ot := range g.targets {
@@ -53,7 +53,7 @@ func generateDropIndexDepEdges(g *targetStateGraph, t *targets.DropIndex, s targ
 	}
 }
 
-func generateAddIndexDepEdges(g *targetStateGraph, t *targets.AddIndex, s targets.State) {
+func generateAddIndexDepEdges(g *SchemaChange, t *targets.AddIndex, s targets.State) {
 	// AddIndex in the Public state depends on any DropIndex it is replacing being
 	// in the DeleteAndWriteOnly state
 	switch s {
@@ -69,7 +69,7 @@ func generateAddIndexDepEdges(g *targetStateGraph, t *targets.AddIndex, s target
 	}
 }
 
-func generateDropColumnDepEdges(g *targetStateGraph, t *targets.DropColumn, s targets.State) {
+func generateDropColumnDepEdges(g *SchemaChange, t *targets.DropColumn, s targets.State) {
 	switch s {
 	case targets.State_DELETE_AND_WRITE_ONLY:
 		for _, ot := range g.targets {

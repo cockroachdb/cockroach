@@ -54,14 +54,14 @@ func (n *newSchemaChangeResumer) Resume(
 	lm := execCtx.LeaseMgr()
 	db := lm.DB()
 	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
-	stages, err := compiler.Compile(makeTargetStates(ctx, settings, n.targets, states), compiler.CompileFlags{
+	sc, err := compiler.Compile(makeTargetStates(ctx, settings, n.targets, states), compiler.CompileFlags{
 		ExecutionPhase: compiler.PostCommitPhase,
 	})
 	if err != nil {
 		return err
 	}
 
-	for _, s := range stages {
+	for _, s := range sc.Stages() {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			if err := executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops); err != nil {

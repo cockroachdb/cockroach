@@ -2556,7 +2556,7 @@ func (ex *connExecutor) runNewSchemaChanger(
 	phase compiler.ExecutionPhase,
 	executorRunner func(context.Context, func(context.Context, *executor.Executor) error) error,
 ) error {
-	stages, err := compiler.Compile(ex.extraTxnState.schemaChangerState.targetStates, compiler.CompileFlags{
+	sc, err := compiler.Compile(ex.extraTxnState.schemaChangerState.targetStates, compiler.CompileFlags{
 		ExecutionPhase: phase,
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
@@ -2564,7 +2564,7 @@ func (ex *connExecutor) runNewSchemaChanger(
 		return err
 	}
 	after := ex.extraTxnState.schemaChangerState.targetStates
-	for _, s := range stages {
+	for _, s := range sc.Stages() {
 		if err := executorRunner(ctx, func(ctx context.Context, e *executor.Executor) error {
 			return e.ExecuteOps(ctx, s.Ops)
 		}); err != nil {

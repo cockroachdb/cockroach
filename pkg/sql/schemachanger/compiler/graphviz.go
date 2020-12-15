@@ -11,7 +11,7 @@ import (
 	"github.com/emicklei/dot"
 )
 
-func (g *targetStateGraph) drawStages() (*dot.Graph, error) {
+func (g *SchemaChange) drawStages() (*dot.Graph, error) {
 
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
@@ -62,7 +62,7 @@ func (g *targetStateGraph) drawStages() (*dot.Graph, error) {
 	return dg, nil
 }
 
-func (g *targetStateGraph) drawDeps() (*dot.Graph, error) {
+func (g *SchemaChange) drawDeps() (*dot.Graph, error) {
 	dg := dot.NewGraph()
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
@@ -107,43 +107,6 @@ func (g *targetStateGraph) drawDeps() (*dot.Graph, error) {
 	}
 	return dg, nil
 
-}
-
-func drawGraph(edges []edge) (string, error) {
-	g := dot.NewGraph()
-	for _, e := range edges {
-		from, to := e.start(), e.end()
-		fromID, toID := jsonLabel(from.Target), jsonLabel(to.Target)
-
-		fromG := g.Subgraph(string(fromID), dot.ClusterOption{})
-		fromG.Attr("label", htmlLabel(from.Target))
-		fromG.Attr("shape", "none")
-		fromG.Attr("fontsize", "9")
-
-		toG := g.Subgraph(string(toID), dot.ClusterOption{})
-		toG.Attr("label", htmlLabel(to.Target))
-		toG.Attr("shape", "none")
-		toG.Attr("fontsize", "9")
-
-		fromN := fromG.Node(from.State.String())
-		toN := toG.Node(to.State.String())
-		var ge dot.Edge
-		if fromG == toG {
-			ge = fromG.Edge(fromN, toN)
-		} else {
-			ge = g.Edge(fromN, toN)
-		}
-		switch e := e.(type) {
-		case *opEdge:
-			ge.Attr("label", htmlLabel(e.op))
-			ge.Attr("fontsize", "9")
-		case *depEdge:
-			ge.Attr("color", "red")
-		}
-	}
-	var buf strings.Builder
-	g.Write(&buf)
-	return buf.String(), nil
 }
 
 func targetStateID(targetID int, state targets.State) string {

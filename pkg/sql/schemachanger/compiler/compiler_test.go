@@ -859,8 +859,9 @@ func TestCompile(t *testing.T) {
 				require.NoError(t, err)
 				t.Log("\n" + dg.String())
 
-				stages, err := Compile(prevTargetStates, ci.flags)
+				sc, err := Compile(prevTargetStates, ci.flags)
 				require.NoError(t, err)
+				stages := sc.Stages()
 				// TODO (lucy): The ordering of ops in each state is currently
 				// unspecified, so the comparison should be order-insensitive.
 				require.Equal(t, ci.expected, stages)
@@ -930,7 +931,7 @@ func TestDebugScratch(t *testing.T) {
 		},
 	}
 
-	draw := func(t *testing.T, flag ExecutionPhase, f func(g *targetStateGraph) (*dot.Graph, error)) {
+	draw := func(t *testing.T, flag ExecutionPhase, f func(g *SchemaChange) (*dot.Graph, error)) {
 		g, err := buildGraph(targetStates, CompileFlags{
 			ExecutionPhase: flag,
 		})
@@ -941,24 +942,24 @@ func TestDebugScratch(t *testing.T) {
 	}
 	t.Run("deps", func(t *testing.T) {
 		t.Run("PostStatement", func(t *testing.T) {
-			draw(t, PostStatementPhase, (*targetStateGraph).drawDeps)
+			draw(t, PostStatementPhase, (*SchemaChange).drawDeps)
 		})
 		t.Run("PreCommit", func(t *testing.T) {
-			draw(t, PreCommitPhase, (*targetStateGraph).drawDeps)
+			draw(t, PreCommitPhase, (*SchemaChange).drawDeps)
 		})
 		t.Run("PostCommit", func(t *testing.T) {
-			draw(t, PostCommitPhase, (*targetStateGraph).drawDeps)
+			draw(t, PostCommitPhase, (*SchemaChange).drawDeps)
 		})
 	})
 	t.Run("stages", func(t *testing.T) {
 		t.Run("PostStatement", func(t *testing.T) {
-			draw(t, PostStatementPhase, (*targetStateGraph).drawStages)
+			draw(t, PostStatementPhase, (*SchemaChange).drawStages)
 		})
 		t.Run("PreCommit", func(t *testing.T) {
-			draw(t, PreCommitPhase, (*targetStateGraph).drawStages)
+			draw(t, PreCommitPhase, (*SchemaChange).drawStages)
 		})
 		t.Run("PostCommit", func(t *testing.T) {
-			draw(t, PostCommitPhase, (*targetStateGraph).drawStages)
+			draw(t, PostCommitPhase, (*SchemaChange).drawStages)
 		})
 	})
 
