@@ -940,7 +940,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		return
 	}
 
-	fixedCols := memo.ExtractConstColumns(filters, c.e.mem, c.e.evalCtx)
+	fixedCols := memo.ExtractConstColumns(filters, c.e.evalCtx)
 
 	if fixedCols.Len() == 0 {
 		// Zigzagging isn't helpful in the absence of fixed columns.
@@ -1248,7 +1248,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 ) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []*types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		colID := tabID.IndexColumnID(index, i)
-		val := memo.ExtractValueForConstColumn(filters, c.e.mem, c.e.evalCtx, colID)
+		val := memo.ExtractValueForConstColumn(filters, c.e.evalCtx, colID)
 		if val == nil {
 			break
 		}
