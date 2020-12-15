@@ -24,11 +24,11 @@ import (
 
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
-var HistogramClusterMode = settings.RegisterPublicBoolSetting(
+var HistogramClusterMode = settings.RegisterBoolSetting(
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
 	true,
-)
+).WithPublic()
 
 // EquiDepthHistogram creates a histogram where each bucket contains roughly
 // the same number of samples (though it can vary when a boundary value has

@@ -84,11 +84,12 @@ func PromptForPassword() (string, error) {
 
 // MinPasswordLength is the cluster setting that configures the
 // minimum SQL password length.
-var MinPasswordLength = settings.RegisterNonNegativeIntSetting(
+var MinPasswordLength = settings.RegisterIntSetting(
 	"server.user_login.min_password_length",
 	"the minimum length accepted for passwords set in cleartext via SQL. "+
 		"Note that a value lower than 1 is ignored: passwords cannot be empty in any case.",
 	1,
+	settings.NonNegativeInt,
 )
 
 // GenerateRandomPassword generates a somewhat secure password

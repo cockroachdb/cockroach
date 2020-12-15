@@ -33,17 +33,20 @@ type TLSSettings interface {
 	ocspTimeout() time.Duration
 }
 
-var ocspMode = settings.RegisterPublicEnumSetting("security.ocsp.mode",
+var ocspMode = settings.RegisterEnumSetting("security.ocsp.mode",
 	`use OCSP to check whether TLS certificates are revoked. If the OCSP
 server is unreachable, in strict mode all certificates will be rejected
 and in lax mode all certificates will be accepted.`,
-	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"})
+	"off", map[int64]string{ocspOff: "off", ocspLax: "lax", ocspStrict: "strict"}).WithPublic()
 
 // TODO(bdarnell): 3 seconds is the same as base.NetworkTimeout, but
 // we can't use it here due to import cycles. We need a real
 // no-dependencies base package for constants like this.
-var ocspTimeout = settings.RegisterPublicNonNegativeDurationSetting("security.ocsp.timeout",
-	"timeout before considering the OCSP server unreachable", 3*time.Second)
+var ocspTimeout = settings.RegisterDurationSetting("security.ocsp.timeout",
+	"timeout before considering the OCSP server unreachable",
+	3*time.Second,
+	settings.NonNegativeDuration,
+).WithPublic()
 
 type clusterTLSSettings struct {
 	settings *cluster.Settings

@@ -34,7 +34,7 @@ import (
 // followerReadMultiple is the multiple of kv.closed_timestmap.target_duration
 // which the implementation of the follower read capable replica policy ought
 // to use to determine if a request can be used for reading.
-var followerReadMultiple = settings.RegisterValidatedFloatSetting(
+var followerReadMultiple = settings.RegisterFloatSetting(
 	"kv.follower_read.target_multiple",
 	"if above 1, encourages the distsender to perform a read against the "+
 		"closest replica if a request is older than kv.closed_timestamp.target_duration"+

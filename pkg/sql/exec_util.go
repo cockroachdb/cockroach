@@ -80,11 +80,11 @@ import (
 )
 
 // ClusterOrganization is the organization name.
-var ClusterOrganization = settings.RegisterPublicStringSetting(
+var ClusterOrganization = settings.RegisterStringSetting(
 	"cluster.organization",
 	"organization name",
 	"",
-)
+).WithPublic()
 
 // ClusterIsInternal returns true if the cluster organization contains
 // "Cockroach Labs", indicating an internal cluster.
@@ -111,7 +111,7 @@ var ClusterSecret = func() *settings.StringSetting {
 // TODO(bob): Change this to 4 in v2.3; https://github.com/cockroachdb/cockroach/issues/32534
 // TODO(bob): Remove or n-op this in v2.4: https://github.com/cockroachdb/cockroach/issues/32844
 var defaultIntSize = func() *settings.IntSetting {
-	s := settings.RegisterValidatedIntSetting(
+	s := settings.RegisterIntSetting(
 		"sql.defaults.default_int_size",
 		"the size, in bytes, of an INT type", 8, func(i int64) error {
 			if i != 4 && i != 8 {
@@ -125,27 +125,27 @@ var defaultIntSize = func() *settings.IntSetting {
 
 const allowCrossDatabaseFKsSetting = "sql.cross_db_fks.enabled"
 
-var allowCrossDatabaseFKs = settings.RegisterPublicBoolSetting(
+var allowCrossDatabaseFKs = settings.RegisterBoolSetting(
 	allowCrossDatabaseFKsSetting,
 	"if true, creating foreign key references across databases is allowed",
 	false,
-)
+).WithPublic()
 
 const allowCrossDatabaseViewsSetting = "sql.cross_db_views.enabled"
 
-var allowCrossDatabaseViews = settings.RegisterPublicBoolSetting(
+var allowCrossDatabaseViews = settings.RegisterBoolSetting(
 	allowCrossDatabaseViewsSetting,
 	"if true, creating views that refer to other databases is allowed",
 	false,
-)
+).WithPublic()
 
 const allowCrossDatabaseSeqOwnerSetting = "sql.cross_db_sequence_owners.enabled"
 
-var allowCrossDatabaseSeqOwner = settings.RegisterPublicBoolSetting(
+var allowCrossDatabaseSeqOwner = settings.RegisterBoolSetting(
 	allowCrossDatabaseSeqOwnerSetting,
 	"if true, creating sequences owned by tables from other databases is allowed",
 	false,
-)
+).WithPublic()
 
 // traceTxnThreshold can be used to log SQL transactions that take
 // longer than duration to complete. For example, traceTxnThreshold=1s
@@ -154,36 +154,36 @@ var allowCrossDatabaseSeqOwner = settings.RegisterPublicBoolSetting(
 // that any positive duration will enable tracing and will slow down
 // all execution because traces are gathered for all transactions even
 // if they are not output.
-var traceTxnThreshold = settings.RegisterPublicDurationSetting(
+var traceTxnThreshold = settings.RegisterDurationSetting(
 	"sql.trace.txn.enable_threshold",
 	"duration beyond which all transactions are traced (set to 0 to "+
 		"disable). This setting is coarser grained than"+
 		"sql.trace.stmt.enable_threshold because it applies to all statements "+
 		"within a transaction as well as client communication (e.g. retries).", 0,
-)
+).WithPublic()
 
 // traceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
 // to be able to reduce the noise associated with a larger transaction (e.g.
 // round trips to client).
-var traceStmtThreshold = settings.RegisterPublicDurationSetting(
+var traceStmtThreshold = settings.RegisterDurationSetting(
 	"sql.trace.stmt.enable_threshold",
 	"duration beyond which all statements are traced (set to 0 to disable). "+
 		"This applies to individual statements within a transaction and is therefore "+
 		"finer-grained than sql.trace.txn.enable_threshold.",
 	0,
-)
+).WithPublic()
 
 // traceSessionEventLogEnabled can be used to enable the event log
 // that is normally kept for every SQL connection. The event log has a
 // non-trivial performance impact and also reveals SQL statements
 // which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterPublicBoolSetting(
+var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	"sql.trace.session_eventlog.enabled",
 	"set to true to enable session tracing. "+
 		"Note that enabling this may have a non-trivial negative performance impact.",
 	false,
-)
+).WithPublic()
 
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
@@ -191,7 +191,7 @@ const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
 
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
-var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
+var ReorderJoinsLimitClusterValue = settings.RegisterIntSetting(
 	ReorderJoinsLimitClusterSettingName,
 	"default number of joins to reorder",
 	opt.DefaultJoinOrderLimit,
@@ -231,10 +231,11 @@ var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
-var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
+var optDrivenFKCascadesClusterLimit = settings.RegisterIntSetting(
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
 	10000,
+	settings.NonNegativeInt,
 )
 
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
@@ -286,12 +287,13 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
-var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
 		"enables automatically killing sessions that exceed the "+
 		"idle_in_session_timeout threshold",
 	0,
+	settings.NonNegativeDuration,
 )
 
 // TODO(mgartner): remove this once multi-column inverted indexes are fully
@@ -348,7 +350,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 // VectorizeRowCountThresholdClusterValue controls the cluster default for the
 // vectorize row count threshold. When it is met, the vectorized execution
 // engine will be used if possible.
-var VectorizeRowCountThresholdClusterValue = settings.RegisterValidatedIntSetting(
+var VectorizeRowCountThresholdClusterValue = settings.RegisterIntSetting(
 	"sql.defaults.vectorize_row_count_threshold",
 	"default vectorize row count threshold",
 	colexec.DefaultVectorizeRowCountThreshold,
@@ -375,7 +377,7 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 
 // SerialNormalizationMode controls how the SERIAL type is interpreted in table
 // definitions.
-var SerialNormalizationMode = settings.RegisterPublicEnumSetting(
+var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"sql.defaults.serial_normalization",
 	"default handling of SERIAL in table definitions",
 	"rowid",
@@ -384,13 +386,13 @@ var SerialNormalizationMode = settings.RegisterPublicEnumSetting(
 		int64(sessiondata.SerialUsesVirtualSequences): "virtual_sequence",
 		int64(sessiondata.SerialUsesSQLSequences):     "sql_sequence",
 	},
-)
+).WithPublic()
 
-var disallowFullTableScans = settings.RegisterPublicBoolSetting(
+var disallowFullTableScans = settings.RegisterBoolSetting(
 	`sql.defaults.disallow_full_table_scans.enabled`,
 	"setting to true rejects queries that have planned a full table scan",
 	false,
-)
+).WithPublic()
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")

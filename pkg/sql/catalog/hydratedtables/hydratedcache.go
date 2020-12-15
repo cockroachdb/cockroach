@@ -97,10 +97,12 @@ var (
 )
 
 // CacheSize controls the size of the LRU cache.
-var CacheSize = settings.RegisterNonNegativeIntSetting(
+var CacheSize = settings.RegisterIntSetting(
 	"sql.catalog.hydrated_tables.cache_size",
 	"number of table descriptor versions retained in the hydratedtables LRU cache",
-	128)
+	128,
+	settings.NonNegativeInt,
+)
 
 // NewCache constructs a new Cache.
 func NewCache(settings *cluster.Settings) *Cache {

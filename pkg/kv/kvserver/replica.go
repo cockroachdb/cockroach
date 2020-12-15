@@ -99,7 +99,7 @@ var UseAtomicReplicationChanges = settings.RegisterBoolSetting(
 const MaxCommandSizeFloor = 4 << 20 // 4MB
 
 // MaxCommandSize wraps "kv.raft.command.max_size".
-var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
+var MaxCommandSize = settings.RegisterByteSizeSetting(
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
 	64<<20,

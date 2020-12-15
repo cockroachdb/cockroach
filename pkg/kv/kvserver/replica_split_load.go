@@ -21,24 +21,25 @@ import (
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
-var SplitByLoadEnabled = settings.RegisterPublicBoolSetting(
+var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
-)
+).WithPublic()
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
-var SplitByLoadQPSThreshold = settings.RegisterPublicIntSetting(
+var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting",
 	2500, // 2500 req/s
-)
+).WithPublic()
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
-var SplitByLoadMergeDelay = settings.RegisterNonNegativeDurationSetting(
+var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.

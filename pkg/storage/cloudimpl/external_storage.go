@@ -405,20 +405,21 @@ func containsGlob(str string) bool {
 var (
 	// GcsDefault is the setting which defines the JSON key to use during GCS
 	// operations.
-	GcsDefault = settings.RegisterPublicStringSetting(
+	GcsDefault = settings.RegisterStringSetting(
 		CloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
 		"",
-	)
-	httpCustomCA = settings.RegisterPublicStringSetting(
+	).WithPublic()
+	httpCustomCA = settings.RegisterStringSetting(
 		CloudstorageHTTPCASetting,
 		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
-	)
-	timeoutSetting = settings.RegisterPublicDurationSetting(
+	).WithPublic()
+	timeoutSetting = settings.RegisterDurationSetting(
 		cloudStorageTimeout,
 		"the timeout for import/export storage operations",
-		10*time.Minute)
+		10*time.Minute,
+	).WithPublic()
 )
 
 // delayedRetry runs fn and re-runs it a limited number of times if it
