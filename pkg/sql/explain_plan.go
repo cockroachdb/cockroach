@@ -67,6 +67,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	}()
 	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
 	var diagramURL url.URL
+	var diagramJSON string
 	if err != nil {
 		if e.options.Mode == tree.ExplainDistSQL {
 			if len(plan.subqueryPlans) > 0 {
@@ -111,21 +112,27 @@ func (e *explainPlanNode) startExec(params runParams) error {
 				return err
 			}
 
-			_, diagramURL, err = diagram.ToURL()
+			diagramJSON, diagramURL, err = diagram.ToURL()
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
-		return err
+	var rows []string
+	if e.options.Flags[tree.ExplainFlagJSON] {
+		// For the JSON flag, we only want to emit the diagram JSON
+		rows = []string{diagramJSON}
+	} else {
+		if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			return err
+		}
+		rows = ob.BuildStringRows()
+		if e.options.Mode == tree.ExplainDistSQL {
+			rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
+		}
 	}
 	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, 0)
-	rows := ob.BuildStringRows()
-	if e.options.Mode == tree.ExplainDistSQL {
-		rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
-	}
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {
 		datums[i] = tree.DString(row)
