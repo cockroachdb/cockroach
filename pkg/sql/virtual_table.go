@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -70,7 +71,11 @@ func setupGenerator(
 ) (next virtualTableGenerator, cleanup cleanupFunc) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
-	cleanup = cancel
+	var wg sync.WaitGroup
+	cleanup = func() {
+		cancel()
+		wg.Wait()
+	}
 
 	// comm is the channel to manage communication between the row receiver
 	// and the generator. The row receiver notifies the worker to begin
@@ -101,7 +106,9 @@ func setupGenerator(
 		return nil
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// We wait until a call to next before starting the worker. This prevents
 		// concurrent transaction usage during the startup phase. We also have to
 		// wait on done here if cleanup is called before any calls to next() to
