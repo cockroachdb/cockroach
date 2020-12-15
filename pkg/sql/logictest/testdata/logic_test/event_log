@@ -713,3 +713,25 @@ ORDER BY "timestamp", info
 1  {"EventType": "drop_schema", "InstanceID": 1, "SchemaName": "sc", "Statement": "DROP SCHEMA \"\".sc", "User": "root"}
 1  {"EventType": "drop_schema", "InstanceID": 1, "SchemaName": "s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
 1  {"EventType": "drop_schema", "InstanceID": 1, "SchemaName": "t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
+
+
+subtest eventlog_setting_disable
+
+statement ok
+SET CLUSTER SETTING server.eventlog.enabled = false
+
+statement ok
+CREATE ROLE rinvisible
+
+statement ok
+DROP ROLE rinvisible
+
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+FROM system.eventlog
+WHERE "eventType" LIKE '%_role' AND info LIKE '%invisible%'
+----
+
+
+statement ok
+SET CLUSTER SETTING server.eventlog.enabled = false

@@ -559,14 +559,13 @@ func childSpan(ctx context.Context, opName string, remote bool) (context.Context
 		opts.RemoteParent = sp.Meta()
 	}
 	newSpan := tr.startSpanGeneric(opName, opts)
-	if newSpan.isNoop() {
-		// Optimization: if we end up with a noop, return the inputs
-		// to avoid ContextWithSpan call below.
-		//
-		// TODO(tbg): this is unsound. We are returning the incoming
-		// context which may have a Span that could later start recording.
-		// So in effect that span may capture parts of two goroutines
-		// accidentally.
+	if sp.isNoop() && newSpan.isNoop() {
+		// Optimization: if we started and end up with a noop, we can return
+		// the original context to save on the ContextWithSpan alloc. Note
+		// that it is important that the incoming span was the noop span. If
+		// it was a real, non-recording span, it might later start recording.
+		// Besides, the caller expects to get their own span, and will
+		// .Finish() it, leading to an extra, premature call to Finish().
 		return ctx, sp
 	}
 	return ContextWithSpan(ctx, newSpan), newSpan
