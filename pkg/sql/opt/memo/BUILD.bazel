@@ -10,6 +10,7 @@ go_library(
         "expr_format.go",
         "expr_name_gen.go",
         "extract.go",
+        "filters_expr_mutate_checker_skip.go",
         "group.go",
         "interner.go",
         "logical_props_builder.go",

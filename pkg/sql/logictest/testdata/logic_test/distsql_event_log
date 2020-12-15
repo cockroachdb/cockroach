@@ -26,8 +26,8 @@ FROM system.eventlog
 WHERE "eventType" = 'create_statistics'
 ORDER BY "timestamp", info
 ----
-53  1  {"EventType": "create_statistics", "InstanceID": 1, "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "User": "root"}
-53  1  {"EventType": "create_statistics", "InstanceID": 1, "Statement": "CREATE STATISTICS __auto__ FROM test.public.a", "TableName": "test.public.a", "User": "root"}
+53  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS s1 ON id FROM test.public.a", "TableName": "test.public.a", "User": "root"}
+53  1  {"EventType": "create_statistics", "Statement": "CREATE STATISTICS __auto__ FROM test.public.a", "TableName": "test.public.a", "User": "root"}
 
 statement ok
 DROP TABLE a

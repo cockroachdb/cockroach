@@ -32,11 +32,10 @@ func (p *planner) logEvent(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) error {
 	// Compute the common fields from data already known to the planner.
-	sqlInstanceID := p.extendedEvalCtx.NodeID.SQLInstanceID()
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
 
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, sqlInstanceID, descID, user, stmt, event)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, stmt, event)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -65,7 +64,7 @@ func logEventInternalForSchemaChanges(
 		ctx, execCfg.InternalExecutor,
 		txn,
 		int32(descID),
-		int32(sqlInstanceID),
+		int32(execCfg.NodeID.SQLInstanceID()),
 		false, /* skipExternalLog */
 		event)
 }
@@ -79,7 +78,6 @@ func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	sqlInstanceID base.SQLInstanceID,
 	descID descpb.ID,
 	user security.SQLUsername,
 	stmt string,
@@ -94,14 +92,13 @@ func logEventInternalForSQLStatements(
 	m := sqlCommon.CommonSQLDetails()
 	m.Statement = stmt
 	m.User = user.Normalized()
-	m.InstanceID = int32(sqlInstanceID)
 	m.DescriptorID = uint32(descID)
 
 	// Delegate the storing of the event to the regular event logic.
 	return InsertEventRecord(ctx, execCfg.InternalExecutor,
 		txn,
 		int32(descID),
-		int32(sqlInstanceID),
+		int32(execCfg.NodeID.SQLInstanceID()),
 		false, /* skipExternalLog */
 		event)
 }

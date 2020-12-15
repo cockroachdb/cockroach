@@ -60,6 +60,15 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	if logging.mu.clusterID != "" {
 		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.mu.clusterID))
 	}
+	if logging.mu.nodeID != 0 {
+		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.mu.nodeID))
+	}
+	if logging.mu.tenantID != "" {
+		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.mu.tenantID))
+	}
+	if logging.mu.sqlInstanceID != 0 {
+		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.mu.sqlInstanceID))
+	}
 	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps

@@ -39,11 +39,8 @@ message CommonSQLEventDetails {
   // The user account that triggered the event.
   string user = 2 [(gogoproto.jsontag) = ",omitempty"];
 
-  // The instance ID (not tenant ID) of the SQL server where the event was originated.
-  int32 instance_id = 3 [(gogoproto.customname) = "InstanceID", (gogoproto.jsontag) = ",omitempty"];
-
   // The primary object descriptor affected by the operation. Set to zero for operations
   // that don't affect descriptors.
-  uint32 descriptor_id = 4 [(gogoproto.customname) = "DescriptorID" , (gogoproto.jsontag) = ",omitempty"];
+  uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID" , (gogoproto.jsontag) = ",omitempty"];
 }
 
