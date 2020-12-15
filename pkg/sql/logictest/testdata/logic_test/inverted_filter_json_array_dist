@@ -81,82 +81,260 @@ ALTER TABLE json_tab VALIDATE CONSTRAINT check_c
 
 # Filter with a scalar.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '1' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '1' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJysUl-L00AQf_dTDPNyinsku6kv-1T1IhZqW5OCyhlk2x3PSNyNuxs5OPrdpZuKjdTYk3sJ2ZnfP37MHfrvDUos83n-cg2da-BVsXwD1_n71fz5bAGPr2blunw7fwIHiOoBX701n4LawLvXeZHDBqYfuzTNCC74BSyLq7yAFx9AVcjQWE0L9Y08ymvkyFAgwwwrhq2zW_Leuv3qLgJn-hZlyrA2bRf6cahDQyjROk2ONDLUFFTdRL0pf4rVrmK4tY5Q_kYv7KVtk8kAXe0Y2i4clCuGPqgbQpnt2JE7P3I_IbxWm4YKUppckg7D_CplGn9q8wMZlq0yXkLC04Rfxm-ycvS5vs2NBmU0cLDhCzlkuOyChCnHv8Xk94lZWhfIJeJUXaflxUBenN8CP78FEVsQD9fCP2IeWsj-t4V0XL4g31rj6awrS_dnSvqG-rP2tnNbWjm7jTb9cxl5caDJh377rH_MTL_aBzwm81GyGCeLUXI6IPM_ydkoeTLuPLmXc7V79DMAAP__bMeAtQ==
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • scan
+      missing stats
+      table: json_tab@json_inv
+      spans: 2 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysUt2KEzEUvvcpDudmFbNMkqk3uaq6IxZqW2cKKjpI2hzXkZqMSUYWlr67NLNiR-rYFW9Czs_3w8e5xfBthwqLt6v509kCHl7NqnX1ev4IqmJePF-Dhhfl8hV8Cc5-jHoDb14WZQEbmH7oOM8JLsQFLMurooRn70AjQ-sMLfRXCqjeo0CGEhnmWDNsvdtSCM4fRrdpcWZuUHGGjW272LdjE3eECp035MkgQ0NRN7vENxWPsd7XDLfOE6pf2wt36dpsMtiu9wxdF--Ya4Yh6mtCle_Zkbo4Uj9BvNabHZWkDfmMD838zGSaPo39jgyrVtugIBM8E5fpzVaePjU3hTWgrQEBLn4mjwyXXVQwFfgnm-I-NivnI_lMnorrNL0c0MvzUxDnpyBTCvL_pfAXm3cp5P-aAh-nLym0zgY668r44UzJXFN_1sF1fksr77ZJpi-XCZcahkLsp0_6Ymb70cHgMViMguU4WI6C-QAsfgfno-DJuPLkXsr1_sGPAAAA__-G2ntW
 
 # Filter with fully-specified arrays.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUlFv0zwUff9-xdV92fZhFDtBmuSnDJaJSGUtSSVATYTc-jKCgh1sZ6pU9b-jJGxQUAt7se4995yTc6Ts0H9rUWKZzbJXS-hdCzfF_A2ssveL2VV-C-fXebks384u4AdFTYQv3pqPQa3h3eusyOB8DWnVc54QnK0Eg7g-u4B5cYgnDF5M-HVWwMsPoGpkaKymW_WVPMoVCqwZds5uyHvrBmg3EnK9RckZNqbrwwDXDDfWEcodhia0hBKXat1SQUqTizgy1BRU0462D2nTcWjMPTIsO2W8hEjw6Mq5SDx_nKKFo0_NNjMalNFwCTZ8JueR4bwPElLB0hjrPUPbh59xfFB3hFLs2b9Hzs09uUD6pmkDOXKROMz9cM-2nQNrIBUS_JAbfFAuyAovq4pzPjzJ4yT-H9542hHI6L8TRYUwtk3-aHu0avyUqqV1gVwUHxZMxbOj9slT7AvynTWeDuyPOfN9zZD0HU0_mLe929DC2c34mWmdj7oR0OTDdBXTkpvpNAT8VSxOiuPT4vikOPlNXO__-x4AAP__WygsbA==
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 4
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 4 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFv0zAQ_c6vON2XbWAUO0Ga5E8ZLBORylqSSoCWCLn1MYKCHWxnqlT1v6Mk2qCgFvrldPfu3vN7krfof7QoMfu4mF3lt3B-nZfL8v3sAspslr1ZgoKbYv4OvnlrPge1gg9vsyKD8xWkVc95QnB2JxjE9dkFzIt9PGHwasKvswJefwKFDI3VdKu-k0d5hwJrhp2za_LeugHajge53qDkDBvT9WGAa4Zr6wjlFkMTWkKJS7VqqSClyUUcGWoKqmlH2Uez6dg05gEZlp0yXkIkeHTlXCRePnXRwtGXZpMZDcpouAQbvpLzyHDeBwmpYGmM9Y6h7cMvOz6oe0Ipduz_LefmgVwgfdO0gRy5SOz7ftxnm86BNZAKCX7wDT4oF2SFl1XFOR9K8tSJ50ONpxmBjP73oagQxrTJX2kPRo1PiVpaF8hF8X7AVLw4KJ-cIl-Q76zxtCd_SJnvaoak72n6YN72bk0LZ9fjM9M4H3kjoMmHaSumITfTajD4O1kcJcfHyfFRcvIHud49-xkAAP__grwnDQ==
 
 # Filter with a path ending in an empty object.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVFFv0zwUff9-xdV92YcwSpxsIPwUYJmoNNaSVgK0RMitLyMo2MV2pkpV_jtKsmlNWbPtAYmXKL73nHtOjnWzRferQoHz9Dx9t4DaVnCWTT_AZfp5dv5mcgH_n07mi_nH82dwA5E94Icz-quXS_j0Ps1SWEKS12EYExxtc5Q5Ctg2zRFMs9M0g7dfQBbIUBtFF_InORSXyJFhhAxjLBiurVmRc8a2rW0HnKgNipBhqde178u-9BWhwFobq8iSQoaKvCyrtl80BcOVsYTiDnpaOl_qlQ-OB1hMWvlp7QUkHIuGoan9jU7B0Hl5RSjihh3wco_S3FhPNjjZ13l-cPzxYDwfH7-Qy4oykopsEA41bu8i6V5KfY0M52upnYCAh0F3H8G2ebF7CGaWvpWbVCuQWgEH47-TvcuEJdFB3_wpvif6mqwndVZWnizZIBqav-2nm7UFoyHhAlxrHpyX1oscX8k8D8OwffDXOQJptVcVOcLuZ7iD1qOB9ejxkfPHRx7tRh79jcgf8P1H5PG_E_kDS5SRWxvtaG-x758ctgtP6or6v4MztV3RzJpVJ9Mfpx2vKyhyvu_y_jDRfas1uEvmo-SX4-RolByPk-NRcjgg833y8Sj5ZFz55EnKRfPf7wAAAP__VywBrA==
+distribution: full
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 2 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVFFv0zwUff9-xdV92YcwSpysIPwUoJmoVNaSVgJEIuTWlxFU7GI7U6Uq_x0lYVpT1mx7QOIliu-5556TY93s0f3coMD043z6anIJ_48ni-Xi_fQJLNJp-mYJEi6y2Tv47oz-4uUKPrxNsxRWkORVGMYEZ_scZY4C9nV9BrNsnGbw-hNIZKiNokv5gxyKz8iRYYQMYywYbq1Zk3PGNtC-bZyoHYqQYam3le_KvvQbQoGVNlaRJYUMFXlZbhq8qAuGa2MJxW3ruHS-1GsfnPd6MWnkZ5UXkHAsaoam8r91CobOyytCEdfshJc7lBbGerLB6Fjn6cnx573xfHj8Uq42lJFUZIOwr3FzFUn7UuprZLjYSu0EBDwM2usI9vWzw0Mwt_S13KVagdQKOBj_jextJiyJTvrmj_E90ddkPamLcuPJkg2ivvkbPN1tLRgNCRfgGvPgvLRe5PhC5nkYhs2Dv8wRSKujqsgRDj_DnbQe9axHD4-cPzzy6DDy6G9Efo_vPyKP_53I71mijNzWaEdHi3335LBZeFJX1P0dnKnsmubWrFuZ7jhreW1BkfMdyrvDRHdQY_CQzAfJz4fJ0SA5HibHg-SwR-bH5PNB8mhYefQo5aL-71cAAAD__xdB_D4=
 
 # Filter with a path ending in an empty array.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVE9vm04Qvf8-xWgu-VXdChbs_uFEWxPVkhun2FJbGVStvaOUiu66u0sUyeK7V0AiGzcmidRDL4ideW_e462GHdpfJUa4SGbJ-yVUpoTzdP4RVsmXy9nb6QX8P5kulotPs2dwCxEd4IfV6psTa_j8IUkTWEOcVb4fEpztMhQZRrDK6zOYp5MkhXdfQeTIUGlJF-InWYxWyJFhgAxDzBlujd6Qtdo0rV0LnMobjHyGhdpWriu7wpWEEVZKG0mGJDKU5ERRNv28zhlutCGM9tBJYV2hNs4b9bAYN_LzykUQc8xrhrpytzo5Q-vEFWEU1uyEl3uUFto4Mt74WOf5yfGj3ng-PH4p1iWlJCQZz-9r3N1F3L4U6hoZLrZC2Qg87nvtfXir_MX-sKtBKAkctPtOZp8Ei4OTbvlT3E7VNRlH8rwoHRkyXtC3fNdPbrYGtIKYR2Aby2CdMC7K8JXIMt_3mwd_nSGQkkfVNxnC4WfYk9aDnvXg8UHzxwcdHAYd_L2gH3D7R9DhvxP0AwuTkt1qZeloie-f7DfLTfKKuj-B1ZXZ0KXRm1amO85bXluQZF3X5d1hqrpWY_CQzAfJL4fJwSA5HCaHg2S_R-bH5NEgeTysPH6Scl7_9zsAAP__S4D5cQ==
+distribution: full
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 2 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVF1v0zAUfedXXN2XgTBKnGx8-ClAM1GprCOtBKiJkFtfjaBiF9uZJlX57ygJU5uyZpvEAy9RfM8995wc62aL7tcaBaZfLidvxxfwdDSezWefJs9glk7S93OQcJ5NP8IPZ_Q3L5fw-UOapbCEJK_CMCY42eYocxSwKOoTmGajNIN3X0EiQ20UXcif5FAskCPDCBnGWDDcWLMi54xtoG3bOFY3KEKGpd5Uviv70q8JBVbaWEWWFDJU5GW5bvCiLhiujCUUu9ZR6XypVz447fVi0shPKy8g4VjUDE3l_-gUDJ2XV4QirtkRL3cozYz1ZIOzQ53nR8ef9sbz4fFzuVxTRlKRDcK-xu1VJO1Lqa-R4WwjtRMQ8DBoryNYFC92h20NUivgYPx3srskWBIddcsf43asr8l6Uufl2pMlG0R9y7d4erOxYDQkXIBrLIPz0nqR4yuZ52EYNg_-OkcgrQ6qb3KE_c9wR61HPevRw4PmDw862g86-ndB3-P2r6Dj_yfoexYmI7cx2tHBEt89OWyWm9QVdX8CZyq7oktrVq1Md5y2vLagyPkO5d1hrDuoMbhP5oPkl8PkaJAcD5PjQXLYI_ND8ukg-WxY-exRykX95HcAAAD__3dB9BI=
 
 # Filter with a nested array. This index expression is not tight.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk29vmz4Qx5__XsXpnrT9zRMYUlXyI9qVaqm6poNI25SgyQm3jonazDZVpijvfQLSbnQNSh6AfH8-d1_7dGu0P0sUmMY38bsp1KaEq2TyAWbx57ub8_EtHF-O02n68eYEtimyS_hhtfrq5AI-vY-TGI4XEM1r3w8JjmYzziDIsqMTmCQvIiGD0TZyGSdw8QVkhgyVzulWPpBFMUOOGcPK6CVZq03jWrcJ43yFwmdYqKp2jTtjuNSGUKzRFa4kFDiVi5ISkjkZz0eGOTlZlG3ZJ8VReyjUIzJMK6msAI_73rkx7cff9izvztC3YhWrHKTK4Qy0-07GIsNJ7QREnEUBZhuGunZ_ZFkn7wkF37D9pY_VIxlH-VVROjJkPN7X_xSPV5UBrSDiAmyjH6yTxok5ns3nvu83v_CVE_-_-QedjUAqPwThc4T2BcJ_XmDn9YNDrn-tC7UdXLBjcJUpHqT5td_bh4c0T7VxZLyw3zjib3aWHx1S_nmko36Dzi_gOApeWR8hxHU6ub3o1qifst2j55Q9pnF6iOKEbKWVpZ7eXZX9TcaQ8nvqdtXq2izpzuhl26YzJy3XOnKyrovyzhirLtQI_Bvmg3AwDAeDcDgMh4PwaBgeDcKnL-Bs89_vAAAA__9Mybuj
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
+│
+└── • sort
+    │ order: +a
+    │
+    └── • index join
+        │ table: json_tab@primary
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 4
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@json_inv
+                  spans: 4 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9Fv2j4Qx99_f8XpXkp_85Q4oarkp7RrqlExYAnSNkE0GXLrMlE7s03FhPjfpyS0W7oSwUMi350_d1_f6bZof65QYPx5MrwajKB3M0in6cfhOaTxMH43BQm3yfgD_LBafXVyAZ_ex0kMvQVE87XvhwRnsxlnEGTZ2TmMkxeRkEF_H7mJE7j-AhIZKp3TSD6QRTFDjhnD0uglWatN5drWFwb5BoXPsFDl2lXujOFSG0KxRVe4FaHAqVysKCGZk_F8ZJiTk8WqTvskOKoPhXpEhmkplRXgcd-7Mqb--NuW5U0MfSs2scpBqhwuQbvvZCwyHK-dgIizKMBsx1Cv3R9Z1sl7QsF37HjpA_VIxlF-W6wcGTIeb-t_iseb0oBWEHEBttIP1knjxBwv53Pf96tf-MqJ_1_9g8ZGIJWfgvA5Qt2B8J8OHHx-cMrz73Sh9oMLDgyuNMWDNL-O6314SvFUG0fGC9uFI_7mYPr-KemfR9pvF2j8AnpR8Mr2CCHu0vHoutmi9pX9Gj1fOWIaF6coTsiWWllq6T2U2d9lDCm_p2ZXrV6bJU2MXtZlGnNcc7UjJ-uaKG-MgWpClcC_Yd4JB91w0AmH3XDYCfe74X4nfPECznb__Q4AAP__3TS2RA==
 
 # Combine predicates with OR.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1]' OR b @> '[2]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVNFu0zAUfecrru7LNjBKnLQg5SmDZqJSWUtaCVAbIbe-jKBgF9uZKk39d5Rk65ayppvECy-Wfe859xznKL5B-7vACKfJKHk_g9IUcJGOP8I8-TIZnQ8v4XQwnM6mn0ZncAsRDeCn1eqbE0v4_CFJEzhdQrwofT8kOJnz7OQMxmm7GDTFQZLCu68gMmSotKRL8YssRnPkyDBAhiFmDNdGr8habarWTQ0cyg1GPsNcrUvXlF3uCsIIS6WNJEMSGUpyIi-qfrbNGK60IYzuoYPculytnNdrYTGu5MeliyDmmG0Z6tLd6mQMrRNXhFG4ZQe8PKI01caR8fr7Oq8Oju-1xvPu8TOxLCglIcl4flvjLpq43uTqGhlO10LZCDzue-fGePz1budNDH3PN4mSIJQEDtr9IHP_NVgcHHTMn-N4qK7JOJIXeeHIkPGCtu27frJZG9AKYh6BrWyDdcK4aIFvFwvf96sl3O34y2oNmjMCKXkcyBcIDy9rD14waF0weHok_OmRBLtIgn8eyRHHf0US_m-RHPkJU7JrrSztPQyPT_arB4PkFTWvi9WlWdHE6FUt0xzHNa8uSLKu6fLmMFRNqzL4kMw7yW-6yUEnOewmh51kv0Xm--ReJ7nfrdx_lnK2ffEnAAD__9gUEyw=
+distribution: full
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 2
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 2 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVNFv0z4Qfv_9Fad72fbDKHHSguSnDJqJSmUtaSVAa4Tc-hhBxS62M1Wa-r-jJKxbyppuEi-8WPbdffd9l0-5W3Q_Vygw_TQZnQ8v4XQwnM6mH0ZnME1H6dsZSLjIxu_huzP6i5cL-PguzVI4XUAyL8MwJji54vnJGYyzdjBqgoM0gzefQSJDbRRdyh_kUFwhR4YRMowxZ7i2ZknOGVulbuvCodqgCBkWel36JuwLvyIUWGpjFVlSyFCRl8WqyufbnOHSWEJxXzoonC_00ge9Vi0mFf249AISjvmWoSn9b56cofPymlDEW3ZAyyNMU2M92aC_z_PiYPteqz3vbj-TixVlJBXZIGxz3DmT1JdC3yDD6VpqJyDgYXBubcBf7m7BxNLXYpNqBVIr4GD8N7L3X4Ml0UHF_DmKh_qGrCd1Uaw8WbJB1JZ9l083awtGQ8IFuEo2OC-tF3N8PZ-HYVgd8e7G_6_OqHkjkFbHC_kc4eGw7uCAUWvA6OmW8KdbEu0sif66JUcU_2FJ_K9ZcuQnzMitjXa0txge7xxWC4PUNTXbxZnSLmlizbKmaZ7jGlcHFDnfZHnzGOomVQl8COad4Ffd4KgTHHeD405w2ALzfXCvE9zvZu4_iznf_vcrAAD___KFDc0=
 
 # Combine predicates with OR.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT * FROM json_tab WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT * FROM json_tab WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU91u00wQvf-eYjQ3_fkW2WunIO2VW-qKVCEJdiRAiYWceChG7q7ZXVdBUd4d2W4CBtmQm9X8nTlndjQ7NN8KFBiHk_D1AipdwF00ewvL8MN8cj2ewvntOF7E7yYX8Fxy2RZ8NUp-suka3r8JoxDO1xCsKtf1Cc6WfnJ2AbOoG1xyBl7SZm7DCG4-QpogQ6kymqaPZFAskWPCsNRqQ8YoXYd2TcE426JwGeayrGwdThhulCYUO7S5LQgFLtJ1QRGlGWnHRYYZ2TQvmrYHsUFj5PIJGcZlKo0Ah7vOtdaO_-JoOXNNn_NtKDNIZQZXoOwX0gYZziorIOAs8DDZM1SV_SnH2PSBUPA9-3fJY_lE2lJ2lxeWNGmHd3Uf8uG21KAkBFyAqXWDsam2YoWvVivXdevHP1r8sn5ftj4CyezvhXyF0Ezr_TFt76jeKaPeq1w-L8frWU6p88dUf-_8Mwv8Xn7_FP5YaUva8bvcAf-_t_3olPbHDY66BG1cwHngdQ9ECHEfz6Y37aF0sodLOZb0Srw6RWJEplTSUEdgX2d3nzCk7IHaGzSq0huaa7VpaFp31uCaQEbGtlneOmPZpmqBv4L5INgbBnuDYH8Y7A-CR8Pg0SD46jdwsv_vRwAAAP__eUGvYw==
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
+│
+└── • sort
+    │ order: +a
+    │
+    └── • index join
+        │ table: json_tab@primary
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 3
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@json_inv
+                  spans: 3 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUU02P0zAQvfMrRnPZD4wSJ12QfMoumxVdlbYklQC1EXKbYQnq2sF2V0VV_ztKQgsBJdCLNV9v3huPZof22xoFxh-mo-vhGM5vh-ksfTe6gDQexa9ncAl3yeQtfLVafXJyCe_fxEkM50uIFhvfDwnO5mF2dgGTpB2ccwZB1mRu4wRuPoJEhkrnNJaPZFHMkWPGsDR6RdZqU4V2dcEw36LwGRaq3LgqnDFcaUModugKtyYUOJPLNSUkczKejwxzcrJY120PWqPaKNQTMkxLqawAj_vetTFe-OJoeVNDn4ttrHKQKocr0O4LGYsMJxsnIOIsCjDbM9Qb90uOdfKBUPA9-3_JQ_VExlF-V6wdGTIeb-s-5ONtaUAriLgAW-kG66RxYoGvFgvf96snPFr8snpfNj4CqfzfhXyBUE8b_DVt56jBKaPe60L9XE7QsZzSFI_SfG_9M4vCTv7wFP5UG0fGC9vcEX_e2X5wSvvjBgdtgiYu4DwK2vchhLhPJ-Ob5k5a2cOhHEs6JV6dIjEhW2plqSWwq7O_zxhS_kDNDVq9MSuaGr2qaRp3UuPqQE7WNVneOEPVpCqBv4N5LzjoBwe94LAfHPaCB_3gQS_46g9wtn_2IwAA___7DKoE
 
 # More complex combination.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
 SELECT a FROM json_tab
 WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'::json)
-ORDER BY a]
+ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklGL00AUhd_9FZf7slscSSZFhHnKrs1ipTY1Kag0Qaad6xqJM3VmshRK_7sk2aWN0uq-hJl77ndyDswe3a8aBebJLHm7hMbWcJelH2CVfF7MbqZzuJ5M82X-cTaCxxXZL_xwRn_1cg2f3iVZAtfXa4iLJgzHBFcrXl4J8T5P57cjSDMYaNFRG8HNfDJEx2fBAtfSFngCp9kkyeD2C8gSGWqjaC5_kkOxQo4lw601G3LO2Ha07xamaociZFjpbePbcclwYyyh2KOvfE0ocCnXNWUkFdkgRIaKvKzqzvapdNwdKv2ADPOt1E5AwMPgMeKrk3OwsPSt2iVagdQKOAfjv5N1yDBtvICYszjC8sDQNP6YyXl5Tyj4gf1_7ql-IOtJ3VW1J0s24MPwT3qy21owGmIuwLXhwXlpvSjwTVGEYdh-eFGEUdQ2OE4QSKt_bEUFQlf09V89z5aMnlMyN9aTDaJhtZi_PGs_fo59Rm5rtKOB_Tnn8FAyJHVP_ftyprEbWliz6X7TX9OO6waKnO9V3l-mupfagKcwvwhHl-HoIjz-Ay4PL34HAAD___dnP8Y=
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 6
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 6 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklGL00AUhd_9FZf7si2OZCZFhHnKrs1ipTY1Kahsgkw71zVSZ-rMdCmU_ndJ4tJGad19CTP33O_kHJg9-l9rlJh-nk-vJzMYjCfFovg4HUKRTtO3C1Bwm2cf4Ie35mtQS_j0Ls1TGAyWkJRbzkcEV3eiupLyfZHNboaQ5dDT4qM2hOvZuI-OzoIlLpUr8QTO8nGaw80XUMjQWE0z9ZM8yjsUWDHcOLsi761rRvt2YaJ3KDnD2my2oRlXDFfWEco9hjqsCSUu1HJNOSlNLuLIUFNQ9bq1feyctIfaPCDDYqOMlxAJHv1J-OrkHM0dfat3qdGgjAYhwIbv5DwyzLZBQiJYEmN1YGi34ZjJB3VPKMWBPT33xDyQC6Rv63UgRy4S_fCPerrbOLAGEiHBN-HBB-WCLPFNWXLOm48oSx7HTYPjBIGM_s9WXCK0RV__0_Nsyfg5JQvrArko7ldLxMuz9qPn2OfkN9Z46tmfc-aHiiHpe-rel7dbt6K5s6v2N901a7l2oMmHThXdZWI6qQl4CouLcHwZji_Co7_g6vDidwAAAP__rm46Zw==
 
 # Combined with non-JSON predicates.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND a % 2 = 0 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k--K00AUxb_7FJcLsi3OkkzSVhkQWm0WC7WtaUGlBpk21yUSM3VmIgtL312a1NpId7ZV_DZ_7u-ckxzmHs33HAXOo3H0egGlzuEmnr6FZfRhNh6MJtAajuaL-btxG_Yjsh74alTx2coVvH8TxRG0VtD_VPp-SHC15MlVGwaTIbRaEp5C0IaX4LdhGg-jGF59BJkgw0KlNJHfyKBYIkeGATIMMWG40WpNxii9u7qvBkfpHQqfYVZsSlsf28zmhAKVTklTigxTsjLLK70-f4bJNmG4VppQ_J6eqGu18XqN6WTLUJV2r5wwNFbeEorOlh258yP3E8ILucopJpmS9vxmmF-_ql8tsuIHMpxvZGEEeNz3Blp7_Pqw8maavmR3UbH7pGlpBfQ5PhSRXxLxJsstadJe0MxXnwto9fmuLSHEaLJ4UZW2Xz_oH1ziP1fakvY6p6o6LR825IPzG-DnNxAcGgj-vYFHIh4aCP9TA4_47xvo_m0Dvls-JrNRhaGzXpe_e56U3lL9nI0q9ZpmWq0rm3o7rbjqICVj69vn9WZU1Fe7gMcwd8KBGw6ccOiGQyfsN2D-J9xxwl23c9cJ99xw76LYyfbJzwAAAP__jDL5yA==
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • filter
+    │ filter: (a % 2) = 0
+    │
+    └── • scan
+          missing stats
+          table: json_tab@json_inv
+          spans: 1 span
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k--K00AUxb_7FJcLsi3OkkyyrTIgtNosFmpb04LKGmTaXJdIzcSZiSwsfXdJUmsj3dlW8dv8-51zksO9R_N9gwKjD_PJcDyFzmi8WC7eTbqwiCbR6yVIuI5nb-GrUflnK1fw_k0UR9BZweBT6fshwcUNTy66MJyOoNOR8BSCLrwEvwuzeBTF8OojSGSYq5Sm8hsZFDfIkWGADENMGBZarckYpaur-_rhOL1D4TPM8qK0zbHN7IZQoNIpaUqRYUpWZptab8CfYbJNGK6VJhS_X0_VpSq8fut1smWoSrtTThgaK28JxdWWHbjzA_cjwku52lBMMiXt-e0wv_7UoF5k-Q9kuChkbgR43PeGWnv8cr_y5pq-ZHdRXn3SrLQCBhwfisjPiXidbSxp0l7QztecC-gMeFWWEGI8Xb6oO9utH_QPzvFfKG1Je1fHqjouH7bkg9Mb4Kc3EOwbCP69gUci7hsI_1MDj_jvGuj9bQO-Wz4mU6jc0EnT5VfjSektNeNsVKnXNNdqXds021nN1QcpGdvcPm8247y5qgIewtwJB244cMKhGw6dsN-C-Z_wlRPuuZ17TrjvhvtnxU62T34GAAD__2_w9Gk=
 
 # The split disjunction rule allows us to use the index for this query.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' OR a = 44 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF9vmzwUxu_fT2Gd96Kt5goMJGmRJqVbmZapazoSaZsyNDnBa5lSzGwztYry3Scgy9_GJk3WO8D-nfPY53mYgPw1Bh96wVXwto9yMUbvwu5HNAi-3FxddK7R8WWn1-99ujpBsy202vBT8vS7okP0-X0QBuh4iNrfctt2GToakOjoBHVDdEzRa-R5xfNlEKI3XxGNAEPKY3ZN75kEfwAEMDiAwYUIQyb4iEnJRbE0KTd24gfwbQxJmuWq-BxhGHHBwJ-AStSYgQ99OhyzkNGYCcsGDDFTNBmX5f_KbGciuafiETD0MppKH1med2p5nvU_YOjmykdtgtsORFMMPFeLZlLRWwY-meL6gnpcKCas1qqWNnm1tby3S_nLRKokHSmL2OsdisOImAkWFwdaa7eoMHxEd1TebdDRdCGpsVXSog6vej11Tq1u16B7PpKtF9Y8uLprfsozi3gr27e1b620J_X9Sbb4s3xI0t9LBiW2dSGERU7nT9aNYD-ShyCNa9yQs4vEDzxJZwpdY4JqxMXdpfksLo3nxsVQfm67sxdLCzloWsiB0-LUt6tT367O3K7O_nY1SFyyq3d4uxqaz-zafK5dDeXncz9_Mbs6B7Wr8w9_7k80DpnMeCpZrf-2XUhn8S2rjip5LkbsRvBR2aZ67ZZc-SFmUlWrpHrppNVSIXAZJlrY0cPOOkyW4fMVmOwGE28f2tXDrvbQhs6e_rob-itraOmmHm5q4ZYebmnhMz18ts-k9bBp0nraMOnzfSZNDMkyRUufLWIIF9mw-CruGvANk-8yMgNtmpkBNwyN6CO23jua_vcnAAD__0dAjWk=
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: a
+│ order key: a
+│
+└── • sort
+    │ order: +a
+    │
+    └── • union all
+        │
+        ├── • index join
+        │   │ table: json_tab@primary
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: json_tab@json_inv
+        │         spans: 1 span
+        │
+        └── • scan
+              missing stats
+              table: json_tab@primary
+              spans: [/44 - /44]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF9v2jwUxu_fT2Gd96Kt5ipxEqCNNIluzTQmBiwgbVMXTYZ4bSYaZ7aZWiG--5SE8bfYobDeOXF-5zz2eZ5MQf4agw_Bl177qtVBp9et_qD_qX2G-kE7eDtAFL0Lux_RT8nT74oO0ef3QRig0yFqfpvYtsvQyQ2JTs5QN0SnFL1Gnpevr4MQvfmKKGBIecw69J5J8G-AAAYHMLgQYcgEHzEpuci3psWHrfgBfBtDkmYTlb-OMIy4YOBPQSVqzMCHAR2OWchozIRlA4aYKZqMi_J_VTYzkdxT8QgY-hlNpY8szzu3PM_6HzB0J8pHTYKbDkQzDHyils2korcMfDLD1QX1uVBMWI11LU3yamd5b5_y14lUSTpSFrE3O-SHETETLM4PtNFuWWH4iO6ovNuio9lSUm2npGUdXvZ66pxa3a5B92IkOy-sfnR1HX7OM4t4a5_vat9Ya0-q-5Ps8GexSNLfKwYltnUlhEXOFyurJ9iP5CFI4wo35Owj8QNP0rlC15igCnFx92k-j0vtuXExlF_Y7uLF0kKOmhZy5LQ41e3qVLers7Crc7hdDRJX7Ood366G5nO71p9rV0P5xdwvX8yuzlHt6vzDn_sTjUMmM55KVum_befSWXzLyqNKPhEj1hN8VLQpH7sFV7yImVTlLikfWmm5lQtchYkWdvSwswmTVfhyDSb7wcQ7hHb1sKs9tKGzp7_umv7Kalq6rofrWrihhxta-EIPXxwyaT1smrSeNkz68pBJE0OyTNHSZ4sYwkW2LL6OuwZ8y-T7jMxAm2ZmwA1DI_qIbfaOZv_9CQAA___7R4gK
 
 # We cannot use the index for this query.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' OR sqrt(a::decimal) = 2 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd3qm0AQxe_7FMPc_A1siWvvFgrmw1CLiakG2pJK2egQLMY1uyu0BN-9qC2JhZT2cs6cs_Pj7A3NtUKBaRAFqwO0uoJNEm_hGHzaR4twB846TA_ph2gGvyxyNHwzqv5q5Qk-vguSAJwT-F9a131D8HLk2csM4gQcc9XWkUKsg1W4XUQzeAtev1kHCSw_g8yQYa0K2skLGRRH5JgxbLTKyRile-k2GMLiOwqXYVk3re3ljGGuNKG4oS1tRSjwIE8VJSQL0nMXGRZkZVkNz_6G9RtdXqT-gQzTRtZGwGtkGLdWgM-Z72HWMVStvR8xVp4JBe_Yv4NsysqSJj3nU4pRF-D43rQsIcT7NN4tH0rz-bQ1cR_vxE9xvf_BTcg0qjY0gX32sttlDKk40_g3RrU6p71W-XBmHOMhNwgFGTtu-TiE9bjqAR_D_K9h749w1r36GQAA___a4Ni9
+distribution: full
+vectorized: true
+·
+• filter
+│ filter: (b @> '[1]') OR (sqrt(a::DECIMAL) = 2)
+│
+└── • scan
+      missing stats
+      table: json_tab@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd_Km0AQxe_7FMPcfAa2xLV3CwXzx1CLiakG2pJK2egQLMY1uyu0BN-9qJTEQkq_yzlnz8yPszc01woFBl_20SLcgbMO00P6KZpBGkTB6gASNkm8hR9G1d-tPMHnD0ESgHMC_1vruu8IXo48e5lBnIBjrto6Uoh1sAq3i2gG78HrnXWQwPIrSGRYq4J28kIGxRE5ZgwbrXIyRuleug0PwuInCpdhWTet7eWMYa40obihLW1FKPAgTxUlJAvScxcZFmRlWQ1r_7D6jS4vUv9ChmkjayPgLTKMWyvA58z3MOsYqtbejxgrz4SCd-z_QTZlZUmTnvMpxagLcHxv2pUQ4mMa75YPnfl8Wpq4j3fip7jea3ATMo2qDU1gn212u4whFWca_8aoVue01yofzoxjPOQGoSBjR5ePQ1iPVg_4GOb_DHt_hbPuze8AAAD__3Di014=
 
 statement ok
 INSERT INTO array_tab VALUES
@@ -185,35 +363,129 @@ NULL       /10      {1}       1
 /20        NULL     {3}       3
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE b @> '{}' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{}' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k1Fr2z4Uxd__n0Lcl_7HVGzZyQp68ra4LOAlnZ2xjcYUxboUgyd5klw6gr_7sN2tc9a4LWMvAune3z0nJ757sN8q4JDFSfx2QxpTkfN0_Z5cxp8vktfLFfl_scw22YfkBblrEUODMEZ8v3JiRz69i9OY7Ei0bXw_RHKyb0_IOl3EKXnzhYgcKCgtcSW-ogV-CQwoBEAhhJxCbXSB1mrTlfZ941LeAvcplKpu3PDsSlchcGiUNhINSqAg0Ymy6up5m1MotEHg962L0rpSFc6bjXoh6uTXjeMkYpC3FHTj7nRyCtaJawQetvSIlweUMm0cGm9-qPPy6PjZaDybHr8RuwpTFBKN5481fv0HkTDmqlQ3QCGrhbKceMw_9ZjvrT4mSX_c_2oaBUedsec4W6obNA7leVk5NGi8YGzvZz2-rQ3RikSME9vZI6gk38J2G56dDQeQo5aCkaXg6WGxp4cV-Kde8JdhPeLsj7DCfx_WIx9uirbWyuLBMj082e-WDOU1DhtpdWMKvDC66GWG67rn-geJ1g1VNlyWaih1Bn-H2ST8ahoOJuFwGg4nYX8Es0N4NgnPp5Xnz1LO2_9-BAAA__8dCNL7
+distribution: full
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • inverted filter
+    │ inverted column: b_inverted_key
+    │ num spans: 1
+    │
+    └── • scan
+          missing stats
+          table: array_tab@arr_inv
+          spans: 1 span
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9Fv0zAQxt_5K6x7GQhPiZOWSX4K0ExUCu1IigDRaHLj0xQp2MF2pqEq_ztKAoyUNduE9mLJvvvd9_Vrbg_2ewUc4s8XyevlijxfLLNN9iF5QbI4id9uiCDn6fo9EcaIH5dO7Mind3Eakx2Jto3vh0hO9u0JWaeLOCVvvhABFJSWuBLf0AL_CgwoBEAhhJxCbXSB1mrTlfZ941LeAPcplKpu3PDsSlchcGiUNhINSqAg0Ymy6up5m1MotEHgt62L0rpSFc6bjXoh6uTXjeMkYpC3FHTjfunkFKwTVwg8bOkRL3coZdo4NN78UOfl0fGz0Xg2PX4jdhWmKCQazx9r_PkLImHMZamugUJWC2U58Zh_6jHfW31Mkv64_dU0Co46Y49xtlTXaBzK87JyaNB4wdje73p8UxuiFYkYJ7azR1BJvoXtNjw7Gw4gRy0FI0vBw8NiDw8r8E-94D_DusfZP2GFTx_WPR9uirbWyuLBMt092e-WDOUVDhtpdWMKvDC66GWG67rn-geJ1g1VNlyWaih1Bv-G2ST8ahoOJuFwGg4nYX8Es0N4NgnPp5Xnj1LO22c_AwAA___3ic2c
 
 # Combined with non-Array predicates.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{1}' AND a % 2 = 0 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k-Fq2zAUhf_vKS4XRhOmEstOsiEYpFtcFsiSzg5sozNFiS_F4FmeJI-N4HcftkOXjFRNCvsTIul-5xwfoS2aHzkKjMN5-H4Flc7hOlp-hNvwy838araA3nQWr-JP8z7sRmQ3ILWWv--sXMPnD2EUQm8Nk2-V5wUEF1teX_ThajGFXk_CS_D78Ba8PiyjaRjBu68gE2RYqJQW8jsZFLfIkaGPDANMGJZabcgYpZujbTs4S3-h8BhmRVnZbttmNicUqHRKmlJkmJKVWd7qTfgrTOqE4UZpQvF3eqEuVTkYH0wnNUNV2Z1ywtBYeU8ohjXbc-d77keEV3KdU0QyJT3wDsM8dDWRWt9lxU9kGJeyMAIG3Bvwy-a3-fplZQVMOD4WiJ8T6DrLLWnSrfJemm5fQG_Cm7sRQswWqzftFe3-P-rvn-MfK21JD4bHLua4fHAg75_eNz-9b7_t239O308Eeug7-E99P-G_63v03L49t3xEplSFoZNejtc8PUrvqXuqRlV6QzdabVqbbrlsuXYjJWO709fdYlZ0R03AfZg7Yd8N-044cMOBE_YOYP4vPHTCI7fzyAmP3fD4rNhJ_eJPAAAA___F9u2X
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • filter
+    │ filter: (a % 2) = 0
+    │
+    └── • scan
+          missing stats
+          table: array_tab@arr_inv
+          spans: 1 span
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k--K00AUxb_7FJcLsi3O0kzSVhkQutosFmq7JgUVDcu0uSyBmIkzE1FK3l2SlLWV7my7sF9K58_vnJMz3C2anzkKDL_czK9mC-hNZ_Eq_jTvQxzOw_crkHAdLT-C1Fr-ubVyDZ8_hFEIvTVMvleeFxBcbHl90YerxRR6PQkvwe_DW_D6sIymYQTvvoJEhoVKaSF_kEHxDTky9JFhgAnDUqsNGaN0c7RtL87S3yg8hllRVrbbtpnNCQUqnZKmFBmmZGWWt3oT_gqTOmG4UZpQ_Lu9UJeqHIwPbic1Q1XZnXLC0Fh5RyiGNdtz53vuR4RXcp1TRDIlPfAOw9xXNZFa32bFL2QYl7IwAgbcG_DL5rf5-mVlBUw4PhSInxPoOsstadKt8l6abl9Ab8KbpxFCzBarN-0L7f4_6O-f4x8rbUkPhsce5rh8cCDvn943P71vv-3bf0rfjwS67zt4pr4f8d_1PXpq355bPiJTqsLQSZPjNaNH6R11o2pUpTd0o9WmtemWy5ZrN1Iytjt93S1mRXfUBNyHuRP23bDvhAM3HDhh7wDm_8NDJzxyO4-c8NgNj8-KndQv_gYAAP__ZXjoOA==
 
 # The split disjunction rule allows us to use the index for this query.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k29r2z4Qx5__XoW434OmTMGW8neGQbbFYxlZ0jmBbXSmKPFRDK7lSfJYCXnvw3Zo6lCrTseeGEt3n_t-T8ftQP9MwIOVP_ffr0muEvIhWH4m1_63q_nb2YJ0prPVevVlfkkOKaJKEEqJ-xsjNuTrRz_wSWdDJj9y1-0hudix_cUlWQakI8gbworfqR-Qd9-JCIFCKiNciDvU4F0DAwocKPQgpJApuUWtpSpCuzJxFv0Gz6UQp1luqmsTmwTBgzyVKkKFEVCI0Ig4KeLhPqSwlQrBO6YuZFdmzvAkkYLMzaFsSEEbcYvg9fe0QfqJwiupDCpnVKsME_YKmsoPzik_jbWJ061xxqcCQGFZde-R6pSb8q9Jd1jTZXbdtdgkGKCIUDmsLv0w-IlQ6iZOfwGFVSZS7RGHuQ7rFl_ewhA_x9AnGacHP70mP5mK74S6P0rTCW9U79XUefvncJ-Xf3iOrsOc_9v5YS_1w9uPh5fj4S8ZzzOGHo2n_4_HcxR9avsBLPs_aLX_7jkLGqDOZKqxZeWQAka3WPWhZa62eKXktpSpjsuSKy8i1KaKsuowS6tQYfAxzKwwt8PcCr-2wz0r3LfDfSvs1mB2Cg-s8NgOD63wyG579DfK47N6Dvf__QkAAP__qvR3QQ==
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: a
+│ order key: a
+│
+└── • sort
+    │ order: +a
+    │
+    └── • union all
+        │
+        ├── • index join
+        │   │ table: array_tab@primary
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: array_tab@arr_inv
+        │         spans: 1 span
+        │
+        └── • scan
+              missing stats
+              table: array_tab@primary
+              spans: [/1 - /1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k19r2zAUxd_3KcTdQ1umYEv5O8Mg2-KxjCzp7MA2NlMU-1IMqeVJ8lgJ-e7DdmnqUKtOx16MpavfPUc63B3oX1vwwP92uXg7X5Lz2Txch18WFyT0F_77NRHkQ7D6TIRS4vbKiA35-tEPfHK-IdOfhev2kZzt2P7sgqwCci7IG8LK35kfkHffiQAKmUxwKW5Qg_cDGFDgQKEPEYVcyRi1lqos7aqD8-QPeC6FNMsLU2-b1GwRPCgyqRJUmACFBI1It2U92kcUYqkQvMPRpezJ3BkdHaQgC3PXNqKgjbhG8AZ72iL9SONQKoPKGTc6w5S9grb2w1Paz1Jt0iw2zuRYACis6tt7pF4Vpvpr0x01dJlddy02WwxQJKgc1pS-z30qlLpKs99AIcxFpj3iMNdhvfLLOxjipxj6JNPszk-_zU-u0huhbg_SdMpb1fsNdd79Odyn5e-fo-cw52U3P-y5fnj3eHgVD39OPE8YehDP4D_HcxB9bPoBLPM_7DT_7ikDGqDOZaaxY-eIAibXWN9Dy0LFeKlkXMnUy1XFVRsJalNXWb2YZ3WpNPgQZlaY22FuhV_b4b4VHtjhgRV2GzA7hodWeGKHR1Z4bLc9_hflyUl3jvYv_gYAAP__5A1x4g==
 
 # The split disjunction rule allows us to use the index for this query.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVGFP20gQ_X6_YjX3AdAZ2bNOCFg6KXfFqKkooQlSWxELbeIRWAped3eNQCj_vXJsJZgk6wTRql-i7O68eW9mnucZ9I8pBDAMz8MPVyxXU3Y26H9m1-G3y_P_ehds_7Q3vBp-OT9gVYgoA4RS4unGiDH7-jEchGx_f8y6o9zzfGJ7zzjbO2D9Aatd8tneQXkr2L8Mi7-n4YD9_52JCBxIZUwX4p40BNeA4AAHB3yIHMiUnJDWUhVPz_PAXvwIgedAkma5Ka9NYqYEAeSpVDEpisGBmIxIpsV7NIscmEhFECxDTxNtknRi3HYtFroFfT83AesiRDMHZG4qnsgBbcQtQdCaORu0rGH6JJN0QCIm5R7VuRaN7GYquRfqaUntdPlG9vYu7EOpDCm387rKfzamP9ol_aKNJ-vaWA5jTSuXCcZP7E7ouxX0fGiVos5GRcs86wZflWmTjdigu9kMx--u7kIeysxF_5WL19Of1OjRPq4rMZ5SZUbcZEah1E2SPoADw0ykOmAuei4eFr_-dg7lu2jqpQ-kDMVnydSQIuXW6168h4-ZYjJlXQyYLoQxbYQywQhGI444AkZpXJ38EbCN6vyaOr59x7zmz3fRsUMX3b-36xa-VQ_ffoJ8PkH-xgk2aFqZYOtPmmC1AY_fugEb0i9XiffbViB_1xXIf-EKXEM8IJ3JVNNW280rpFN8S2WpWuZqQpdKTuY05bE_x80vYtKmfMXy0EvLp0LgSzBawdwO5lawbwf7r8H4EtyqgXE3MPp2dMuqu20Ht-3tbtmrPrKiO3Zwxwr27LqP7bobfHJiR3sNLrN7tEE52k2KDS7FFZvu4rQGdJPVcMWpVq9Fs79-BgAA__95wQ1F
+distribution: full
+vectorized: false
+·
+• distinct
+│ distinct on: a
+│ order key: a
+│
+└── • sort
+    │ order: +a
+    │
+    └── • union all
+        │
+        ├── • index join
+        │   │ table: array_tab@primary
+        │   │
+        │   └── • inverted filter
+        │       │ inverted column: b_inverted_key
+        │       │ num spans: 1
+        │       │
+        │       └── • scan
+        │             missing stats
+        │             table: array_tab@arr_inv
+        │             spans: 1 span
+        │
+        └── • scan
+              missing stats
+              table: array_tab@primary
+              spans: [/1 - /1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVGFv2jAQ_b5fYd0-tNVSJedAaSNNYltTjakrHVTapoEqQ05tJGpntqlaVfz3KQRBU8AB1E37grDP7967u5d7AvN7BBHEPy7PP7Qu2P5pq3vV_XZ-wLrxefzpigl21ml_ZUJr8XhtxYB9_xx3Yra_P2DN3jgIQmJ7TzjZO2DtDitd8sneQXEr2HuG-d_TuMM-_mQCPJAqoQtxRwaiX4DgAQcPQuh7kGk1JGOUzkNP04et5AGiwINUZmNbXNvUjggiGEulE9KUgAcJWZGO8nh_0vdgqDRBtHh6mhqbyqH166W30Mzp22MbsSZCf-KBGtsZT98DY8UNQVSbeGu0rGD6olLZIZGQ9o_KXPM-NjOd3gn9uKD2mnwte30b9q7SlrTfeFnlu7Xpj7ZJP2_jyao2FsNY0cpFgsEjuxXmdgk9HdpMUWOtokWeVYOflemSjVihu9oMx6-u7kIdqszH8IWLV9OflOjRPa4rMRjRzIy4zoxC6-tU3oMH3UxIEzEfAx8P899wM4fybTS15D1pS8lZOrKkSfvluufx-CHTTEnWxIiZXBgzVmgb9aDX44g9YCST2SnsAVurLiyp45t3LKj-fOcdO_TRf7tZt3BXPXzzCfLpBPmOE6zQtDTB2v80wdkGPN51A1akX6yS4J-tQP6qK5D_xRW4grhDJlPS0EbbLcilU3JDRalGjfWQLrUaTmmKY3uKm14kZGwRxeLQkkUoF_gcjE4wd4O5Exy6weFLMD4H10pg3A6MoRtdc-quu8F1d7tr7qqPnOiGG9xwggO37mO37gqfnLjRQYXL3B6tUI5uk2KFS3HJpts4rQJdZTVccqrTa_3Jmz8BAAD__zm3B-Y=
 
 # We cannot use the index for this query.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab WHERE (b @> '{2}' AND a = 3) OR b[0] = a ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr2zAUhd_3Ky73pQ6oRJZfhqDgbHGZIXM6JbAVzwwlvhSDa3mSDCvB_33YDmkzSLY93nPPuTroO6D7WaPETbJKPm6hszXcq_VnyJNvD6tFmkGwTDfbzZfVDI4WPRm0tfrlh9c7-PopUQkEwQ7i7x3nEcHNQfQ3M1hkSwg03EE0m8FaQbDLeQF3oIdpmSj48Ai6QIaNKSnTz-RQ5hgiwwgLhq01e3LO2EE-jKa0_IWSM6yatvODXDDcG0soD-grXxNKzMytaecCGZbkdVWPtp6h6fxryHn9RCijnr05HF4_vNW7mhTpkuycn53H02fEra2etX1BhptWN07CLTJcd15CHLJY4KUm4f80ua9qT5bsPDyvMekSgiAWJxgLpRaPuZBSptn2fXHEEocDl6N4xDNqscj5yfva_WJxcVb8L2wUudY0jv4JDu8LhlQ-0cTfmc7u6cGa_fjMNK7H3CiU5Py0jaYhbabVUPBtOLwaFtfD4mqY_xEu-ne_AwAA__8KtQyj
+distribution: full
+vectorized: true
+·
+• filter
+│ filter: ((b @> ARRAY[2]) AND (a = 3)) OR (a = b[0])
+│
+└── • scan
+      missing stats
+      table: array_tab@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkVFr2zAQx9_3KY57qQMqkeWXISg4W1xmyJxOCWwlM0OJj2JwLU-SYSX4uw_bIW0G8bbH--v-5x_-HdH9rFBi8u1htUgzCJbpZrv5sprBJlklH7eg4V6tP4O2Vr_88HoPXz8lKoEg2EP8veU8Irg5iu5mBotsCYGGO4hmM1grCPY7nsMd6H5aJgo-PIJGhrUpKNPP5FDuMESGEeYMG2sO5JyxfXwcltLiF0rOsKyb1vdxzvBgLKE8oi99RSgxM7emmQtkWJDXZTWsdQxN619LzusnQhl17M3hcPrwVu8rUqQLsnN-cR7P_yJubPms7Qsy3DS6dhJukeG69RLikMUCr5GE_0NyX1aeLNl5eIkx5hKCIBZnFwulFo87IaVMs-37_GQlDnstp_BkZ8hisePn3Vf2q-DiAvwvbhS5xtSO_kkO73KGVDzR6N-Z1h7owZrD8JlxXA-9ISjI-fE1Goe0Hp96wLflcLIspstissz_KOfdu98BAAD__xs0B0Q=

@@ -3,11 +3,20 @@
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY)
 
-# Test that EXPLAIN (DISTSQL) on a query with a subquery works.
+# Hide the line with "vectorized:", which differs depending on the config.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT avg(a) OVER () FROM t)]
+SELECT info FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT avg(a) OVER () FROM t)] WHERE info NOT LIKE 'vectorized%'
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1LwzAYx-9-ivA_tRLZumNOG1qlMNfZjimMHmLzMApdU5PUF0a_u6wZ6ISJHp__2y9kD_tSQyCP5_H1inWmZrdZes828dNyPksWLLhJ8lX-MA_ZMXLpA8HxlK_bQIYsXccZC0LvubAAR6MVLeSOLMQGEQqO1uiSrNXmIO2HQKLeIcYcVdN27iAXHKU2BLGHq1xNEFjJ55oykorMaAwORU5W9TDrpq2pdtJ8gCNvZWMFu0LRc-jOfQ1aJ7cEEfX879DHqlH6jcwoOiXO1nfBNArBkXZOsOnkLG7yH1xGttWNpRPYueVxX3CQ2pL_R6s7U9LS6HLA-DMdeoOgyDrvRv5IGm8dHvi9HP1anvwoF_3FZwAAAP__Ysu2sg==
+distribution: local
+·
+• window
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF1L8zAUx--fTxEOPKyVyNZd5mpDqxbrOtuyCaMXsTmOQpfUJJ0vo99d1gx0wkQvz__tF7ID81wDgyyMw4ucVPJJkas0uSOr8GEeT6MZ8S6jLM_uY58cMmcu4B1Ovl173CfJIkyJ5zvP-gVZ3oRp6AZnSU7i6DYkgy2WVunqHcX_AVCQSuCMb9AAW0EABYVGqxKNUXov7fpAJF6BjShUsmntXi4olEojsB3YytYIDHL-WGOKXKAejoCCQMurup-1k0ZXG67fgELWcGkYOYeio6Ba-zloLF8jsKCjv4cuKynUC-phcEycLq69SeADhaS1jEzGJ3Hjv-BSNI2SBo9gp5ZHXUEBxRrdPxrV6hLnWpU9xp1J3-sFgcY6N3BHJJ21f-DXcvBjefytXHT_PgIAAP__H3zBmg==
 
 # Test that explaining a query that contains a subquery the result of which is
 # needed to make the physical plan is rejected. See #40677.

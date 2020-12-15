@@ -47,6 +47,16 @@ vectorized: true
       spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]
+EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE9Lw0AQxe9-imVOCiNtqqc9pdiKC7GpSUClzWHNDiWQZuPuBpKWfHdJIv4DpR7nzfzee7tHsK8FcIiXwfImYbUp2G0U3rPN8mkdzMWKnS9EnMQPwQV7P2mQtcgOyLagjcpLWeSu3cKINe2BPYrkjoXRQqzmgUieU0AotaKV3JMFvgEPUoTK6Iys1aaXjsOBUA3wKUJeVrXr5RQh04aAH8HlriDgkMiXgiKSisxkCgiKnMyLwbZpD35l8r00LSDElSwtZ5eAENaOM3-G_hX615B2CLp2nxHWyR0B9zo8vUb48fCJ963Fb-6z_7hHZCtdWjrJedqlCKR2NH6k1bXJaG10NsSMYzhwg6DIunHrjYMox1Vf8Cvs_QnPfsBpd_YWAAD__zpkvUQ=
+distribution: local
+vectorized: true
+·
+• ordinality
+│
+└── • scan
+      missing stats
+      table: xyz@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9ro0AUxd_3UwznaRfukpjdp3kybLJUsDFVoS2ND1O9BME4dmYETfC7lyj0H7Skj_fcOb9z5p5gnypIrO-24TLYiJ-rIEmTm_CXSNbh-l8qOhI9iSOJHbQpylpVpet3EP_j6Fp0_VHcBumViOJVsFmGQXoPQq0L3qgDW8gHeMgIjdE5W6vNWTqND4Kig5wTyrpp3VnOCLk2DHmCK13FkEjVY8Uxq4LNbA5CwU6V1Yjt-qPfmPKgTA9C0qjaSvEbhKh1UvgL8v-Q_xfZQNCte42wTu0Z0hvo8hrRy79n3rsWn9EX36HHbBtdW76IPB8yAhd7ng5pdWty3hqdjzHTGI2-USjYumnrTUNQT6tzwbdm70vz4oM5G348BwAA__8gULfl

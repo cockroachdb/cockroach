@@ -525,7 +525,6 @@ EXPLAIN (VERBOSE)
         kv
 ----
 distribution: local
-vectorized: false
 ·
 • root
 │ columns: (avg)

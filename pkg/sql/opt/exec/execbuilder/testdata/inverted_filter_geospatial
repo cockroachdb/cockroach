@@ -12,14 +12,50 @@ CREATE TABLE geo_table2(
 )
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v0zAQx9_5K6x7WSuZ1U6KQH4KPzII6trSVgI0R1WojxKR2sF2UVDV_x0lGXTd1G7JgyXf3cf39Te-HbhfBQiYx6P47YJsbUGuZpNrchN_mY5eJ2PSe5fMF_NPoz65LfnZFqzRLH32rcCAfP4Qz2Li_DLXHq3DlXe9i-kkGS964SUj4SXrXwjxPp5cx4vZV1qjm34KFLRROM426EDcAIeUQmnNCp0ztg7tmoJEVSAYhVyXW1-HUworYxHEDnzuCwQBi1rIDDOFdsCAgkKf5UVz7EFnVPdd5lphBRTmZaadIAMJb6SsvispK86krNhjCzzvynAJJNOKhIwY_wOtAwqTrRck4jQKaRRAuqdgtv5wQeezNYLge_p0ExL9G61HdZUXHi3aAT924l8-rkpLjCZRIIirXSDOZ9aL5lbhyxdSsoBJydhjCxDUqitWm3HajdNWBF2s-GhyffscgpPPobT5JrN_ntY-7NL-_x8Ij5u3cXF_VBhnnD38Xg0f7C_E3TmKgv5B_Enlwy7KZ-hKox0e6T51MtunFFCtsR1WZ7Z2hVNrVk2bdjtpuCag0Pk2y9tNottULfAuzM_CwXk4OAuH5-HwLDy8B6f7Z38DAAD__-v9pS4=
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk8-O0zAQxu88hTWXtpLZ2kkRyKfwJwtB3ba0lQDhqgr1UCJaO9guCqr67igJ0O2ukt3kYGlm8vN8_uw5gvu5AwHxp9n4ZTIh_TfJYrn4MB6QRTyOXy_JD3I9n96QLZq1T7_uMCAf38XzmDi_zrRH63DjXb83myaTZT-8YiS8YoOeEG_j6U28nH-mJbofAAVtFE7SPToQX4DDikJuzQadM7ZMHasfElWAYBQynR98mV5R2BiLII7gM79DELAsdcwxVWiHDCgo9Gm2q7Y9y4zKtutMKyyAwiJPtRNkKOGVlMU3JWXBmZQFe2iBp10ZLoGkWpGQEeO_o3VAYXrwgkScRiGNAlidKJiDPx_Q-XSLIPiJPt6ERP9C61FdZzuPFu2QXzrxrx4XuSVGkygQxJUuEOdT60V1qvD5MylZwKRk7KEFCGrVFSvNaHaj2YqgixXvTab_Poeg8TnkNtun9vfj2odd2v-_gfCyeZ0XdyeFccbZ_e_F6F7cE7fHKAoGZ_GNykddlM_R5UY7vNDdtDM7rSig2mI9rM4c7AZn1myqNnU4rbgqodD5usrrINF1qRR4G-atcNAOB61w2A6HrfDoDrw6PfkTAAD___DFn88=
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v0zAQx9_5K6x7aSuZ1UmKQH4KPzII6trSVgI0R1WojxIttYPtoKCq_ztKMti6KR3JgyWf7-P7-pu7A9ifOXBYRdPo7ZqUJieXy_kVuY6-LKav4xkZvotX69Wn6YjcptxQcrMp8tJutMI2eYd649JvOfrk84doGRHrNplyaCxunR0OFvN4th4GF4wEF2w04Px9NL-K1suvtEb3owQoKC1xlu7RAr8GDxIKhdFbtFabOnRoEmJZAWcUMlWUrg4nFLbaIPADuMzlCBzWtZAlphLNmAEFiS7N8ubaO51hXXeTKYkVUFgVqbKcjAW8EaL6LoWoPCZExZ5a4HlfxhNAUiVJwIh2P9BYoDAvHSehR8OAhj4kRwq6dHcPtC7dIXDvSP_fhFj9QuNQXma5Q4Nm7J068fc8qgpDtCKhz4mtXSDWpcbx5lXByxdCMJ8JwdhTCxBUsi9Wm9HtRrcVfh8rPupM3baD39kOhcn2qfl9Up6GQaeCoI-Cfz8hOK3fxvnDaWEe89jj79Xk0X7A749S6I9OmqlT_KSP-CXaQiuLJ9K7bmbHhALKHbYja3VptrgwetuUabfzhmsCEq1rT712E6v2qBZ4H_bOwv552D8LB-fh4Cw8eQAnx2d_AgAA__8CMKrn
+distribution: local
+vectorized: false
+·
+• filter
+│ filter: st_intersects('010100000000000000000008400000000000000840', geom)
+│
+└── • index join
+    │ table: geo_table2@primary
+    │
+    └── • inverted filter
+        │ inverted column: geom_inverted_key
+        │ num spans: 31
+        │
+        └── • scan
+              missing stats
+              table: geo_table2@geom_index
+              spans: 31 spans
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk9-PEjEQx9_9K5p5OUjq0W4xmj6tP_Z0DQcIJGosISsdcXNLu7bFrCH872Z31Tvuspzw0GRm-HS-_e7MHvyPAiQkn6ajl-mY9N6k88X8w6hP5skoeb0gN5TcrMpi51fWILmaTa7JBu0qZF8LjMjHd8ksIT6schPQeVwH37uYTtLxoicuGRGXrH8h5dtkcp0sZp9pjW77QMFYjeNsix7kF-CwpFA6u0bvratT--YPqa5AMgq5KXehTi8prK1DkHsIeSgQJCxqHTPMNLoBAwoaQ5YXzbW3MuO67So3GiugMC8z4yUZKHilVPVNK1VxplTFHjvg6bkMV0Ayo4lgxIbv6DxQmOyCJDGnsaBxBMsDBbsLtw_0IdsgSH6g_29Can6iC6iv8iKgQzfgx078rSdV6Yg1JI4k8bULxIfMBdm8Sjx_phSLmFKMPXYAQaPPxWozut3otiI6x4r3Njd_xiHqHIfS5dvM_TpqT2PRqUCco-DfRxDH_du8vL8sjDPOHv5eDB_EF_LuJsVR_2iYOsUPzxE_Q19a4_FIetfN7LCkgHqD7cp6u3NrnDq7btq04aThmoRGH9oqb4PUtKVa4F2Yn4Sj03B0EhanYXESHt6Dl4cnvwMAAP__phyliA==
 
 query T
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
