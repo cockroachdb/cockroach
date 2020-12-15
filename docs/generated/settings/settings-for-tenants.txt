@@ -1,0 +1,101 @@
+Setting	Type	Default	Description
+cloudstorage.gs.default.key	string		if set, JSON key to use during Google Cloud Storage operations
+cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
+cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
+cluster.organization	string		organization name
+cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset
+diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which SQL statement statistics are refreshed even if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.
+diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs
+diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported
+diagnostics.sql_stat_reset.interval	duration	1h0m0s	interval controlling how often SQL statement statistics should be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.
+enterprise.license	string		the encoded cluster license
+external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port
+external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)
+feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true
+feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true
+feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true
+feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true
+feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true
+feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true
+feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true
+jobs.retention_time	duration	336h0m0s	the amount of time to retain records for completed jobs before
+kv.allocator.load_based_lease_rebalancing.enabled	boolean	true	set to enable rebalancing of range leases based on load and latency
+kv.allocator.load_based_rebalancing	enumeration	leases and replicas	whether to rebalance based on the distribution of QPS across stores [off = 0, leases = 1, leases and replicas = 2]
+kv.allocator.qps_rebalance_threshold	float	0.25	minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull
+kv.allocator.range_rebalance_threshold	float	0.05	minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull
+kv.bulk_io_write.max_rate	byte size	1.0 TiB	the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
+kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information
+kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
+kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
+kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
+kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
+kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
+kv.transaction.max_intents_bytes	integer	262144	maximum number of bytes used to track locks in transactions
+kv.transaction.max_refresh_spans_bytes	integer	256000	maximum number of bytes used to track refresh spans in serializable transactions
+security.ocsp.mode	enumeration	off	"use OCSP to check whether TLS certificates are revoked. If the OCSP
+server is unreachable, in strict mode all certificates will be rejected
+and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]"
+security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable
+server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)
+server.auth_log.sql_sessions.enabled	boolean	false	if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)
+server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic
+server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.
+server.consistency_check.max_rate	byte size	8.0 MiB	the rate limit (bytes/sec) to use for consistency checks; used in conjunction with server.consistency_check.interval to control the frequency of consistency checks. Note that setting this too high can negatively impact performance.
+server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
+server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
+server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
+server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint (this feature is experimental)
+server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled) (this feature is experimental)
+server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid) (this feature is experimental)
+server.oidc_authentication.client_id	string		sets OIDC client id (this feature is experimental)
+server.oidc_authentication.client_secret	string		sets OIDC client secret (this feature is experimental)
+server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console (this feature is experimental)
+server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract) (this feature is experimental)
+server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve) (this feature is experimental)
+server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL (base HTTP URL, likely your load balancer, must route to the path /oidc/v1/callback) (this feature is experimental)
+server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`) (this feature is experimental)
+server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
+server.remote_debugging.mode	string	local	set to enable remote debugging, localhost-only or disable (any, local, off)
+server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process
+server.shutdown.lease_transfer_wait	duration	5s	the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process
+server.shutdown.query_wait	duration	10s	the server will wait for at least this amount of time for active queries to finish
+server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead
+server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
+server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
+sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references across databases is allowed
+sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
+sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
+sql.defaults.default_int_size	integer	8	the size, in bytes, of an INT type
+sql.defaults.disallow_full_table_scans.enabled	boolean	false	setting to true rejects queries that have planned a full table scan
+sql.defaults.results_buffer.size	byte size	16 KiB	default size of the buffer that accumulates results for a statement or a batch of statements before they are sent to the client. This can be overridden on an individual connection with the 'results_buffer_size' parameter. Note that auto-retries generally only happen while no results have been delivered to the client, so reducing this size can increase the number of retriable errors a client receives. On the other hand, increasing the buffer size can increase the delay until the client receives the first result row. Updating the setting only affects new connections. Setting to 0 disables any buffering.
+sql.defaults.serial_normalization	enumeration	rowid	default handling of SERIAL in table definitions [rowid = 0, virtual_sequence = 1, sql_sequence = 2]
+sql.distsql.max_running_flows	integer	500	maximum number of concurrent flows that can be run on a node
+sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.
+sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.
+sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node
+sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
+sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
+sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
+sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
+sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
+sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
+sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent
+sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators
+sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode
+sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh
+sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh
+sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode
+sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode
+sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
+sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects
+sql.trace.log_statement_execute	boolean	false	set to true to enable logging of executed statements
+sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session tracing. Note that enabling this may have a non-trivial negative performance impact.
+sql.trace.stmt.enable_threshold	duration	0s	duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.
+sql.trace.txn.enable_threshold	duration	0s	duration beyond which all transactions are traced (set to 0 to disable). This setting is coarser grained thansql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries).
+timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
+timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.
+timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.
+trace.debug.enable	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests
+trace.lightstep.token	string		if set, traces go to Lightstep using this token
+trace.zipkin.collector	string		if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set
+version	version	20.2-16	set the active cluster version in the format '<major>.<minor>'
