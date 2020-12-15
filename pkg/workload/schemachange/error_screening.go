@@ -55,16 +55,17 @@ func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName strin
    )`, tableName.Schema(), tableName.Object(), columnName)
 }
 
-func typeExists(tx *pgx.Tx, typ tree.ResolvableTypeReference) (bool, error) {
-	if !strings.Contains(typ.SQLString(), "enum") {
+func typeExists(tx *pgx.Tx, typ *tree.TypeName) (bool, error) {
+	if !strings.Contains(typ.Object(), "enum") {
 		return true, nil
 	}
 
 	return scanBool(tx, `SELECT EXISTS (
-	SELECT typname
-		FROM pg_catalog.pg_type
-   WHERE typname = $1
-	)`, typ.SQLString())
+	SELECT ns.nspname, t.typname
+  FROM pg_catalog.pg_namespace AS ns
+  JOIN pg_catalog.pg_type AS t ON t.typnamespace = ns.oid
+ WHERE ns.nspname = $1 AND t.typname = $2
+	)`, typ.Schema(), typ.Object())
 }
 
 func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
@@ -320,4 +321,139 @@ func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]str
 	}
 
 	return results, err
+}
+
+func indexExists(tx *pgx.Tx, tableName *tree.TableName, indexName string) (bool, error) {
+	return scanBool(tx, `SELECT EXISTS(
+			SELECT *
+			  FROM information_schema.statistics
+			 WHERE table_schema = $1
+			   AND table_name = $2
+			   AND index_name = $3
+  )`, tableName.Schema(), tableName.Object(), indexName)
+}
+
+func columnsStoredInPrimaryIdx(
+	tx *pgx.Tx, tableName *tree.TableName, columnNames tree.NameList,
+) (bool, error) {
+	columnsMap := map[string]bool{}
+	for _, name := range columnNames {
+		columnsMap[string(name)] = true
+	}
+
+	primaryColumns, err := scanStringArray(tx, `
+	SELECT array_agg(column_name)
+	  FROM (
+	        SELECT DISTINCT column_name
+	          FROM information_schema.statistics
+	         WHERE index_name = 'primary'
+	           AND table_schema = $1
+	           AND table_name = $2
+	       );
+	`, tableName.Schema(), tableName.Object())
+
+	if err != nil {
+		return false, err
+	}
+
+	for _, primaryColumn := range primaryColumns {
+		if _, exists := columnsMap[primaryColumn]; exists {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func scanStringArray(tx *pgx.Tx, query string, args ...interface{}) (b []string, err error) {
+	err = tx.QueryRow(query, args...).Scan(&b)
+	return b, err
+}
+
+// canApplyUniqueConstraint checks if the rows in a table are unique with respect
+// to the specified columns such that a unique constraint can successfully be applied.
+func canApplyUniqueConstraint(
+	tx *pgx.Tx, tableName *tree.TableName, columns []string,
+) (bool, error) {
+	columnNames := strings.Join(columns, ", ")
+
+	// If a row contains NULL in each of the columns relevant to a unique constraint,
+	// then the row will always be unique to other rows with respect to the constraint
+	// (even if there is another row with NULL values in each of the relevant columns).
+	// To account for this, the whereNotNullClause below is constructed to ignore rows
+	// with with NULL values in each of the relevant columns. Then, uniqueness can be
+	// verified easily using a SELECT DISTINCT statement.
+	whereNotNullClause := strings.Builder{}
+	for idx, column := range columns {
+		whereNotNullClause.WriteString(fmt.Sprintf("%s IS NOT NULL ", column))
+		if idx != len(columns)-1 {
+			whereNotNullClause.WriteString("OR ")
+		}
+	}
+
+	return scanBool(tx,
+		fmt.Sprintf(`
+		SELECT (
+	       SELECT count(*)
+	         FROM (
+	               SELECT DISTINCT %s
+	                 FROM %s
+	                WHERE %s
+	              )
+	      )
+	      = (
+	        SELECT count(*)
+	          FROM %s
+	         WHERE %s
+	       );
+	`, columnNames, tableName.String(), whereNotNullClause.String(), tableName.String(), whereNotNullClause.String()))
+
+}
+
+func columnContainsNull(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`SELECT EXISTS (
+		SELECT %s
+		  FROM %s
+	   WHERE %s IS NULL
+	)`, columnName, tableName.String(), columnName))
+}
+
+func constraintIsPrimary(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT EXISTS(
+	        SELECT *
+	          FROM pg_catalog.pg_constraint
+	         WHERE conrelid = '%s'::REGCLASS::INT
+	           AND conname = '%s'
+	           AND (contype = 'p')
+	       );
+	`, tableName.String(), constraintName))
+}
+
+func constraintIsUnique(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	return scanBool(tx, fmt.Sprintf(`
+	SELECT EXISTS(
+	        SELECT *
+	          FROM pg_catalog.pg_constraint
+	         WHERE conrelid = '%s'::REGCLASS::INT
+	           AND conname = '%s'
+	           AND (contype = 'u')
+	       );
+	`, tableName.String(), constraintName))
+}
+
+func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	return scanBool(tx, `
+     SELECT (
+			 SELECT is_generated
+				 FROM information_schema.columns
+				WHERE table_schema = $1
+				  AND table_name = $2
+				  AND column_name = $3
+            )
+	         = 'YES'
+`, tableName.Schema(), tableName.Object(), columnName)
 }
