@@ -103,13 +103,10 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 	return buffer.String()
 }
 
-// RegisterPublicEnumSetting defines a new setting with type int and makes it public.
-func RegisterPublicEnumSetting(
-	key, desc string, defaultValue string, enumValues map[int64]string,
-) *EnumSetting {
-	s := RegisterEnumSetting(key, desc, defaultValue, enumValues)
-	s.SetVisibility(Public)
-	return s
+// WithPublic sets public visibility and can be chained.
+func (e *EnumSetting) WithPublic() *EnumSetting {
+	e.SetVisibility(Public)
+	return e
 }
 
 // RegisterEnumSetting defines a new setting with type int.

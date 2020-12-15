@@ -51,7 +51,7 @@ import (
 //
 // The "results_buffer_size" connection parameter can be used to override this
 // default for an individual connection.
-var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
+var connResultsBufferSize = settings.RegisterByteSizeSetting(
 	"sql.defaults.results_buffer.size",
 	"default size of the buffer that accumulates results for a statement or a batch "+
 		"of statements before they are sent to the client. This can be overridden on "+
@@ -63,17 +63,17 @@ var connResultsBufferSize = settings.RegisterPublicByteSizeSetting(
 		"Updating the setting only affects new connections. "+
 		"Setting to 0 disables any buffering.",
 	16<<10, // 16 KiB
-)
+).WithPublic()
 
-var logConnAuth = settings.RegisterPublicBoolSetting(
+var logConnAuth = settings.RegisterBoolSetting(
 	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
-	false)
+	false).WithPublic()
 
-var logSessionAuth = settings.RegisterPublicBoolSetting(
+var logSessionAuth = settings.RegisterBoolSetting(
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
-	false)
+	false).WithPublic()
 
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a

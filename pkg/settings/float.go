@@ -95,34 +95,21 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 }
 
 // RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterNonNegativeFloatSetting defines a new setting with type float.
-func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterPositiveFloatSetting defines a new setting with type float.
-func RegisterPositiveFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v <= 0 {
-			return errors.Errorf("cannot set %s to a non-positive value: %f", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterValidatedFloatSetting defines a new setting with type float.
-func RegisterValidatedFloatSetting(
-	key, desc string, defaultValue float64, validateFn func(float64) error,
+func RegisterFloatSetting(
+	key, desc string, defaultValue float64, validateFns ...func(float64) error,
 ) *FloatSetting {
+	var validateFn func(float64) error
+	if len(validateFns) > 0 {
+		validateFn = func(v float64) error {
+			for _, fn := range validateFns {
+				if err := fn(v); err != nil {
+					return errors.Wrapf(err, "invalid value for %s", key)
+				}
+			}
+			return nil
+		}
+	}
+
 	if validateFn != nil {
 		if err := validateFn(defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
@@ -134,4 +121,20 @@ func RegisterValidatedFloatSetting(
 	}
 	register(key, desc, setting)
 	return setting
+}
+
+// NonNegativeFloat can be passed to RegisterFloatSetting.
+func NonNegativeFloat(v float64) error {
+	if v < 0 {
+		return errors.Errorf("cannot set to a negative value: %f", v)
+	}
+	return nil
+}
+
+// PositiveFloat can be passed to RegisterFloatSetting.
+func PositiveFloat(v float64) error {
+	if v <= 0 {
+		return errors.Errorf("cannot set to a non-positive value: %f", v)
+	}
+	return nil
 }

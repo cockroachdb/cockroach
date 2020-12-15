@@ -35,11 +35,11 @@ import (
 )
 
 // RangefeedEnabled is a cluster setting that enables rangefeed requests.
-var RangefeedEnabled = settings.RegisterPublicBoolSetting(
+var RangefeedEnabled = settings.RegisterBoolSetting(
 	"kv.rangefeed.enabled",
 	"if set, rangefeed registration is enabled",
 	false,
-)
+).WithPublic()
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of

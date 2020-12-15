@@ -535,6 +535,7 @@ select table_name, estimated_row_count from crdb_internal.table_row_statistics;
 ----
 backward_dependencies                  NULL
 builtin_functions                      NULL
+cluster_database_privileges            NULL
 cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL

@@ -80,11 +80,12 @@ var ConfigureOIDC = func(
 	return &noOIDCConfigured{}, nil
 }
 
-var webSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
+var webSessionTimeout = settings.RegisterDurationSetting(
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
-)
+	settings.NonNegativeDuration,
+).WithPublic()
 
 type authenticationServer struct {
 	server *Server

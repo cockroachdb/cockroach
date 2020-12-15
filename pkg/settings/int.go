@@ -88,52 +88,53 @@ func (i *IntSetting) setToDefault(sv *Values) {
 	}
 }
 
-// RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterPublicIntSetting defines a new setting with type int and makes it public.
-func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	s := RegisterValidatedIntSetting(key, desc, defaultValue, nil)
-	s.SetVisibility(Public)
-	return s
-}
-
-// RegisterNonNegativeIntSetting defines a new setting with type int.
-func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterPositiveIntSetting defines a new setting with type int.
-func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 1 {
-			return errors.Errorf("cannot set %s to a value < 1: %d", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterValidatedIntSetting defines a new setting with type int with a
+// RegisterIntSetting defines a new setting with type int with a
 // validation function.
-func RegisterValidatedIntSetting(
-	key, desc string, defaultValue int64, validateFn func(int64) error,
+func RegisterIntSetting(
+	key, desc string, defaultValue int64, validateFns ...func(int64) error,
 ) *IntSetting {
-	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
+	var composed func(int64) error
+	if len(validateFns) > 0 {
+		composed = func(v int64) error {
+			for _, validateFn := range validateFns {
+				if err := validateFn(v); err != nil {
+					return errors.Wrapf(err, "invalid value for %s", key)
+				}
+			}
+			return nil
+		}
+	}
+	if composed != nil {
+		if err := composed(defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
 		}
 	}
 	setting := &IntSetting{
 		defaultValue: defaultValue,
-		validateFn:   validateFn,
+		validateFn:   composed,
 	}
 	register(key, desc, setting)
 	return setting
+}
+
+// WithPublic sets public visibility and can be chained.
+func (i *IntSetting) WithPublic() *IntSetting {
+	i.SetVisibility(Public)
+	return i
+}
+
+// PositiveInt can be passed to RegisterIntSetting
+func PositiveInt(v int64) error {
+	if v < 1 {
+		return errors.Errorf("cannot be set to a non-positive value: %d", v)
+	}
+	return nil
+}
+
+// NonNegativeInt can be passed to RegisterIntSetting.
+func NonNegativeInt(v int64) error {
+	if v < 0 {
+		return errors.Errorf("cannot be set to a negative value: %d", v)
+	}
+	return nil
 }

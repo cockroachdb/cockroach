@@ -169,19 +169,13 @@ isAdmin  BOOL    false  NULL  ·  {}                                            
 
 
 # Verify default privileges on system tables.
-query TTTT
+query TTT
 SHOW GRANTS ON DATABASE system
 ----
-system  crdb_internal       admin  GRANT
-system  crdb_internal       root   GRANT
-system  information_schema  admin  GRANT
-system  information_schema  root   GRANT
-system  pg_catalog          admin  GRANT
-system  pg_catalog          root   GRANT
-system  pg_extension        admin  GRANT
-system  pg_extension        root   GRANT
-system  public              admin  GRANT
-system  public              root   GRANT
+system  admin  GRANT
+system  admin  SELECT
+system  root   GRANT
+system  root   SELECT
 
 query TTTTT
 SHOW GRANTS ON system.*
