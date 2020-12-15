@@ -77,12 +77,6 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
-	if !p.execCfg.TenantTestingKnobs.CanSetClusterSettings() && !p.execCfg.Codec.ForSystemTenant() {
-		// Setting cluster settings is disabled for phase 2 tenants if a test does
-		// not explicitly allow for setting in-memory cluster settings.
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can SET CLUSTER SETTING")
-	}
-
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
@@ -97,12 +91,6 @@ func (p *planner) SetClusterSetting(
 	setting, ok := v.(settings.WritableSetting)
 	if !ok {
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
-	}
-
-	if _, ok := setting.(*settings.VersionSetting); ok && p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
-		// A tenant that is allowed to set in-memory cluster settings is
-		// attempting to set the cluster version setting, which is disallowed.
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can set version settings")
 	}
 
 	var value tree.TypedExpr
@@ -174,31 +162,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	if !params.p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
 	}
-
-	if !params.p.execCfg.Codec.ForSystemTenant() {
-		// Sanity check that this tenant is able to set in-memory settings.
-		if !params.p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
-			return errors.Errorf("tenants cannot set cluster settings, this permission should have been checked at plan time")
-		}
-		var encodedValue string
-		if n.value == nil {
-			encodedValue = n.setting.EncodedDefault()
-		} else {
-			value, err := n.value.Eval(params.p.EvalContext())
-			if err != nil {
-				return err
-			}
-			if _, ok := n.setting.(*settings.VersionSetting); ok {
-				return errors.Errorf("tenants cannot change cluster version setting, this should've been checked at plan time")
-			}
-			encodedValue, err = toSettingString(params.ctx, n.st, n.name, n.setting, value, nil /* prev */)
-			if err != nil {
-				return err
-			}
-		}
-		return params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(n.name, encodedValue, n.setting.Typ())
-	}
-
 	execCfg := params.extendedEvalCtx.ExecCfg
 	var expectedEncodedValue string
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -272,6 +235,14 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			); err != nil {
 				return err
 			}
+
+			if params.p.execCfg.TenantTestingKnobs != nil {
+				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(
+					n.name, encoded, n.setting.Typ(),
+				); err != nil {
+					return err
+				}
+			}
 		}
 
 		// Report tracked cluster settings via telemetry.
@@ -333,7 +304,11 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
 	var observed string
-	err := retry.ForDuration(10*time.Second, func() error {
+	wait := 10 * time.Second
+	if !execCfg.Codec.ForSystemTenant() {
+		wait = 20 * time.Second // poller may be slower than gossip.
+	}
+	err := retry.ForDuration(wait, func() error {
 		observed = n.setting.Encoded(&execCfg.Settings.SV)
 		if observed != expectedEncodedValue {
 			return errNotReady

@@ -903,12 +903,6 @@ var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TenantTestingKnobs) ModuleTestingKnobs() {}
 
-// CanSetClusterSettings is a helper method that returns whether the tenant can
-// set in-memory cluster settings.
-func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
-	return k != nil && k.ClusterSettingsUpdater != nil
-}
-
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
