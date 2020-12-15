@@ -98,18 +98,18 @@ var (
 // Cluster settings.
 var (
 	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
-	graphiteEndpoint = settings.RegisterPublicStringSetting(
+	graphiteEndpoint = settings.RegisterStringSetting(
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
-	)
+	).WithPublic()
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
-	graphiteInterval = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
+	graphiteInterval = settings.RegisterDurationSetting(
 		graphiteIntervalKey,
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
-		maxGraphiteInterval,
-	)
+		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
+	).WithPublic()
 )
 
 type nodeMetrics struct {

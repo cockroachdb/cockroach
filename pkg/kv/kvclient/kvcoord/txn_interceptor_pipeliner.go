@@ -42,7 +42,7 @@ var pipelinedWritesMaxInFlightSize = settings.RegisterByteSizeSetting(
 	"maximum number of bytes used to track in-flight pipelined writes before disabling pipelining",
 	1<<18, /* 256 KB */
 )
-var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
+var pipelinedWritesMaxBatchSize = settings.RegisterIntSetting(
 	"kv.transaction.write_pipelining_max_batch_size",
 	"if non-zero, defines that maximum size batch that will be pipelined through Raft consensus",
 	// NB: there is a tradeoff between the overhead of synchronously waiting for
@@ -54,6 +54,7 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	// so implicit SQL txns should never pipeline their writes - they should either
 	// hit the 1PC fast-path or should have batches which exceed this limit.
 	128,
+	settings.NonNegativeInt,
 )
 
 // trackedWritesMaxSize is a threshold in bytes for lock spans stored on the
@@ -66,11 +67,11 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 // NB: this is called "max_intents_bytes" instead of "max_lock_bytes" because
 // it was created before the concept of intents were generalized to locks.
 // Switching it would require a migration which doesn't seem worth it.
-var trackedWritesMaxSize = settings.RegisterPublicIntSetting(
+var trackedWritesMaxSize = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track locks in transactions",
 	1<<18, /* 256 KB */
-)
+).WithPublic()
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been

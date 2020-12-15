@@ -40,15 +40,17 @@ var (
 		"use experimental time-bound file filter when exporting in BACKUP",
 		true,
 	)
-	priorityAfter = settings.RegisterNonNegativeDurationSetting(
+	priorityAfter = settings.RegisterDurationSetting(
 		"bulkio.backup.read_with_priority_after",
 		"age of read-as-of time above which a BACKUP should read with priority",
 		time.Minute,
+		settings.NonNegativeDuration,
 	)
-	delayPerAttmpt = settings.RegisterNonNegativeDurationSetting(
+	delayPerAttmpt = settings.RegisterDurationSetting(
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
+		settings.NonNegativeDuration,
 	)
 )
 

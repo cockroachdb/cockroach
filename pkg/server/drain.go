@@ -26,18 +26,18 @@ import (
 )
 
 var (
-	queryWait = settings.RegisterPublicDurationSetting(
+	queryWait = settings.RegisterDurationSetting(
 		"server.shutdown.query_wait",
 		"the server will wait for at least this amount of time for active queries to finish",
 		10*time.Second,
-	)
+	).WithPublic()
 
-	drainWait = settings.RegisterPublicDurationSetting(
+	drainWait = settings.RegisterDurationSetting(
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
 			"of the shutdown process",
 		0*time.Second,
-	)
+	).WithPublic()
 )
 
 // Drain puts the node into the specified drain mode(s) and optionally

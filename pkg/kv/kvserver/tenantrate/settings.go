@@ -58,25 +58,33 @@ func LimitConfigsFromSettings(settings *cluster.Settings) LimitConfigs {
 }
 
 var (
-	readRequestRateLimit = settings.RegisterPositiveFloatSetting(
+	readRequestRateLimit = settings.RegisterFloatSetting(
 		"kv.tenant_rate_limiter.read_requests.rate_limit",
 		"per-tenant read request rate limit in requests per second",
-		128)
+		128,
+		settings.PositiveFloat,
+	)
 
-	readRequestBurstLimit = settings.RegisterPositiveIntSetting(
+	readRequestBurstLimit = settings.RegisterIntSetting(
 		"kv.tenant_rate_limiter.read_requests.burst_limit",
 		"per-tenant read request burst limit in requests",
-		512)
+		512,
+		settings.PositiveInt,
+	)
 
-	writeRequestRateLimit = settings.RegisterPositiveFloatSetting(
+	writeRequestRateLimit = settings.RegisterFloatSetting(
 		"kv.tenant_rate_limiter.write_requests.rate_limit",
 		"per-tenant write request rate limit in requests per second",
-		128)
+		128,
+		settings.PositiveFloat,
+	)
 
-	writeRequestBurstLimit = settings.RegisterPositiveIntSetting(
+	writeRequestBurstLimit = settings.RegisterIntSetting(
 		"kv.tenant_rate_limiter.write_requests.burst_limit",
 		"per-tenant write request burst limit in requests",
-		512)
+		512,
+		settings.PositiveInt,
+	)
 
 	readRateLimit = settings.RegisterByteSizeSetting(
 		"kv.tenant_rate_limiter.read_bytes.rate_limit",

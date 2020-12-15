@@ -24,14 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
+var consistencyCheckInterval = settings.RegisterDurationSetting(
 	"server.consistency_check.interval",
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
 	24*time.Hour,
+	settings.NonNegativeDuration,
 )
 
-var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
+var consistencyCheckRate = settings.RegisterByteSizeSetting(
 	"server.consistency_check.max_rate",
 	"the rate limit (bytes/sec) to use for consistency checks; used in "+
 		"conjunction with server.consistency_check.interval to control the "+
@@ -39,7 +40,7 @@ var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
 		"negatively impact performance.",
 	8<<20, // 8MB
 	validatePositive,
-)
+).WithPublic()
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
 // quotapool.RateLimiter. It seems overkill to provide a user setting for this,
