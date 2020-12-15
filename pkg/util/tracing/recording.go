@@ -28,7 +28,7 @@ import (
 )
 
 // RecordingType is the type of recording that a Span might be performing.
-type RecordingType int
+type RecordingType int32
 
 const (
 	// NoRecording means that the Span isn't recording. Child spans created from
