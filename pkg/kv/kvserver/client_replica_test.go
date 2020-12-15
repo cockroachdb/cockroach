@@ -74,8 +74,12 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 		manuals = append(manuals, hlc.NewManualClock(1))
 		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
 	}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	cfg.Clock = nil
 	mtc := &multiTestContext{
-		clocks: clocks,
+		storeConfig: &cfg,
+		clocks:      clocks,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -532,6 +536,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 	}
 
 	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	cfg.Clock = nil // manual clock
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
@@ -929,6 +934,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
 	cfg.Clock = nil // manual clock
@@ -1004,6 +1010,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
 	sc.TestingKnobs.DisableMergeQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
@@ -1475,6 +1482,7 @@ func TestRangeInfo(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.Clock = nil // manual clock
 	ctx := context.Background()
 	mtc := &multiTestContext{
@@ -1737,7 +1745,10 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 func TestDrainRangeRejection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	mtc := &multiTestContext{}
+
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -1761,7 +1772,9 @@ func TestDrainRangeRejection(t *testing.T) {
 func TestChangeReplicasGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 

@@ -449,6 +449,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	runFilter.Store(true)
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.Clock = nil // manual clock
 	sc.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
@@ -514,7 +515,10 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.WithIssue(t, 57537, "flaky test")
 	defer log.Scope(t).Close(t)
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -688,14 +692,17 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			name = "differentTerm"
 		}
 		t.Run(name, func(t *testing.T) {
+			storeCfg := kvserver.TestStoreConfig(nil)
+			storeCfg.TestingKnobs.DisableReplicateQueue = true
 			mtc := &multiTestContext{
+				storeConfig: &storeCfg,
 				// This test was written before the multiTestContext started creating many
 				// system ranges at startup, and hasn't been update to take that into
 				// account.
 				startWithSingleRange: true,
 			}
-			defer mtc.Stop()
 			mtc.Start(t, 3)
+			defer mtc.Stop()
 			const stoppedStore = 1
 			repl0, err := mtc.stores[0].GetReplica(1)
 			if err != nil {
@@ -852,7 +859,12 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	cfg.Clock = nil // using manual clock
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -1346,7 +1358,11 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -1500,6 +1516,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	// Drop the raft tick interval so the Raft group is ticked more.
 	sc.RaftTickInterval = 10 * time.Millisecond
 	// Don't timeout raft leader. We don't want leadership moving.
@@ -1729,7 +1746,9 @@ func TestUnreplicateFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1751,7 +1770,10 @@ func TestUnreplicateFirstRange(t *testing.T) {
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	storeCfg := kvserver.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &storeCfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -1832,7 +1854,11 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 func TestProgressWithDownNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -1915,6 +1941,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// RaftElectionTimeoutTicks and RangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
 	sc.RaftElectionTimeoutTicks = 1000000
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -2153,6 +2180,7 @@ func TestQuotaPool(t *testing.T) {
 	const rangeID = 1
 	ctx := context.Background()
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2302,6 +2330,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	const rangeID = 1
 
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
@@ -2397,7 +2426,9 @@ func TestRaftHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2435,8 +2466,10 @@ func TestRaftHeartbeats(t *testing.T) {
 func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -2506,7 +2539,9 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mtc := &multiTestContext{}
+	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2554,6 +2589,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
 	}
@@ -2632,6 +2668,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 		func() {
 			storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 			storeCfg.TestingKnobs.DisableMergeQueue = true
+			storeCfg.TestingKnobs.DisableReplicateQueue = true
 			mtc := &multiTestContext{
 				storeConfig: &storeCfg,
 			}
@@ -2714,6 +2751,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &storeCfg,
@@ -2780,7 +2818,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	mtc := &multiTestContext{}
+
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	const rangeID = roachpb.RangeID(1)
 
@@ -2827,7 +2868,9 @@ func TestRaftRemoveRace(t *testing.T) {
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2914,7 +2957,9 @@ func TestReplicaGCRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -3208,6 +3253,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Newly-started stores (including the "rogue" one) should not GC
 	// their replicas. We'll turn this back on when needed.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.Clock = nil // manual clock
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -3385,7 +3431,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -3521,6 +3570,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -3648,7 +3698,10 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
@@ -3704,7 +3757,9 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mtc := &multiTestContext{}
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &cfg}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -3734,14 +3789,18 @@ func TestRemovedReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	cfg := kvserver.TestStoreConfig(nil)
+	cfg.Clock = nil // using manual clock
+	cfg.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
+		storeConfig: &cfg,
 		// This test was written before the multiTestContext started creating many
 		// system ranges at startup, and hasn't been update to take that into
 		// account.
 		startWithSingleRange: true,
 	}
-	defer mtc.Stop()
 	mtc.Start(t, 2)
+	defer mtc.Stop()
 
 	// Disable the replica GC queues. This verifies that the replica is
 	// considered removed even before the gc queue has run, and also
@@ -3877,6 +3936,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{
 		storeConfig: &sc,
@@ -3941,6 +4001,7 @@ func TestRangeQuiescence(t *testing.T) {
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
+	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 		// This test was written before the multiTestContext started creating many
@@ -4016,6 +4077,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	// Don't timeout range leases (see the relation between
 	// RaftElectionTimeoutTicks and RangeLeaseActiveDuration). This test expects
@@ -4100,6 +4162,7 @@ func TestFailedConfChange(t *testing.T) {
 	// followers.
 	var filterActive int32
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.ChangeReplicas != nil {
 			return 0, roachpb.NewErrorf("boom")
@@ -4527,6 +4590,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
 	sc := kvserver.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{
 		storeConfig:     &sc,
 		rpcTestingKnobs: knobs,
@@ -4642,6 +4706,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			tsc := kvserver.TestStoreConfig(nil)
 			tsc.TestingKnobs.TestingApplyFilter = applyFilterFn(blockPreApplication)
 			tsc.TestingKnobs.TestingPostApplyFilter = applyFilterFn(blockPostApplication)
+			tsc.TestingKnobs.DisableReplicateQueue = true
 
 			mtc := &multiTestContext{storeConfig: &tsc}
 			defer mtc.Stop()
