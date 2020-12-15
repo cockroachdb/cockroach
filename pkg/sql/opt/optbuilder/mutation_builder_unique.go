@@ -21,33 +21,18 @@ import (
 )
 
 // buildUniqueChecksForInsert builds uniqueness check queries for an insert.
+// These check queries are used to enforce UNIQUE WITHOUT INDEX constraints.
 func (mb *mutationBuilder) buildUniqueChecksForInsert() {
-	uniqueCount := mb.tab.UniqueCount()
-	if uniqueCount == 0 {
-		// No relevant unique checks.
-		return
-	}
-
 	// We only need to build unique checks if there is at least one unique
 	// constraint without an index.
-	needChecks := false
-	i := 0
-	for ; i < uniqueCount; i++ {
-		if mb.tab.Unique(i).WithoutIndex() {
-			needChecks = true
-			break
-		}
-	}
-	if !needChecks {
+	if !mb.hasUniqueWithoutIndexConstraints() {
 		return
 	}
 
 	mb.ensureWithID()
 	h := &mb.uniqueCheckHelper
 
-	// i is already set to the index of the first uniqueness check without an
-	// index, so start iterating from there.
-	for ; i < uniqueCount; i++ {
+	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index we don't need to plan
 		// a check.
 		if mb.tab.Unique(i).WithoutIndex() && h.init(mb, i) {
@@ -55,6 +40,55 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		}
 	}
 	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
+}
+
+// buildUniqueChecksForUpdate builds uniqueness check queries for an update.
+// These check queries are used to enforce UNIQUE WITHOUT INDEX constraints.
+func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
+	// We only need to build unique checks if there is at least one unique
+	// constraint without an index.
+	if !mb.hasUniqueWithoutIndexConstraints() {
+		return
+	}
+
+	mb.ensureWithID()
+	h := &mb.uniqueCheckHelper
+
+	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
+		// If this constraint is already enforced by an index or doesn't include
+		// the updated columns we don't need to plan a check.
+		if mb.tab.Unique(i).WithoutIndex() && mb.uniqueColsUpdated(i) && h.init(mb, i) {
+			// The insertion check works for updates too since it simply checks that
+			// the unique columns in the newly inserted or updated rows do not match
+			// any existing rows. The check prevents rows from matching themselves by
+			// adding a filter based on the primary key.
+			mb.uniqueChecks = append(mb.uniqueChecks, h.buildInsertionCheck())
+		}
+	}
+	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
+}
+
+// hasUniqueWithoutIndexConstraints returns true if there are any
+// UNIQUE WITHOUT INDEX constraints on the table.
+func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
+	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
+		if mb.tab.Unique(i).WithoutIndex() {
+			return true
+		}
+	}
+	return false
+}
+
+// uniqueColsUpdated returns true if any of the columns for a unique
+// constraint are being updated (according to updateColIDs).
+func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal int) bool {
+	uc := mb.tab.Unique(uniqueOrdinal)
+	for i, n := 0, uc.ColumnCount(); i < n; i++ {
+		if ord := uc.ColumnOrdinal(mb.tab, i); mb.updateColIDs[ord] != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // uniqueCheckHelper is a type associated with a single unique constraint and
