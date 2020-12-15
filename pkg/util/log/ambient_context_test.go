@@ -48,7 +48,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	// Annotate a context that has an open span.
 
 	sp1 := tracer.StartSpan("root", tracing.WithForceRealSpan())
-	sp1.StartRecording(tracing.SnowballRecording)
+	sp1.SetVerbose(true)
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
@@ -61,11 +61,11 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	if err := tracing.TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span root:
-			tags: sb=1
+			tags: _verbose=1
 			event: a
 			event: c
 		Span child:
-			tags: ambient= sb=1
+			tags: _verbose=1 ambient=
 			event: [ambient] b
 	`); err != nil {
 		t.Fatal(err)

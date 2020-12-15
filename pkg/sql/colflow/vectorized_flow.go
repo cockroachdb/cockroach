@@ -196,7 +196,7 @@ func (f *vectorizedFlow) Setup(
 		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
 	}
 	recordingStats := false
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		recordingStats = true
 	}
 	helper := newVectorizedFlowCreatorHelper(f.FlowBase)

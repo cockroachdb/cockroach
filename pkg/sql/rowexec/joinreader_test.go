@@ -922,9 +922,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	// Run the flow in a snowball trace so that we can test for tracing info.
+	// Run the flow in a verbose trace so that we can test for tracing info.
 	tracer := tracing.NewTracer()
-	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
 	defer sp.Finish()
 
 	evalCtx := tree.MakeTestingEvalContext(st)

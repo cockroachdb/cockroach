@@ -55,8 +55,8 @@ type SpanMeta struct {
 
 	// If set, all spans derived from this context are being recorded.
 	//
-	// NB: at the time of writing, this is only ever set to SnowballTracing
-	// and only if Baggage[Snowball] is set.
+	// NB: at the time of writing, this is only ever set to RecordingVerbose
+	// and only if Baggage[verboseTracingBaggageKey] is set.
 	recordingType RecordingType
 
 	// The Span's associated baggage.
@@ -147,7 +147,7 @@ type crdbSpan struct {
 
 func (s *crdbSpan) recordingType() RecordingType {
 	if s == nil {
-		return NoRecording
+		return RecordingOff
 	}
 	return s.mu.recording.recordingType.load()
 }
@@ -200,16 +200,11 @@ type Span struct {
 }
 
 func (s *Span) isBlackHole() bool {
-	return s.crdb.recordingType() == NoRecording && s.netTr == nil && s.ot == (otSpan{})
+	return s.crdb.recordingType() == RecordingOff && s.netTr == nil && s.ot == (otSpan{})
 }
 
 func (s *Span) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
-}
-
-// IsRecording returns true if the Span is recording its events.
-func (s *Span) IsRecording() bool {
-	return s.crdb.recordingType() != NoRecording
 }
 
 // enableRecording start recording on the Span. From now on, log events and child spans
@@ -226,8 +221,8 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if parent != nil {
 		parent.addChild(s)
 	}
-	if recType == SnowballRecording {
-		s.setBaggageItemLocked(Snowball, "1")
+	if recType == RecordingVerbose {
+		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
 	// Clear any previously recorded info. This is needed by SQL SessionTracing,
 	// who likes to start and stop recording repeatedly on the same Span, and
@@ -237,58 +232,56 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	s.mu.recording.remoteSpans = nil
 }
 
-// StartRecording enables recording on the Span. Events from this point forward
-// are recorded; also, all direct and indirect child spans started from now on
-// will be part of the same recording.
-//
-// Recording is not supported by noop spans; to ensure a real Span is always
-// created, use the WithForceRealSpan option to StartSpan.
-//
-// If recording was already started on this Span (either directly or because a
-// parent Span is recording), the old recording is lost.
-//
-// Children spans created from the Span while it is *not* recording will not
-// necessarily be recordable.
-func (s *Span) StartRecording(recType RecordingType) {
-	if recType == NoRecording {
-		panic("StartRecording called with NoRecording")
-	}
-	if s.isNoop() {
-		panic("StartRecording called on NoopSpan; use the WithForceRealSpan option for StartSpan")
-	}
-
-	// If we're already recording (perhaps because the parent was recording when
-	// this Span was created), there's nothing to do.
-	if recType != s.crdb.recordingType() {
-		s.crdb.enableRecording(nil /* parent */, recType)
-	}
+// IsVerbose returns true if the Span is verbose. See SetVerbose for details.
+func (s *Span) IsVerbose() bool {
+	return s.crdb.recordingType() == RecordingVerbose
 }
 
-// StopRecording disables recording on this Span. Child spans that were created
-// since recording was started will continue to record until they finish.
+// SetVerbose toggles verbose recording on the Span, which must not be a noop span
+// (see the WithForceRealSpan option).
 //
-// Calling this after StartRecording is not required; the recording will go away
-// when all the spans finish.
+// With 'true', future calls to LogFields and LogKV are recorded, and any future
+// descendants of this Span will do so automatically as well. This does not apply
+// to past derived Spans, which may in fact be noop spans.
 //
-// StopRecording() can be called on a Finish()ed Span.
-func (s *Span) StopRecording() {
+// As a side effect, calls to `SetVerbose(true)` on a span that was not already
+// verbose will reset any past recording stored on this Span.
+//
+// When passed 'false', LogFields and LogKV will cede to add data to the recording
+// (though they may still be collected, should the Span have been set up with an
+// auxiliary trace sink). This does not apply to Spans derived from this one when
+// it was verbose.
+func (s *Span) SetVerbose(to bool) {
+	// TODO(tbg): when always-on tracing is firmly established, we can remove the ugly
+	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
+	// noop span.
 	if s.isNoop() {
-		panic("can't disable recording a noop Span")
+		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
-	s.crdb.disableRecording()
+	if to {
+		// If we're already recording (perhaps because the parent was recording when
+		// this Span was created), there's nothing to do. Avoid the call to enableRecording
+		// because it would clear the existing recording.
+		recType := RecordingVerbose
+		if recType != s.crdb.recordingType() {
+			s.crdb.enableRecording(nil /* parent */, recType)
+		}
+	} else {
+		s.crdb.disableRecording()
+	}
 }
 
 func (s *crdbSpan) disableRecording() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	oldRecType := s.mu.recording.recordingType.swap(NoRecording)
+	oldRecType := s.mu.recording.recordingType.swap(RecordingOff)
 	// We test the duration as a way to check if the Span has been finished. If it
 	// has, we don't want to do the call below as it might crash (at least if
 	// there's a netTr).
-	if (s.mu.duration == -1) && (oldRecType == SnowballRecording) {
-		// Clear the Snowball baggage item, assuming that it was set by
+	if (s.mu.duration == -1) && (oldRecType == RecordingVerbose) {
+		// Clear the verboseTracingBaggageKey baggage item, assuming that it was set by
 		// enableRecording().
-		s.setBaggageItemLocked(Snowball, "")
+		s.setBaggageItemLocked(verboseTracingBaggageKey, "")
 	}
 }
 
@@ -300,7 +293,7 @@ func (s *Span) GetRecording() Recording {
 }
 
 func (s *crdbSpan) getRecording() Recording {
-	if s.recordingType() == NoRecording {
+	if s.recordingType() == RecordingOff {
 		// TODO(tbg): is this desired? If a span is not currently recording,
 		// it can still hold a recording.
 		return nil
@@ -336,7 +329,7 @@ func (s *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 }
 
 func (s *crdbSpan) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if s.recordingType() == NoRecording {
+	if s.recordingType() == RecordingOff {
 		return errors.AssertionFailedf("adding Raw Spans to a Span that isn't recording")
 	}
 	// Change the root of the remote recording to be a child of this Span. This is
@@ -366,7 +359,7 @@ func (s *Span) IsBlackHole() bool {
 // or corresponds to a "no-op" Span. If this is true, any Span
 // derived from this context will be a "black hole Span".
 func (sc *SpanMeta) isNilOrNoop() bool {
-	return sc == nil || (sc.recordingType == NoRecording && sc.shadowTracerType == "")
+	return sc == nil || (sc.recordingType == RecordingOff && sc.shadowTracerType == "")
 }
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
@@ -526,7 +519,7 @@ func (s *Span) LogFields(fields ...otlog.Field) {
 }
 
 func (s *crdbSpan) LogFields(fields ...otlog.Field) {
-	if s.recordingType() != SnowballRecording {
+	if s.recordingType() != RecordingVerbose {
 		return
 	}
 	s.mu.Lock()
@@ -543,7 +536,7 @@ func (s *crdbSpan) LogFields(fields ...otlog.Field) {
 // reason to even evaluate LogKV and LogData calls
 // because the result wouldn't be used for anything.
 func (s *Span) hasVerboseSink() bool {
-	if s.netTr == nil && s.ot == (otSpan{}) && s.crdb.recordingType() != SnowballRecording {
+	if s.netTr == nil && s.ot == (otSpan{}) && s.crdb.recordingType() != RecordingVerbose {
 		return false
 	}
 	return true
@@ -581,7 +574,12 @@ func (s *crdbSpan) SetBaggageItemAndTag(restrictedKey, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.setBaggageItemLocked(restrictedKey, value)
-	s.setTagLocked(restrictedKey, value)
+	// Don't set the tag if this is the special cased baggage item indicating
+	// span verbosity, as it is named nondescriptly and the recording knows
+	// how to display its verbosity independently.
+	if restrictedKey != verboseTracingBaggageKey {
+		s.setTagLocked(restrictedKey, value)
+	}
 }
 
 func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
@@ -593,7 +591,6 @@ func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
 		s.mu.Baggage = make(map[string]string)
 	}
 	s.mu.Baggage[restrictedKey] = value
-	s.setTagLocked(restrictedKey, value)
 }
 
 // Tracer is part of the opentracing.Span interface.
@@ -620,13 +617,15 @@ func (s *crdbSpan) getRecordingLocked() tracingpb.RecordedSpan {
 		rs.Tags[k] = v
 	}
 
-	switch rs.Duration {
-	case -1:
+	if rs.Duration == -1 {
 		// -1 indicates an unfinished Span. For a recording it's better to put some
 		// duration in it, otherwise tools get confused. For example, we export
 		// recordings to Jaeger, and spans with a zero duration don't look nice.
 		rs.Duration = timeutil.Now().Sub(rs.StartTime)
-		addTag("unfinished", "")
+		addTag("_unfinished", "1")
+	}
+	if s.mu.recording.recordingType.load() == RecordingVerbose {
+		addTag("_verbose", "1")
 	}
 
 	if s.mu.stats != nil {

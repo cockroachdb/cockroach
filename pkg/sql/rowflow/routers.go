@@ -260,7 +260,7 @@ func (rb *routerBase) setupStreams(
 // init must be called after setupStreams but before Start.
 func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T) {
 	// Check if we're recording stats.
-	if s := tracing.SpanFromContext(ctx); s != nil && s.IsRecording() {
+	if s := tracing.SpanFromContext(ctx); s != nil && s.IsVerbose() {
 		rb.statsCollectionEnabled = true
 	}
 
