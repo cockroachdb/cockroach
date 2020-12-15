@@ -1270,10 +1270,10 @@ func restoreJobDescription(
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, false
 	}
 
 	if err := featureflag.CheckEnabled(
@@ -1282,14 +1282,14 @@ func restorePlanHook(
 		featureRestoreEnabled,
 		"RESTORE",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
 	for i := range restoreStmt.From {
 		fromFn, err := p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.From[i]), "RESTORE")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 		fromFns[i] = fromFn
 	}
@@ -1299,19 +1299,19 @@ func restorePlanHook(
 	if restoreStmt.Options.EncryptionPassphrase != nil {
 		pwFn, err = p.TypeAsString(ctx, restoreStmt.Options.EncryptionPassphrase, "RESTORE")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
 	var kmsFn func() ([]string, error)
 	if restoreStmt.Options.DecryptionKMSURI != nil {
 		if restoreStmt.Options.EncryptionPassphrase != nil {
-			return nil, nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
+			return nil, nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set"), false
 		}
 		kmsFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			"RESTORE")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
@@ -1319,7 +1319,7 @@ func restorePlanHook(
 	if restoreStmt.Options.IntoDB != nil {
 		intoDBFn, err = p.TypeAsString(ctx, restoreStmt.Options.IntoDB, "RESTORE")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
@@ -1327,7 +1327,7 @@ func restorePlanHook(
 	if restoreStmt.Subdir != nil {
 		subdirFn, err = p.TypeAsString(ctx, restoreStmt.Subdir, "RESTORE")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
@@ -1407,9 +1407,9 @@ func restorePlanHook(
 	}
 
 	if restoreStmt.Options.Detached {
-		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil, false
 	}
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil, false
 }
 
 func checkPrivilegesForRestore(

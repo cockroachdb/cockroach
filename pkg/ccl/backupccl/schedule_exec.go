@@ -131,7 +131,7 @@ func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 func planBackup(
 	ctx context.Context, p sql.PlanHookState, backupStmt tree.Statement,
 ) (sql.PlanHookRowFn, error) {
-	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
+	fn, cols, _, _, err, _ := backupPlanHook(ctx, backupStmt, p)
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))

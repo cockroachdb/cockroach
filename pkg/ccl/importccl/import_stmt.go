@@ -260,10 +260,10 @@ func addToFileFormatTelemetry(fileFormat, state string) {
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, false
 	}
 
 	addToFileFormatTelemetry(importStmt.FileFormat, "attempted")
@@ -274,25 +274,25 @@ func importPlanHook(
 		featureImportEnabled,
 		"IMPORT",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	var createFileFn func() (string, error)
 	if !importStmt.Bundle && !importStmt.Into && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(ctx, importStmt.CreateFile, "IMPORT")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
 	optsFn, err := p.TypeAsStringOpts(ctx, importStmt.Options, importOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -914,7 +914,7 @@ func importPlanHook(
 
 		return nil
 	}
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil, false
 }
 
 func parseAvroOptions(

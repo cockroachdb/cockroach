@@ -675,10 +675,10 @@ func checkPrivilegesForBackup(
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	backupStmt := getBackupStatement(stmt)
 	if backupStmt == nil {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, false
 	}
 
 	if err := featureflag.CheckEnabled(
@@ -687,7 +687,7 @@ func backupPlanHook(
 		featureBackupEnabled,
 		"BACKUP",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	var err error
@@ -695,17 +695,17 @@ func backupPlanHook(
 	if backupStmt.Subdir != nil {
 		subdirFn, err = p.TypeAsString(ctx, backupStmt.Subdir, "BACKUP")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
 	toFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.To), "BACKUP")
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 	incrementalFromFn, err := p.TypeAsStringArray(ctx, backupStmt.IncrementalFrom, "BACKUP")
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	encryptionParams := backupEncryptionParams{}
@@ -715,7 +715,7 @@ func backupPlanHook(
 	if backupStmt.Options.EncryptionPassphrase != nil {
 		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 		pwFn = fn
 		encryptionParams.encryptMode = passphrase
@@ -725,12 +725,12 @@ func backupPlanHook(
 	if backupStmt.Options.EncryptionKMSURI != nil {
 		if encryptionParams.encryptMode != noEncryption {
 			return nil, nil, nil, false,
-				errors.New("cannot have both encryption_passphrase and kms option set")
+				errors.New("cannot have both encryption_passphrase and kms option set"), false
 		}
 		fn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
 			"BACKUP")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 		kmsFn = func() ([]string, *backupKMSEnv, error) {
 			res, err := fn()
@@ -1268,9 +1268,9 @@ func backupPlanHook(
 	}
 
 	if backupStmt.Options.Detached {
-		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil, false
 	}
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil, false
 }
 
 func makeNewEncryptionOptions(

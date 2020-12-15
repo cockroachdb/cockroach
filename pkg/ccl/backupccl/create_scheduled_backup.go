@@ -657,14 +657,14 @@ func collectScheduledBackupTelemetry(
 
 func createBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	schedule, ok := stmt.(*tree.ScheduledBackup)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, false
 	}
 	eval, err := makeScheduledBackupEval(ctx, p, schedule)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -676,7 +676,7 @@ func createBackupScheduleHook(
 
 		return nil
 	}
-	return fn, scheduledBackupHeader, nil, false, nil
+	return fn, scheduledBackupHeader, nil, false, nil, false
 }
 
 // MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets in

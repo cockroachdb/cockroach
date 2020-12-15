@@ -146,6 +146,10 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
+func (ca *changeAggregator) IsChangefeedHookFnNode() bool {
+	return false
+}
+
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
@@ -528,6 +532,10 @@ func newChangeFrontierProcessor(
 	}
 
 	return cf, nil
+}
+
+func (cf *changeFrontier) IsChangefeedHookFnNode() bool {
+	return false
 }
 
 // Start is part of the RowSource interface.

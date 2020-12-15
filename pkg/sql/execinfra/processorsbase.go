@@ -950,4 +950,5 @@ type LocalProcessor interface {
 // (in both row-by-row and the vectorized engines).
 type StreamingProcessor interface {
 	mustBeStreaming()
+	IsChangefeedHookFnNode() bool
 }

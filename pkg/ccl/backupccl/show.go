@@ -67,26 +67,27 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, false
 	}
 
 	if backup.Path == nil && backup.InCollection != nil {
-		return showBackupsInCollectionPlanHook(ctx, backup, p)
+		a, b, c, d, e := showBackupsInCollectionPlanHook(ctx, backup, p)
+		return a, b, c, d, e, false
 	}
 
 	toFn, err := p.TypeAsString(ctx, backup.Path, "SHOW BACKUP")
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	var inColFn func() (string, error)
 	if backup.InCollection != nil {
 		inColFn, err = p.TypeAsString(ctx, backup.InCollection, "SHOW BACKUP")
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, false
 		}
 	}
 
@@ -97,11 +98,11 @@ func showBackupPlanHook(
 	}
 	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 	opts, err := optsFn()
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, false
 	}
 
 	var shower backupShower
@@ -223,7 +224,7 @@ func showBackupPlanHook(
 		return nil
 	}
 
-	return fn, shower.header, nil, false, nil
+	return fn, shower.header, nil, false, nil, false
 }
 
 type backupShower struct {

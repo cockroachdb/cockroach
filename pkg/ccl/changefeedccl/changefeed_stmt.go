@@ -72,10 +72,10 @@ func init() {
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, nil, false, nil, true
 	}
 
 	if err := featureflag.CheckEnabled(
@@ -84,7 +84,7 @@ func changefeedPlanHook(
 		featureChangefeedEnabled,
 		"CHANGEFEED",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, true
 	}
 
 	var sinkURIFn func() (string, error)
@@ -110,7 +110,7 @@ func changefeedPlanHook(
 		var err error
 		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, err, true
 		}
 		header = colinfo.ResultColumns{
 			{Name: "job_id", Typ: types.Int},
@@ -119,7 +119,7 @@ func changefeedPlanHook(
 
 	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, nil, false, err, true
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -404,7 +404,7 @@ func changefeedPlanHook(
 		}
 		return nil
 	}
-	return fn, header, nil, avoidBuffering, nil
+	return fn, header, nil, avoidBuffering, nil, true
 }
 
 func changefeedJobDescription(

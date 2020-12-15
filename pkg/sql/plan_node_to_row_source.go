@@ -115,6 +115,13 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 	})
 }
 
+func (p *planNodeToRowSource) IsChangefeedHookFnNode() bool {
+	if n, hook := p.node.(*hookFnNode); hook {
+		return n.isChangefeed
+	}
+	return false
+}
+
 func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
 	// We do not call p.StartInternal to avoid creating a span. Only the context
 	// needs to be set.

@@ -1957,10 +1957,10 @@ func TestJobInTxn(t *testing.T) {
 	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
-		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 			st, ok := stmt.(*tree.Backup)
 			if !ok {
-				return nil, nil, nil, false, nil
+				return nil, nil, nil, false, nil, false
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
@@ -1973,7 +1973,7 @@ func TestJobInTxn(t *testing.T) {
 				)
 				return err
 			}
-			return fn, nil, nil, false, nil
+			return fn, nil, nil, false, nil, false
 		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -1992,10 +1992,10 @@ func TestJobInTxn(t *testing.T) {
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
-		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error, bool) {
 			_, ok := stmt.(*tree.Restore)
 			if !ok {
-				return nil, nil, nil, false, nil
+				return nil, nil, nil, false, nil, false
 			}
 			fn := func(_ context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
@@ -2008,7 +2008,7 @@ func TestJobInTxn(t *testing.T) {
 				)
 				return err
 			}
-			return fn, nil, nil, false, nil
+			return fn, nil, nil, false, nil, false
 		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {

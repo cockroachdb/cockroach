@@ -38,7 +38,7 @@ import (
 // plan execution.
 type planHookFn func(
 	context.Context, tree.Statement, PlanHookState,
-) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error)
+) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error, isChangefeed bool)
 
 // PlanHookRowFn describes the row-production for hook-created plans. The
 // channel argument is used to return results to the plan's runner. It's
@@ -132,6 +132,8 @@ type hookFnNode struct {
 	subplans []planNode
 
 	run hookFnRun
+
+	isChangefeed bool
 }
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.

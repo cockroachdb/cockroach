@@ -99,7 +99,7 @@ func wrapRowSources(
 		return nil, err
 	}
 
-	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
+	if s, ok := toWrap.(execinfra.StreamingProcessor); ok && s.IsChangefeedHookFnNode() {
 		return colexec.NewStreamingColumnarizer(
 			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
 		)
