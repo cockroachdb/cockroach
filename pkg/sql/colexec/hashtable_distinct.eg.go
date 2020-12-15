@@ -12972,7 +12972,11 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if !ht.probeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update headID
 			// with the current key if it has not been set yet.
@@ -12984,7 +12988,8 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
@@ -13002,7 +13007,6 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 	if b.Length() == 0 {
 		return
 	}
-	distinctCount := 0
 	if sel := b.Selection(); sel != nil {
 		batchLength := b.Length()
 		// Capture the slices in order for BCE to occur.
@@ -13013,7 +13017,8 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 		// Reuse the buffer allocated for distinct.
 		visited := ht.probeScratch.distinct
 		copy(visited, zeroBoolColumn)
-		for i := 0; i < batchLength; i++ {
+		distinctCount := 0
+		for i := 0; i < batchLength && distinctCount < batchLength; i++ {
 			//gcassert:bce
 			headID := headIDs[i]
 			if headID != 0 {
@@ -13022,12 +13027,12 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 					visited[headID-1] = true
 					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
-					h := hashBuffer[i]
-					hashBuffer[distinctCount] = h
+					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
 				}
 			}
 		}
+		b.SetLength(distinctCount)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
@@ -13040,7 +13045,8 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 		// Reuse the buffer allocated for distinct.
 		visited := ht.probeScratch.distinct
 		copy(visited, zeroBoolColumn)
-		for i := 0; i < batchLength; i++ {
+		distinctCount := 0
+		for i := 0; i < batchLength && distinctCount < batchLength; i++ {
 			//gcassert:bce
 			headID := headIDs[i]
 			if headID != 0 {
@@ -13049,14 +13055,13 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 					visited[headID-1] = true
 					// Compacting and deduplicating hash buffer.
 					//gcassert:bce
-					h := hashBuffer[i]
-					hashBuffer[distinctCount] = h
+					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
 				}
 			}
 		}
+		b.SetLength(distinctCount)
 	}
-	b.SetLength(distinctCount)
 }
 
 // distinctCheck determines if the current key in the groupID bucket matches the
@@ -13068,10 +13073,15 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(ht.keys, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if ht.probeScratch.differs[toCheck] {
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}

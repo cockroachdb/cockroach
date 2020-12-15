@@ -497,6 +497,9 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 		// Then, we initialize groupID with the initial hash buckets and
 		// toCheck with all applicable indices.
 		hj.ht.probeScratch.setupLimitedSlices(batchSize, hj.ht.buildMode)
+		// Early bounds checks.
+		groupIDs := hj.ht.probeScratch.groupID
+		_ = groupIDs[batchSize-1]
 		var nToCheck uint64
 		switch hj.spec.joinType {
 		case descpb.LeftAntiJoin, descpb.RightAntiJoin, descpb.ExceptAllJoin:
@@ -504,7 +507,9 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			// needs a special treatment in order to reuse the same "check"
 			// functions below.
 			for i, bucket := range hj.probeState.buckets[:batchSize] {
-				hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
+				f := hj.ht.buildScratch.first[bucket]
+				//gcassert:bce
+				groupIDs[i] = f
 				if hj.ht.buildScratch.first[bucket] != 0 {
 					// Non-zero "first" key indicates that there is a match of hashes
 					// and we need to include the current tuple to check whether it is
@@ -515,7 +520,9 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			}
 		default:
 			for i, bucket := range hj.probeState.buckets[:batchSize] {
-				hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
+				f := hj.ht.buildScratch.first[bucket]
+				//gcassert:bce
+				groupIDs[i] = f
 			}
 			copy(hj.ht.probeScratch.toCheck, hashTableInitialToCheck[:batchSize])
 			nToCheck = uint64(batchSize)
@@ -623,15 +630,26 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 		}
 
 		if hj.spec.trackBuildMatches {
+			// Early bounds checks.
+			buildIdx := hj.probeState.buildIdx
+			_ = buildIdx[nResults-1]
 			if hj.spec.joinType.IsLeftOuterOrFullOuter() {
+				// Early bounds checks.
+				probeRowUnmatched := hj.probeState.probeRowUnmatched
+				_ = probeRowUnmatched[nResults-1]
 				for i := 0; i < nResults; i++ {
-					if !hj.probeState.probeRowUnmatched[i] {
-						hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
+					//gcassert:bce
+					if !probeRowUnmatched[i] {
+						//gcassert:bce
+						bIdx := buildIdx[i]
+						hj.probeState.buildRowMatched[bIdx] = true
 					}
 				}
 			} else {
 				for i := 0; i < nResults; i++ {
-					hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
+					//gcassert:bce
+					bIdx := buildIdx[i]
+					hj.probeState.buildRowMatched[bIdx] = true
 				}
 			}
 		}

@@ -197,7 +197,15 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
 			if n == 0 {
-				op.state = hashAggregatorAggregating
+				if op.bufferingState.tuples.Length() == 0 {
+					if len(op.buckets) == 0 {
+						op.state = hashAggregatorDone
+					} else {
+						op.state = hashAggregatorOutputting
+					}
+				} else {
+					op.state = hashAggregatorAggregating
+				}
 				continue
 			}
 			toBuffer := n

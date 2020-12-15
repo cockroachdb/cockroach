@@ -441,8 +441,13 @@ func (ht *hashTable) findBuckets(
 	sel := batch.Selection()
 
 	ht.probeScratch.setupLimitedSlices(batchLength, ht.buildMode)
+	// Early bounds checks.
+	groupIDs := ht.probeScratch.groupID
+	_ = groupIDs[batchLength-1]
 	for i, hash := range ht.probeScratch.hashBuffer[:batchLength] {
-		ht.probeScratch.groupID[i] = first[hash]
+		f := first[hash]
+		//gcassert:bce
+		groupIDs[i] = f
 	}
 	copy(ht.probeScratch.toCheck, hashTableInitialToCheck[:batchLength])
 
@@ -618,7 +623,11 @@ func (ht *hashTable) checkBuildForDistinct(
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if ht.probeScratch.distinct[toCheck] {
 			ht.probeScratch.distinct[toCheck] = false
 			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
@@ -626,7 +635,8 @@ func (ht *hashTable) checkBuildForDistinct(
 		} else if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
@@ -647,7 +657,11 @@ func (ht *hashTable) checkBuildForAggregation(
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if !ht.probeScratch.distinct[toCheck] {
 			// If the tuple is distinct, it doesn't have a duplicate in the
 			// hash table already, so we skip it.
@@ -655,7 +669,8 @@ func (ht *hashTable) checkBuildForAggregation(
 				// We have a hash collision, so we need to continue probing
 				// against the next tuples in the hash chain.
 				ht.probeScratch.differs[toCheck] = false
-				ht.probeScratch.toCheck[nDiffers] = toCheck
+				//gcassert:bce
+				toCheckSlice[nDiffers] = toCheck
 				nDiffers++
 			} else {
 				// This tuple has a duplicate in the hash table, so we remember
