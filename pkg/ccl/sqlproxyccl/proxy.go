@@ -49,6 +49,8 @@ type BackendConfig struct {
 
 // Options are the options to the Proxy method.
 type Options struct {
+	// Deprecated: construct FrontendAdmitter, passing this information in case
+	// that SSL is desired.
 	IncomingTLSConfig *tls.Config // config used for client -> proxy connection
 
 	// BackendFromParams returns the config to use for the proxy -> backend
@@ -69,6 +71,11 @@ type Options struct {
 	// If set, consulted to decorate an error message to be sent to the client.
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
+
+	// If set, will be called immediately after a new incoming connection
+	// is accepted. It can optionally negotiate SSL, provide admittance control or
+	// other types of frontend connection filtering.
+	FrontendAdmitter func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error)
 
 	// If set, will be used to establish and return connection to the backend.
 	// If not set, the old logic will be used.
@@ -98,59 +105,35 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		}).Encode(nil))
 	}
 
-	var conn net.Conn = proxyConn
-	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
-	// hence it's important to close `conn` rather than `proxyConn` since closing
-	// the latter will not call `Close` method of `tls.Conn`.
-	defer func() { _ = conn.Close() }()
-	var sniServerName string
-	// If we have an incoming TLS Config, require that the client initiates
-	// with a TLS connection.
-	if s.opts.IncomingTLSConfig != nil {
-		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
-		if err != nil {
-			return NewErrorf(CodeClientReadFailed, "while receiving startup message")
+	frontendAdmitter := s.opts.FrontendAdmitter
+	if frontendAdmitter == nil {
+		// Keep this until all clients are switched to provide FrontendAdmitter
+		// at what point we can also drop IncomingTLSConfig
+		frontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+			return FrontendAdmit(incoming, s.opts.IncomingTLSConfig)
 		}
-		switch m.(type) {
-		case *pgproto3.SSLRequest:
-		case *pgproto3.CancelRequest:
-			// Ignore CancelRequest explicitly. We don't need to do this but it makes
-			// testing easier by avoiding a call to sendErrToClient on this path
-			// (which would confuse assertCtx).
-			return nil
-		default:
-			code := CodeUnexpectedInsecureStartupMessage
-			sendErrToClient(conn, code, "server requires encryption")
-			return NewErrorf(code, "unsupported startup message: %T", m)
-		}
-
-		_, err = conn.Write([]byte{pgAcceptSSLRequest})
-		if err != nil {
-			return NewErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
-		}
-
-		cfg := s.opts.IncomingTLSConfig.Clone()
-
-		cfg.GetConfigForClient = func(h *tls.ClientHelloInfo) (*tls.Config, error) {
-			sniServerName = h.ServerName
-			return nil, nil
-		}
-		conn = tls.Server(conn, cfg)
 	}
 
-	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
+	conn, msg, err := frontendAdmitter(proxyConn)
 	if err != nil {
-		return NewErrorf(CodeClientReadFailed, "receiving post-TLS startup message: %v", err)
-	}
-	msg, ok := m.(*pgproto3.StartupMessage)
-	if !ok {
-		return NewErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
+		var codeErr *CodeError
+		if errors.As(err, &codeErr) && codeErr.code == CodeUnexpectedInsecureStartupMessage {
+			sendErrToClient(
+				proxyConn, // Do this on the TCP connection as it means denying SSL
+				CodeUnexpectedInsecureStartupMessage,
+				"server requires encryption",
+			)
+		}
+		return err
 	}
 
-	// Add the sniServerName (if used) as parameter
-	if sniServerName != "" {
-		msg.Parameters["sni-server"] = sniServerName
+	// This currently only happens for CancelRequest type of startup messages
+	// that we don't support
+	if conn == nil {
+		return nil
+
 	}
+	defer func() { _ = conn.Close() }()
 
 	backendDialer := s.opts.BackendDialer
 	if backendDialer == nil {
