@@ -52,6 +52,7 @@ var Resolution10sStorageTTL = settings.RegisterPublicDurationSetting(
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
+	nil,
 )
 
 // deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
@@ -59,6 +60,7 @@ var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
 	s := settings.RegisterDurationSetting(
 		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
 		resolution30mDefaultPruneThreshold,
+		nil,
 	)
 	s.SetRetired()
 	return s
@@ -79,6 +81,7 @@ var Resolution30mStorageTTL = settings.RegisterPublicDurationSetting(
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",
 	resolution30mDefaultPruneThreshold,
+	nil,
 )
 
 // DB provides Cockroach's Time Series API.

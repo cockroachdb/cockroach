@@ -42,11 +42,12 @@ import (
 
 // ReporterInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReporterInterval = settings.RegisterPublicNonNegativeDurationSetting(
+var ReporterInterval = settings.RegisterPublicDurationSetting(
 	"kv.replication_reports.interval",
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
 	time.Minute,
+	settings.NonNegativeDuration,
 )
 
 // Reporter periodically produces a couple of reports on the cluster's data

@@ -46,7 +46,7 @@ var intA = settings.RegisterValidatedIntSetting(intKey, "desc", 1, func(v int64)
 	return nil
 
 })
-var durationA = settings.RegisterValidatedDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
+var durationA = settings.RegisterDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
 	}

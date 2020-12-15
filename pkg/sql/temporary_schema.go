@@ -55,6 +55,7 @@ var TempObjectCleanupInterval = settings.RegisterPublicDurationSetting(
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
 	30*time.Minute,
+	nil,
 )
 
 var (

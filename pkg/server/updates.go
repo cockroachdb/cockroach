@@ -60,10 +60,11 @@ const (
 	updateCheckJitterSeconds = 120
 )
 
-var diagnosticReportFrequency = settings.RegisterPublicNonNegativeDurationSetting(
+var diagnosticReportFrequency = settings.RegisterPublicDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
+	settings.NonNegativeDuration,
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.

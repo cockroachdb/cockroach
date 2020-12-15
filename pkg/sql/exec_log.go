@@ -89,11 +89,12 @@ var logStatementsExecuteEnabled = settings.RegisterPublicBoolSetting(
 	false,
 )
 
-var slowQueryLogThreshold = settings.RegisterPublicNonNegativeDurationSettingWithExplicitUnit(
+var slowQueryLogThreshold = settings.RegisterPublicDurationSettingWithExplicitUnit(
 	"sql.log.slow_query.latency_threshold",
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
 	0,
+	settings.NonNegativeDuration,
 )
 
 var slowInternalQueryLogEnabled = settings.RegisterPublicBoolSetting(

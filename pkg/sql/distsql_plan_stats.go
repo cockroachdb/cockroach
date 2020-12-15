@@ -50,6 +50,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,
+	nil,
 )
 
 func (dsp *DistSQLPlanner) createStatsPlan(

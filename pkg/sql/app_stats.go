@@ -111,10 +111,12 @@ var stmtStatsEnable = settings.RegisterPublicBoolSetting(
 // TxnStatsNumStmtIDsToRecord limits the number of statementIDs stored for in
 // transactions statistics for a single transaction. This defaults to 1000, and
 // currently is non-configurable (hidden setting).
-var TxnStatsNumStmtIDsToRecord = settings.RegisterPositiveIntSetting(
+var TxnStatsNumStmtIDsToRecord = settings.RegisterValidatedIntSetting(
 	"sql.metrics.transaction_details.max_statement_ids",
 	"max number of statement IDs to store for transaction statistics",
-	1000)
+	1000,
+	settings.PositiveInt,
+)
 
 // txnStatsEnable determines whether to collect per-application transaction
 // statistics.
@@ -129,6 +131,7 @@ var sqlStatsCollectionLatencyThreshold = settings.RegisterPublicDurationSetting(
 	"minimum execution time to cause statement statistics to be collected. "+
 		"If configured, no transaction stats are collected.",
 	0,
+	nil,
 )
 
 var dumpStmtStatsToLogBeforeReset = settings.RegisterPublicBoolSetting(
@@ -143,10 +146,11 @@ var sampleLogicalPlans = settings.RegisterPublicBoolSetting(
 	true,
 )
 
-var logicalPlanCollectionPeriod = settings.RegisterPublicNonNegativeDurationSetting(
+var logicalPlanCollectionPeriod = settings.RegisterPublicDurationSetting(
 	"sql.metrics.statement_details.plan_collection.period",
 	"the time until a new logical plan is collected",
 	5*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 func (s stmtKey) String() string {

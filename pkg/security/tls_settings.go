@@ -42,8 +42,8 @@ and in lax mode all certificates will be accepted.`,
 // TODO(bdarnell): 3 seconds is the same as base.NetworkTimeout, but
 // we can't use it here due to import cycles. We need a real
 // no-dependencies base package for constants like this.
-var ocspTimeout = settings.RegisterPublicNonNegativeDurationSetting("security.ocsp.timeout",
-	"timeout before considering the OCSP server unreachable", 3*time.Second)
+var ocspTimeout = settings.RegisterPublicDurationSetting("security.ocsp.timeout",
+	"timeout before considering the OCSP server unreachable", 3*time.Second, settings.NonNegativeDuration)
 
 type clusterTLSSettings struct {
 	settings *cluster.Settings

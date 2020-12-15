@@ -418,7 +418,7 @@ var (
 	timeoutSetting = settings.RegisterPublicDurationSetting(
 		cloudStorageTimeout,
 		"the timeout for import/export storage operations",
-		10*time.Minute)
+		10*time.Minute, nil)
 )
 
 // delayedRetry runs fn and re-runs it a limited number of times if it

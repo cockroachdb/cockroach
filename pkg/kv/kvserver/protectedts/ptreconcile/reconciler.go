@@ -33,10 +33,11 @@ import (
 
 // ReconcileInterval is the interval between two generations of the reports.
 // When set to zero - disables the report generation.
-var ReconcileInterval = settings.RegisterPublicNonNegativeDurationSetting(
+var ReconcileInterval = settings.RegisterPublicDurationSetting(
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 // StatusFunc is used to check on the status of a Record based on its Meta

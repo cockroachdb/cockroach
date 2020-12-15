@@ -36,7 +36,9 @@ import (
 var pollingInterval = settings.RegisterDurationSetting(
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
-	10*time.Second)
+	10*time.Second,
+	nil,
+)
 
 var bundleChunkSize = settings.RegisterValidatedByteSizeSetting(
 	"sql.stmt_diagnostics.bundle_chunk_size",

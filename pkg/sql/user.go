@@ -181,10 +181,11 @@ func retrieveUserAndPassword(
 	return exists, canLogin, hashedPassword, validUntil, err
 }
 
-var userLoginTimeout = settings.RegisterPublicNonNegativeDurationSetting(
+var userLoginTimeout = settings.RegisterPublicDurationSetting(
 	"server.user_login.timeout",
 	"timeout after which client authentication times out if some system range is unavailable (0 = no timeout)",
 	10*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // GetAllRoles returns a "set" (map) of Roles -> true.

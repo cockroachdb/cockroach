@@ -30,6 +30,7 @@ var (
 		"server.shutdown.query_wait",
 		"the server will wait for at least this amount of time for active queries to finish",
 		10*time.Second,
+		nil,
 	)
 
 	drainWait = settings.RegisterPublicDurationSetting(
@@ -37,6 +38,7 @@ var (
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
 			"of the shutdown process",
 		0*time.Second,
+		nil,
 	)
 )
 

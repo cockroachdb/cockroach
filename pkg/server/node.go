@@ -103,11 +103,11 @@ var (
 		"",
 	)
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
-	graphiteInterval = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
+	graphiteInterval = settings.RegisterPublicDurationSetting(
 		graphiteIntervalKey,
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
-		maxGraphiteInterval,
+		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
 	)
 )
 

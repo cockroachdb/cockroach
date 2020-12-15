@@ -105,62 +105,39 @@ func (d *DurationSetting) setToDefault(sv *Values) {
 	}
 }
 
-// RegisterDurationSetting defines a new setting with type duration.
-func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
-	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
-}
-
 // RegisterPublicDurationSetting defines a new setting with type
 // duration and makes it public.
-func RegisterPublicDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
-	s := RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
+func RegisterPublicDurationSetting(
+	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
+) *DurationSetting {
+	s := RegisterDurationSetting(key, desc, defaultValue, validateFn)
 	s.SetVisibility(Public)
 	return s
 }
 
-// RegisterPublicNonNegativeDurationSetting defines a new setting with
-// type duration and makes it public.
-func RegisterPublicNonNegativeDurationSetting(
-	key, desc string, defaultValue time.Duration,
-) *DurationSetting {
-	s := RegisterNonNegativeDurationSetting(key, desc, defaultValue)
-	s.SetVisibility(Public)
-	return s
+// NonNegativeDuration can be passed to RegisterDurationSetting.
+func NonNegativeDuration(v time.Duration) error {
+	if v < 0 {
+		return errors.Errorf("cannot set to a negative duration: %s", v)
+	}
+	return nil
 }
 
-// RegisterPublicNonNegativeDurationSettingWithMaximum defines a new setting with
-// type duration, makes it public, and sets a maximum value.
-// The maximum value is an allowed value.
-func RegisterPublicNonNegativeDurationSettingWithMaximum(
-	key, desc string, defaultValue time.Duration, maxValue time.Duration,
-) *DurationSetting {
-	s := RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {
+// NonNegativeDurationWithMaximum can be passed to RegisterDurationSetting.
+func NonNegativeDurationWithMaximum(maxValue time.Duration) func(time.Duration) error {
+	return func(v time.Duration) error {
 		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
+			return errors.Errorf("cannot set to a negative duration: %s", v)
 		}
 		if v > maxValue {
-			return errors.Errorf("cannot set %s to a value larger than %s", key, maxValue)
+			return errors.Errorf("cannot set to a value larger than %s", maxValue)
 		}
 		return nil
-	})
-	s.SetVisibility(Public)
-	return s
+	}
 }
 
-// RegisterNonNegativeDurationSetting defines a new setting with type duration.
-func RegisterNonNegativeDurationSetting(
-	key, desc string, defaultValue time.Duration,
-) *DurationSetting {
-	return RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
-		}
-		return nil
-	})
-}
-
-// RegisterValidatedDurationSetting defines a new setting with type duration.
-func RegisterValidatedDurationSetting(
+// RegisterDurationSetting defines a new setting with type duration.
+func RegisterDurationSetting(
 	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
 ) *DurationSetting {
 	if validateFn != nil {
@@ -176,21 +153,16 @@ func RegisterValidatedDurationSetting(
 	return setting
 }
 
-// RegisterPublicNonNegativeDurationSettingWithExplicitUnit defines a new
+// RegisterPublicDurationSettingWithExplicitUnit defines a new
 // public setting with type duration which requires an explicit unit when being
 // set.
-func RegisterPublicNonNegativeDurationSettingWithExplicitUnit(
-	key, desc string, defaultValue time.Duration,
+func RegisterPublicDurationSettingWithExplicitUnit(
+	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
 ) *DurationSettingWithExplicitUnit {
 	setting := &DurationSettingWithExplicitUnit{
 		DurationSetting{
 			defaultValue: defaultValue,
-			validateFn: func(v time.Duration) error {
-				if v < 0 {
-					return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
-				}
-				return nil
-			},
+			validateFn:   validateFn,
 		},
 	}
 	setting.SetVisibility(Public)

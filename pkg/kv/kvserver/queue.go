@@ -55,6 +55,7 @@ var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",
 	defaultProcessTimeout,
+	nil,
 )
 
 func init() {

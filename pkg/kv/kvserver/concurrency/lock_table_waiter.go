@@ -59,6 +59,7 @@ var LockTableLivenessPushDelay = settings.RegisterDurationSetting(
 	//
 	// TODO(nvanbenschoten): continue increasing this default value.
 	50*time.Millisecond,
+	nil,
 )
 
 // LockTableDeadlockDetectionPushDelay sets the delay before pushing in order to
@@ -87,6 +88,7 @@ var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 	//
 	// TODO(nvanbenschoten): increasing this default value.
 	100*time.Millisecond,
+	nil,
 )
 
 // lockTableWaiterImpl is an implementation of lockTableWaiter.

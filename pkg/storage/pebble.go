@@ -56,6 +56,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 	"maximum duration for disk operations; any operations that take longer"+
 		" than this setting trigger a warning log entry or process crash",
 	maxSyncDurationDefault,
+	nil,
 )
 
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than

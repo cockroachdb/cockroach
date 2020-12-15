@@ -55,7 +55,9 @@ var (
 	gcSetting = settings.RegisterPublicDurationSetting(
 		"jobs.retention_time",
 		"the amount of time to retain records for completed jobs before",
-		time.Hour*24*14)
+		time.Hour*24*14,
+		nil,
+	)
 )
 
 // adoptedJobs represents a the epoch and cancelation of a job id being run

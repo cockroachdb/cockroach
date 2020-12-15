@@ -121,45 +121,52 @@ var bulkIOWriteLimit = settings.RegisterPublicByteSizeSetting(
 )
 
 // importRequestsLimit limits concurrent import requests.
-var importRequestsLimit = settings.RegisterPositiveIntSetting(
+var importRequestsLimit = settings.RegisterValidatedIntSetting(
 	"kv.bulk_io_write.concurrent_import_requests",
 	"number of import requests a store will handle concurrently before queuing",
 	1,
+	settings.PositiveInt,
 )
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
-var addSSTableRequestLimit = settings.RegisterPositiveIntSetting(
+var addSSTableRequestLimit = settings.RegisterValidatedIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
 	"number of AddSSTable requests a store will handle concurrently before queuing",
 	1,
+	settings.PositiveInt,
 )
 
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
-var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
+var concurrentRangefeedItersLimit = settings.RegisterValidatedIntSetting(
 	"kv.rangefeed.concurrent_catchup_iterators",
 	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
 	64,
+	settings.PositiveInt,
 )
 
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas.
-var queueAdditionOnSystemConfigUpdateRate = settings.RegisterNonNegativeFloatSetting(
+var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
 	"kv.store.system_config_update.queue_add_rate",
-	"the rate (per second) at which the store will add all replicas to the split and merge queue due to system config gossip",
-	.5)
+	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to system config gossip",
+	.5,
+	settings.NonNegativeFloat,
+)
 
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas. The default is relatively high to deal with startup
 // scenarios.
-var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterNonNegativeIntSetting(
+var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterValidatedIntSetting(
 	"kv.store.system_config_update.queue_add_burst",
 	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
-	32)
+	32,
+	settings.NonNegativeInt,
+)
 
 // leaseTransferWait limits the amount of time a drain command waits for lease
 // and Raft leadership transfers.
 var leaseTransferWait = func() *settings.DurationSetting {
-	s := settings.RegisterValidatedDurationSetting(
+	s := settings.RegisterDurationSetting(
 		leaseTransferWaitSettingName,
 		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process",
 		5*time.Second,
@@ -184,10 +191,11 @@ const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
+var ExportRequestsLimit = settings.RegisterValidatedIntSetting(
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
+	settings.PositiveInt,
 )
 
 // TestStoreConfig has some fields initialized with values relevant in tests.

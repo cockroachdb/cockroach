@@ -706,22 +706,22 @@ func (s *Server) newConnExecutorWithTxn(
 
 // SQLStatReset is the cluster setting that controls at what interval SQL
 // statement statistics should be reset.
-var SQLStatReset = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
+var SQLStatReset = settings.RegisterPublicDurationSetting(
 	"diagnostics.sql_stat_reset.interval",
 	"interval controlling how often SQL statement statistics should "+
 		"be reset (should be less than diagnostics.forced_sql_stat_reset.interval). It has a max value of 24H.",
 	time.Hour,
-	time.Hour*24,
+	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 )
 
 // MaxSQLStatReset is the cluster setting that controls at what interval SQL
 // statement statistics must be flushed within.
-var MaxSQLStatReset = settings.RegisterPublicNonNegativeDurationSettingWithMaximum(
+var MaxSQLStatReset = settings.RegisterPublicDurationSetting(
 	"diagnostics.forced_sql_stat_reset.interval",
 	"interval after which SQL statement statistics are refreshed even "+
 		"if not collected (should be more than diagnostics.sql_stat_reset.interval). It has a max value of 24H.",
 	time.Hour*2, // 2 x diagnostics.sql_stat_reset.interval
-	time.Hour*24,
+	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 )
 
 // PeriodicallyClearSQLStats spawns a loop to reset stats based on the setting

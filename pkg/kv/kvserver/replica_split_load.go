@@ -35,10 +35,11 @@ var SplitByLoadQPSThreshold = settings.RegisterPublicIntSetting(
 )
 
 // SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
-var SplitByLoadMergeDelay = settings.RegisterNonNegativeDurationSetting(
+var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.

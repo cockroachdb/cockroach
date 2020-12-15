@@ -100,24 +100,20 @@ func RegisterPublicIntSetting(key, desc string, defaultValue int64) *IntSetting 
 	return s
 }
 
-// RegisterNonNegativeIntSetting defines a new setting with type int.
-func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
-		}
-		return nil
-	})
+// PositiveInt can be passed toRegisterValidatedIntSetting
+func PositiveInt(v int64) error {
+	if v < 0 {
+		return errors.Errorf("cannot set to a negative value: %d", v)
+	}
+	return nil
 }
 
-// RegisterPositiveIntSetting defines a new setting with type int.
-func RegisterPositiveIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
-		if v < 1 {
-			return errors.Errorf("cannot set %s to a value < 1: %d", key, v)
-		}
-		return nil
-	})
+// NonNegativeInt can be passed to RegisterValidatedIntSetting.
+func NonNegativeInt(v int64) error {
+	if v < 0 {
+		return errors.Errorf("cannot set to a negative value: %d", v)
+	}
+	return nil
 }
 
 // RegisterValidatedIntSetting defines a new setting with type int with a

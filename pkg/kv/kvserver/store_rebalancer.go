@@ -91,10 +91,11 @@ var LoadBasedRebalancingMode = settings.RegisterPublicEnumSetting(
 // workloads change and clients come and go, so we need to be a little more
 // forgiving to avoid thrashing.
 var qpsRebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterNonNegativeFloatSetting(
+	s := settings.RegisterFloatSetting(
 		"kv.allocator.qps_rebalance_threshold",
 		"minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull",
 		0.25,
+		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Public)
 	return s

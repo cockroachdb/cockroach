@@ -68,6 +68,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
+	nil,
 )
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(

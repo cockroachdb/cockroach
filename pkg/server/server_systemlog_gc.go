@@ -43,6 +43,7 @@ var (
 			systemLogGCPeriod,
 		),
 		30*24*time.Hour, // 30 days
+		nil,
 	)
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
@@ -55,6 +56,7 @@ var (
 			systemLogGCPeriod,
 		),
 		90*24*time.Hour, // 90 days
+		nil,
 	)
 )
 
@@ -83,7 +85,7 @@ func (s *Server) gcSystemLog(
 	}
 
 	deleteStmt := fmt.Sprintf(
-		`SELECT count(1), max(timestamp) FROM 
+		`SELECT count(1), max(timestamp) FROM
 [DELETE FROM system.%s WHERE timestamp >= $1 AND timestamp <= $2 LIMIT 1000 RETURNING timestamp]`,
 		table,
 	)

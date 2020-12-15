@@ -40,7 +40,9 @@ var (
 	LeniencySetting = settings.RegisterDurationSetting(
 		"jobs.registry.leniency",
 		"the amount of time to defer any attempts to reschedule a job",
-		defaultLeniencySetting)
+		defaultLeniencySetting,
+		nil,
+	)
 )
 
 // lenientNow returns the timestamp after which we should attempt

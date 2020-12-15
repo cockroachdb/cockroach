@@ -159,6 +159,7 @@ var traceTxnThreshold = settings.RegisterPublicDurationSetting(
 		"disable). This setting is coarser grained than"+
 		"sql.trace.stmt.enable_threshold because it applies to all statements "+
 		"within a transaction as well as client communication (e.g. retries).", 0,
+	nil,
 )
 
 // traceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -171,6 +172,7 @@ var traceStmtThreshold = settings.RegisterPublicDurationSetting(
 		"This applies to individual statements within a transaction and is therefore "+
 		"finer-grained than sql.trace.txn.enable_threshold.",
 	0,
+	nil,
 )
 
 // traceSessionEventLogEnabled can be used to enable the event log
@@ -230,10 +232,11 @@ var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
-var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
+var optDrivenFKCascadesClusterLimit = settings.RegisterValidatedIntSetting(
 	"sql.defaults.foreign_key_cascades_limit",
 	"default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query",
 	10000,
+	settings.NonNegativeInt,
 )
 
 var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
@@ -285,12 +288,13 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
-var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
 		"enables automatically killing sessions that exceed the "+
 		"idle_in_session_timeout threshold",
 	0,
+	settings.NonNegativeDuration,
 )
 
 // TODO(mgartner): remove this once multi-column inverted indexes are fully
