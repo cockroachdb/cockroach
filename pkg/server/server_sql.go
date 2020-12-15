@@ -763,6 +763,10 @@ func (s *sqlServer) preStart(
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
 
+	if !s.execCfg.Codec.ForSystemTenant() {
+		s.startRefreshSettingsPoller(ctx, stopper)
+	}
+
 	// Start the sqlLivenessProvider after we've run the SQL migrations that it
 	// relies on. Jobs used by sqlmigrations can't rely on having the
 	// sqlLivenessProvider running as it was introduced in 20.2.

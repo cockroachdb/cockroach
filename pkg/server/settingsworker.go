@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -147,4 +149,42 @@ func (s *Server) refreshSettings(initialSettingsKVs []roachpb.KeyValue) error {
 		}
 	})
 	return nil
+}
+
+// RefreshSettings starts a settings-changes poller.
+func (s *sqlServer) startRefreshSettingsPoller(ctx context.Context, stopper *stop.Stopper) {
+	// Setup updater that listens for changes in settings.
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		fn := func() {
+			rows, err := s.internalExecutor.Query(ctx, "settings-refresh", nil, `SELECT name, value, "valueType" FROM system.settings`)
+			if err != nil {
+				log.Warningf(ctx, "failed to read updated settings: %v", err)
+				return
+			}
+			u := s.execCfg.Settings.MakeUpdater()
+			for _, row := range rows {
+				if err := u.Set(
+					string(tree.MustBeDString(row[0])), string(tree.MustBeDString(row[1])), string(tree.MustBeDString(row[2])),
+				); err != nil {
+					log.Warningf(ctx, "failed to read updated settings: %v", err)
+					return
+				}
+			}
+			u.ResetRemaining()
+		}
+
+		log.Infof(ctx, "loading cluster settings...")
+		fn()
+
+		tick := time.NewTicker(time.Second * 15)
+		log.Infof(ctx, "stating polling for settings changes...")
+		for {
+			select {
+			case <-tick.C:
+				fn()
+			case <-stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
