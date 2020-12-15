@@ -201,6 +201,9 @@ type Setting interface {
 	// Reserved settings are still accessible to users, but they don't get
 	// listed out when retrieving all settings.
 	Visibility() Visibility
+
+	// SystemOnly indicates if a setting is only applicable to the system tenant.
+	SystemOnly() bool
 }
 
 // WritableSetting is the exported interface of non-masked settings.
@@ -263,6 +266,7 @@ const (
 type common struct {
 	description string
 	visibility  Visibility
+	systemOnly  bool
 	// Each setting has a slotIdx which is used as a handle with Values.
 	slotIdx       int
 	nonReportable bool
@@ -296,6 +300,10 @@ func (i common) Description() string {
 
 func (i common) Visibility() Visibility {
 	return i.visibility
+}
+
+func (i common) SystemOnly() bool {
+	return i.systemOnly
 }
 
 func (i common) isReportable() bool {

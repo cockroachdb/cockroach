@@ -111,6 +111,15 @@ func (d *DurationSetting) WithPublic() *DurationSetting {
 	return d
 }
 
+// WithSystemOnly marks this setting as system-only and can be chained.
+func (d *DurationSetting) WithSystemOnly() *DurationSetting {
+	d.common.systemOnly = true
+	return d
+}
+
+// Defeat the linter.
+var _ = (*DurationSetting).WithSystemOnly
+
 // RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
 	key, desc string, defaultValue time.Duration, validateFns ...func(time.Duration) error,
