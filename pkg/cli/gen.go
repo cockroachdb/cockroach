@@ -180,8 +180,11 @@ The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 	},
 }
 
+var includeReservedSettings bool
+var excludeSystemSettings bool
+
 var genSettingsListCmd = &cobra.Command{
-	Use:   "settings-list <output-dir>",
+	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
 	Long: `
 Output the list of cluster settings known to this binary.
@@ -204,6 +207,11 @@ Output the list of cluster settings known to this binary.
 			if !ok {
 				panic(fmt.Sprintf("could not find setting %q", name))
 			}
+
+			if excludeSystemSettings && setting.SystemOnly() {
+				continue
+			}
+
 			if setting.Visibility() != settings.Public {
 				// We don't document non-public settings at this time.
 				continue
@@ -271,6 +279,10 @@ func init() {
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
 	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
 		"Overwrite key if it exists")
+	genSettingsListCmd.PersistentFlags().BoolVar(&includeReservedSettings, "include-reserved", false,
+		"include undocumented 'reserved' settings")
+	genSettingsListCmd.PersistentFlags().BoolVar(&excludeSystemSettings, "without-system-only", false,
+		"do not list settings only applicable to system tenant")
 
 	genCmd.AddCommand(genCmds...)
 }
