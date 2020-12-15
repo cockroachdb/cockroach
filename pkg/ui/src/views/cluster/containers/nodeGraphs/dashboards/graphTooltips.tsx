@@ -105,3 +105,10 @@ export const LiveBytesGraphTooltip: React.FC<{ tooltipSelection?: string }> =
       </dd>
     </dl>
   </div>);
+
+export const StatementDenialsClusterSettingsTooltip: React.FC<{tooltipSelection?: string }> =
+  ({ tooltipSelection }) => (<div>
+    The total number of statements denied per second {tooltipSelection} due to a
+    <Anchor href={docsURL.clusterSettings}> cluster setting </Anchor>
+    in the format feature.statement_type.enabled = FALSE.
+  </div>);

@@ -45,7 +45,7 @@ type renameDatabaseNode struct {
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER DATABASE",
 	); err != nil {
 		return nil, err

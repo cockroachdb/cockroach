@@ -39,7 +39,7 @@ var _ planNode = &alterTypeNode{n: nil}
 func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER TYPE",
 	); err != nil {
 		return nil, err

@@ -37,7 +37,7 @@ type renameIndexNode struct {
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"RENAME INDEX",
 	); err != nil {
 		return nil, err

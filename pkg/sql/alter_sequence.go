@@ -31,7 +31,7 @@ type alterSequenceNode struct {
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER SEQUENCE",
 	); err != nil {
 		return nil, err

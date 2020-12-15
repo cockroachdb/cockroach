@@ -34,7 +34,7 @@ type commentOnTableNode struct {
 func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"COMMENT ON TABLE",
 	); err != nil {
 		return nil, err

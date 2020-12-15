@@ -56,7 +56,7 @@ type alterTableNode struct {
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,
-		&p.ExecCfg().Settings.SV,
+		p.ExecCfg(),
 		"ALTER TABLE",
 	); err != nil {
 		return nil, err
