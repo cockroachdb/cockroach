@@ -77,16 +77,15 @@ func (s *StringSetting) setToDefault(sv *Values) {
 	}
 }
 
+// WithPublic sets public visibility and can be chained.
+func (s *StringSetting) WithPublic() *StringSetting {
+	s.SetVisibility(Public)
+	return s
+}
+
 // RegisterStringSetting defines a new setting with type string.
 func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
 	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
-}
-
-// RegisterPublicStringSetting defines a new setting with type string and makes it public.
-func RegisterPublicStringSetting(key, desc string, defaultValue string) *StringSetting {
-	s := RegisterValidatedStringSetting(key, desc, defaultValue, nil)
-	s.SetVisibility(Public)
-	return s
 }
 
 // RegisterValidatedStringSetting defines a new setting with type string with a

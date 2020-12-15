@@ -1,5 +1,6 @@
 zip
 ----
+retrieving SQL data for crdb_internal.cluster_database_privileges... writing: debug/crdb_internal.cluster_database_privileges.txt
 requesting list of SQL databases... 8 found
 requesting database details for ../system... writing: debug/schema/___system@details.json
 0 tables found

@@ -160,6 +160,16 @@ func (pl List) ToBitField() uint32 {
 	return ret
 }
 
+// Contains returns true iff the list contains the given privilege kind.
+func (pl List) Contains(k Kind) bool {
+	for _, p := range pl {
+		if p == k {
+			return true
+		}
+	}
+	return false
+}
+
 // ListFromBitField takes a bitfield of privileges and a ObjectType
 // returns a List. It is ordered in increasing value of privilege.Kind.
 func ListFromBitField(m uint32, objectType ObjectType) List {

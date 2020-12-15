@@ -37,22 +37,22 @@ var (
 )
 
 // TimeseriesStorageEnabled controls whether to store timeseries data to disk.
-var TimeseriesStorageEnabled = settings.RegisterPublicBoolSetting(
+var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 	"timeseries.storage.enabled",
 	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
 		"unless you are storing the data elsewhere",
 	true,
-)
+).WithPublic()
 
 // Resolution10sStorageTTL defines the maximum age of data that will be retained
 // at he 10 second resolution. Data older than this is subject to being "rolled
 // up" into the 30 minute resolution and then deleted.
-var Resolution10sStorageTTL = settings.RegisterPublicDurationSetting(
+var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	"timeseries.storage.resolution_10s.ttl",
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
-)
+).WithPublic()
 
 // deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
 var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
@@ -74,12 +74,12 @@ func init() {
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at he 30 minute resolution. Data older than this is subject to
 // deletion.
-var Resolution30mStorageTTL = settings.RegisterPublicDurationSetting(
+var Resolution30mStorageTTL = settings.RegisterDurationSetting(
 	"timeseries.storage.resolution_30m.ttl",
 	"the maximum age of time series data stored at the 30 minute resolution. Data older than this "+
 		"is subject to deletion.",
 	resolution30mDefaultPruneThreshold,
-)
+).WithPublic()
 
 // DB provides Cockroach's Time Series API.
 type DB struct {

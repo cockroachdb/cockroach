@@ -282,9 +282,7 @@ func (s *adminServer) DatabaseDetails(
 		ctx, "admin-show-grants", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		// We only want to show the grants on the database.
-		// Since public schemas inherit grants from the database,
-		// it is safe to query only the public schema here.
-		fmt.Sprintf("SELECT * FROM [SHOW GRANTS ON DATABASE %s] WHERE schema_name = 'public'", escDBName),
+		fmt.Sprintf("SELECT * FROM [SHOW GRANTS ON DATABASE %s]", escDBName),
 	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
@@ -295,18 +293,12 @@ func (s *adminServer) DatabaseDetails(
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
-			schemaCol     = "schema_name"
 			userCol       = "grantee"
 			privilegesCol = "privilege_type"
 		)
 
 		scanner := makeResultScanner(cols)
 		for _, row := range rows {
-			var schemaName string
-			if err := scanner.Scan(row, schemaCol, &schemaName); err != nil {
-				return nil, err
-			}
-
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string

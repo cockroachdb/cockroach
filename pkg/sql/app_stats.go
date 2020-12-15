@@ -104,50 +104,53 @@ type transactionCounts struct {
 
 // stmtStatsEnable determines whether to collect per-statement
 // statistics.
-var stmtStatsEnable = settings.RegisterPublicBoolSetting(
+var stmtStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
-)
+).WithPublic()
 
 // TxnStatsNumStmtIDsToRecord limits the number of statementIDs stored for in
 // transactions statistics for a single transaction. This defaults to 1000, and
 // currently is non-configurable (hidden setting).
-var TxnStatsNumStmtIDsToRecord = settings.RegisterPositiveIntSetting(
+var TxnStatsNumStmtIDsToRecord = settings.RegisterIntSetting(
 	"sql.metrics.transaction_details.max_statement_ids",
 	"max number of statement IDs to store for transaction statistics",
-	1000)
+	1000,
+	settings.PositiveInt,
+)
 
 // txnStatsEnable determines whether to collect per-application transaction
 // statistics.
-var txnStatsEnable = settings.RegisterPublicBoolSetting(
+var txnStatsEnable = settings.RegisterBoolSetting(
 	"sql.metrics.transaction_details.enabled", "collect per-application transaction statistics", true,
-)
+).WithPublic()
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
-var sqlStatsCollectionLatencyThreshold = settings.RegisterPublicDurationSetting(
+var sqlStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"sql.metrics.statement_details.threshold",
 	"minimum execution time to cause statement statistics to be collected. "+
 		"If configured, no transaction stats are collected.",
 	0,
-)
+).WithPublic()
 
-var dumpStmtStatsToLogBeforeReset = settings.RegisterPublicBoolSetting(
+var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
-)
+).WithPublic()
 
-var sampleLogicalPlans = settings.RegisterPublicBoolSetting(
+var sampleLogicalPlans = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
 	true,
-)
+).WithPublic()
 
-var logicalPlanCollectionPeriod = settings.RegisterPublicNonNegativeDurationSetting(
+var logicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 	"sql.metrics.statement_details.plan_collection.period",
 	"the time until a new logical plan is collected",
 	5*time.Minute,
-)
+	settings.NonNegativeDuration,
+).WithPublic()
 
 func (s stmtKey) String() string {
 	if s.failed {

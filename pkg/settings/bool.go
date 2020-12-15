@@ -76,16 +76,15 @@ func (b *BoolSetting) setToDefault(sv *Values) {
 	b.set(sv, b.defaultValue)
 }
 
+// WithPublic sets public visibility and can be chained.
+func (b *BoolSetting) WithPublic() *BoolSetting {
+	b.SetVisibility(Public)
+	return b
+}
+
 // RegisterBoolSetting defines a new setting with type bool.
 func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
 	register(key, desc, setting)
 	return setting
-}
-
-// RegisterPublicBoolSetting defines a new setting with type bool and makes it public.
-func RegisterPublicBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
-	s := RegisterBoolSetting(key, desc, defaultValue)
-	s.SetVisibility(Public)
-	return s
 }

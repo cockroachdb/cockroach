@@ -97,13 +97,13 @@ var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
 
-	forwardClockJumpCheckEnabled = settings.RegisterPublicBoolSetting(
+	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
-	)
+	).WithPublic()
 
-	persistHLCUpperBoundInterval = settings.RegisterPublicDurationSetting(
+	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
 			"does not generate a wall time greater than the persisted timestamp and will panic if "+
@@ -112,7 +112,7 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
-	)
+	).WithPublic()
 )
 
 // Server is the cockroach server node.

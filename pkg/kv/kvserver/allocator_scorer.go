@@ -78,10 +78,11 @@ const (
 // the mean range count at which that store is considered overfull or underfull
 // of ranges.
 var rangeRebalanceThreshold = func() *settings.FloatSetting {
-	s := settings.RegisterNonNegativeFloatSetting(
+	s := settings.RegisterFloatSetting(
 		"kv.allocator.range_rebalance_threshold",
 		"minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull",
 		0.05,
+		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Public)
 	return s

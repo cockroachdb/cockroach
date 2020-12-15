@@ -50,11 +50,11 @@ var (
 	//
 	// Doing this, rather than just using a default of `true`, means that a node
 	// will not errantly send a report using a default before loading settings.
-	DiagnosticsReportingEnabled = settings.RegisterPublicBoolSetting(
+	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
-	)
+	).WithPublic()
 
 	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
 	CrashReports = settings.RegisterBoolSetting(

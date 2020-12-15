@@ -19,8 +19,9 @@ import (
 //
 // NB: The more generic name of this setting precedes its current
 // interpretation. It used to control additional polling rates.
-var TableDescriptorPollInterval = settings.RegisterNonNegativeDurationSetting(
+var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the table descriptors",
 	1*time.Second,
+	settings.NonNegativeDuration,
 )

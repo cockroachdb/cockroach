@@ -25,6 +25,7 @@ SHOW TABLES FROM crdb_internal
 ----
 crdb_internal  backward_dependencies        table  NULL  NULL  NULL
 crdb_internal  builtin_functions            table  NULL  NULL  NULL
+crdb_internal  cluster_database_privileges  table  NULL  NULL  NULL
 crdb_internal  cluster_queries              table  NULL  NULL  NULL
 crdb_internal  cluster_sessions             table  NULL  NULL  NULL
 crdb_internal  cluster_settings             table  NULL  NULL  NULL

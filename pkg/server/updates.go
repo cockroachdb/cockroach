@@ -60,11 +60,12 @@ const (
 	updateCheckJitterSeconds = 120
 )
 
-var diagnosticReportFrequency = settings.RegisterPublicNonNegativeDurationSetting(
+var diagnosticReportFrequency = settings.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
-)
+	settings.NonNegativeDuration,
+).WithPublic()
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
 func addJitter(d time.Duration, jitterSec int) time.Duration {

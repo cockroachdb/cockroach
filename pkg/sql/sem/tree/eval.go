@@ -2570,11 +2570,11 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 const experimentalBox2DClusterSettingName = "sql.spatial.experimental_box2d_comparison_operators.enabled"
 
-var experimentalBox2DClusterSetting = settings.RegisterPublicBoolSetting(
+var experimentalBox2DClusterSetting = settings.RegisterBoolSetting(
 	experimentalBox2DClusterSettingName,
 	"enables the use of certain experimental box2d comparison operators",
 	false,
-)
+).WithPublic()
 
 func checkExperimentalBox2DComparisonOperatorEnabled(ctx *EvalContext) error {
 	if !experimentalBox2DClusterSetting.Get(&ctx.Settings.SV) {

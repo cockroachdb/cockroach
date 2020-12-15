@@ -839,12 +839,12 @@ func validatePositive(v int64) error {
 
 // rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
 // This includes snapshots generated for upreplication or for rebalancing.
-var rebalanceSnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
+var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 8<<20),
 	validatePositive,
-)
+).WithPublic()
 
 // recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
 // sent. Ideally, one would never see a Raft-initiated snapshot; we'd like all
@@ -852,18 +852,18 @@ var rebalanceSnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
 // completely get rid of them.
 // TODO(tbg): The existence of this rate, separate from rebalanceSnapshotRate,
 // does not make a whole lot of sense.
-var recoverySnapshotRate = settings.RegisterPublicValidatedByteSizeSetting(
+var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20),
 	validatePositive,
-)
+).WithPublic()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
 // grow to during Range snapshots before being sent to the receiver. This limit
 // places an upper-bound on the memory footprint of the sender of a Range
 // snapshot. It is also the granularity of rate limiting.
-var snapshotSenderBatchSize = settings.RegisterValidatedByteSizeSetting(
+var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 	"kv.snapshot_sender.batch_size",
 	"size of key-value batches sent over the network during snapshots",
 	256<<10, // 256 KB
@@ -873,7 +873,7 @@ var snapshotSenderBatchSize = settings.RegisterValidatedByteSizeSetting(
 // snapshotSSTWriteSyncRate is the size of chunks to write before fsync-ing.
 // The default of 2 MiB was chosen to be in line with the behavior in bulk-io.
 // See sstWriteSyncRate.
-var snapshotSSTWriteSyncRate = settings.RegisterValidatedByteSizeSetting(
+var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
 	bulkIOWriteBurst,

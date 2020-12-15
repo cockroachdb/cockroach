@@ -39,20 +39,20 @@ var strA = settings.RegisterValidatedStringSetting(strKey, "desc", "<default>", 
 	}
 	return nil
 })
-var intA = settings.RegisterValidatedIntSetting(intKey, "desc", 1, func(v int64) error {
+var intA = settings.RegisterIntSetting(intKey, "desc", 1, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
 	}
 	return nil
 
 })
-var durationA = settings.RegisterValidatedDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
+var durationA = settings.RegisterDurationSetting(durationKey, "desc", time.Minute, func(v time.Duration) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
 	}
 	return nil
 })
-var byteSizeA = settings.RegisterValidatedByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
+var byteSizeA = settings.RegisterByteSizeSetting(byteSizeKey, "desc", 1024*1024, func(v int64) error {
 	if v < 0 {
 		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
 	}
