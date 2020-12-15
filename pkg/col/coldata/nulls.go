@@ -192,27 +192,6 @@ func (n *Nulls) UnsetNull(i int) {
 	n.nulls[i>>3] |= bitMask[i&7]
 }
 
-// Remove the unused warning.
-var (
-	n = Nulls{}
-	_ = n.swap
-)
-
-// swap swaps the null values at the argument indices. We implement the logic
-// directly on the byte array rather than case on the result of NullAt to avoid
-// having to take some branches.
-func (n *Nulls) swap(iIdx, jIdx int) {
-	i, j := uint64(iIdx), uint64(jIdx)
-	// Get original null values.
-	ni := (n.nulls[i/8] >> (i % 8)) & 0x1
-	nj := (n.nulls[j/8] >> (j % 8)) & 0x1
-	// Write into the correct positions.
-	iMask := bitMask[i%8]
-	jMask := bitMask[j%8]
-	n.nulls[i/8] = (n.nulls[i/8] & ^iMask) | (nj << (i % 8))
-	n.nulls[j/8] = (n.nulls[j/8] & ^jMask) | (ni << (j % 8))
-}
-
 // setSmallRange is a helper that copies over a slice [startIdx, startIdx+toSet)
 // of src and puts it into this nulls starting at destIdx.
 func (n *Nulls) setSmallRange(src *Nulls, destIdx, startIdx, toSet int) {

@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node !metamorphic
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
