@@ -63,7 +63,7 @@ func newFiltererProcessor(
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		f.input = newInputStatCollector(f.input)
 		f.ExecStatsForTrace = f.execStatsForTrace
 	}

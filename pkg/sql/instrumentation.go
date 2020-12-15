@@ -106,7 +106,7 @@ func (ih *instrumentationHelper) SetOutputMode(outputMode outputMode, explainFla
 	ih.explainFlags = explainFlags
 }
 
-// Setup potentially enables snowball tracing for the statement, depending on
+// Setup potentially enables verbose tracing for the statement, depending on
 // output mode or statement diagnostic activation requests. Finish() must be
 // called after the statement finishes execution (unless needFinish=false, in
 // which case Finish() is a no-op).
@@ -151,7 +151,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
-	newCtx, ih.sp = tracing.StartSnowballTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
 	return newCtx, true
 }
 

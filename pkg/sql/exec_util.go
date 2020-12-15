@@ -1528,7 +1528,7 @@ func (st *SessionTracing) StartTracing(
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
-		sp.StartRecording(recType)
+		sp.SetVerbose(true)
 		st.firstTxnSpan = sp
 	}
 
@@ -1558,7 +1558,7 @@ func (st *SessionTracing) StartTracing(
 			tracing.WithCtxLogTags(connCtx),
 		)
 	}
-	sp.StartRecording(recType)
+	sp.SetVerbose(true)
 	st.connSpan = sp
 
 	// Hijack the connections context.
@@ -1578,20 +1578,20 @@ func (st *SessionTracing) StopTracing() error {
 	st.enabled = false
 	st.kvTracingEnabled = false
 	st.showResults = false
-	st.recordingType = tracing.NoRecording
+	st.recordingType = tracing.RecordingOff
 
 	var spans []tracingpb.RecordedSpan
 
 	if st.firstTxnSpan != nil {
 		spans = append(spans, st.firstTxnSpan.GetRecording()...)
-		st.firstTxnSpan.StopRecording()
+		st.firstTxnSpan.SetVerbose(false)
 	}
 	st.connSpan.Finish()
 	spans = append(spans, st.connSpan.GetRecording()...)
 	// NOTE: We're stopping recording on the connection's ctx only; the stopping
 	// is not inherited by children. If we are inside of a txn, that span will
 	// continue recording, even though nobody will collect its recording again.
-	st.connSpan.StopRecording()
+	st.connSpan.SetVerbose(false)
 	st.ex.ctxHolder.unhijack()
 
 	var err error

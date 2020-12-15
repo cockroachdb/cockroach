@@ -635,7 +635,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	stmtTraceThreshold := traceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
 	if !alreadyRecording && stmtTraceThreshold > 0 {
 		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer)
-		stmtThresholdSpan.StartRecording(tracing.SnowballRecording)
+		stmtThresholdSpan.SetVerbose(true)
 	}
 
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
@@ -1303,7 +1303,7 @@ func (ex *connExecutor) runSetTracing(
 
 func (ex *connExecutor) enableTracing(modes []string) error {
 	traceKV := false
-	recordingType := tracing.SnowballRecording
+	recordingType := tracing.RecordingVerbose
 	enableMode := true
 	showResults := false
 
@@ -1318,7 +1318,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		case "kv":
 			traceKV = true
 		case "cluster":
-			recordingType = tracing.SnowballRecording
+			recordingType = tracing.RecordingVerbose
 		default:
 			return pgerror.Newf(pgcode.Syntax,
 				"set tracing: unknown mode %q", s)

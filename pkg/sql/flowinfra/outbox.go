@@ -211,7 +211,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 
 	var span *tracing.Span
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
-	if span != nil && span.IsRecording() {
+	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)

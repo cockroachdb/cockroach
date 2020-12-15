@@ -34,15 +34,15 @@ var (
 	testPutResp = roachpb.PutResponse{}
 )
 
-// An example of snowball tracing being used to dump a trace around a
+// An example of verbose tracing being used to dump a trace around a
 // transaction. Use something similar whenever you cannot use
 // sql.trace.txn.threshold.
-func TestTxnSnowballTrace(t *testing.T) {
+func TestTxnVerboseTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	tracer := tracing.NewTracer()
-	ctx, sp := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
+	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test-txn")
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -61,7 +61,7 @@ func TestTxnSnowballTrace(t *testing.T) {
 	// dump:
 	//    0.105ms      0.000ms    event:inside txn
 	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
-	//txn: "internal/client/txn_test.go:67 TestTxnSnowballTrace" id=<nil> key=/Min lock=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
+	//txn: "internal/client/txn_test.go:67 TestTxnVerboseTrace" id=<nil> key=/Min lock=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
 	//    0.278ms      0.173ms    event:txn complete
 	found, err := regexp.MatchString(
 		// The (?s) makes "." match \n. This makes the test resilient to other log

@@ -25,11 +25,11 @@ func TestLogTags(t *testing.T) {
 	l := logtags.SingleTagBuffer("tag1", "val1")
 	l = l.Add("tag2", "val2")
 	sp1 := tr.StartSpan("foo", WithForceRealSpan(), WithLogTags(l))
-	sp1.StartRecording(SnowballRecording)
+	sp1.SetVerbose(true)
 	sp1.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp1.GetRecording(), `
 		Span foo:
-		  tags: sb=1 tag1=val1 tag2=val2
+		  tags: _verbose=1 tag1=val1 tag2=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("tag1", "tag2"))
 	shadowTracer.clear()
@@ -38,21 +38,21 @@ func TestLogTags(t *testing.T) {
 	RegisterTagRemapping("tag2", "two")
 
 	sp2 := tr.StartSpan("bar", WithForceRealSpan(), WithLogTags(l))
-	sp2.StartRecording(SnowballRecording)
+	sp2.SetVerbose(true)
 	sp2.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp2.GetRecording(), `
 		Span bar:
-			tags: one=val1 sb=1 two=val2
+			tags: _verbose=1 one=val1 two=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("one", "two"))
 	shadowTracer.clear()
 
 	sp3 := tr.StartSpan("baz", WithLogTags(l), WithForceRealSpan())
-	sp3.StartRecording(SnowballRecording)
+	sp3.SetVerbose(true)
 	sp3.Finish()
 	require.NoError(t, TestingCheckRecordedSpans(sp3.GetRecording(), `
 		Span baz:
-			tags: one=val1 sb=1 two=val2
+			tags: _verbose=1 one=val1 two=val2
 	`))
 	require.NoError(t, shadowTracer.expectSingleSpanWithTags("one", "two"))
 }

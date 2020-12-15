@@ -98,7 +98,7 @@ func TestTraceAnalyzer(t *testing.T) {
 	)
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
 		var sp *tracing.Span
-		ctx, sp = tracing.StartSnowballTrace(ctx, execCfg.AmbientCtx.Tracer, t.Name())
+		ctx, sp = tracing.StartVerboseTrace(ctx, execCfg.AmbientCtx.Tracer, t.Name())
 		ie := execCfg.InternalExecutor
 		ie.SetSessionData(
 			&sessiondata.SessionData{

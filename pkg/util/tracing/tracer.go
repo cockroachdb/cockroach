@@ -27,8 +27,13 @@ import (
 	"golang.org/x/net/trace"
 )
 
-// Snowball is set as Baggage on traces which are used for snowball tracing.
-const Snowball = "sb"
+// verboseTracingBaggageKey is set as Baggage on traces which are used for verbose tracing,
+// meaning that a) spans derived from this one will not be no-op spans and b) they will
+// start recording.
+//
+// This is "sb" for historical reasons; this concept used to be called "[S]now[b]all" tracing
+// and since this string goes on the wire, it's a hassle to change it now.
+const verboseTracingBaggageKey = "sb"
 
 // maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
 const maxLogsPerSpan = 1000
@@ -71,15 +76,15 @@ var zipkinCollector = settings.RegisterPublicStringSetting(
 //  - forwarding events to x/net/trace instances
 //
 //  - recording traces. Recording is started automatically for spans that have
-//    the Snowball baggage and can be started explicitly as well. Recorded
+//    the verboseTracingBaggageKey baggage and can be started explicitly as well. Recorded
 //    events can be retrieved at any time.
 //
 //  - lightstep traces. This is implemented by maintaining a "shadow" lightstep
 //    Span inside each of our spans.
 //
 // Even when tracing is disabled, we still use this Tracer (with x/net/trace and
-// lightstep disabled) because of its recording capability (snowball
-// tracing needs to work in all cases).
+// lightstep disabled) because of its recording capability (verbose tracing needs
+// to work in all cases).
 //
 // Tracer is currently stateless so we could have a single instance; however,
 // this won't be the case if the cluster settings move away from using global
@@ -195,7 +200,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	// caller explicitly asked for a real span they need to get one.
 	// In all other cases, a noop span will do.
 	if !t.AlwaysTrace() &&
-		opts.recordingType() == NoRecording &&
+		opts.recordingType() == RecordingOff &&
 		!opts.ForceRealSpan {
 		return t.noopSpan
 	}
@@ -301,7 +306,7 @@ func (t *Tracer) startSpanGeneric(opName string, opts spanOptions) *Span {
 	// over the remote parent, if any. If neither are specified, we're not recording.
 	recordingType := opts.recordingType()
 
-	if recordingType != NoRecording {
+	if recordingType != RecordingOff {
 		var p *crdbSpan
 		if opts.Parent != nil {
 			p = opts.Parent.crdb
@@ -465,8 +470,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (*SpanMeta, er
 	}
 
 	var recordingType RecordingType
-	if baggage[Snowball] != "" {
-		recordingType = SnowballRecording
+	if baggage[verboseTracingBaggageKey] != "" {
+		recordingType = RecordingVerbose
 	}
 
 	var shadowCtx opentracing.SpanContext
@@ -611,13 +616,12 @@ func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 	return context.WithValue(ctx, activeSpanKey{}, sp)
 }
 
-// StartSnowballTrace takes in a context and returns a derived one with a
-// "snowball Span" in it. The caller takes ownership of this Span from the
-// returned context and is in charge of Finish()ing it. The Span has recording
-// enabled.
+// StartVerboseTrace takes in a context and returns a derived one with a
+// Span in it that is recording verbosely. The caller takes ownership of
+// this Span from the returned context and is in charge of Finish()ing it.
 //
 // TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
-func StartSnowballTrace(
+func StartVerboseTrace(
 	ctx context.Context, tracer *Tracer, opName string,
 ) (context.Context, *Span) {
 	var span *Span
@@ -628,7 +632,7 @@ func StartSnowballTrace(
 	} else {
 		span = tracer.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))
 	}
-	span.StartRecording(SnowballRecording)
+	span.SetVerbose(true)
 	return ContextWithSpan(ctx, span), span
 }
 
@@ -644,13 +648,13 @@ func ContextWithRecordingSpan(
 ) (retCtx context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
 	sp := tr.StartSpan(opName, WithForceRealSpan(), WithCtxLogTags(ctx))
-	sp.StartRecording(SnowballRecording)
+	sp.SetVerbose(true)
 	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx = ContextWithSpan(ctx, sp)
 
 	cancel = func() {
 		cancelCtx()
-		sp.StopRecording()
+		sp.SetVerbose(false)
 		sp.Finish()
 		tr.Close()
 	}

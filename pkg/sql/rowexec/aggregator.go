@@ -94,7 +94,7 @@ func (ag *aggregatorBase) init(
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}

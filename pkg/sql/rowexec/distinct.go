@@ -133,7 +133,7 @@ func newDistinct(
 	// So we have to set up the account here.
 	d.arena = stringarena.Make(&d.memAcc)
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsRecording() {
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
 		d.input = newInputStatCollector(d.input)
 		d.ExecStatsForTrace = d.execStatsForTrace
 	}
