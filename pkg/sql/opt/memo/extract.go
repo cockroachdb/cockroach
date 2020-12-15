@@ -282,9 +282,7 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 
 // ExtractConstColumns returns columns in the filters expression that have been
 // constrained to fixed values.
-func ExtractConstColumns(
-	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext,
-) (fixedCols opt.ColSet) {
+func ExtractConstColumns(on FiltersExpr, evalCtx *tree.EvalContext) (fixedCols opt.ColSet) {
 	for i := range on {
 		scalar := on[i]
 		scalarProps := scalar.ScalarProps()
@@ -298,7 +296,7 @@ func ExtractConstColumns(
 // ExtractValueForConstColumn returns the constant value of a column returned by
 // ExtractConstColumns.
 func ExtractValueForConstColumn(
-	on FiltersExpr, mem *Memo, evalCtx *tree.EvalContext, col opt.ColumnID,
+	on FiltersExpr, evalCtx *tree.EvalContext, col opt.ColumnID,
 ) tree.Datum {
 	for i := range on {
 		scalar := on[i]
