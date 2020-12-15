@@ -2313,8 +2313,10 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 
 	default:
 		if opt.IsMutationOp(e) {
-			// Note: this can still be 0.
-			excludedID = e.Private().(*MutationPrivate).WithID
+			if p, ok := e.Private().(*MutationPrivate); ok {
+				// Note: this can still be 0.
+				excludedID = p.WithID
+			}
 		}
 	}
 
