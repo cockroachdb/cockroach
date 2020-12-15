@@ -106,7 +106,7 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 		ob.LeaveNode()
 	}
 	for _, n := range plan.Checks {
-		ob.EnterMetaNode("fk-check")
+		ob.EnterMetaNode("constraint-check")
 		if err := walk(n); err != nil {
 			return err
 		}
