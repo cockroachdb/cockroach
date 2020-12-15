@@ -138,6 +138,9 @@ func (m *AlterDatabaseOwner) LoggingChannel() logpb.Channel { return logpb.Chann
 func (m *AlterSchemaOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *AlterTableOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterTypeOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
