@@ -40,9 +40,14 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
 `
 	cer, err := tls.LoadX509KeyPair("testserver.crt", "testserver.key")
 	require.NoError(t, err)
-	opts.IncomingTLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{cer},
-		ServerName:   "localhost",
+	opts.FrontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+		return FrontendAdmit(
+			incoming,
+			&tls.Config{
+				Certificates: []tls.Certificate{cer},
+				ServerName:   "localhost",
+			},
+		)
 	}
 
 	const listenAddress = "127.0.0.1:0"

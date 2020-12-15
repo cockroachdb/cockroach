@@ -146,8 +146,13 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		InsecureSkipVerify: true,
 	}
 	server := sqlproxyccl.NewServer(sqlproxyccl.Options{
-		IncomingTLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cer},
+		FrontendAdmitter: func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+			return sqlproxyccl.FrontendAdmit(
+				incoming,
+				&tls.Config{
+					Certificates: []tls.Certificate{cer},
+				},
+			)
 		},
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
 			params := msg.Parameters
