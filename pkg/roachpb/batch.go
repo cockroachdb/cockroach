@@ -48,7 +48,7 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 	} else {
 		// When not transactional, allow empty timestamp and use nowFn instead
 		if ba.Timestamp.IsEmpty() {
-			ba.Timestamp = nowFn()
+			ba.Timestamp = enginepb.TxnTimestamp(nowFn())
 		}
 	}
 	return nil
@@ -59,7 +59,7 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 // request in the batch operates on a time span such as ExportRequest or
 // RevertRangeRequest, which both specify the start of that span in their
 // arguments while using ba.Timestamp to indicate the upper bound of that span.
-func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
+func (ba BatchRequest) EarliestActiveTimestamp() enginepb.TxnTimestamp {
 	ts := ba.Timestamp
 	for _, ru := range ba.Requests {
 		switch t := ru.GetInner().(type) {

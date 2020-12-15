@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -62,7 +61,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 				ikey := pebble.InternalKey{
 					UserKey: EncodeKey(MVCCKey{
 						Key:       key,
-						Timestamp: hlc.Timestamp{WallTime: int64(timestamp)},
+						Timestamp: enginepb.TxnTimestamp{WallTime: int64(timestamp)},
 					}),
 				}
 
@@ -123,7 +122,7 @@ func TestPebbleIterReuse(t *testing.T) {
 
 	batch := eng.NewBatch()
 	for i := 0; i < 100; i++ {
-		key := MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
+		key := MVCCKey{[]byte{byte(i)}, enginepb.TxnTimestamp{WallTime: 100}}
 		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
 			t.Fatal(err)
 		}
@@ -213,14 +212,14 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("1\xfd\xff"), makeMVCCKey("1\xff"), makeMVCCKey("1\xfe")},
 		{MVCCKey{
 			Key:       []byte("1\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		}, makeMVCCKey("9"), makeMVCCKey("2")},
 		{MVCCKey{
 			Key:       []byte("1\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		}, makeMVCCKey("19"), MVCCKey{
 			Key:       []byte("1\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		},
 		},
 		// Empty b values.
@@ -254,7 +253,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("13\xff"), makeMVCCKey("2")},
 		{MVCCKey{
 			Key:       []byte("1\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		}, makeMVCCKey("2")},
 		{makeMVCCKey("\xff"), makeMVCCKey("\xff")},
 		{makeMVCCKey("\xff\xff"), makeMVCCKey("\xff\xff")},
@@ -262,10 +261,10 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("\xfe\xff\xff"), makeMVCCKey("\xff")},
 		{MVCCKey{
 			Key:       []byte("\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		}, MVCCKey{
 			Key:       []byte("\xff\xff"),
-			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
+			Timestamp: enginepb.TxnTimestamp{WallTime: 20, Logical: 3},
 		}},
 	}
 	for _, tc := range succCases {
@@ -304,7 +303,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	for i := range keys {
 		k := MVCCKey{
 			Key: randutil.RandBytes(rng, 8),
-			Timestamp: hlc.Timestamp{
+			Timestamp: enginepb.TxnTimestamp{
 				WallTime: int64(rng.Intn(5)),
 			},
 		}

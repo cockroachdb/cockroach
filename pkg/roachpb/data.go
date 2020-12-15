@@ -337,8 +337,8 @@ func MakeValueFromBytes(bs []byte) Value {
 
 // MakeValueFromBytesAndTimestamp returns a value with bytes, timestamp and
 // tag set.
-func MakeValueFromBytesAndTimestamp(bs []byte, t hlc.Timestamp) Value {
-	v := Value{Timestamp: t}
+func MakeValueFromBytesAndTimestamp(bs []byte, ts enginepb.TxnTimestamp) Value {
+	v := Value{Timestamp: ts}
 	v.SetBytes(bs)
 	return v
 }
@@ -884,20 +884,21 @@ func MakeTransaction(
 	name string, baseKey Key, userPriority UserPriority, now hlc.Timestamp, maxOffsetNs int64,
 ) Transaction {
 	u := uuid.FastMakeV4()
-	maxTS := now.Add(maxOffsetNs, 0)
+	txnTS := enginepb.TxnTimestamp(now)
+	maxTS := enginepb.TxnTimestamp(now.Add(maxOffsetNs, 0))
 
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Key:            baseKey,
 			ID:             u,
-			WriteTimestamp: now,
-			MinTimestamp:   now,
+			WriteTimestamp: txnTS,
+			MinTimestamp:   txnTS,
 			Priority:       MakePriority(userPriority),
 			Sequence:       0, // 1-indexed, incremented before each Request
 		},
 		Name:          name,
 		LastHeartbeat: now,
-		ReadTimestamp: now,
+		ReadTimestamp: txnTS,
 		MaxTimestamp:  maxTS,
 	}
 }
@@ -906,7 +907,8 @@ func MakeTransaction(
 // occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
-	ts.Forward(t.ReadTimestamp)
+	// TODO(nvanbenschoten): try to forward by read timestamp? Or just don't try?
+	// ts.Forward(t.ReadTimestamp)
 	return ts
 }
 
@@ -1013,12 +1015,10 @@ func MakePriority(userPriority UserPriority) enginepb.TxnPriority {
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
 func (t *Transaction) Restart(
-	userPriority UserPriority, upgradePriority enginepb.TxnPriority, timestamp hlc.Timestamp,
+	userPriority UserPriority, upgradePriority enginepb.TxnPriority, timestamp enginepb.TxnTimestamp,
 ) {
 	t.BumpEpoch()
-	if t.WriteTimestamp.Less(timestamp) {
-		t.WriteTimestamp = timestamp
-	}
+	t.WriteTimestamp.Forward(timestamp)
 	t.ReadTimestamp = t.WriteTimestamp
 	// Upgrade priority to the maximum of:
 	// - the current transaction priority
@@ -1045,7 +1045,7 @@ func (t *Transaction) BumpEpoch() {
 // Refresh reconfigures a transaction to account for a read refresh up to the
 // specified timestamp. For details about transaction read refreshes, see the
 // comment on txnSpanRefresher.
-func (t *Transaction) Refresh(timestamp hlc.Timestamp) {
+func (t *Transaction) Refresh(timestamp enginepb.TxnTimestamp) {
 	t.WriteTimestamp.Forward(timestamp)
 	t.ReadTimestamp.Forward(t.WriteTimestamp)
 	t.WriteTooOld = false
@@ -1425,7 +1425,7 @@ func PrepareTransactionForRetry(
 // to the specified timestamp to avoid a client-side transaction restart. If
 // true, returns a cloned, updated Transaction object with the provisional
 // commit timestamp and read timestamp set appropriately.
-func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
+func PrepareTransactionForRefresh(txn *Transaction, timestamp enginepb.TxnTimestamp) (bool, *Transaction) {
 	if txn.CommitTimestampFixed {
 		return false, nil
 	}
@@ -1467,23 +1467,25 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 
 func readWithinUncertaintyIntervalRetryTimestamp(
 	ctx context.Context, txn *Transaction, err *ReadWithinUncertaintyIntervalError, origin NodeID,
-) hlc.Timestamp {
+) enginepb.TxnTimestamp {
 	// If the reader encountered a newer write within the uncertainty
 	// interval, we advance the txn's timestamp just past the last observed
 	// timestamp from the node.
-	ts, ok := txn.GetObservedTimestamp(origin)
-	if !ok {
-		log.Fatalf(ctx,
-			"missing observed timestamp for node %d found on uncertainty restart. "+
-				"err: %s. txn: %s. Observed timestamps: %v",
-			origin, err, txn, txn.ObservedTimestamps)
-	}
-	// Also forward by the existing timestamp.
-	ts.Forward(err.ExistingTimestamp.Next())
-	return ts
+	// TODO(nvanbenschoten)
+	// ts, ok := txn.GetObservedTimestamp(origin)
+	// if !ok {
+	// 	log.Fatalf(ctx,
+	// 		"missing observed timestamp for node %d found on uncertainty restart. "+
+	// 			"err: %s. txn: %s. Observed timestamps: %v",
+	// 		origin, err, txn, txn.ObservedTimestamps)
+	// }
+	// // Also forward by the existing timestamp.
+	// ts.Forward(err.ExistingTimestamp.Next())
+	// return ts
+	return enginepb.TxnTimestamp{}
 }
 
-func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
+func writeTooOldRetryTimestamp(err *WriteTooOldError) enginepb.TxnTimestamp {
 	return err.ActualTimestamp
 }
 

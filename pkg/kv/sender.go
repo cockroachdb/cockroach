@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // TxnType specifies whether a transaction is the root (parent)
@@ -174,7 +173,7 @@ type TxnSender interface {
 	// queries and backups). This method must be called on every
 	// transaction retry (but note that retries should be rare for
 	// read-only queries with no clock uncertainty).
-	SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp)
+	SetFixedTimestamp(ctx context.Context, ts enginepb.TxnTimestamp)
 
 	// ManualRestart bumps the transactions epoch, and can upgrade the
 	// timestamp and priority.
@@ -187,7 +186,7 @@ type TxnSender interface {
 	// when a retryable error is seen.
 	// TODO(andrei): this second use should go away once we move to a
 	// TxnAttempt model.
-	ManualRestart(context.Context, roachpb.UserPriority, hlc.Timestamp)
+	ManualRestart(context.Context, roachpb.UserPriority, enginepb.TxnTimestamp)
 
 	// UpdateStateOnRemoteRetryableErr updates the txn in response to an
 	// error encountered when running a request through the txn.
@@ -204,7 +203,7 @@ type TxnSender interface {
 	// Note a transaction can be internally pushed forward in time
 	// before committing so this is not guaranteed to be the commit
 	// timestamp. Use CommitTimestamp() when needed.
-	ReadTimestamp() hlc.Timestamp
+	ReadTimestamp() enginepb.TxnTimestamp
 
 	// CommitTimestamp returns the transaction's start timestamp.
 	//
@@ -218,7 +217,7 @@ type TxnSender interface {
 	// likelihood that a retry error will bubble up to a client.
 	//
 	// See CommitTimestampFixed() below.
-	CommitTimestamp() hlc.Timestamp
+	CommitTimestamp() enginepb.TxnTimestamp
 
 	// CommitTimestampFixed returns true if the commit timestamp has
 	// been fixed to the start timestamp and cannot be pushed forward.
@@ -228,7 +227,7 @@ type TxnSender interface {
 	// commit timestamp. This can move forward throughout the txn's
 	// lifetime. See the explanatory comments for the WriteTimestamp
 	// field on TxnMeta.
-	ProvisionalCommitTimestamp() hlc.Timestamp
+	ProvisionalCommitTimestamp() enginepb.TxnTimestamp
 
 	// IsSerializablePushAndRefreshNotPossible returns true if the
 	// transaction is serializable, its timestamp has been pushed and

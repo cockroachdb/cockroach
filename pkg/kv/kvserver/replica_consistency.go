@@ -669,7 +669,7 @@ func (r *Replica) sha512(
 		if snapshot != nil {
 			// Add LeaseAppliedState to the diff.
 			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: hlc.Timestamp{},
+				Timestamp: enginepb.TxnTimestamp{},
 			}
 			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
 			var v roachpb.Value

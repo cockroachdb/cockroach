@@ -76,8 +76,8 @@ type EvalContext interface {
 	// for the provided transaction information. See Replica.CanCreateTxnRecord
 	// for details about its arguments, return values, and preconditions.
 	CanCreateTxnRecord(
-		txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
+		txnID uuid.UUID, txnKey []byte, txnMinTS enginepb.TxnTimestamp,
+	) (ok bool, minCommitTS enginepb.TxnTimestamp, reason roachpb.TransactionAbortedReason)
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
@@ -92,7 +92,7 @@ type EvalContext interface {
 	// setting is disabled.
 	GetSplitQPS() float64
 
-	GetGCThreshold() hlc.Timestamp
+	GetGCThreshold() enginepb.TxnTimestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetDescAndLease(context.Context) (roachpb.RangeDescriptor, roachpb.Lease)
@@ -112,9 +112,9 @@ type MockEvalCtx struct {
 	Stats            enginepb.MVCCStats
 	QPS              float64
 	AbortSpan        *abortspan.AbortSpan
-	GCThreshold      hlc.Timestamp
+	GCThreshold      enginepb.TxnTimestamp
 	Term, FirstIndex uint64
-	CanCreateTxn     func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason)
+	CanCreateTxn     func() (bool, enginepb.TxnTimestamp, roachpb.TransactionAbortedReason)
 	Lease            roachpb.Lease
 }
 
@@ -197,11 +197,11 @@ func (m *mockEvalCtxImpl) GetSplitQPS() float64 {
 	return m.QPS
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
-	uuid.UUID, []byte, hlc.Timestamp,
-) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+	uuid.UUID, []byte, enginepb.TxnTimestamp,
+) (bool, enginepb.TxnTimestamp, roachpb.TransactionAbortedReason) {
 	return m.CanCreateTxn()
 }
-func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
+func (m *mockEvalCtxImpl) GetGCThreshold() enginepb.TxnTimestamp {
 	return m.GCThreshold
 }
 func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -148,7 +149,7 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	}
 
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = r.store.Clock().Now()
+	ba.Timestamp = enginepb.TxnTimestamp(r.store.Clock().Now())
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
@@ -200,7 +201,7 @@ var errSystemConfigIntent = errors.New("must retry later due to intent on System
 func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEntries, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
-	ba.Timestamp = r.store.Clock().Now()
+	ba.Timestamp = enginepb.TxnTimestamp(r.store.Clock().Now())
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)

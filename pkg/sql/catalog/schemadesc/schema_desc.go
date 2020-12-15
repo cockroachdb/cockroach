@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -175,7 +175,7 @@ func (desc *Mutable) MaybeIncrementVersion() {
 		return
 	}
 	desc.Version++
-	desc.ModificationTime = hlc.Timestamp{}
+	desc.ModificationTime = enginepb.TxnTimestamp{}
 }
 
 // OriginalName implements the MutableDescriptor interface.

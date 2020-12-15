@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -232,7 +233,7 @@ func (sc *SchemaChanger) refreshMaterializedView(
 }
 
 func (sc *SchemaChanger) backfillQueryIntoTable(
-	ctx context.Context, table *descpb.TableDescriptor, query string, ts hlc.Timestamp, desc string,
+	ctx context.Context, table *descpb.TableDescriptor, query string, ts enginepb.TxnTimestamp, desc string,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
 		if err := fn(); err != nil {
@@ -1988,7 +1989,7 @@ func (sc *SchemaChanger) txnWithModified(
 func createSchemaChangeEvalCtx(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) extendedEvalContext {
 

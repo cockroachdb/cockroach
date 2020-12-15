@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -268,9 +269,9 @@ var virtualSchemas = map[descpb.ID]virtualSchema{
 	catconstants.PgExtensionSchemaID: pgExtension,
 }
 
-var startTime = hlc.Timestamp{
+var startTime = enginepb.TxnTimestamp(hlc.Timestamp{
 	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
-}
+})
 
 //
 // SQL-layer interface to work with virtual schemas.

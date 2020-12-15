@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -85,9 +84,9 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 		key MVCCKey
 	}{
 		{key: MVCCKey{Key: roachpb.Key("a")}},
-		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
-		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: MVCCKey{Key: roachpb.Key("flags"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Flags: 3}}},
+		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: enginepb.TxnTimestamp{WallTime: 89999}}},
+		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: enginepb.TxnTimestamp{WallTime: 99, Logical: 45}}},
+		{key: MVCCKey{Key: roachpb.Key("flags"), Timestamp: enginepb.TxnTimestamp{WallTime: 99, Logical: 45, Flags: 3}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {

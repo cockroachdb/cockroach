@@ -43,6 +43,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -62,8 +63,8 @@ type ReleaseFunc func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI)
 //
 // The methods exposed on Tracker are safe for concurrent use.
 type TrackerI interface {
-	Close(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool)
-	Track(ctx context.Context) (hlc.Timestamp, ReleaseFunc)
+	Close(next enginepb.TxnTimestamp, expCurEpoch ctpb.Epoch) (enginepb.TxnTimestamp, map[roachpb.RangeID]ctpb.LAI, bool)
+	Track(ctx context.Context) (enginepb.TxnTimestamp, ReleaseFunc)
 	FailedCloseAttempts() int64
 }
 
@@ -142,7 +143,7 @@ type Provider interface {
 	Producer
 	Notifyee
 	Start()
-	MaxClosed(roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) hlc.Timestamp
+	MaxClosed(roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI) enginepb.TxnTimestamp
 }
 
 // A ClientRegistry is the client component of the follower reads subsystem. It
@@ -162,11 +163,11 @@ type ClientRegistry interface {
 // detailed description of the semantics. The final returned boolean indicates
 // whether tracked epoch matched the expCurEpoch and that returned information
 // may be used.
-type CloseFn func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool)
+type CloseFn func(next enginepb.TxnTimestamp, expCurEpoch ctpb.Epoch) (enginepb.TxnTimestamp, map[roachpb.RangeID]ctpb.LAI, bool)
 
 // AsCloseFn uses the TrackerI as a CloseFn.
 func AsCloseFn(t TrackerI) CloseFn {
-	return func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
+	return func(next enginepb.TxnTimestamp, expCurEpoch ctpb.Epoch) (enginepb.TxnTimestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
 		return t.Close(next, expCurEpoch)
 	}
 }

@@ -98,10 +98,10 @@ func TestErrorTxn(t *testing.T) {
 func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	{
 		rwueNew := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			makeTxnTS(1, 0), makeTxnTS(2, 0),
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+				MaxTimestamp:       makeTxnTS(3, 0),
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: makeTS(4, 0)}},
 			})
 		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
@@ -112,8 +112,7 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	}
 
 	{
-		rwueOld := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, nil)
+		rwueOld := NewReadWithinUncertaintyIntervalError(makeTxnTS(1, 0), makeTxnTS(2, 0), nil)
 
 		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
@@ -136,12 +135,12 @@ func TestErrorRedaction(t *testing.T) {
 	t.Run("uncertainty-restart", func(t *testing.T) {
 		// NB: most other errors don't redact properly. More elbow grease is needed.
 		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			makeTxnTS(1, 0), makeTxnTS(2, 0),
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+				MaxTimestamp:       makeTxnTS(3, 0),
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: makeTS(4, 0)}},
 			}))
-		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
+		txn := MakeTransaction("foo", Key("bar"), 1, makeTS(1, 0), 1)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -171,13 +170,13 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.Equal(t, TransactionRestart_NONE, pErr.deprecatedTransactionRestart)
 		require.Nil(t, pErr.deprecatedDetail.Value)
 	})
-	txn := MakeTransaction("foo", Key("k"), 0, hlc.Timestamp{WallTime: 1}, 50000)
+	txn := MakeTransaction("foo", Key("k"), 0, makeTS(1, 0), 50000)
 
 	t.Run("structured-wrapped", func(t *testing.T) {
 		// For extra spice, wrap the structured error. This ensures
 		// that we populate the deprecated fields even when
 		// the error detail is not the head of the error chain.
-		err := NewReadWithinUncertaintyIntervalError(hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, &txn)
+		err := NewReadWithinUncertaintyIntervalError(makeTxnTS(1, 0), makeTxnTS(2, 0), &txn)
 
 		pErr := NewError(errors.Wrap(err, "foo"))
 		// Quick check that the detail round-trips when EncodedError is still there.

@@ -14,7 +14,7 @@ import (
 	"context"
 	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -78,7 +78,7 @@ func GetDescriptorVersion(desc *Descriptor) DescriptorVersion {
 }
 
 // GetDescriptorModificationTime returns the ModificationTime of the descriptor.
-func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
+func GetDescriptorModificationTime(desc *Descriptor) enginepb.TxnTimestamp {
 	switch t := desc.Union.(type) {
 	case *Descriptor_Table:
 		return t.Table.ModificationTime
@@ -112,7 +112,7 @@ func GetDescriptorState(desc *Descriptor) DescriptorState {
 }
 
 // setDescriptorModificationTime sets the ModificationTime of the descriptor.
-func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
+func setDescriptorModificationTime(desc *Descriptor, ts enginepb.TxnTimestamp) {
 	switch t := desc.Union.(type) {
 	case *Descriptor_Table:
 		t.Table.ModificationTime = ts
@@ -145,7 +145,7 @@ func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
 func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
-	ctx context.Context, desc *Descriptor, ts hlc.Timestamp,
+	ctx context.Context, desc *Descriptor, ts enginepb.TxnTimestamp,
 ) {
 	switch t := desc.Union.(type) {
 	case nil:
@@ -208,7 +208,7 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 // TODO(ajwerner): Now that all descriptors have their modification time set
 // this way, this function should be retired and similar or better safeguards
 // for all descriptors should be pursued.
-func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
+func TableFromDescriptor(desc *Descriptor, ts enginepb.TxnTimestamp) *TableDescriptor {
 	//nolint:descriptormarshal
 	t := desc.GetTable()
 	if t != nil {
@@ -218,7 +218,7 @@ func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
 }
 
 // TypeFromDescriptor is the same thing as TableFromDescriptor, but for types.
-func TypeFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TypeDescriptor {
+func TypeFromDescriptor(desc *Descriptor, ts enginepb.TxnTimestamp) *TypeDescriptor {
 	t := desc.GetType()
 	if t != nil {
 		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)

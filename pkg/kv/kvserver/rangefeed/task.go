@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -116,7 +115,7 @@ func (s *initResolvedTSScan) Cancel() {
 type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
 	// timestamp. It returns the resulting transaction protos.
-	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	PushTxns(context.Context, []enginepb.TxnMeta, enginepb.TxnTimestamp) ([]*roachpb.Transaction, error)
 	// ResolveIntents resolves the specified intents.
 	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
 }
@@ -141,12 +140,12 @@ type TxnPusher interface {
 type txnPushAttempt struct {
 	p     *Processor
 	txns  []enginepb.TxnMeta
-	ts    hlc.Timestamp
+	ts    enginepb.TxnTimestamp
 	doneC chan struct{}
 }
 
 func newTxnPushAttempt(
-	p *Processor, txns []enginepb.TxnMeta, ts hlc.Timestamp, doneC chan struct{},
+	p *Processor, txns []enginepb.TxnMeta, ts enginepb.TxnTimestamp, doneC chan struct{},
 ) runnable {
 	return &txnPushAttempt{
 		p:     p,

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -533,7 +532,7 @@ func canDoServersideRetry(
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	latchSpans *spanset.SpanSet,
-	deadline *hlc.Timestamp,
+	deadline *enginepb.TxnTimestamp,
 ) bool {
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
@@ -547,7 +546,7 @@ func canDoServersideRetry(
 			deadline = et.Deadline
 		}
 	}
-	var newTimestamp hlc.Timestamp
+	var newTimestamp enginepb.TxnTimestamp
 
 	if pErr != nil {
 		switch tErr := pErr.GetDetail().(type) {

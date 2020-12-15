@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -123,7 +123,7 @@ type txnSpanRefresher struct {
 	// don't fail on (i.e. if we'll refresh, we'll refreshFrom timestamp onwards).
 	// After every epoch bump, it is initialized to the timestamp of the first
 	// batch. It is then bumped after every successful refresh.
-	refreshedTimestamp hlc.Timestamp
+	refreshedTimestamp enginepb.TxnTimestamp
 
 	// canAutoRetry is set if the txnSpanRefresher is allowed to auto-retry.
 	canAutoRetry bool

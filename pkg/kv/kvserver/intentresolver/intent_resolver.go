@@ -358,7 +358,8 @@ func (ir *IntentResolver) MaybePushTransactions(
 
 	// Attempt to push the transaction(s).
 	b := &kv.Batch{}
-	b.Header.Timestamp = ir.clock.Now()
+	// TODO(nvanbenschoten): how does the PushTxn work in this case?
+	b.Header.Timestamp = enginepb.TxnTimestamp(ir.clock.Now())
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&roachpb.PushTxnRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -455,7 +456,8 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 func (ir *IntentResolver) CleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
-	h := roachpb.Header{Timestamp: now}
+	// TODO(nvanbenschoten): how does the PushTxn work in this case?
+	h := roachpb.Header{Timestamp: enginepb.TxnTimestamp(now)}
 
 	// All transactions in MaybePushTransactions will be sent in a single batch.
 	// In order to ensure that progress is made, we want to ensure that this
@@ -627,7 +629,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					return
 				}
 				b := &kv.Batch{}
-				b.Header.Timestamp = now
+				// TODO(nvanbenschoten): how does the PushTxn work in this case?
+				b.Header.Timestamp = enginepb.TxnTimestamp(now)
 				b.AddRawRequest(&roachpb.PushTxnRequest{
 					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 					PusherTxn: roachpb.Transaction{
@@ -770,7 +773,7 @@ type ResolveOptions struct {
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
-	MinTimestamp hlc.Timestamp
+	MinTimestamp enginepb.TxnTimestamp
 }
 
 // lookupRangeID maps a key to a RangeID for best effort batching of intent

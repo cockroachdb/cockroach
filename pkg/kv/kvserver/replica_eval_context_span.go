@@ -157,8 +157,8 @@ func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
 // for the provided transaction information. See Replica.CanCreateTxnRecord
 // for details about its arguments, return values, and preconditions.
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+	txnID uuid.UUID, txnKey []byte, txnMinTS enginepb.TxnTimestamp,
+) (bool, enginepb.TxnTimestamp, roachpb.TransactionAbortedReason) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
@@ -168,7 +168,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
-func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
+func (rec SpanSetReplicaEvalContext) GetGCThreshold() enginepb.TxnTimestamp {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
 	)

@@ -237,7 +237,7 @@ func iterateEntries(
 		ctx, reader,
 		keys.RaftLogKey(rangeID, lo),
 		keys.RaftLogKey(rangeID, hi),
-		hlc.Timestamp{},
+		enginepb.TxnTimestamp{},
 		storage.MVCCScanOptions{},
 		scanFunc,
 	)
@@ -543,7 +543,7 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
-		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{Inconsistent: true})
+		enginepb.TxnTimestamp(hlc.MaxTimestamp), &desc, storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}
@@ -629,7 +629,7 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, writer, &diff, key, enginepb.TxnTimestamp{}, value, nil /* txn */)
 		} else {
 			// We type assert `writer` to also be an engine.ReadWriter only in
 			// the case where we're replacing existing entries.
@@ -637,7 +637,7 @@ func (r *Replica) append(
 			if !ok {
 				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
 			}
-			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, value, nil /* txn */)
+			err = storage.MVCCPut(ctx, eng, &diff, key, enginepb.TxnTimestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, 0, err
@@ -658,7 +658,7 @@ func (r *Replica) append(
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			err := storage.MVCCDelete(ctx, eng, &diff, r.raftMu.stateLoader.RaftLogKey(i),
-				hlc.Timestamp{}, nil /* txn */)
+				enginepb.TxnTimestamp{}, nil /* txn */)
 			if err != nil {
 				return 0, 0, 0, err
 			}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -56,7 +57,7 @@ func QueryIntent(
 	// Read at the specified key at the maximum timestamp. This ensures that we
 	// see an intent if one exists, regardless of what timestamp it is written
 	// at.
-	_, intent, err := storage.MVCCGet(ctx, reader, args.Key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+	_, intent, err := storage.MVCCGet(ctx, reader, args.Key, enginepb.TxnTimestamp(hlc.MaxTimestamp), storage.MVCCGetOptions{
 		// Perform an inconsistent read so that intents are returned instead of
 		// causing WriteIntentErrors.
 		Inconsistent: true,

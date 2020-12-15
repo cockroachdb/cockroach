@@ -316,7 +316,8 @@ message ClearRangeRequest {
   // that time (plus max offset) to have passed at which point they can reuse
   // the span they cleared without fear of this request being replayed later and
   // clearing subsequent writes.
-  util.hlc.Timestamp deadline = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp deadline = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.
@@ -335,7 +336,8 @@ message RevertRangeRequest {
   // any MVCC key with a strictly higher timestamp. TargetTime must be higher
   // than the GC Threshold for the replica - so that it is assured that the keys
   // for that time are still there — or the request will fail.
-  util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // A RevertRangeResponse is the return value from the RevertRange() method.
@@ -589,7 +591,7 @@ message EndTxnRequest {
   // If EndTxn(Commit=true) finds that the txn's timestamp has been pushed above
   // this deadline, an error will be returned and the client is supposed to
   // rollback the txn.
-  util.hlc.Timestamp deadline = 3;
+  util.hlc.Timestamp deadline = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
@@ -676,7 +678,8 @@ message EndTxnResponse {
   bool one_phase_commit = 4;
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
-  util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -847,11 +850,13 @@ message GCRequest {
 
   message GCKey {
     bytes key = 1 [(gogoproto.casttype) = "Key"];
-    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
-  util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 
   reserved 5;
 }
@@ -904,7 +909,8 @@ message PushTxnRequest {
   // PushTo is the timestamp which PusheeTxn should be pushed to. During
   // conflict resolution, it should be set just after the timestamp of the
   // conflicting read or write.
-  util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
   // commit timestamp forward. Writers set this to PUSH_ABORT to request
   // that pushee_txn be aborted if possible. Inconsistent readers set
@@ -1072,7 +1078,8 @@ message ResolveIntentRangeRequest {
   // The minimum timestamp for any intents written by this
   // transaction. If present, this value can be used to optimize the
   // iteration over the span to find intents to resolve.
-  util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // The list of ignored seqnum ranges as per the Transaction record.
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 6 [
     (gogoproto.nullable) = false,
@@ -1333,7 +1340,8 @@ message FileEncryptionOptions {
 message ExportRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ExternalStorage storage = 2 [(gogoproto.nullable) = false];
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
 
   // Return the exported SST data in the response.
@@ -1417,7 +1425,8 @@ message ExportResponse {
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated File files = 2 [(gogoproto.nullable) = false];
-  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // ImportRequest is the argument to the Import() method, to bulk load key/value
@@ -1438,7 +1447,8 @@ message ImportRequest {
   Span data_span = 3 [(gogoproto.nullable) = false];
   // EndTime, if not the zero value, will cause only entries before it to be
   // imported.
-  util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   reserved 4;
   message TableRekey {
 
@@ -1502,7 +1512,8 @@ message AdminVerifyProtectedTimestampRequest {
   ];
 
   // Protected is the timestamp at which the record with RecordID protects.
-  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp protected = 2 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 
   // RecordAliveAt is a an hlc timestamp at which the record being verified is
   // known to exist. A value for RecordAliveAt is generally determined by
@@ -1567,7 +1578,8 @@ message RefreshRequest {
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
-  util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // RefreshResponse is the response to a Refresh() operation.
@@ -1584,7 +1596,8 @@ message RefreshRangeRequest {
 
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
-  util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // RefreshRangeResponse is the response to a RefreshRange() operation.
@@ -1783,7 +1796,8 @@ message Header {
   // the server to set it from txn.ReadTimestamp. Also, for transactional
   // requests, writes are performed at the provisional commit timestamp
   // (txn.WriteTimestamp).
-  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // replica specifies the destination of the request.
   ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
@@ -1987,7 +2001,8 @@ message BatchResponse {
     // which is awkward. We could consider making this field optional and only
     // populate it for non-transactional requests. The timestamp cache would then
     // use an accessor on BatchResponse to pick the one that matters.
-    util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
@@ -2070,7 +2085,9 @@ message RangeFeedValue {
 message RangeFeedCheckpoint {
   Span               span        = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp resolved_ts = 2 [
-    (gogoproto.nullable) = false, (gogoproto.customname) = "ResolvedTS"];
+    (gogoproto.nullable) = false, 
+    (gogoproto.customname) = "ResolvedTS",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // RangeFeedError is a variant of RangeFeedEvent that indicates that an error

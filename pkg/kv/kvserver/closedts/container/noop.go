@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -54,12 +55,12 @@ func (noopEverything) Get(client ctpb.InboundClient) error {
 	return errors.New("closed timestamps disabled")
 }
 func (noopEverything) Close(
-	next hlc.Timestamp, expCurEpoch ctpb.Epoch,
-) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
-	return hlc.Timestamp{}, nil, false
+	next enginepb.TxnTimestamp, expCurEpoch ctpb.Epoch,
+) (enginepb.TxnTimestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
+	return enginepb.TxnTimestamp{}, nil, false
 }
-func (noopEverything) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFunc) {
-	return hlc.Timestamp{}, func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI) {}
+func (noopEverything) Track(ctx context.Context) (enginepb.TxnTimestamp, closedts.ReleaseFunc) {
+	return enginepb.TxnTimestamp{}, func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI) {}
 }
 func (noopEverything) FailedCloseAttempts() int64 {
 	return 0
@@ -75,8 +76,8 @@ func (noopEverything) Subscribe(context.Context, chan<- ctpb.Entry) {}
 func (noopEverything) Start()                                       {}
 func (noopEverything) MaxClosed(
 	roachpb.NodeID, roachpb.RangeID, ctpb.Epoch, ctpb.LAI,
-) hlc.Timestamp {
-	return hlc.Timestamp{}
+) enginepb.TxnTimestamp {
+	return enginepb.TxnTimestamp{}
 }
 func (noopEverything) Request(roachpb.NodeID, roachpb.RangeID) {}
 func (noopEverything) EnsureClient(roachpb.NodeID)             {}

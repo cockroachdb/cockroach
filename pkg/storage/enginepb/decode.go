@@ -13,7 +13,6 @@ package enginepb
 import (
 	"encoding/binary"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,7 +42,7 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 }
 
 // DecodeKey decodes an key/timestamp from its serialized representation.
-func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error) {
+func DecodeKey(encodedKey []byte) (key []byte, timestamp TxnTimestamp, _ error) {
 	key, ts, ok := SplitMVCCKey(encodedKey)
 	if !ok {
 		return nil, timestamp, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
@@ -79,7 +78,7 @@ const kvLenSize = 8
 // the key/value, the timestamp, and the suffix of data remaining in the batch.
 func ScanDecodeKeyValue(
 	repr []byte,
-) (key []byte, ts hlc.Timestamp, value []byte, orepr []byte, err error) {
+) (key []byte, ts TxnTimestamp, value []byte, orepr []byte, err error) {
 	if len(repr) < kvLenSize {
 		return key, ts, nil, repr, errors.Errorf("unexpected batch EOF")
 	}

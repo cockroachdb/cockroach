@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -555,7 +554,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
-	deadline *hlc.Timestamp,
+	deadline *enginepb.TxnTimestamp,
 ) (batch storage.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {

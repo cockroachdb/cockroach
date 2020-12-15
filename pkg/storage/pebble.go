@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -263,7 +262,7 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
-			ts := encodeTimestamp(meta.Timestamp.ToTimestamp())
+			ts := encodeTimestamp(meta.TxnTimestamp())
 			t.updateBounds(ts)
 		}
 	}
@@ -649,7 +648,7 @@ func (p *Pebble) Closed() bool {
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *Pebble) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io IterOptions,
@@ -1091,8 +1090,8 @@ func (p *Pebble) Compact() error {
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
-	bufStart := EncodeKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeKey(MVCCKey{end, hlc.Timestamp{}})
+	bufStart := EncodeKey(MVCCKey{start, enginepb.TxnTimestamp{}})
+	bufEnd := EncodeKey(MVCCKey{end, enginepb.TxnTimestamp{}})
 	return p.db.Compact(bufStart, bufEnd)
 }
 
@@ -1234,7 +1233,7 @@ func (p *pebbleReadOnly) Closed() bool {
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleReadOnly) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io IterOptions,
@@ -1439,7 +1438,7 @@ func (p *pebbleSnapshot) Closed() bool {
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleSnapshot) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io IterOptions,
@@ -1525,7 +1524,7 @@ func pebbleGetProto(
 func pebbleExportToSst(
 	reader Reader,
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io IterOptions,

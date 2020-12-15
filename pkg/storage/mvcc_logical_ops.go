@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // MVCCLogicalOpType is an enum with values corresponding to each of the
@@ -50,7 +49,7 @@ const (
 type MVCCLogicalOpDetails struct {
 	Txn       enginepb.TxnMeta
 	Key       roachpb.Key
-	Timestamp hlc.Timestamp
+	Timestamp enginepb.TxnTimestamp
 
 	// Safe indicates that the values in this struct will never be invalidated
 	// at a later point. If the details object cannot promise that its values

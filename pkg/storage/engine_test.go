@@ -180,7 +180,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 				// Put a value so that the deletion below finds a value to seek
 				// to.
-				if err := MVCCPut(context.Background(), batch, nil, key, hlc.Timestamp{},
+				if err := MVCCPut(context.Background(), batch, nil, key, enginepb.TxnTimestamp{},
 					roachpb.MakeValueFromString("x"), nil); err != nil {
 					t.Fatal(err)
 				}
@@ -188,7 +188,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 				// Seek the iterator to `key` and clear the value (but without
 				// telling the iterator about that).
 				if err := MVCCDelete(context.Background(), batch, nil, key,
-					hlc.Timestamp{}, nil); err != nil {
+					enginepb.TxnTimestamp{}, nil); err != nil {
 					t.Fatal(err)
 				}
 
@@ -200,7 +200,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 				// result back, we'll see the (newly deleted) value (due to the
 				// failure mode above).
 				if v, _, err := MVCCGet(context.Background(), batch, key,
-					hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
+					enginepb.TxnTimestamp{}, MVCCGetOptions{}); err != nil {
 					t.Fatal(err)
 				} else if v != nil {
 					t.Fatalf("expected no value, got %+v", v)
@@ -606,9 +606,9 @@ func TestEngineTimeBound(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			var minTimestamp = hlc.Timestamp{WallTime: 1, Logical: 0}
-			var maxTimestamp = hlc.Timestamp{WallTime: 3, Logical: 0}
-			times := []hlc.Timestamp{
+			var minTimestamp = enginepb.TxnTimestamp{WallTime: 1, Logical: 0}
+			var maxTimestamp = enginepb.TxnTimestamp{WallTime: 3, Logical: 0}
+			times := []enginepb.TxnTimestamp{
 				{WallTime: 2, Logical: 0},
 				minTimestamp,
 				maxTimestamp,

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -127,7 +127,7 @@ func PushTxn(
 		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
 	}
 	now := cArgs.EvalCtx.Clock().Now()
-	if now.Less(h.Timestamp) {
+	if enginepb.TxnTimestamp(now).Less(h.Timestamp) {
 		// The batch's timestamp should have been used to update the clock.
 		return result.Result{}, errors.Errorf("request timestamp %s less than current clock time %s", h.Timestamp, now)
 	}
@@ -138,7 +138,7 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
-	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn, storage.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, readWriter, key, enginepb.TxnTimestamp{}, &existTxn, storage.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -279,7 +279,7 @@ func PushTxn(
 		// If the transaction record was already present, forward the timestamp
 		// to accommodate AbortSpan GC. See method comment for details.
 		if ok {
-			reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
+			reply.PusheeTxn.WriteTimestamp.Forward(enginepb.TxnTimestamp(reply.PusheeTxn.LastActive()))
 		}
 	case roachpb.PUSH_TIMESTAMP:
 		// Otherwise, update timestamp to be one greater than the request's
@@ -301,7 +301,7 @@ func PushTxn(
 	// in the timestamp cache.
 	if ok {
 		txnRecord := reply.PusheeTxn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, enginepb.TxnTimestamp{}, nil, &txnRecord); err != nil {
 			return result.Result{}, err
 		}
 	}

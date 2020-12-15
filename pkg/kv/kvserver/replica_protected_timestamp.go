@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -233,7 +234,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 // the new gc threshold itself.
 func (r *Replica) checkProtectedTimestampsForGC(
 	ctx context.Context, policy zonepb.GCPolicy,
-) (canGC bool, cacheTimestamp, gcTimestamp, newThreshold hlc.Timestamp) {
+) (canGC bool, cacheTimestamp, gcTimestamp hlc.Timestamp, newThreshold enginepb.TxnTimestamp) {
 
 	// We may be reading the protected timestamp cache while we're holding
 	// the Replica.mu for reading. If we do so and find newer state in the cache
@@ -266,7 +267,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	if gcTimestamp.Less(lease.Start) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
 			r, lease, gcTimestamp)
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, enginepb.TxnTimestamp{}
 	}
 
 	newThreshold = gc.CalculateThreshold(gcTimestamp, policy)
@@ -274,7 +275,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 	// If we've already GC'd right up to this record, there's no reason to
 	// gc again.
 	if newThreshold.Equal(gcThreshold) {
-		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}
+		return false, hlc.Timestamp{}, hlc.Timestamp{}, enginepb.TxnTimestamp{}
 	}
 
 	return true, read.readAt, gcTimestamp, newThreshold
@@ -288,7 +289,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 // verification request arrives which applies under a later cache state and then
 // the gc queue, acting on older cache state, attempts to set the gc threshold
 // above a successfully verified record.
-func (r *Replica) markPendingGC(readAt, newThreshold hlc.Timestamp) error {
+func (r *Replica) markPendingGC(readAt hlc.Timestamp, newThreshold enginepb.TxnTimestamp) error {
 	r.protectedTimestampMu.Lock()
 	defer r.protectedTimestampMu.Unlock()
 	if readAt.Less(r.protectedTimestampMu.minStateReadTimestamp) {

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -37,7 +37,7 @@ type rowFetcher interface {
 	StartInconsistentScan(
 		_ context.Context,
 		_ *kv.DB,
-		initialTimestamp hlc.Timestamp,
+		initialTimestamp enginepb.TxnTimestamp,
 		maxTimestampAge time.Duration,
 		spans roachpb.Spans,
 		limitBatches bool,

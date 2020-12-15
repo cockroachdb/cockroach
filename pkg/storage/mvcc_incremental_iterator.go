@@ -13,7 +13,6 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -78,8 +77,8 @@ type MVCCIncrementalIterator struct {
 	// iterator.
 	timeBoundIter MVCCIterator
 
-	startTime hlc.Timestamp
-	endTime   hlc.Timestamp
+	startTime enginepb.TxnTimestamp
+	endTime   enginepb.TxnTimestamp
 	err       error
 	valid     bool
 
@@ -97,8 +96,8 @@ type MVCCIncrementalIterOptions struct {
 	// EndTime]. Note that if {Min,Max}TimestampHints are specified in
 	// IterOptions, the timestamp hints interval should include the start and end
 	// time.
-	StartTime hlc.Timestamp
-	EndTime   hlc.Timestamp
+	StartTime enginepb.TxnTimestamp
+	EndTime   enginepb.TxnTimestamp
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -303,7 +302,7 @@ func (i *MVCCIncrementalIterator) advance() {
 			return
 		}
 
-		metaTimestamp := i.meta.Timestamp.ToTimestamp()
+		metaTimestamp := i.meta.TxnTimestamp()
 		if i.meta.Txn != nil {
 			if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
 				i.err = &roachpb.WriteIntentError{

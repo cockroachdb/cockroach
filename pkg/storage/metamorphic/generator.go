@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -511,7 +511,7 @@ func (m *metaTestRunner) printComment(comment string) {
 
 // Monotonically increasing timestamp generator.
 type tsGenerator struct {
-	lastTS hlc.Timestamp
+	lastTS enginepb.TxnTimestamp
 	zipf   *rand.Zipf
 }
 
@@ -519,13 +519,13 @@ func (t *tsGenerator) init(rng *rand.Rand) {
 	t.zipf = rand.NewZipf(rng, 2, 5, zipfMax)
 }
 
-func (t *tsGenerator) generate() hlc.Timestamp {
+func (t *tsGenerator) generate() enginepb.TxnTimestamp {
 	t.lastTS.WallTime++
 	return t.lastTS
 }
 
-func (t *tsGenerator) randomPastTimestamp(rng *rand.Rand) hlc.Timestamp {
-	var result hlc.Timestamp
+func (t *tsGenerator) randomPastTimestamp(rng *rand.Rand) enginepb.TxnTimestamp {
+	var result enginepb.TxnTimestamp
 
 	// Return a result that's skewed toward the latest wall time.
 	result.WallTime = int64(float64(t.lastTS.WallTime) * float64((zipfMax - t.zipf.Uint64())) / float64(zipfMax))

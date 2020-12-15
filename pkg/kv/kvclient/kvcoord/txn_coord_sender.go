@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -402,7 +401,7 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 }
 
 func generateTxnDeadlineExceededErr(
-	txn *roachpb.Transaction, deadline hlc.Timestamp,
+	txn *roachpb.Transaction, deadline enginepb.TxnTimestamp,
 ) *roachpb.Error {
 	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
 	extraMsg := fmt.Sprintf(
@@ -888,21 +887,21 @@ func (tc *TxnCoordSender) String() string {
 }
 
 // ReadTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) ReadTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) ReadTimestamp() enginepb.TxnTimestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.ReadTimestamp
 }
 
 // ProvisionalCommitTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) ProvisionalCommitTimestamp() enginepb.TxnTimestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.txn.WriteTimestamp
 }
 
 // CommitTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) CommitTimestamp() hlc.Timestamp {
+func (tc *TxnCoordSender) CommitTimestamp() enginepb.TxnTimestamp {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	txn := &tc.mu.txn
@@ -918,7 +917,7 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 }
 
 // SetFixedTimestamp is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts enginepb.TxnTimestamp) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.mu.txn.ReadTimestamp = ts
@@ -933,7 +932,7 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 
 // ManualRestart is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
+	ctx context.Context, pri roachpb.UserPriority, ts enginepb.TxnTimestamp,
 ) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()

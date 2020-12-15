@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -60,7 +60,7 @@ func TruncateLog(
 	var legacyTruncatedState roachpb.RaftTruncatedState
 	legacyKeyFound, err := storage.MVCCGetProto(
 		ctx, readWriter, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
-		hlc.Timestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
+		enginepb.TxnTimestamp{}, &legacyTruncatedState, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		return result.Result{}, err
@@ -140,7 +140,7 @@ func TruncateLog(
 		// side effect) into the new unreplicated key.
 		if err := storage.MVCCDelete(
 			ctx, readWriter, cArgs.Stats, keys.RaftTruncatedStateLegacyKey(cArgs.EvalCtx.GetRangeID()),
-			hlc.Timestamp{}, nil, /* txn */
+			enginepb.TxnTimestamp{}, nil, /* txn */
 		); err != nil {
 			return result.Result{}, err
 		}

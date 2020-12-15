@@ -51,6 +51,14 @@ func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
 	return makeTS(walltime, logical).SetFlag(hlc.TimestampFlag_SYNTHETIC)
 }
 
+func makeTxnTS(walltime int64, logical int32) enginepb.TxnTimestamp {
+	return enginepb.ToTxnTimestamp(makeTS(walltime, logical))
+}
+
+func makeTxnTSWithFlag(walltime int64, logical int32) enginepb.TxnTimestamp {
+	return enginepb.ToTxnTimestamp(makeTSWithFlag(walltime, logical))
+}
+
 // TestKeyNext tests that the method for creating lexicographic
 // successors to byte slices works as expected.
 func TestKeyNext(t *testing.T) {
@@ -462,16 +470,16 @@ var nonZeroTxn = Transaction{
 		Key:            Key("foo"),
 		ID:             uuid.MakeV4(),
 		Epoch:          2,
-		WriteTimestamp: makeTSWithFlag(20, 21),
-		MinTimestamp:   makeTSWithFlag(10, 11),
+		WriteTimestamp: makeTxnTSWithFlag(20, 21),
+		MinTimestamp:   makeTxnTSWithFlag(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
 	},
 	Name:                 "name",
 	Status:               COMMITTED,
 	LastHeartbeat:        makeTSWithFlag(1, 2),
-	ReadTimestamp:        makeTSWithFlag(20, 22),
-	MaxTimestamp:         makeTSWithFlag(40, 41),
+	ReadTimestamp:        makeTxnTSWithFlag(20, 22),
+	MaxTimestamp:         makeTxnTSWithFlag(40, 41),
 	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTSWithFlag(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
@@ -687,13 +695,13 @@ func TestTransactionClone(t *testing.T) {
 
 func TestTransactionRestart(t *testing.T) {
 	txn := nonZeroTxn
-	txn.Restart(1, 1, makeTS(25, 1))
+	txn.Restart(1, 1, makeTxnTS(25, 1))
 
 	expTxn := nonZeroTxn
 	expTxn.Epoch++
 	expTxn.Sequence = 0
-	expTxn.WriteTimestamp = makeTS(25, 1)
-	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTimestamp = makeTxnTS(25, 1)
+	expTxn.ReadTimestamp = makeTxnTS(25, 1)
 	expTxn.WriteTooOld = false
 	expTxn.CommitTimestampFixed = false
 	expTxn.LockSpans = nil
@@ -704,11 +712,11 @@ func TestTransactionRestart(t *testing.T) {
 
 func TestTransactionRefresh(t *testing.T) {
 	txn := nonZeroTxn
-	txn.Refresh(makeTS(25, 1))
+	txn.Refresh(makeTxnTS(25, 1))
 
 	expTxn := nonZeroTxn
-	expTxn.WriteTimestamp = makeTS(25, 1)
-	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTimestamp = makeTxnTS(25, 1)
+	expTxn.ReadTimestamp = makeTxnTS(25, 1)
 	expTxn.WriteTooOld = false
 	require.Equal(t, expTxn, txn)
 }

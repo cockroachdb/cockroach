@@ -16,8 +16,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -82,7 +82,7 @@ func TestSSTIterator(t *testing.T) {
 		kv := MVCCKeyValue{
 			Key: MVCCKey{
 				Key:       []byte{'A' + byte(i)},
-				Timestamp: hlc.Timestamp{WallTime: int64(i)},
+				Timestamp: enginepb.TxnTimestamp{WallTime: int64(i)},
 			},
 			Value: []byte{'a' + byte(i)},
 		}
@@ -131,15 +131,15 @@ func TestCockroachComparer(t *testing.T) {
 	}
 	keyA2 := MVCCKey{
 		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
+		Timestamp: enginepb.TxnTimestamp{WallTime: 2},
 	}
 	keyA1 := MVCCKey{
 		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 1},
+		Timestamp: enginepb.TxnTimestamp{WallTime: 1},
 	}
 	keyB2 := MVCCKey{
 		Key:       []byte("b"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
+		Timestamp: enginepb.TxnTimestamp{WallTime: 2},
 	}
 
 	if x := EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {

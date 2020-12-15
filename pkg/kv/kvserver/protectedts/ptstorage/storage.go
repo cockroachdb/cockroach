@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -227,7 +228,7 @@ func rowToRecord(ctx context.Context, row tree.Datums, r *ptpb.Record) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse timestamp for %v", r.ID)
 	}
-	r.Timestamp = ts
+	r.Timestamp = enginepb.TxnTimestamp(ts)
 
 	r.MetaType = string(*row[2].(*tree.DString))
 	if row[3] != tree.DNull {

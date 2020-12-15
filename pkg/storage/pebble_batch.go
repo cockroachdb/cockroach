@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -120,7 +120,7 @@ func (p *pebbleBatch) Closed() bool {
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (p *pebbleBatch) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io IterOptions,

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -48,7 +48,7 @@ type chunkBackfiller interface {
 		mutations []descpb.DescriptorMutation,
 		span roachpb.Span,
 		chunkSize int64,
-		readAsOf hlc.Timestamp,
+		readAsOf enginepb.TxnTimestamp,
 	) (roachpb.Key, error)
 
 	// CurrentBufferFill returns how fractionally full the configured buffer is.

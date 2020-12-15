@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -96,7 +95,7 @@ type pebbleMVCCScanner struct {
 	// Iteration bounds. Does not contain MVCC timestamp.
 	start, end roachpb.Key
 	// Timestamp with which MVCCScan/MVCCGet was called.
-	ts hlc.Timestamp
+	ts enginepb.TxnTimestamp
 	// Max number of keys to return. Note that targetBytes below is implemented
 	// by mutating maxKeys. (In particular, one must not assume that if maxKeys
 	// is zero initially it will always be zero).
@@ -131,7 +130,7 @@ type pebbleMVCCScanner struct {
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
 	// the scan.
-	mostRecentTS hlc.Timestamp
+	mostRecentTS enginepb.TxnTimestamp
 	// Stores any error returned. If non-nil, iteration short circuits.
 	err error
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
@@ -275,7 +274,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 }
 
 // Returns an uncertainty error with the specified timestamp and p.txn.
-func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
+func (p *pebbleMVCCScanner) uncertaintyError(ts enginepb.TxnTimestamp) bool {
 	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.txn)
 	p.results.clear()
 	p.intents.Reset()
@@ -360,7 +359,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		p.err = errors.Errorf("intent without transaction")
 		return false
 	}
-	metaTS := p.meta.Timestamp.ToTimestamp()
+	metaTS := p.meta.TxnTimestamp()
 
 	// metaTS is the timestamp of an intent value, which we may or may
 	// not end up ignoring, depending on factors codified below. If we do ignore
@@ -624,7 +623,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // Seeks to the latest revision of the current key that's still less than or
 // equal to the specified timestamp, adds it to the result set, then moves onto
 // the next user key.
-func (p *pebbleMVCCScanner) seekVersion(ts hlc.Timestamp, uncertaintyCheck bool) bool {
+func (p *pebbleMVCCScanner) seekVersion(ts enginepb.TxnTimestamp, uncertaintyCheck bool) bool {
 	key := MVCCKey{Key: p.curKey.Key, Timestamp: ts}
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
 	origKey := p.keyBuf[:len(p.curKey.Key)]

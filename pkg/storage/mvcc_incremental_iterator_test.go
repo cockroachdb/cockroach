@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -37,7 +36,7 @@ const all, latest = true, false
 func iterateExpectErr(
 	e Engine,
 	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	startTime, endTime enginepb.TxnTimestamp,
 	revisions bool,
 	errString string,
 ) func(*testing.T) {
@@ -73,7 +72,7 @@ func assertExportedKVs(
 	t *testing.T,
 	e Engine,
 	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	startTime, endTime enginepb.TxnTimestamp,
 	revisions bool,
 	io IterOptions,
 	expected []MVCCKeyValue,
@@ -112,7 +111,7 @@ func assertIteratedKVs(
 	t *testing.T,
 	e Engine,
 	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	startTime, endTime enginepb.TxnTimestamp,
 	revisions bool,
 	io IterOptions,
 	expected []MVCCKeyValue,
@@ -155,7 +154,7 @@ func assertIteratedKVs(
 func assertEqualKVs(
 	e Engine,
 	startKey, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	startTime, endTime enginepb.TxnTimestamp,
 	revisions bool,
 	expected []MVCCKeyValue,
 ) func(*testing.T) {
@@ -202,15 +201,15 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		// Use a non-zero min, since we use IsEmpty to decide if a ts should be used
 		// as upper/lower-bound during iterator initialization.
-		tsMin = hlc.Timestamp{WallTime: 0, Logical: 1}
-		ts1   = hlc.Timestamp{WallTime: 1, Logical: 0}
-		ts2   = hlc.Timestamp{WallTime: 2, Logical: 0}
-		ts3   = hlc.Timestamp{WallTime: 3, Logical: 0}
-		ts4   = hlc.Timestamp{WallTime: 4, Logical: 0}
-		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
+		tsMin = enginepb.TxnTimestamp{WallTime: 0, Logical: 1}
+		ts1   = enginepb.TxnTimestamp{WallTime: 1, Logical: 0}
+		ts2   = enginepb.TxnTimestamp{WallTime: 2, Logical: 0}
+		ts3   = enginepb.TxnTimestamp{WallTime: 3, Logical: 0}
+		ts4   = enginepb.TxnTimestamp{WallTime: 4, Logical: 0}
+		tsMax = enginepb.TxnTimestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
+	makeKVT := func(key roachpb.Key, value []byte, ts enginepb.TxnTimestamp) MVCCKeyValue {
 		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
 	}
 
@@ -399,7 +398,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 }
 
 func slurpKVsInTimeRange(
-	reader Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
+	reader Reader, prefix roachpb.Key, startTime, endTime enginepb.TxnTimestamp,
 ) ([]MVCCKeyValue, error) {
 	endKey := prefix.PrefixEnd()
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
@@ -441,10 +440,10 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 			kA := roachpb.Key("kA")
 			vA1 := roachpb.MakeValueFromString("vA1")
 			vA2 := roachpb.MakeValueFromString("vA2")
-			ts0 := hlc.Timestamp{WallTime: 0}
-			ts1 := hlc.Timestamp{WallTime: 1}
-			ts2 := hlc.Timestamp{WallTime: 2}
-			ts3 := hlc.Timestamp{WallTime: 3}
+			ts0 := enginepb.TxnTimestamp{WallTime: 0}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2}
+			ts3 := enginepb.TxnTimestamp{WallTime: 3}
 			txn := &roachpb.Transaction{
 				TxnMeta: enginepb.TxnMeta{
 					Key:            roachpb.Key("b"),
@@ -505,7 +504,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
+	txn := func(key roachpb.Key, ts enginepb.TxnTimestamp) *roachpb.Transaction {
 		return &roachpb.Transaction{
 			TxnMeta: enginepb.TxnMeta{
 				Key:            key,
@@ -531,10 +530,10 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	vB1 := roachpb.MakeValueFromString("vB1")
 	kC := roachpb.Key("kC")
 	vC1 := roachpb.MakeValueFromString("vC1")
-	ts0 := hlc.Timestamp{WallTime: 0}
-	ts1 := hlc.Timestamp{WallTime: 1}
-	ts2 := hlc.Timestamp{WallTime: 2}
-	ts3 := hlc.Timestamp{WallTime: 3}
+	ts0 := enginepb.TxnTimestamp{WallTime: 0}
+	ts1 := enginepb.TxnTimestamp{WallTime: 1}
+	ts2 := enginepb.TxnTimestamp{WallTime: 2}
+	ts3 := enginepb.TxnTimestamp{WallTime: 3}
 	txnA1 := txn(kA, ts1)
 	txnA3 := txn(kA, ts3)
 	txnB1 := txn(kB, ts1)
@@ -619,7 +618,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
 		v := roachpb.MakeValueFromString(value)
 		if err := MVCCPut(
-			ctx, db1, nil, roachpb.Key(key), hlc.Timestamp{WallTime: ts}, v, txn,
+			ctx, db1, nil, roachpb.Key(key), enginepb.TxnTimestamp{WallTime: ts}, v, txn,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -631,9 +630,9 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			Key:            roachpb.Key("b"),
 			ID:             uuid.MakeV4(),
 			Epoch:          1,
-			WriteTimestamp: hlc.Timestamp{WallTime: 2},
+			WriteTimestamp: enginepb.TxnTimestamp{WallTime: 2},
 		},
-		ReadTimestamp: hlc.Timestamp{WallTime: 2},
+		ReadTimestamp: enginepb.TxnTimestamp{WallTime: 2},
 	})
 
 	// Create a second DB in which we'll create a specific SSTable structure: the
@@ -699,8 +698,8 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		// intent error.
 		it := NewMVCCIncrementalIterator(db2, MVCCIncrementalIterOptions{
 			IterOptions: IterOptions{UpperBound: keys.MaxKey},
-			StartTime:   hlc.Timestamp{WallTime: 1},
-			EndTime:     hlc.Timestamp{WallTime: 2},
+			StartTime:   enginepb.TxnTimestamp{WallTime: 1},
+			EndTime:     enginepb.TxnTimestamp{WallTime: 2},
 		})
 		defer it.Close()
 		for it.SeekGE(MVCCKey{Key: keys.MinKey}); ; it.Next() {
@@ -740,27 +739,27 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 	defer eng.Close()
 
 	for _, testCase := range []struct {
-		start hlc.Timestamp
-		end   hlc.Timestamp
+		start enginepb.TxnTimestamp
+		end   enginepb.TxnTimestamp
 	}{
 		// entire time range
-		{hlc.Timestamp{WallTime: 0, Logical: 0}, hlc.Timestamp{WallTime: 110, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 0, Logical: 0}, enginepb.TxnTimestamp{WallTime: 110, Logical: 0}},
 		// one SST
-		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 10, Logical: 0}, enginepb.TxnTimestamp{WallTime: 19, Logical: 0}},
 		// one SST, plus the min of the following SST
-		{hlc.Timestamp{WallTime: 10, Logical: 0}, hlc.Timestamp{WallTime: 20, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 10, Logical: 0}, enginepb.TxnTimestamp{WallTime: 20, Logical: 0}},
 		// one SST, plus the max of the preceding SST
-		{hlc.Timestamp{WallTime: 9, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 9, Logical: 0}, enginepb.TxnTimestamp{WallTime: 19, Logical: 0}},
 		// one SST, plus the min of the following and the max of the preceding SST
-		{hlc.Timestamp{WallTime: 9, Logical: 0}, hlc.Timestamp{WallTime: 21, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 9, Logical: 0}, enginepb.TxnTimestamp{WallTime: 21, Logical: 0}},
 		// one SST, not min or max
-		{hlc.Timestamp{WallTime: 17, Logical: 0}, hlc.Timestamp{WallTime: 18, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 17, Logical: 0}, enginepb.TxnTimestamp{WallTime: 18, Logical: 0}},
 		// one SST's max
-		{hlc.Timestamp{WallTime: 18, Logical: 0}, hlc.Timestamp{WallTime: 19, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 18, Logical: 0}, enginepb.TxnTimestamp{WallTime: 19, Logical: 0}},
 		// one SST's min
-		{hlc.Timestamp{WallTime: 19, Logical: 0}, hlc.Timestamp{WallTime: 20, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 19, Logical: 0}, enginepb.TxnTimestamp{WallTime: 20, Logical: 0}},
 		// random endpoints
-		{hlc.Timestamp{WallTime: 32, Logical: 0}, hlc.Timestamp{WallTime: 78, Logical: 0}},
+		{enginepb.TxnTimestamp{WallTime: 32, Logical: 0}, enginepb.TxnTimestamp{WallTime: 78, Logical: 0}},
 	} {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()

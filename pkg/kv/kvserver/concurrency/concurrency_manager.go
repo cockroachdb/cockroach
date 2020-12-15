@@ -415,7 +415,7 @@ func (r *Request) txnMeta() *enginepb.TxnMeta {
 // for all locks acquired by other transactions at or below this timestamp
 // to be released. All locks acquired by other transactions above this
 // timestamp are ignored.
-func (r *Request) readConflictTimestamp() hlc.Timestamp {
+func (r *Request) readConflictTimestamp() enginepb.TxnTimestamp {
 	ts := r.Timestamp
 	if r.Txn != nil {
 		ts = r.Txn.ReadTimestamp
@@ -427,7 +427,7 @@ func (r *Request) readConflictTimestamp() hlc.Timestamp {
 // writeConflictTimestamp returns the minimum timestamp at which the request
 // acquires locks when performing mutations. All writes performed by the
 // requests must take place at or above this timestamp.
-func (r *Request) writeConflictTimestamp() hlc.Timestamp {
+func (r *Request) writeConflictTimestamp() enginepb.TxnTimestamp {
 	ts := r.Timestamp
 	if r.Txn != nil {
 		ts = r.Txn.WriteTimestamp

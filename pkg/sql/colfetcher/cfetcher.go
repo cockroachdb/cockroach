@@ -36,9 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -107,7 +107,7 @@ type cTableInfo struct {
 	//
 	// rowLastModified is the timestamp of the last time any family in the row
 	// was modified in any way.
-	rowLastModified hlc.Timestamp
+	rowLastModified enginepb.TxnTimestamp
 	// timestampOutputIdx controls at what row ordinal to write the timestamp.
 	timestampOutputIdx int
 
@@ -781,7 +781,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
-			rf.table.rowLastModified = hlc.Timestamp{}
+			rf.table.rowLastModified = enginepb.TxnTimestamp{}
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -999,7 +999,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFinalizeRow:
 			// Populate any system columns in the output.
 			if rf.table.timestampOutputIdx != noOutputColumn {
-				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
+				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified.ToClockTimestampUnchecked())
 			}
 			if rf.table.oidOutputIdx != noOutputColumn {
 				rf.machine.tableoidCol.Set(rf.machine.rowIdx, tree.NewDOid(tree.DInt(rf.table.desc.GetID())))

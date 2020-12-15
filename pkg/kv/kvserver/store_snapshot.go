@@ -922,7 +922,7 @@ func SendEmptySnapshot(
 	var ms enginepb.MVCCStats
 	// Seed an empty range into the new engine.
 	if err := storage.MVCCPutProto(
-		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), now, nil /* txn */, &desc,
+		ctx, eng, &ms, keys.RangeDescriptorKey(desc.StartKey), enginepb.TxnTimestamp(now), nil /* txn */, &desc,
 	); err != nil {
 		return err
 	}
@@ -932,7 +932,7 @@ func SendEmptySnapshot(
 		ms,
 		desc,
 		roachpb.Lease{},
-		hlc.Timestamp{}, // gcThreshold
+		enginepb.TxnTimestamp{}, // gcThreshold
 		stateloader.TruncatedStateUnreplicated,
 	)
 	if err != nil {

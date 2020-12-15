@@ -14,7 +14,6 @@ import (
 	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -169,7 +168,7 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 	buf[len(buf)-1] = byte(timestampLength)
 }
 
-func encodeTimestamp(ts hlc.Timestamp) []byte {
+func encodeTimestamp(ts enginepb.TxnTimestamp) []byte {
 	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(MVCCKey{Timestamp: ts}))
 	return encodedTS
 }

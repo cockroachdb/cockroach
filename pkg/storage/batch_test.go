@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -207,8 +206,8 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
 					ro.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-						MinTimestampHint: hlc.MinTimestamp,
-						MaxTimestampHint: hlc.MaxTimestamp,
+						MinTimestampHint: enginepb.MaxTxnTimestamp,
+						MaxTimestampHint: enginepb.MinTxnTimestamp,
 						UpperBound:       roachpb.KeyMax,
 					}).Close()
 				},
@@ -1205,9 +1204,9 @@ func TestDecodeKey(t *testing.T) {
 
 	tests := []MVCCKey{
 		{Key: []byte("foo")},
-		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
-		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},
-		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Flags: 3}},
+		{Key: []byte("foo"), Timestamp: enginepb.TxnTimestamp{WallTime: 1}},
+		{Key: []byte("foo"), Timestamp: enginepb.TxnTimestamp{WallTime: 1, Logical: 1}},
+		{Key: []byte("foo"), Timestamp: enginepb.TxnTimestamp{WallTime: 1, Logical: 1, Flags: 3}},
 	}
 	for _, test := range tests {
 		t.Run(test.String(), func(t *testing.T) {

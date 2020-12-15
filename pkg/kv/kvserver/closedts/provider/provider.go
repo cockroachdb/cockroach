@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -161,7 +161,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 			everBeenLive = true
 			// Close may fail if the data being closed does not correspond to the
 			// current liveAtEpoch.
-			closed, m, ok := p.cfg.Close(next, liveAtEpoch)
+			closed, m, ok := p.cfg.Close(enginepb.TxnTimestamp(next), liveAtEpoch)
 			if !ok {
 				if log.V(1) {
 					log.Infof(ctx, "failed to close %v due to liveness epoch mismatch at %v",
@@ -343,8 +343,8 @@ func (p *Provider) Subscribe(ctx context.Context, ch chan<- ctpb.Entry) {
 // MaxClosed implements closedts.Provider.
 func (p *Provider) MaxClosed(
 	nodeID roachpb.NodeID, rangeID roachpb.RangeID, epoch ctpb.Epoch, lai ctpb.LAI,
-) hlc.Timestamp {
-	var maxTS hlc.Timestamp
+) enginepb.TxnTimestamp {
+	var maxTS enginepb.TxnTimestamp
 	p.cfg.Storage.VisitDescending(nodeID, func(entry ctpb.Entry) (done bool) {
 		if mlai, found := entry.MLAI[rangeID]; found {
 			if entry.Epoch == epoch && mlai <= lai {

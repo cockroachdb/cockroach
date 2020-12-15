@@ -862,7 +862,8 @@ func (q *Queue) queryTxnStatus(
 	now hlc.Timestamp,
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
 	b := &kv.Batch{}
-	b.Header.Timestamp = q.cfg.Clock.Now()
+	// TODO(nvanbenschoten): how does the QueryTxn work in this case?
+	b.Header.Timestamp = enginepb.TxnTimestamp(q.cfg.Clock.Now())
 	b.AddRawRequest(&roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txnMeta.Key,
@@ -918,7 +919,8 @@ func (q *Queue) forcePushAbort(
 	forcePush.Force = true
 	forcePush.PushType = roachpb.PUSH_ABORT
 	b := &kv.Batch{}
-	b.Header.Timestamp = q.cfg.Clock.Now()
+	// TODO(nvanbenschoten): how does the QueryTxn work in this case?
+	b.Header.Timestamp = enginepb.TxnTimestamp(q.cfg.Clock.Now())
 	b.AddRawRequest(&forcePush)
 	if err := q.cfg.DB.Run(ctx, b); err != nil {
 		return nil, b.MustPErr()

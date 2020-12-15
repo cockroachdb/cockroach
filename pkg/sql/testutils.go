@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,7 +49,7 @@ func CreateTestTableDescriptor(
 			st,
 			n,
 			parentID, keys.PublicSchemaID, id,
-			hlc.Timestamp{}, /* creationTime */
+			enginepb.TxnTimestamp{}, /* creationTime */
 			privileges,
 			nil, /* affected */
 			&semaCtx,
@@ -68,7 +68,7 @@ func CreateTestTableDescriptor(
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
-			hlc.Timestamp{}, /* creationTime */
+			enginepb.TxnTimestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
 			nil, /* params */

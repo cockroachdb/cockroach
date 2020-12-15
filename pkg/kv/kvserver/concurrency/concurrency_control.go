@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -318,7 +317,7 @@ type Request struct {
 
 	// The timestamp that the request should evaluate at.
 	// Should be set to Txn.ReadTimestamp if Txn is non-nil.
-	Timestamp hlc.Timestamp
+	Timestamp enginepb.TxnTimestamp
 
 	// The priority of the request. Only set if Txn is nil.
 	Priority roachpb.UserPriority

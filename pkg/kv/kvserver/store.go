@@ -1296,7 +1296,7 @@ func IterateIDPrefixKeys(
 		}
 
 		ok, err := storage.MVCCGetProto(
-			ctx, reader, unsafeKey.Key, hlc.Timestamp{}, msg, storage.MVCCGetOptions{})
+			ctx, reader, unsafeKey.Key, enginepb.TxnTimestamp{}, msg, storage.MVCCGetOptions{})
 		if err != nil {
 			return err
 		}
@@ -1350,7 +1350,7 @@ func IterateRangeDescriptors(
 		return err
 	}
 
-	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
+	_, err := storage.MVCCIterate(ctx, reader, start, end, enginepb.TxnTimestamp(hlc.MaxTimestamp),
 		storage.MVCCScanOptions{Inconsistent: true}, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
@@ -1363,7 +1363,7 @@ func IterateRangeDescriptors(
 func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := storage.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
+		ctx, eng, keys.StoreIdentKey(), enginepb.TxnTimestamp{}, &ident, storage.MVCCGetOptions{})
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
@@ -2076,7 +2076,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 		s.engine,
 		nil,
 		keys.StoreLastUpKey(),
-		hlc.Timestamp{},
+		enginepb.TxnTimestamp{},
 		nil,
 		&time,
 	)
@@ -2089,7 +2089,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
-	ok, err := storage.MVCCGetProto(ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{},
+	ok, err := storage.MVCCGetProto(ctx, s.Engine(), keys.StoreLastUpKey(), enginepb.TxnTimestamp{},
 		&timestamp, storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -2111,7 +2111,7 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 		batch,
 		nil,
 		keys.StoreHLCUpperBoundKey(),
-		hlc.Timestamp{},
+		enginepb.TxnTimestamp{},
 		nil,
 		&ts,
 	); err != nil {
@@ -2128,7 +2128,7 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 // If this value does not exist 0 is returned
 func ReadHLCUpperBound(ctx context.Context, e storage.Engine) (int64, error) {
 	var timestamp hlc.Timestamp
-	ok, err := storage.MVCCGetProto(ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{},
+	ok, err := storage.MVCCGetProto(ctx, e, keys.StoreHLCUpperBoundKey(), enginepb.TxnTimestamp{},
 		&timestamp, storage.MVCCGetOptions{})
 	if err != nil {
 		return 0, err
@@ -2509,7 +2509,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 	clusterNodes := s.ClusterNodeCount()
 
-	var minMaxClosedTS hlc.Timestamp
+	var minMaxClosedTS enginepb.TxnTimestamp
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, timestamp, livenessMap, clusterNodes)
 		if metrics.Leader {
@@ -2775,7 +2775,7 @@ func (s *Store) ManuallyEnqueue(
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	return storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+	return storage.MVCCPutProto(ctx, eng, nil, keys.StoreClusterVersionKey(), enginepb.TxnTimestamp{}, nil, &cv)
 }
 
 // ReadClusterVersion reads the cluster version from the store-local version
@@ -2784,7 +2784,7 @@ func ReadClusterVersion(
 	ctx context.Context, reader storage.Reader,
 ) (clusterversion.ClusterVersion, error) {
 	var cv clusterversion.ClusterVersion
-	_, err := storage.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{},
+	_, err := storage.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), enginepb.TxnTimestamp{},
 		&cv, storage.MVCCGetOptions{})
 	return cv, err
 }

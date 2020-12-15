@@ -87,7 +87,8 @@ message TxnMeta {
   //       value will need to be rewritten at the forwarded timestamp if the
   //       transaction commits.
   //
-  util.hlc.Timestamp write_timestamp = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp write_timestamp = 5 [(gogoproto.nullable) = false, 
+      (gogoproto.casttype) = "TxnTimestamp"];
   // The timestamp that the transaction was assigned by its gateway when it
   // began its first epoch. This is the earliest timestamp that the transaction
   // could have written any of its intents at.
@@ -106,7 +107,8 @@ message TxnMeta {
   //    txn record was not yet written. In that case, the pusher uses this field
   //    as an indication of a timestamp when the pushee's coordinator is known
   //    to have been alive.
-  util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp min_timestamp = 9 [(gogoproto.nullable) = false, 
+      (gogoproto.casttype) = "TxnTimestamp"];
   // The transaction's priority, ratcheted on transaction pushes.
   int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];
   // A zero-indexed sequence number which is increased on each request
@@ -202,7 +204,7 @@ message RangeAppliedState {
 // transaction.
 message MVCCWriteValueOp {
   bytes key = 1;
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnTimestamp"];
   bytes value = 3;
   bytes prev_value = 4;
 }
@@ -215,8 +217,8 @@ message MVCCWriteIntentOp {
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false];
   bytes txn_key = 2;
-  util.hlc.Timestamp txn_min_timestamp = 4 [(gogoproto.nullable) = false];
-  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp txn_min_timestamp = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnTimestamp"];
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnTimestamp"];
 }
 
 // MVCCUpdateIntentOp corresponds to an intent being updates at a larger
@@ -226,7 +228,7 @@ message MVCCUpdateIntentOp {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false];
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnTimestamp"];
 }
 
 // MVCCCommitIntentOp corresponds to an intent being committed for a given
@@ -237,7 +239,7 @@ message MVCCCommitIntentOp {
     (gogoproto.customname) = "TxnID",
     (gogoproto.nullable) = false];
   bytes key = 2;
-  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnTimestamp"];
   bytes value = 4;
   bytes prev_value = 5;
 }

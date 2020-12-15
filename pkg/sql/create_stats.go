@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -499,7 +500,7 @@ func (r *createStatsResumer) Resume(
 		if details.AsOf != nil {
 			p.SemaCtx().AsOfTimestamp = details.AsOf
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
-			txn.SetFixedTimestamp(ctx, *details.AsOf)
+			txn.SetFixedTimestamp(ctx, enginepb.TxnTimestamp(*details.AsOf))
 		}
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)

@@ -121,11 +121,14 @@ message ReadWithinUncertaintyIntervalError {
 
   // This data below is purely informational and used to tailor the
   // error message.
-  optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
+  optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // The remaining fields may be missing when running in clusters that have
   // members at below CockroachDB v2.0.
-  optional util.hlc.Timestamp max_timestamp = 3;
+  optional util.hlc.Timestamp max_timestamp = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   repeated roachpb.ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
@@ -285,8 +288,10 @@ message WriteIntentError {
 // by instead bumping the transaction's write timestamp, setting the
 // transaction's WriteTooOld flag, and dropping the error.
 message WriteTooOldError {
-  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
+  optional util.hlc.Timestamp actual_timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // An OpRequiresTxnError indicates that a command required to be
@@ -418,8 +423,10 @@ message IntegerOverflowError {
 // A BatchTimestampBeforeGCError indicates that a request's timestamp was
 // before the GC threshold.
 message BatchTimestampBeforeGCError {
-  optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
+  optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // An IntentMissingError indicates that a QueryIntent request expected

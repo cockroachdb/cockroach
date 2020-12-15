@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -160,7 +160,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		//
 		// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
 		// currently relied on in import and restore code and tests.
-		var creationTime hlc.Timestamp
+		var creationTime enginepb.TxnTimestamp
 		desc, err := makeViewTableDesc(
 			params.ctx,
 			viewName,
@@ -285,7 +285,7 @@ func makeViewTableDesc(
 	schemaID descpb.ID,
 	id descpb.ID,
 	resultColumns []colinfo.ResultColumn,
-	creationTime hlc.Timestamp,
+	creationTime enginepb.TxnTimestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,

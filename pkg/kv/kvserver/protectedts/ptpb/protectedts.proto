@@ -93,7 +93,7 @@ message Record {
   bytes id = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
 
   // Timestamp is the timestamp which is protected.
-  util.hlc.Timestamp timestamp = 2  [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp", (gogoproto.nullable) = false];
 
   // Mode specifies whether this record protects all values live at timestamp
   // or all values live at or after that timestamp.

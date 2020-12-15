@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -866,12 +865,12 @@ func (e *evalCtx) getResolve() (bool, roachpb.TransactionStatus) {
 	return true, e.getTxnStatus()
 }
 
-func (e *evalCtx) getTs(txn *roachpb.Transaction) hlc.Timestamp {
+func (e *evalCtx) getTs(txn *roachpb.Transaction) enginepb.TxnTimestamp {
 	return e.getTsWithName(txn, "ts")
 }
 
-func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) hlc.Timestamp {
-	var ts hlc.Timestamp
+func (e *evalCtx) getTsWithName(txn *roachpb.Transaction, name string) enginepb.TxnTimestamp {
+	var ts enginepb.TxnTimestamp
 	if txn != nil {
 		ts = txn.ReadTimestamp
 	}
@@ -994,7 +993,7 @@ func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 }
 
 func (e *evalCtx) newTxn(
-	txnName string, ts, maxTs hlc.Timestamp, key roachpb.Key,
+	txnName string, ts, maxTs enginepb.TxnTimestamp, key roachpb.Key,
 ) (*roachpb.Transaction, error) {
 	if _, ok := e.txns[txnName]; ok {
 		e.Fatalf("txn %s already open", txnName)

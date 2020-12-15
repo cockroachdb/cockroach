@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -77,8 +76,8 @@ import (
 // handled carefully and in a total order.
 type resolvedTimestamp struct {
 	init       bool
-	closedTS   hlc.Timestamp
-	resolvedTS hlc.Timestamp
+	closedTS   enginepb.TxnTimestamp
+	resolvedTS enginepb.TxnTimestamp
 	intentQ    unresolvedIntentQueue
 }
 
@@ -89,7 +88,7 @@ func makeResolvedTimestamp() resolvedTimestamp {
 }
 
 // Get returns the current value of the resolved timestamp.
-func (rts *resolvedTimestamp) Get() hlc.Timestamp {
+func (rts *resolvedTimestamp) Get() enginepb.TxnTimestamp {
 	return rts.resolvedTS
 }
 
@@ -116,7 +115,7 @@ func (rts *resolvedTimestamp) IsInit() bool {
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
 // for the resolved timestamp has advanced. The method returns whether this
 // caused the resolved timestamp to move forward.
-func (rts *resolvedTimestamp) ForwardClosedTS(newClosedTS hlc.Timestamp) bool {
+func (rts *resolvedTimestamp) ForwardClosedTS(newClosedTS enginepb.TxnTimestamp) bool {
 	if rts.closedTS.Forward(newClosedTS) {
 		return rts.recompute()
 	}
@@ -158,7 +157,7 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		// that was written only in an earlier epoch being resolved after its
 		// transaction committed in a later epoch. Don't make any assumptions
 		// about the transaction other than to decrement its reference count.
-		return rts.intentQ.DecrRef(t.TxnID, hlc.Timestamp{})
+		return rts.intentQ.DecrRef(t.TxnID, enginepb.TxnTimestamp{})
 
 	case *enginepb.MVCCAbortTxnOp:
 		// Unlike the previous case, an aborted transaction does indicate
@@ -246,7 +245,7 @@ func (rts *resolvedTimestamp) assertNoChange() {
 // assertOpAboveTimestamp asserts that this operation is at a larger timestamp
 // than the current resolved timestamp. A violation of this assertion would
 // indicate a failure of the closed timestamp mechanism.
-func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS hlc.Timestamp) {
+func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS enginepb.TxnTimestamp) {
 	if opTS.LessEq(rts.resolvedTS) {
 		panic(fmt.Sprintf("resolved timestamp %s equal to or above timestamp of operation %v",
 			rts.resolvedTS, op))
@@ -282,8 +281,8 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 type unresolvedTxn struct {
 	txnID           uuid.UUID
 	txnKey          roachpb.Key
-	txnMinTimestamp hlc.Timestamp
-	timestamp       hlc.Timestamp
+	txnMinTimestamp enginepb.TxnTimestamp
+	timestamp       enginepb.TxnTimestamp
 	refCount        int // count of unresolved intents
 
 	// The index of the item in the unresolvedTxnHeap, maintained by the
@@ -385,7 +384,7 @@ func (uiq *unresolvedIntentQueue) Oldest() *unresolvedTxn {
 // timestamp. It does so in O(n) time, where n is the number of matching
 // transactions, NOT the total number of transactions being tracked. The
 // resulting transactions will not be in sorted order.
-func (uiq *unresolvedIntentQueue) Before(ts hlc.Timestamp) []*unresolvedTxn {
+func (uiq *unresolvedIntentQueue) Before(ts enginepb.TxnTimestamp) []*unresolvedTxn {
 	var txns []*unresolvedTxn
 	var collect func(int)
 	collect = func(i int) {
@@ -403,7 +402,7 @@ func (uiq *unresolvedIntentQueue) Before(ts hlc.Timestamp) []*unresolvedTxn {
 // returns whether the update advanced the timestamp of the oldest transaction
 // in the queue.
 func (uiq *unresolvedIntentQueue) IncRef(
-	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts hlc.Timestamp,
+	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts enginepb.TxnTimestamp,
 ) bool {
 	return uiq.updateTxn(txnID, txnKey, txnMinTS, ts, +1)
 }
@@ -411,19 +410,19 @@ func (uiq *unresolvedIntentQueue) IncRef(
 // DecrRef decrements the reference count of the specified transaction. It
 // returns whether the update advanced the timestamp of the oldest transaction
 // in the queue.
-func (uiq *unresolvedIntentQueue) DecrRef(txnID uuid.UUID, ts hlc.Timestamp) bool {
-	return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, ts, -1)
+func (uiq *unresolvedIntentQueue) DecrRef(txnID uuid.UUID, ts enginepb.TxnTimestamp) bool {
+	return uiq.updateTxn(txnID, nil, enginepb.TxnTimestamp{}, ts, -1)
 }
 
 // UpdateTS updates the timestamp of the specified transaction without modifying
 // its intent reference count. It returns whether the update advanced the
 // timestamp of the oldest transaction in the queue.
-func (uiq *unresolvedIntentQueue) UpdateTS(txnID uuid.UUID, ts hlc.Timestamp) bool {
-	return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, ts, 0)
+func (uiq *unresolvedIntentQueue) UpdateTS(txnID uuid.UUID, ts enginepb.TxnTimestamp) bool {
+	return uiq.updateTxn(txnID, nil, enginepb.TxnTimestamp{}, ts, 0)
 }
 
 func (uiq *unresolvedIntentQueue) updateTxn(
-	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts hlc.Timestamp, delta int,
+	txnID uuid.UUID, txnKey roachpb.Key, txnMinTS, ts enginepb.TxnTimestamp, delta int,
 ) bool {
 	txn, ok := uiq.txns[txnID]
 	if !ok {
@@ -474,7 +473,7 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
 	// This implementation is logically equivalent to the following, but
 	// it avoids underflow conditions:
-	//  return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, hlc.Timestamp{}, math.MinInt64)
+	//  return uiq.updateTxn(txnID, nil, enginepb.TxnTimestamp{}, enginepb.TxnTimestamp{}, math.MinInt64)
 
 	txn, ok := uiq.txns[txnID]
 	if !ok {

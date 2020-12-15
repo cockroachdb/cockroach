@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -240,7 +241,7 @@ func (ex *connExecutor) populatePrepared(
 	}
 	if protoTS != nil {
 		p.semaCtx.AsOfTimestamp = protoTS
-		txn.SetFixedTimestamp(ctx, *protoTS)
+		txn.SetFixedTimestamp(ctx, enginepb.TxnTimestamp(*protoTS))
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres

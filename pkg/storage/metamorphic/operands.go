@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 type operandType int
@@ -274,12 +274,12 @@ func (t *pastTSGenerator) closeAll() {
 	// No-op.
 }
 
-func (t *pastTSGenerator) toString(ts hlc.Timestamp) string {
+func (t *pastTSGenerator) toString(ts enginepb.TxnTimestamp) string {
 	return fmt.Sprintf("%d", ts.WallTime)
 }
 
-func (t *pastTSGenerator) parse(input string) hlc.Timestamp {
-	var ts hlc.Timestamp
+func (t *pastTSGenerator) parse(input string) enginepb.TxnTimestamp {
+	var ts enginepb.TxnTimestamp
 	wallTime, err := strconv.ParseInt(input, 10, 0)
 	if err != nil {
 		panic(err)

@@ -40,8 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -124,7 +124,7 @@ type scTxnFn func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext
 type historicalTxnRunner func(ctx context.Context, fn scTxnFn) error
 
 // makeFixedTimestampRunner creates a historicalTxnRunner suitable for use by the helpers.
-func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) historicalTxnRunner {
+func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf enginepb.TxnTimestamp) historicalTxnRunner {
 	runner := func(ctx context.Context, retryable scTxnFn) error {
 		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 			// We need to re-create the evalCtx since the txn may retry.
@@ -137,7 +137,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 
 func (sc *SchemaChanger) fixedTimestampTxn(
 	ctx context.Context,
-	readAsOf hlc.Timestamp,
+	readAsOf enginepb.TxnTimestamp,
 	retryable func(ctx context.Context, txn *kv.Txn) error,
 ) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -618,7 +618,7 @@ func (sc *SchemaChanger) validateConstraints(
 		}
 	}
 
-	readAsOf := sc.clock.Now()
+	readAsOf := enginepb.TxnTimestamp(sc.clock.Now())
 	var tableDesc *tabledesc.Immutable
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
@@ -916,7 +916,7 @@ func (sc *SchemaChanger) distBackfill(
 	origNRanges := -1
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
-	readAsOf := sc.clock.Now()
+	readAsOf := enginepb.TxnTimestamp(sc.clock.Now())
 	// Index backfilling ingests SSTs that don't play nicely with running txns
 	// since they just add their keys blindly. Running a Scan of the target
 	// spans at the time the SSTs' keys will be written will calcify history up
@@ -1118,7 +1118,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		}
 	}
 
-	readAsOf := sc.clock.Now()
+	readAsOf := enginepb.TxnTimestamp(sc.clock.Now())
 	var tableDesc *tabledesc.Immutable
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)

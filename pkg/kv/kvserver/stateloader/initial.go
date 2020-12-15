@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -44,7 +43,7 @@ func WriteInitialReplicaState(
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
+	gcThreshold enginepb.TxnTimestamp,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
@@ -92,7 +91,7 @@ func WriteInitialState(
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
+	gcThreshold enginepb.TxnTimestamp,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	newMS, err := WriteInitialReplicaState(

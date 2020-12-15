@@ -217,7 +217,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		// to change its read timestamp.
 		defer func() {
 			if err == nil {
-				ts = txn.ReadTimestamp()
+				ts = txn.ReadTimestamp().ToClockTimestampUnchecked()
 			}
 		}()
 		md, err := c.storage.GetMetadata(ctx, txn)

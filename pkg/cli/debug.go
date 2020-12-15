@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -189,7 +190,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		table := tabledesc.NewImmutable(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
+		table := tabledesc.NewImmutable(*descpb.TableFromDescriptor(&desc, enginepb.TxnTimestamp{}))
 
 		fn := func(kv storage.MVCCKeyValue) (string, error) {
 			var v roachpb.Value
@@ -471,7 +472,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 			k = storage.MVCCKey{
 				Key:       bs[0],
-				Timestamp: hlc.Timestamp{WallTime: 987654321},
+				Timestamp: enginepb.TxnTimestamp(hlc.Timestamp{WallTime: 987654321}),
 			}
 		}
 
@@ -591,7 +592,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var descs []roachpb.RangeDescriptor
 
-	if _, err := storage.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
+	if _, err := storage.MVCCIterate(context.Background(), db, start, end, enginepb.TxnTimestamp(hlc.MaxTimestamp),
 		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) error {
 			var desc roachpb.RangeDescriptor
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
@@ -1075,7 +1076,7 @@ func removeDeadReplicas(
 			// A crude form of the intent resolution process: abort the
 			// transaction by deleting its record.
 			txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-			if err := storage.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
+			if err := storage.MVCCDelete(ctx, batch, &ms, txnKey, enginepb.TxnTimestamp{}, nil); err != nil {
 				return nil, err
 			}
 			update := roachpb.LockUpdate{

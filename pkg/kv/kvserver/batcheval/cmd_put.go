@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 func init() {
@@ -46,7 +46,7 @@ func Put(
 	h := cArgs.Header
 	ms := cArgs.Stats
 
-	var ts hlc.Timestamp
+	var ts enginepb.TxnTimestamp
 	if !args.Inline {
 		ts = h.Timestamp
 	}

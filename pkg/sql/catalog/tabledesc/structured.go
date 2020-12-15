@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -1440,7 +1440,7 @@ func (desc *Mutable) MaybeIncrementVersion() {
 	// Starting in 19.2 we use a zero-valued ModificationTime when incrementing
 	// the version, and then, upon reading, use the MVCC timestamp to populate
 	// the ModificationTime.
-	desc.ModificationTime = hlc.Timestamp{}
+	desc.ModificationTime = enginepb.TxnTimestamp{}
 }
 
 // OriginalName implements the MutableDescriptor interface.

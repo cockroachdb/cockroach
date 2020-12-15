@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -81,7 +82,7 @@ type descriptorVersionState struct {
 	// The expiration time is either the expiration time of the lease when a lease
 	// is associated with the version, or the ModificationTime of the next version
 	// when the version isn't associated with a lease.
-	expiration hlc.Timestamp
+	expiration enginepb.TxnTimestamp
 
 	mu struct {
 		syncutil.Mutex
@@ -110,7 +111,7 @@ func (s *descriptorVersionState) stringLocked() string {
 
 // hasExpired checks if the descriptor is too old to be used (by a txn
 // operating) at the given timestamp.
-func (s *descriptorVersionState) hasExpired(timestamp hlc.Timestamp) bool {
+func (s *descriptorVersionState) hasExpired(timestamp enginepb.TxnTimestamp) bool {
 	return s.expiration.LessEq(timestamp)
 }
 
@@ -137,9 +138,9 @@ func (s *descriptorVersionState) incRefcountLocked() {
 
 // The lease expiration stored in the database is of a different type.
 // We've decided that it's too much work to change the type to
-// hlc.Timestamp, so we're using this method to give us the stored
+// enginepb.TxnTimestamp, so we're using this method to give us the stored
 // type: tree.DTimestamp.
-func storedLeaseExpiration(expiration hlc.Timestamp) tree.DTimestamp {
+func storedLeaseExpiration(expiration enginepb.TxnTimestamp) tree.DTimestamp {
 	return tree.DTimestamp{Time: timeutil.Unix(0, expiration.WallTime).Round(time.Microsecond)}
 }
 
@@ -189,7 +190,7 @@ func (s storage) jitteredLeaseDuration() time.Duration {
 // or offline (currently only applicable to tables), the error will be of type
 // inactiveTableError. The expiration time set for the lease > minExpiration.
 func (s storage) acquire(
-	ctx context.Context, minExpiration hlc.Timestamp, id descpb.ID,
+	ctx context.Context, minExpiration enginepb.TxnTimestamp, id descpb.ID,
 ) (*descriptorVersionState, error) {
 	var descVersionState *descriptorVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -334,7 +335,7 @@ func (m *Manager) WaitForOneVersion(
 
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
-		now := m.storage.clock.Now()
+		now := enginepb.TxnTimestamp(m.storage.clock.Now())
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
 		version = desc.GetVersion()
 		count, err := CountLeases(ctx, m.storage.internalExecutor, descs, now)
@@ -370,7 +371,7 @@ func NewIDVersionPrev(name string, id descpb.ID, currVersion descpb.DescriptorVe
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor sqlutil.InternalExecutor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context, executor sqlutil.InternalExecutor, versions []IDVersion, at enginepb.TxnTimestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range versions {
@@ -404,7 +405,7 @@ func CountLeases(
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
 func (s storage) getForExpiration(
-	ctx context.Context, expiration hlc.Timestamp, id descpb.ID,
+	ctx context.Context, expiration enginepb.TxnTimestamp, id descpb.ID,
 ) (*descriptorVersionState, error) {
 	var descVersionState *descriptorVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -607,7 +608,7 @@ func ensureVersion(
 // It returns true if the descriptor returned is the known latest version
 // of the descriptor.
 func (t *descriptorState) findForTimestamp(
-	ctx context.Context, timestamp hlc.Timestamp,
+	ctx context.Context, timestamp enginepb.TxnTimestamp,
 ) (*descriptorVersionState, bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -652,9 +653,9 @@ func (t *descriptorState) findForTimestamp(
 // 3. Figure out a sane policy on when these descriptors should be purged.
 //    They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
-	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
+	ctx context.Context, id descpb.ID, timestamp enginepb.TxnTimestamp,
 ) ([]*descriptorVersionState, error) {
-	expiration, done := func() (hlc.Timestamp, bool) {
+	expiration, done := func() (enginepb.TxnTimestamp, bool) {
 		t := m.findDescriptorState(id, false /* create */)
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -679,7 +680,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 		}
 
 		if afterIdx == len(t.mu.active.data) {
-			return hlc.Timestamp{}, true
+			return enginepb.TxnTimestamp{}, true
 		}
 
 		// Read descriptor versions one by one into the past until we
@@ -855,7 +856,7 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 			return nil, errors.New("cannot acquire lease when draining")
 		}
 		newest := m.findNewest(id)
-		var minExpiration hlc.Timestamp
+		var minExpiration enginepb.TxnTimestamp
 		if newest != nil {
 			minExpiration = newest.expiration
 		}
@@ -1006,7 +1007,7 @@ func purgeOldVersions(
 	// Acquire a refcount on the descriptor on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
+	desc, _, err := t.findForTimestamp(ctx, enginepb.TxnTimestamp(m.storage.clock.Now()))
 	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
@@ -1171,7 +1172,7 @@ type nameCache struct {
 // The descriptor's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
 func (c *nameCache) get(
-	parentID descpb.ID, parentSchemaID descpb.ID, name string, timestamp hlc.Timestamp,
+	parentID descpb.ID, parentSchemaID descpb.ID, name string, timestamp enginepb.TxnTimestamp,
 ) *descriptorVersionState {
 	c.mu.Lock()
 	desc, ok := c.descriptors[makeNameCacheKey(parentID, parentSchemaID, name)]
@@ -1272,7 +1273,7 @@ type Manager struct {
 
 		// updatesResolvedTimestamp keeps track of a timestamp before which all
 		// descriptor updates have already been seen.
-		updatesResolvedTimestamp hlc.Timestamp
+		updatesResolvedTimestamp enginepb.TxnTimestamp
 	}
 
 	draining atomic.Value
@@ -1332,7 +1333,7 @@ func NewLeaseManager(
 	}
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
-	lm.mu.updatesResolvedTimestamp = db.Clock().Now()
+	lm.mu.updatesResolvedTimestamp = enginepb.TxnTimestamp(db.Clock().Now())
 
 	lm.draining.Store(false)
 	return lm
@@ -1376,11 +1377,11 @@ func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
 // id and fails because the id has been dropped by the TRUNCATE.
 func (m *Manager) AcquireByName(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-) (catalog.Descriptor, hlc.Timestamp, error) {
+) (catalog.Descriptor, enginepb.TxnTimestamp, error) {
 	// Check if we have cached an ID for this name.
 	descVersion := m.names.get(parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
@@ -1391,19 +1392,19 @@ func (m *Manager) AcquireByName(
 				if t := m.findDescriptorState(descVersion.GetID(), false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, descVersion.GetID(), name); err != nil {
-						return nil, hlc.Timestamp{}, err
+						return nil, enginepb.TxnTimestamp{}, err
 					}
 				}
 			}
 			return descVersion.Descriptor, descVersion.expiration, nil
 		}
 		if err := m.Release(descVersion); err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, enginepb.TxnTimestamp{}, err
 		}
 		// Return a valid descriptor for the timestamp.
 		desc, expiration, err := m.Acquire(ctx, timestamp, descVersion.GetID())
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, enginepb.TxnTimestamp{}, err
 		}
 		return desc, expiration, nil
 	}
@@ -1415,11 +1416,11 @@ func (m *Manager) AcquireByName(
 	var err error
 	id, err := m.resolveName(ctx, timestamp, parentID, parentSchemaID, name)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, enginepb.TxnTimestamp{}, err
 	}
 	desc, expiration, err := m.Acquire(ctx, timestamp, id)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, enginepb.TxnTimestamp{}, err
 	}
 	if !NameMatchesDescriptor(desc, parentID, parentSchemaID, name) {
 		// We resolved name `name`, but the lease has a different name in it.
@@ -1459,11 +1460,11 @@ func (m *Manager) AcquireByName(
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
 		if err := m.AcquireFreshestFromStore(ctx, id); err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, enginepb.TxnTimestamp{}, err
 		}
 		desc, expiration, err = m.Acquire(ctx, timestamp, id)
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, enginepb.TxnTimestamp{}, err
 		}
 		if !NameMatchesDescriptor(desc, parentID, parentSchemaID, name) {
 			// If the name we had doesn't match the newest descriptor in the DB, then
@@ -1471,7 +1472,7 @@ func (m *Manager) AcquireByName(
 			if err := m.Release(desc); err != nil {
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
-			return nil, hlc.Timestamp{}, catalog.ErrDescriptorNotFound
+			return nil, enginepb.TxnTimestamp{}, catalog.ErrDescriptorNotFound
 		}
 	}
 	return desc, expiration, nil
@@ -1482,7 +1483,7 @@ func (m *Manager) AcquireByName(
 // catalog.ErrDescriptorNotFound is returned.
 func (m *Manager) resolveName(
 	ctx context.Context,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
@@ -1529,8 +1530,8 @@ func (m *Manager) resolveName(
 // can only return an older version of a descriptor if the latest version
 // can be leased; as it stands a dropped descriptor cannot be leased.
 func (m *Manager) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
-) (catalog.Descriptor, hlc.Timestamp, error) {
+	ctx context.Context, timestamp enginepb.TxnTimestamp, id descpb.ID,
+) (catalog.Descriptor, enginepb.TxnTimestamp, error) {
 	for {
 		t := m.findDescriptorState(id, true /*create*/)
 		desc, latest, err := t.findForTimestamp(ctx, timestamp)
@@ -1540,7 +1541,7 @@ func (m *Manager) Acquire(
 				durationUntilExpiry := time.Duration(desc.expiration.WallTime - timestamp.WallTime)
 				if durationUntilExpiry < m.storage.leaseRenewalTimeout {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, id, desc.GetName()); err != nil {
-						return nil, hlc.Timestamp{}, err
+						return nil, enginepb.TxnTimestamp{}, err
 					}
 				}
 			}
@@ -1555,7 +1556,7 @@ func (m *Manager) Acquire(
 				_, errLease := acquireNodeLease(ctx, m, id)
 				return errLease
 			}(); err != nil {
-				return nil, hlc.Timestamp{}, err
+				return nil, enginepb.TxnTimestamp{}, err
 			}
 
 			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
@@ -1566,12 +1567,12 @@ func (m *Manager) Acquire(
 			// Read old versions from the store. This can block while reading.
 			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp)
 			if errRead != nil {
-				return nil, hlc.Timestamp{}, errRead
+				return nil, enginepb.TxnTimestamp{}, errRead
 			}
 			m.insertDescriptorVersions(id, versions)
 
 		default:
-			return nil, hlc.Timestamp{}, err
+			return nil, enginepb.TxnTimestamp{}, err
 		}
 	}
 }
@@ -1905,7 +1906,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 	if log.V(2) {
 		log.Info(ctx, "received a new config; will refresh leases")
 	}
-	var latestTimestamp hlc.Timestamp
+	var latestTimestamp enginepb.TxnTimestamp
 	cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 		// Attempt to unmarshal config into a descriptor.
 		var descriptor descpb.Descriptor
@@ -1980,7 +1981,7 @@ func (m *Manager) waitForRangefeedsToBeUsable(ctx context.Context, s *stop.Stopp
 // up to this timestamp. It is set under the gossip path based on the highest
 // timestamp seen in a system config and under the rangefeed path when a
 // resolved timestamp is received.
-func (m *Manager) setResolvedTimestamp(ts hlc.Timestamp) {
+func (m *Manager) setResolvedTimestamp(ts enginepb.TxnTimestamp) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.mu.updatesResolvedTimestamp.Less(ts) {
@@ -1988,7 +1989,7 @@ func (m *Manager) setResolvedTimestamp(ts hlc.Timestamp) {
 	}
 }
 
-func (m *Manager) getResolvedTimestamp() hlc.Timestamp {
+func (m *Manager) getResolvedTimestamp() enginepb.TxnTimestamp {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.mu.updatesResolvedTimestamp
@@ -2185,15 +2186,15 @@ func (m *Manager) VisitLeases(
 // This method is useful for testing and is only intended to be used in that
 // context.
 func (m *Manager) TestingAcquireAndAssertMinVersion(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID, minVersion descpb.DescriptorVersion,
-) (catalog.Descriptor, hlc.Timestamp, error) {
+	ctx context.Context, timestamp enginepb.TxnTimestamp, id descpb.ID, minVersion descpb.DescriptorVersion,
+) (catalog.Descriptor, enginepb.TxnTimestamp, error) {
 	t := m.findDescriptorState(id, true)
 	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, enginepb.TxnTimestamp{}, err
 	}
 	desc, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, enginepb.TxnTimestamp{}, err
 	}
 	return desc.Descriptor, desc.expiration, nil
 }

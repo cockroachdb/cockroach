@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -880,7 +880,7 @@ var _ ErrorDetailInterface = &WriteIntentError{}
 // the timestamp of the operation that hit the error, along with the timestamp
 // immediately after the existing write which had a higher timestamp and which
 // caused the error.
-func NewWriteTooOldError(operationTS, actualTS hlc.Timestamp) *WriteTooOldError {
+func NewWriteTooOldError(operationTS, actualTS enginepb.TxnTimestamp) *WriteTooOldError {
 	return &WriteTooOldError{
 		Timestamp:       operationTS,
 		ActualTimestamp: actualTS,
@@ -912,7 +912,7 @@ var _ transactionRestartError = &WriteTooOldError{}
 // The read and existing timestamps as well as the txn are purely informational
 // and used for formatting the error message.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, existingTS hlc.Timestamp, txn *Transaction,
+	readTS, existingTS enginepb.TxnTimestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
 	rwue := &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:     readTS,

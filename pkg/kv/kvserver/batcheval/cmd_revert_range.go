@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -42,7 +42,7 @@ func declareKeysRevertRange(
 
 // isEmptyKeyTimeRange checks if the span has no writes in (since,until].
 func isEmptyKeyTimeRange(
-	readWriter storage.ReadWriter, from, to roachpb.Key, since, until hlc.Timestamp,
+	readWriter storage.ReadWriter, from, to roachpb.Key, since, until enginepb.TxnTimestamp,
 ) (bool, error) {
 	// Use a TBI to check if there is anything to delete -- the first key Seek hits
 	// may not be in the time range but the fact the TBI found any key indicates

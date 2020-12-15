@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -303,12 +303,12 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 func unwrapDescriptor(
 	ctx context.Context,
 	dg catalog.DescGetter,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 	desc *descpb.Descriptor,
 	validate bool,
 ) (catalog.Descriptor, error) {
 	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, enginepb.TxnTimestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	var unwrapped catalog.Descriptor
 	switch {
@@ -339,11 +339,11 @@ func unwrapDescriptor(
 // unwraps it into an implementation of catalog.MutableDescriptor. It ensures
 // that the ModificationTime is set properly.
 func unwrapDescriptorMutable(
-	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
+	ctx context.Context, dg catalog.DescGetter, ts enginepb.TxnTimestamp, desc *descpb.Descriptor,
 ) (catalog.MutableDescriptor, error) {
 	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
 	table, database, typ, schema :=
-		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
+		descpb.TableFromDescriptor(desc, enginepb.TxnTimestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
@@ -701,8 +701,8 @@ func GetSchemaDescriptorsFromIDs(
 //
 // TODO(ajwerner): unify this with the other unwrapping logic.
 func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.MutableDescriptor {
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
-	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, enginepb.TxnTimestamp{})
+	table, database, typ, schema := descpb.TableFromDescriptor(desc, enginepb.TxnTimestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:

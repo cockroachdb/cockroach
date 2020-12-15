@@ -145,7 +145,7 @@ func putPooledEvent(ev *event) {
 // channel, which is necessary to prevent reordering.
 type event struct {
 	ops     []enginepb.MVCCLogicalOp
-	ct      hlc.Timestamp
+	ct      enginepb.TxnTimestamp
 	initRTS bool
 	syncC   chan struct{}
 	// This setting is used in conjunction with syncC in tests in order to ensure
@@ -294,7 +294,7 @@ func (p *Processor) run(
 				continue
 			}
 
-			now := p.Clock.Now()
+			now := enginepb.TxnTimestamp(p.Clock.Now())
 			before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
 			oldTxns := p.rts.intentQ.Before(before)
 
@@ -389,7 +389,7 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // NOT safe to call on nil Processor.
 func (p *Processor) Register(
 	span roachpb.RSpan,
-	startTS hlc.Timestamp,
+	startTS enginepb.TxnTimestamp,
 	catchupIterConstructor IteratorConstructor,
 	withDiff bool,
 	stream Stream,
@@ -467,7 +467,7 @@ func (p *Processor) ConsumeLogicalOps(ops ...enginepb.MVCCLogicalOp) bool {
 // EventChanTimeout configuration. If the method returns false, the processor
 // will have been stopped, so calling Stop is not necessary.  Safe to call on
 // nil Processor.
-func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
+func (p *Processor) ForwardClosedTS(closedTS enginepb.TxnTimestamp) bool {
 	if p == nil {
 		return true
 	}
@@ -594,7 +594,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 	}
 }
 
-func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
+func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS enginepb.TxnTimestamp) {
 	if p.rts.ForwardClosedTS(newClosedTS) {
 		p.publishCheckpoint(ctx)
 	}
@@ -607,7 +607,7 @@ func (p *Processor) initResolvedTS(ctx context.Context) {
 }
 
 func (p *Processor) publishValue(
-	ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp, value, prevValue []byte,
+	ctx context.Context, key roachpb.Key, timestamp enginepb.TxnTimestamp, value, prevValue []byte,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)

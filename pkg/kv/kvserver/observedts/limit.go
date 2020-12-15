@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -63,17 +64,19 @@ func LimitTxnMaxTimestamp(
 	// incorrect assumptions about when data was written, in absolute time on a
 	// different node, which held the lease before this replica acquired it.
 	obsTS.Forward(status.Lease.Start)
+	// Convert the observed timestamp to the transaction time domain.
+	obsTxnTS := enginepb.TxnTimestamp(obsTS)
 	// If the observed timestamp reduces the transaction's uncertainty interval,
 	// update the transacion proto.
-	if obsTS.Less(txn.MaxTimestamp) {
+	if obsTxnTS.Less(txn.MaxTimestamp) {
 		// Copy-on-write to protect others we might be sharing the Txn with.
 		txnClone := txn.Clone()
 		// The uncertainty window is [ReadTimestamp, maxTS), so if that window
 		// is empty, there won't be any uncertainty restarts.
-		if obsTS.LessEq(txn.ReadTimestamp) {
+		if obsTxnTS.LessEq(txn.ReadTimestamp) {
 			log.Event(ctx, "read has no clock uncertainty")
 		}
-		txnClone.MaxTimestamp.Backward(obsTS)
+		txnClone.MaxTimestamp.Backward(obsTxnTS)
 		txn = txnClone
 	}
 	return txn

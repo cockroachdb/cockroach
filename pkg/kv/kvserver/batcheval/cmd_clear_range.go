@@ -69,7 +69,7 @@ func ClearRange(
 	var pd result.Result
 
 	if !args.Deadline.IsEmpty() {
-		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(now) {
+		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(enginepb.TxnTimestamp(now)) {
 			return result.Result{}, errors.Errorf("ClearRange has deadline %s <= %s", args.Deadline, now)
 		}
 	}

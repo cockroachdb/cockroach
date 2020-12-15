@@ -59,7 +59,8 @@ message BackfillerSpec {
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 
   reserved 6;
 }

@@ -388,7 +388,7 @@ type Replica struct {
 		lastReplicaAddedTime time.Time
 		// initialMaxClosed is the initial maxClosed timestamp for the replica as known
 		// from its left-hand-side upon creation.
-		initialMaxClosed hlc.Timestamp
+		initialMaxClosed enginepb.TxnTimestamp
 
 		// The most recently updated time for each follower of this range. This is updated
 		// every time a Raft message is received from a peer.
@@ -583,7 +583,7 @@ type Replica struct {
 
 		// pendingGCThreshold holds a timestamp which is being proposed as a new
 		// GC threshold for the range.
-		pendingGCThreshold hlc.Timestamp
+		pendingGCThreshold enginepb.TxnTimestamp
 	}
 }
 
@@ -792,7 +792,7 @@ func (r *Replica) GetRangeID() roachpb.RangeID {
 }
 
 // GetGCThreshold returns the GC threshold.
-func (r *Replica) GetGCThreshold() hlc.Timestamp {
+func (r *Replica) GetGCThreshold() enginepb.TxnTimestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.GCThreshold
@@ -805,7 +805,7 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 // contains data outside of the user keyspace, we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
 	st *kvserverpb.LeaseStatus, isAdmin bool,
-) hlc.Timestamp {
+) enginepb.TxnTimestamp {
 	threshold := *r.mu.state.GCThreshold
 
 	// The GC threshold is the oldest value we can return here.
@@ -958,7 +958,7 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
-	_, err := storage.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+	_, err := storage.MVCCGetProto(ctx, r.store.Engine(), key, enginepb.TxnTimestamp{}, &timestamp,
 		storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -968,7 +968,7 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
-	return storage.MVCCPutProto(ctx, r.store.Engine(), nil, key, hlc.Timestamp{}, nil, &timestamp)
+	return storage.MVCCPutProto(ctx, r.store.Engine(), nil, key, enginepb.TxnTimestamp{}, nil, &timestamp)
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the
@@ -977,7 +977,7 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := storage.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, &timestamp,
+		_, err := storage.MVCCGetProto(ctx, r.store.Engine(), key, enginepb.TxnTimestamp{}, &timestamp,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
@@ -1155,7 +1155,7 @@ func (r *Replica) checkExecutionCanProceed(
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
 // cannot be executed by the Replica.
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
-	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
+	ctx context.Context, rSpan roachpb.RSpan, ts enginepb.TxnTimestamp,
 ) error {
 	now := r.Clock().Now()
 	r.mu.RLock()
@@ -1191,7 +1191,7 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st *kvserverpb.LeaseStatus, isAdmin bool,
+	ts enginepb.TxnTimestamp, st *kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
@@ -1226,7 +1226,8 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 		if ba.Txn != nil {
 			ts.Forward(ba.Txn.MaxTimestamp)
 		}
-		if ts.Less(freezeStart) {
+		// TODO(nvanbenschoten): what's the deal here?
+		if ts.ToClockTimestampUnchecked().Less(freezeStart) {
 			// When the max timestamp of a read request is less than the subsumption
 			// time recorded by this Range (freezeStart), we're guaranteed that none
 			// of the writes accepted by the leaseholder for the keyspan (which could
@@ -1407,7 +1408,7 @@ func (ec *endCmds) done(
 func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timestamp) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, enginepb.TxnTimestamp(r.Clock().Now()),
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return err
@@ -1462,7 +1463,8 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 			// returns immediately and causes us to spin hot, whereas
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
 			b := &kv.Batch{}
-			b.Header.Timestamp = r.Clock().Now()
+			// TODO(nvanbenschoten): how does the PushTxnRequest work in this case?
+			b.Header.Timestamp = enginepb.TxnTimestamp(r.Clock().Now())
 			b.AddRawRequest(&roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{

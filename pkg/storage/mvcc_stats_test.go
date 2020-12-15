@@ -76,7 +76,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
 			// Put a value.
 			value := roachpb.MakeValueFromString("value")
 			if err := MVCCPut(ctx, engine, aggMS, key, ts1, value, nil); err != nil {
@@ -99,7 +99,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "after put", aggMS, &expMS)
 
 			// Delete the value at ts=3. We'll commit this at ts=4 later.
-			ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
+			ts3 := enginepb.TxnTimestamp{WallTime: 3 * 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
 				ReadTimestamp: ts3,
@@ -110,7 +110,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 
 			// Now commit the value, but with a timestamp gap (i.e. this is a
 			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+			ts4 := enginepb.TxnTimestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
@@ -155,7 +155,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
 				ReadTimestamp: ts1,
@@ -195,7 +195,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 
 			// Now commit the intent, but with a timestamp gap (i.e. this is a
 			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+			ts4 := enginepb.TxnTimestamp{WallTime: 4 * 1e9}
 			txn.Status = roachpb.COMMITTED
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
@@ -239,7 +239,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
 				ReadTimestamp: ts1,
@@ -279,7 +279,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 
 			// Now push the value, but with a timestamp gap (i.e. this is a
 			// push as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+			ts4 := enginepb.TxnTimestamp{WallTime: 4 * 1e9}
 			txn.WriteTimestamp.Forward(ts4)
 			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
 				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
@@ -328,8 +328,8 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2 * 1e9}
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
@@ -451,8 +451,8 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2 * 1e9}
 
 			key := roachpb.Key("a")
 			txn := &roachpb.Transaction{
@@ -567,9 +567,9 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
-			ts3 := hlc.Timestamp{WallTime: 3e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
+			ts3 := enginepb.TxnTimestamp{WallTime: 3e9}
 
 			// Write a non-transactional tombstone at t=1s.
 			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil /* txn */); err != nil {
@@ -711,9 +711,9 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
-			ts3 := hlc.Timestamp{WallTime: 3e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
+			ts3 := enginepb.TxnTimestamp{WallTime: 3e9}
 
 			// Write a non-transactional value at t=1s.
 			value := roachpb.MakeValueFromString("value")
@@ -884,8 +884,8 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
 
 			// Write tombstones at ts1 and ts2.
 			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil); err != nil {
@@ -961,8 +961,8 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
 			key := roachpb.Key("a")
-			ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
-			ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
+			ts201 := enginepb.TxnTimestamp{WallTime: 2e9 + 1}
+			ts099 := enginepb.TxnTimestamp{WallTime: 1e9 - 1}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts201},
 				ReadTimestamp: ts099,
@@ -1058,8 +1058,8 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 			key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
@@ -1146,8 +1146,8 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
 
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
@@ -1241,7 +1241,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
 			txn := &roachpb.Transaction{
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
 				ReadTimestamp: ts1,
@@ -1317,8 +1317,8 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+			ts1 := enginepb.TxnTimestamp{WallTime: 1e9}
+			ts2 := enginepb.TxnTimestamp{WallTime: 2e9}
 
 			// Write a value at ts1.
 			val1 := roachpb.MakeValueFromString("value")
@@ -1383,7 +1383,7 @@ var mvccStatsTests = []struct {
 
 type state struct {
 	MS  *enginepb.MVCCStats
-	TS  hlc.Timestamp
+	TS  enginepb.TxnTimestamp
 	Txn *roachpb.Transaction
 
 	eng Engine
@@ -1420,7 +1420,7 @@ func (s *randomTest) step(t *testing.T) {
 	if !s.inline {
 		// Jump up to a few seconds into the future. In ~1% of cases, jump
 		// backwards instead (this exercises intactness on WriteTooOld, etc).
-		s.TS = hlc.Timestamp{
+		s.TS = enginepb.TxnTimestamp{
 			WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4e9),
 			Logical:  int32(s.rng.Intn(10)),
 		}
@@ -1431,7 +1431,7 @@ func (s *randomTest) step(t *testing.T) {
 			s.TS.WallTime = 0
 		}
 	} else {
-		s.TS = hlc.Timestamp{}
+		s.TS = enginepb.TxnTimestamp{}
 	}
 
 	restart := s.Txn != nil && s.rng.Intn(2) == 0
@@ -1519,7 +1519,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 	actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
-			txn := roachpb.MakeTransaction("test", nil, 0, s.TS, 0)
+			txn := roachpb.MakeTransaction("test", nil, 0, hlc.Timestamp(s.TS), 0)
 			s.Txn = &txn
 		}
 		return ""
@@ -1558,7 +1558,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	}
 	actions["GC"] = func(s *state) string {
 		// Sometimes GC everything, sometimes only older versions.
-		gcTS := hlc.Timestamp{
+		gcTS := enginepb.TxnTimestamp{
 			WallTime: s.rng.Int63n(s.TS.WallTime + 1 /* avoid zero */),
 		}
 		if err := MVCCGarbageCollect(

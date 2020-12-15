@@ -335,13 +335,13 @@ func (db *DB) GetProto(ctx context.Context, key interface{}, msg protoutil.Messa
 // key can be either a byte slice or a string.
 func (db *DB) GetProtoTs(
 	ctx context.Context, key interface{}, msg protoutil.Message,
-) (hlc.Timestamp, error) {
+) (enginepb.TxnTimestamp, error) {
 	r, err := db.Get(ctx, key)
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return enginepb.TxnTimestamp{}, err
 	}
 	if err := r.ValueProto(msg); err != nil || r.Value == nil {
-		return hlc.Timestamp{}, err
+		return enginepb.TxnTimestamp{}, err
 	}
 	return r.Value.Timestamp, nil
 }

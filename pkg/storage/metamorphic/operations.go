@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -115,7 +114,7 @@ func generateMVCCScan(
 	if endKey.Less(key) {
 		key, endKey = endKey, key
 	}
-	var ts hlc.Timestamp
+	var ts enginepb.TxnTimestamp
 	var txn txnID
 	if inconsistent {
 		ts = m.pastTSGenerator.parse(args[2])
@@ -152,7 +151,7 @@ type mvccGetOp struct {
 	m            *metaTestRunner
 	reader       readWriterID
 	key          roachpb.Key
-	ts           hlc.Timestamp
+	ts           enginepb.TxnTimestamp
 	txn          txnID
 	inconsistent bool
 }
@@ -286,8 +285,8 @@ type mvccClearTimeRangeOp struct {
 	writer    readWriterID
 	key       roachpb.Key
 	endKey    roachpb.Key
-	startTime hlc.Timestamp
-	endTime   hlc.Timestamp
+	startTime enginepb.TxnTimestamp
+	endTime   enginepb.TxnTimestamp
 }
 
 func (m mvccClearTimeRangeOp) run(ctx context.Context) string {
@@ -343,7 +342,7 @@ type mvccScanOp struct {
 	m            *metaTestRunner
 	key          roachpb.Key
 	endKey       roachpb.Key
-	ts           hlc.Timestamp
+	ts           enginepb.TxnTimestamp
 	txn          txnID
 	inconsistent bool
 	reverse      bool
@@ -380,7 +379,7 @@ func (m mvccScanOp) run(ctx context.Context) string {
 type txnOpenOp struct {
 	m  *metaTestRunner
 	id txnID
-	ts hlc.Timestamp
+	ts enginepb.TxnTimestamp
 }
 
 func (t txnOpenOp) run(ctx context.Context) string {

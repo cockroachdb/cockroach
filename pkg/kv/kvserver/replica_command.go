@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2049,7 +2050,7 @@ func (r *Replica) sendSnapshot(
 	}
 
 	usesReplicatedTruncatedState, err := storage.MVCCGetProto(
-		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, storage.MVCCGetOptions{},
+		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), enginepb.TxnTimestamp{}, nil, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		return errors.Wrap(err, "loading legacy truncated state")

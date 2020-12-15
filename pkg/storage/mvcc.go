@@ -94,7 +94,7 @@ func emptyKeyError() error {
 // of a timestamp.
 type MVCCKey struct {
 	Key       roachpb.Key
-	Timestamp hlc.Timestamp
+	Timestamp enginepb.TxnTimestamp
 }
 
 // MakeMVCCMetadataKey creates an MVCCKey from a roachpb.Key.
@@ -705,7 +705,7 @@ func MVCCGetProto(
 	ctx context.Context,
 	reader Reader,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	msg protoutil.Message,
 	opts MVCCGetOptions,
 ) (bool, error) {
@@ -731,7 +731,7 @@ func MVCCPutProto(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txn *roachpb.Transaction,
 	msg protoutil.Message,
 ) error {
@@ -751,7 +751,7 @@ func MVCCBlindPutProto(
 	writer Writer,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	msg protoutil.Message,
 	txn *roachpb.Transaction,
 ) error {
@@ -806,7 +806,7 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 // Note that transactional gets must be consistent. Put another way, only
 // non-transactional gets may be inconsistent.
 //
-// If the timestamp is specified as hlc.Timestamp{}, the value is expected to be
+// If the timestamp is specified as enginepb.TxnTimestamp{}, the value is expected to be
 // "inlined". See MVCCPut().
 //
 // When reading in "fail on more recent" mode, a WriteTooOldError will be
@@ -815,7 +815,7 @@ func newMVCCIterator(reader Reader, inlineMeta bool, opts IterOptions) MVCCItera
 // observes another transaction's intent, even if it has a timestamp above
 // the read timestamp.
 func MVCCGet(
-	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+	ctx context.Context, reader Reader, key roachpb.Key, timestamp enginepb.TxnTimestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{Prefix: true})
 	defer iter.Close()
@@ -827,7 +827,7 @@ func mvccGet(
 	ctx context.Context,
 	iter MVCCIterator,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCGetOptions,
 ) (value optionalValue, intent *roachpb.Intent, err error) {
 	if len(key) == 0 {
@@ -903,7 +903,7 @@ func MVCCGetAsTxn(
 	ctx context.Context,
 	reader Reader,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txnMeta enginepb.TxnMeta,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, reader, key, timestamp, MVCCGetOptions{
@@ -1031,7 +1031,7 @@ func (b *putBuffer) putIntentMeta(
 	txnDidNotUpdateMeta bool,
 	meta *enginepb.MVCCMetadata,
 ) (keyBytes, valBytes int64, err error) {
-	if meta.Txn != nil && meta.Timestamp.ToTimestamp() != meta.Txn.WriteTimestamp {
+	if meta.Txn != nil && meta.TxnTimestamp() != meta.Txn.WriteTimestamp {
 		// The timestamps are supposed to be in sync. If they weren't, it wouldn't
 		// be clear for readers which one to use for what.
 		return 0, 0, errors.AssertionFailedf(
@@ -1071,7 +1071,7 @@ func (b *putBuffer) putIntentMeta(
 // dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 //
-// If the timestamp is specified as hlc.Timestamp{}, the value is
+// If the timestamp is specified as enginepb.TxnTimestamp{}, the value is
 // inlined instead of being written as a timestamp-versioned value. A
 // zero timestamp write to a key precludes a subsequent write using a
 // non-zero timestamp and vice versa. Inlined values require only a
@@ -1083,7 +1083,7 @@ func MVCCPut(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -1113,7 +1113,7 @@ func MVCCBlindPut(
 	writer Writer,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
@@ -1131,7 +1131,7 @@ func MVCCDelete(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txn *roachpb.Transaction,
 ) error {
 	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
@@ -1152,7 +1152,7 @@ func mvccPutUsingIter(
 	iter MVCCIterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) ([]byte, error),
@@ -1183,7 +1183,7 @@ func maybeGetValue(
 	key roachpb.Key,
 	value []byte,
 	exists bool,
-	readTimestamp hlc.Timestamp,
+	readTimestamp enginepb.TxnTimestamp,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) ([]byte, error),
 ) ([]byte, error) {
@@ -1251,7 +1251,7 @@ func replayTransactionalWrite(
 	iter MVCCIterator,
 	meta *enginepb.MVCCMetadata,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value []byte,
 	txn *roachpb.Transaction,
 	valueFn func(optionalValue) ([]byte, error),
@@ -1341,15 +1341,15 @@ func replayTransactionalWrite(
 // In an attempt to reduce confusion about which timestamp applies, when writing
 // transactionally, the timestamp parameter must be equal to the transaction's
 // read timestamp. (One could imagine instead requiring that the timestamp
-// parameter be set to hlc.Timestamp{} when writing transactionally, but
-// hlc.Timestamp{} is already used as a sentinel for inline puts.)
+// parameter be set to enginepb.TxnTimestamp{} when writing transactionally, but
+// enginepb.TxnTimestamp{} is already used as a sentinel for inline puts.)
 func mvccPutInternal(
 	ctx context.Context,
 	writer Writer,
 	iter MVCCIterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value []byte,
 	txn *roachpb.Transaction,
 	buf *putBuffer,
@@ -1444,7 +1444,7 @@ func mvccPutInternal(
 		writeTimestamp = txn.WriteTimestamp
 	}
 
-	timestamp = hlc.Timestamp{} // prevent accidental use below
+	timestamp = enginepb.TxnTimestamp{} // prevent accidental use below
 
 	// Determine what the logical operation is. Are we writing an intent
 	// or a value directly?
@@ -1463,7 +1463,7 @@ func mvccPutInternal(
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
-		metaTimestamp := meta.Timestamp.ToTimestamp()
+		metaTimestamp := meta.TxnTimestamp()
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
@@ -1760,7 +1760,7 @@ func MVCCIncrement(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
@@ -1830,7 +1830,7 @@ func MVCCConditionalPut(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
@@ -1856,7 +1856,7 @@ func MVCCBlindConditionalPut(
 	writer Writer,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
@@ -1871,7 +1871,7 @@ func mvccConditionalPutUsingIter(
 	iter MVCCIterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
@@ -1909,7 +1909,7 @@ func MVCCInitPut(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
@@ -1932,7 +1932,7 @@ func MVCCBlindInitPut(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
@@ -1946,7 +1946,7 @@ func mvccInitPutUsingIter(
 	iter MVCCIterator,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
@@ -1996,7 +1996,7 @@ func MVCCMerge(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	value roachpb.Value,
 ) error {
 	if len(key) == 0 {
@@ -2049,7 +2049,7 @@ func MVCCClearTimeRange(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
-	startTime, endTime hlc.Timestamp,
+	startTime, endTime enginepb.TxnTimestamp,
 	maxBatchSize int64,
 ) (*roachpb.Span, error) {
 	var batchSize int64
@@ -2179,7 +2179,7 @@ func MVCCClearTimeRange(
 			if err := it.ValueProto(&meta); err != nil {
 				return nil, err
 			}
-			ts := meta.Timestamp.ToTimestamp()
+			ts := meta.TxnTimestamp()
 			if meta.Txn != nil && startTime.Less(ts) && ts.LessEq(endTime) {
 				err := &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{
@@ -2231,7 +2231,7 @@ func MVCCDeleteRange(
 	ms *enginepb.MVCCStats,
 	key, endKey roachpb.Key,
 	max int64,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
@@ -2275,7 +2275,7 @@ func mvccScanToBytes(
 	ctx context.Context,
 	iter MVCCIterator,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	if len(endKey) == 0 {
@@ -2337,7 +2337,7 @@ func mvccScanToKvs(
 	ctx context.Context,
 	iter MVCCIterator,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	res, err := mvccScanToBytes(ctx, iter, key, endKey, timestamp, opts)
@@ -2479,7 +2479,7 @@ func MVCCScan(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
@@ -2492,7 +2492,7 @@ func MVCCScanToBytes(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
 	iter := newMVCCIterator(reader, timestamp.IsEmpty(), IterOptions{LowerBound: key, UpperBound: endKey})
@@ -2510,7 +2510,7 @@ func MVCCScanAsTxn(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	txnMeta enginepb.TxnMeta,
 ) (MVCCScanResult, error) {
 	return MVCCScan(ctx, reader, key, endKey, timestamp, MVCCScanOptions{
@@ -2533,7 +2533,7 @@ func MVCCIterate(
 	ctx context.Context,
 	reader Reader,
 	key, endKey roachpb.Key,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts MVCCScanOptions,
 	f func(roachpb.KeyValue) error,
 ) ([]roachpb.Intent, error) {
@@ -2673,7 +2673,7 @@ func mvccResolveWriteIntent(
 	if !ok || meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
 		return false, nil
 	}
-	metaTimestamp := meta.Timestamp.ToTimestamp()
+	metaTimestamp := meta.TxnTimestamp()
 	precedingIntentState := ExistingIntentInterleaved
 	if isIntentSeparated {
 		precedingIntentState = ExistingIntentSeparated
@@ -3111,7 +3111,7 @@ func MVCCGarbageCollect(
 	rw ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 ) error {
 
 	var count int64
@@ -3163,7 +3163,7 @@ func MVCCGarbageCollect(
 		// being removed. We had this faulty functionality at some point; it
 		// should no longer be necessary since the higher levels already make
 		// sure each individual GCRequest does bounded work.
-		if meta.Timestamp.ToTimestamp().LessEq(gcKey.Timestamp) {
+		if meta.TxnTimestamp().LessEq(gcKey.Timestamp) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra

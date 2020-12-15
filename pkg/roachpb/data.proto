@@ -86,7 +86,8 @@ message Value {
   // Its contents may be modified on the next call to Value.SetFoo.
   bytes raw_bytes = 1;
   // Timestamp of value.
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 }
 
 // KeyValue is a pair of Key and Value for returned Key/Value pairs
@@ -101,8 +102,8 @@ message KeyValue {
 // store-reserved system key (KeyLocalIdent).
 message StoreIdent {
   bytes cluster_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "ClusterID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
   int32 store_id = 3 [(gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
@@ -333,14 +334,16 @@ message Transaction {
   // advance "refreshing the read set". So, the read timestamp advances after a
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
-  util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // Initial Timestamp + clock skew. Reads which encounter values with
   // timestamps between timestamp and max_timestamp trigger a txn
   // retry error, unless the node being read is listed in observed_timestamps
   // (in which case no more read uncertainty can occur).
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
-  util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
   // this list is to avoid uncertainty related restarts which normally occur
@@ -558,7 +561,8 @@ message AbortSpanEntry {
   bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The candidate commit timestamp the transaction record held at the time
   // it was aborted.
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // The priority of the transaction.
   int32 priority = 3 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnPriority"];

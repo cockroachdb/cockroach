@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -63,7 +62,7 @@ func declareKeysEndTxn(
 ) {
 	et := req.(*roachpb.EndTxnRequest)
 	declareKeysWriteTransaction(desc, header, req, latchSpans)
-	var minTxnTS hlc.Timestamp
+	var minTxnTS enginepb.TxnTimestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		minTxnTS = header.Txn.MinTimestamp
@@ -197,7 +196,7 @@ func EndTxn(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{},
+		ctx, readWriter, key, enginepb.TxnTimestamp{}, &existingTxn, storage.MVCCGetOptions{},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -380,7 +379,7 @@ func EndTxn(
 
 // IsEndTxnExceedingDeadline returns true if the transaction exceeded its
 // deadline.
-func IsEndTxnExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTxnRequest) bool {
+func IsEndTxnExceedingDeadline(t enginepb.TxnTimestamp, args *roachpb.EndTxnRequest) bool {
 	return args.Deadline != nil && args.Deadline.LessEq(t)
 }
 
@@ -533,7 +532,7 @@ func updateStagingTxn(
 	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, enginepb.TxnTimestamp{}, nil /* txn */, &txnRecord)
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -553,12 +552,12 @@ func updateFinalizedTxn(
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
 		}
-		return storage.MVCCDelete(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */)
+		return storage.MVCCDelete(ctx, readWriter, ms, key, enginepb.TxnTimestamp{}, nil /* txn */)
 	}
 	txn.LockSpans = externalLocks
 	txn.InFlightWrites = nil
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, enginepb.TxnTimestamp{}, nil /* txn */, &txnRecord)
 }
 
 // RunCommitTrigger runs the commit trigger from an end transaction request.
@@ -808,7 +807,7 @@ func splitTrigger(
 	batch storage.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(andrei): should this span be a child of the ctx's (if any)?
 	sp := rec.ClusterSettings().Tracer.StartSpan("split", tracing.WithCtxLogTags(ctx))
@@ -853,7 +852,7 @@ func splitTriggerHelper(
 	batch storage.Batch,
 	statsInput splitStatsHelperInput,
 	split *roachpb.SplitTrigger,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(d4l3k): we should check which side of the split is smaller
 	// and compute stats for it instead of having a constraint that the
@@ -869,7 +868,7 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
+	if err := storage.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), enginepb.TxnTimestamp{}, nil, &replicaGCTS); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -963,7 +962,7 @@ func splitTriggerHelper(
 			ctx,
 			batch,
 			keys.RaftTruncatedStateLegacyKey(rec.GetRangeID()),
-			hlc.Timestamp{},
+			enginepb.TxnTimestamp{},
 			nil,
 			storage.MVCCGetOptions{},
 		); err != nil {
@@ -1032,7 +1031,7 @@ func mergeTrigger(
 	batch storage.Batch,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 ) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {

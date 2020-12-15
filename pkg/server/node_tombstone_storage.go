@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,7 +60,7 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 	// No cache hit.
 	k := s.key(nodeID)
 	for _, eng := range s.engs {
-		v, _, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
+		v, _, err := storage.MVCCGet(ctx, eng, k, enginepb.TxnTimestamp{}, storage.MVCCGetOptions{})
 		if err != nil {
 			return time.Time{}, err
 		}
@@ -136,7 +137,7 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 		}
 
 		if err := storage.MVCCPut(
-			ctx, eng, nil /* MVCCStats */, k, hlc.Timestamp{}, v, nil, /* txn */
+			ctx, eng, nil /* MVCCStats */, k, enginepb.TxnTimestamp{}, v, nil, /* txn */
 		); err != nil {
 			return err
 		}

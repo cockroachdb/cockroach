@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -66,7 +65,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	// it is trivial.
 	allowlist := *r
 	allowlist.Delta = enginepb.MVCCStatsDelta{}
-	allowlist.Timestamp = hlc.Timestamp{}
+	allowlist.Timestamp = enginepb.TxnTimestamp{}
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
@@ -84,7 +83,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
 	r.IsLeaseRequest = false
-	r.Timestamp = hlc.Timestamp{}
+	r.Timestamp = enginepb.TxnTimestamp{}
 	r.PrevLeaseProposal = nil
 	// The state fields cleared here were already applied to the in-memory view of
 	// replica state for this batch.
@@ -284,7 +283,7 @@ func (r *Replica) handleTruncatedStateResult(
 	return -size
 }
 
-func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
+func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *enginepb.TxnTimestamp) {
 	if thresh.IsEmpty() {
 		return
 	}

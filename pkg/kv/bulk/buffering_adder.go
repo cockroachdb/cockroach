@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -33,7 +33,7 @@ import (
 type BufferingAdder struct {
 	sink SSTBatcher
 	// timestamp applied to mvcc keys created from keys during SST construction.
-	timestamp hlc.Timestamp
+	timestamp enginepb.TxnTimestamp
 
 	// threshold at which buffered entries will be flushed to SSTBatcher.
 	curBufferSize int64
@@ -74,7 +74,7 @@ func MakeBulkAdder(
 	db SSTSender,
 	rangeCache *rangecache.RangeCache,
 	settings *cluster.Settings,
-	timestamp hlc.Timestamp,
+	timestamp enginepb.TxnTimestamp,
 	opts kvserverbase.BulkAdderOptions,
 	bulkMon *mon.BytesMonitor,
 ) (*BufferingAdder, error) {

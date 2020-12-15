@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
@@ -39,17 +38,17 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			defer ol.Close()
 
 			// Write a value and an intent.
-			if err := MVCCPut(ctx, ol, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, enginepb.TxnTimestamp{Logical: 1}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
-			txn1ts := makeTxn(*txn1, hlc.Timestamp{Logical: 2})
+			txn1ts := makeTxn(*txn1, enginepb.TxnTimestamp{Logical: 2})
 			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
 
 			// Write a value and an intent on local keys.
 			localKey := keys.MakeRangeIDPrefix(1)
-			if err := MVCCPut(ctx, ol, nil, localKey, hlc.Timestamp{Logical: 1}, value1, nil); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, enginepb.TxnTimestamp{Logical: 1}, value1, nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
@@ -59,7 +58,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			// Update the intents and write another. Use a distinct batch.
 			olDist := ol.Distinct()
 			txn1ts.Sequence++
-			txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
+			txn1ts.WriteTimestamp = enginepb.TxnTimestamp{Logical: 3}
 			if err := MVCCPut(ctx, olDist, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
@@ -67,8 +66,8 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Set the txn timestamp to a larger value than the intent.
-			txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
-			txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
+			txn1LargerTS := makeTxn(*txn1, enginepb.TxnTimestamp{Logical: 4})
+			txn1LargerTS.WriteTimestamp = enginepb.TxnTimestamp{Logical: 4}
 			if err := MVCCPut(ctx, olDist, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
 				t.Fatal(err)
 			}
@@ -76,7 +75,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 
 			// Resolve all three intent.
 			txn1CommitTS := *txn1Commit
-			txn1CommitTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
+			txn1CommitTS.WriteTimestamp = enginepb.TxnTimestamp{Logical: 4}
 			if _, _, err := MVCCResolveWriteIntentRange(ctx, ol, nil,
 				roachpb.MakeLockUpdate(
 					&txn1CommitTS,
@@ -93,12 +92,12 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			}
 
 			// Write another intent, push it, then abort it.
-			txn2ts := makeTxn(*txn2, hlc.Timestamp{Logical: 5})
+			txn2ts := makeTxn(*txn2, enginepb.TxnTimestamp{Logical: 5})
 			if err := MVCCPut(ctx, ol, nil, testKey3, txn2ts.ReadTimestamp, value4, txn2ts); err != nil {
 				t.Fatal(err)
 			}
 			txn2Pushed := *txn2
-			txn2Pushed.WriteTimestamp = hlc.Timestamp{Logical: 6}
+			txn2Pushed.WriteTimestamp = enginepb.TxnTimestamp{Logical: 6}
 			if _, err := MVCCResolveWriteIntent(ctx, ol, nil,
 				roachpb.MakeLockUpdate(&txn2Pushed, roachpb.Span{Key: testKey3}),
 			); err != nil {
@@ -121,43 +120,43 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			exp := []enginepb.MVCCLogicalOp{
 				makeOp(&enginepb.MVCCWriteValueOp{
 					Key:       testKey1,
-					Timestamp: hlc.Timestamp{Logical: 1},
+					Timestamp: enginepb.TxnTimestamp{Logical: 1},
 				}),
 				makeOp(&enginepb.MVCCWriteIntentOp{
 					TxnID:           txn1.ID,
 					TxnKey:          txn1.Key,
 					TxnMinTimestamp: txn1.MinTimestamp,
-					Timestamp:       hlc.Timestamp{Logical: 2},
+					Timestamp:       enginepb.TxnTimestamp{Logical: 2},
 				}),
 				makeOp(&enginepb.MVCCUpdateIntentOp{
 					TxnID:     txn1.ID,
-					Timestamp: hlc.Timestamp{Logical: 3},
+					Timestamp: enginepb.TxnTimestamp{Logical: 3},
 				}),
 				makeOp(&enginepb.MVCCWriteIntentOp{
 					TxnID:           txn1.ID,
 					TxnKey:          txn1.Key,
 					TxnMinTimestamp: txn1.MinTimestamp,
-					Timestamp:       hlc.Timestamp{Logical: 4},
+					Timestamp:       enginepb.TxnTimestamp{Logical: 4},
 				}),
 				makeOp(&enginepb.MVCCCommitIntentOp{
 					TxnID:     txn1.ID,
 					Key:       testKey1,
-					Timestamp: hlc.Timestamp{Logical: 4},
+					Timestamp: enginepb.TxnTimestamp{Logical: 4},
 				}),
 				makeOp(&enginepb.MVCCCommitIntentOp{
 					TxnID:     txn1.ID,
 					Key:       testKey2,
-					Timestamp: hlc.Timestamp{Logical: 4},
+					Timestamp: enginepb.TxnTimestamp{Logical: 4},
 				}),
 				makeOp(&enginepb.MVCCWriteIntentOp{
 					TxnID:           txn2.ID,
 					TxnKey:          txn2.Key,
 					TxnMinTimestamp: txn2.MinTimestamp,
-					Timestamp:       hlc.Timestamp{Logical: 5},
+					Timestamp:       enginepb.TxnTimestamp{Logical: 5},
 				}),
 				makeOp(&enginepb.MVCCUpdateIntentOp{
 					TxnID:     txn2.ID,
-					Timestamp: hlc.Timestamp{Logical: 6},
+					Timestamp: enginepb.TxnTimestamp{Logical: 6},
 				}),
 				makeOp(&enginepb.MVCCAbortIntentOp{
 					TxnID: txn2.ID,

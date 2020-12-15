@@ -256,7 +256,7 @@ func TestIntentInterleavingIter(t *testing.T) {
 						d.ScanArgs(t, "ts", &ts)
 						var value string
 						d.ScanArgs(t, "v", &value)
-						mvccKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts)}}
+						mvccKey := MVCCKey{Key: key, Timestamp: enginepb.TxnTimestamp{WallTime: int64(ts)}}
 						if err := batch.PutMVCC(mvccKey, []byte(value)); err != nil {
 							return err.Error()
 						}
@@ -380,7 +380,7 @@ func generateRandomData(t *testing.T, rng *rand.Rand) (lkv []lockKeyValue, mvcck
 		}
 		for _, ts := range timestamps {
 			mvcckv = append(mvcckv, MVCCKeyValue{
-				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts) + 1}},
+				Key:   MVCCKey{Key: key, Timestamp: enginepb.TxnTimestamp{WallTime: int64(ts) + 1}},
 				Value: []byte("value"),
 			})
 		}
@@ -433,7 +433,7 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
 		useTimestamp := rng.Intn(2) == 0
 		seekKey := mvcckv[seekIndex].Key
 		if !useTimestamp {
-			seekKey.Timestamp = hlc.Timestamp{}
+			seekKey.Timestamp = enginepb.TxnTimestamp{}
 		}
 		op := "seek-ge"
 		fwdDirection := true
@@ -582,7 +582,7 @@ func writeBenchData(
 		}
 		for j := versionsPerKey; j >= 1; j-- {
 			require.NoError(b, batch.PutMVCC(
-				MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j)}}, []byte("value")))
+				MVCCKey{Key: key, Timestamp: enginepb.TxnTimestamp{WallTime: int64(j)}}, []byte("value")))
 		}
 	}
 	require.NoError(b, batch.Commit(true))

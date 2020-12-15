@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -28,7 +29,7 @@ type Tracker struct {
 	mu struct {
 		syncutil.Mutex
 		// closed is the most recently closed timestamp.
-		closed      hlc.Timestamp
+		closed      enginepb.TxnTimestamp
 		closedEpoch ctpb.Epoch
 
 		// The variables below track required information for the next closed
@@ -78,7 +79,7 @@ type Tracker struct {
 		// later epoch than is currently tracked will result in the current data
 		// corresponding to the prior epoch to be evicted.
 
-		next                  hlc.Timestamp
+		next                  enginepb.TxnTimestamp
 		leftMLAI, rightMLAI   map[roachpb.RangeID]ctpb.LAI
 		leftRef, rightRef     int
 		leftEpoch, rightEpoch ctpb.Epoch
@@ -99,7 +100,7 @@ func NewTracker() *Tracker {
 	t.mu.closedEpoch = initialEpoch
 	t.mu.leftEpoch = initialEpoch
 	t.mu.rightEpoch = initialEpoch
-	t.mu.next = hlc.Timestamp{Logical: 1}
+	t.mu.next = enginepb.TxnTimestamp(hlc.Timestamp{Logical: 1})
 	t.mu.leftMLAI = map[roachpb.RangeID]ctpb.LAI{}
 	t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
 	return t
@@ -191,8 +192,8 @@ func (t *Tracker) String() string {
 // tracked data the state of the tracker is progressed but zero values are
 // returned.
 func (t *Tracker) Close(
-	next hlc.Timestamp, expCurEpoch ctpb.Epoch,
-) (ts hlc.Timestamp, mlai map[roachpb.RangeID]ctpb.LAI, ok bool) {
+	next enginepb.TxnTimestamp, expCurEpoch ctpb.Epoch,
+) (ts enginepb.TxnTimestamp, mlai map[roachpb.RangeID]ctpb.LAI, ok bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	defer func() {
@@ -259,7 +260,7 @@ func (t *Tracker) Close(
 	}
 
 	if t.mu.closedEpoch != expCurEpoch {
-		return hlc.Timestamp{}, nil, false
+		return enginepb.TxnTimestamp{}, nil, false
 	}
 	return t.mu.closed, mlai, true
 }
@@ -275,7 +276,7 @@ func (t *Tracker) Close(
 //
 // The ReleaseFunc is not thread safe. For convenience, it may be called with
 // zero arguments once after a regular call.
-func (t *Tracker) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFunc) {
+func (t *Tracker) Track(ctx context.Context) (enginepb.TxnTimestamp, closedts.ReleaseFunc) {
 	shouldLog := log.V(3)
 
 	t.mu.Lock()
@@ -316,7 +317,7 @@ func (t *Tracker) FailedCloseAttempts() int64 {
 // Track.
 func (t *Tracker) release(
 	ctx context.Context,
-	minProp hlc.Timestamp,
+	minProp enginepb.TxnTimestamp,
 	epoch ctpb.Epoch,
 	rangeID roachpb.RangeID,
 	lai ctpb.LAI,
@@ -370,7 +371,7 @@ func releaseProposal(
 	ctx context.Context,
 	side string,
 	shouldLog bool,
-	minProp hlc.Timestamp,
+	minProp enginepb.TxnTimestamp,
 	rangeID roachpb.RangeID,
 	lai ctpb.LAI,
 	refs *int,

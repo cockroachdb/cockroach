@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -93,17 +92,17 @@ func (m *MockTransactionalSender) String() string {
 }
 
 // ReadTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) ReadTimestamp() hlc.Timestamp {
+func (m *MockTransactionalSender) ReadTimestamp() enginepb.TxnTimestamp {
 	return m.txn.ReadTimestamp
 }
 
 // ProvisionalCommitTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) ProvisionalCommitTimestamp() hlc.Timestamp {
+func (m *MockTransactionalSender) ProvisionalCommitTimestamp() enginepb.TxnTimestamp {
 	return m.txn.WriteTimestamp
 }
 
 // CommitTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) CommitTimestamp() hlc.Timestamp {
+func (m *MockTransactionalSender) CommitTimestamp() enginepb.TxnTimestamp {
 	return m.txn.ReadTimestamp
 }
 
@@ -113,7 +112,7 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 }
 
 // SetFixedTimestamp is part of the TxnSender interface.
-func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
+func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts enginepb.TxnTimestamp) {
 	m.txn.WriteTimestamp = ts
 	m.txn.ReadTimestamp = ts
 	m.txn.MaxTimestamp = ts
@@ -126,7 +125,7 @@ func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Ti
 
 // ManualRestart is part of the TxnSender interface.
 func (m *MockTransactionalSender) ManualRestart(
-	ctx context.Context, pri roachpb.UserPriority, ts hlc.Timestamp,
+	ctx context.Context, pri roachpb.UserPriority, ts enginepb.TxnTimestamp,
 ) {
 	m.txn.Restart(pri, 0 /* upgradePriority */, ts)
 }

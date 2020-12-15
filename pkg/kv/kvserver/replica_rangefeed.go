@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -70,7 +69,7 @@ type rangefeedTxnPusher struct {
 // high-priority push at the specified timestamp to each of the specified
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
-	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
+	ctx context.Context, txns []enginepb.TxnMeta, ts enginepb.TxnTimestamp,
 ) ([]*roachpb.Transaction, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
@@ -155,7 +154,7 @@ func (r *Replica) RangeFeed(
 	if checkTS.IsEmpty() {
 		// If no timestamp was provided then we're not going to run a catch-up
 		// scan, so make sure the GCThreshold in requestCanProceed succeeds.
-		checkTS = r.Clock().Now()
+		checkTS = enginepb.TxnTimestamp(r.Clock().Now())
 	}
 
 	lockedStream := &lockedRangefeedStream{wrapped: stream}
@@ -300,7 +299,7 @@ const defaultEventChanCap = 4096
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
-	startTS hlc.Timestamp,
+	startTS enginepb.TxnTimestamp,
 	catchupIter rangefeed.IteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
@@ -450,7 +449,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 	// Read from the Reader to populate the PrevValue fields.
 	for _, op := range ops.Ops {
 		var key []byte
-		var ts hlc.Timestamp
+		var ts enginepb.TxnTimestamp
 		var prevValPtr *[]byte
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
@@ -524,7 +523,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	// fully populated. Read from the Reader to populate all fields.
 	for _, op := range ops.Ops {
 		var key []byte
-		var ts hlc.Timestamp
+		var ts enginepb.TxnTimestamp
 		var valPtr *[]byte
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:

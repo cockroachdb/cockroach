@@ -50,16 +50,16 @@ const (
 
 // CalculateThreshold calculates the GC threshold given the policy and the
 // current view of time.
-func CalculateThreshold(now hlc.Timestamp, policy zonepb.GCPolicy) (threshold hlc.Timestamp) {
+func CalculateThreshold(now hlc.Timestamp, policy zonepb.GCPolicy) (threshold enginepb.TxnTimestamp) {
 	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
-	return now.Add(-ttlNanos, 0)
+	return enginepb.TxnTimestamp(now.Add(-ttlNanos, 0))
 }
 
 // TimestampForThreshold inverts CalculateThreshold. It returns the timestamp
 // which should be used for now to arrive at the passed threshold.
-func TimestampForThreshold(threshold hlc.Timestamp, policy zonepb.GCPolicy) (ts hlc.Timestamp) {
+func TimestampForThreshold(threshold enginepb.TxnTimestamp, policy zonepb.GCPolicy) (ts hlc.Timestamp) {
 	ttlNanos := int64(policy.TTLSeconds) * time.Second.Nanoseconds()
-	return threshold.Add(ttlNanos, 0)
+	return hlc.Timestamp(threshold.Add(ttlNanos, 0))
 }
 
 // Thresholder is part of the GCer interface.
@@ -89,9 +89,10 @@ func (NoopGCer) SetGCThreshold(context.Context, Threshold) error { return nil }
 // GC implements storage.GCer.
 func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
 
-// Threshold holds the key and txn span GC thresholds, respectively.
+// Threshold holds the GC threshold.
+// TODO(nvanbenschoten): remove the Txn field. It's unused.
 type Threshold struct {
-	Key hlc.Timestamp
+	Key enginepb.TxnTimestamp
 	Txn hlc.Timestamp
 }
 
@@ -126,7 +127,7 @@ type Info struct {
 	// this cycle.
 	ResolveTotal int
 	// Threshold is the computed expiration timestamp. Equal to `Now - Policy`.
-	Threshold hlc.Timestamp
+	Threshold enginepb.TxnTimestamp
 	// AffectedVersionsKeyBytes is the number of (fully encoded) bytes deleted from keys in the storage engine.
 	// Note that this does not account for compression that the storage engine uses to store data on disk. Real
 	// space savings tends to be smaller due to this compression, and space may be released only at a later point
@@ -158,7 +159,8 @@ func Run(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
-	now, newThreshold hlc.Timestamp,
+	now hlc.Timestamp,
+	newThreshold enginepb.TxnTimestamp,
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
@@ -199,7 +201,7 @@ func Run(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	if err := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &info, gcer); err != nil {
+	if err := processAbortSpan(ctx, snap, desc.RangeID, enginepb.TxnTimestamp(txnExp), &info, gcer); err != nil {
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
@@ -232,7 +234,7 @@ func processReplicatedKeyRange(
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
 	now hlc.Timestamp,
-	threshold hlc.Timestamp,
+	threshold enginepb.TxnTimestamp,
 	gcer GCer,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	intentKeyMap map[uuid.UUID][]roachpb.Key,
@@ -287,7 +289,7 @@ func processReplicatedKeyRange(
 		batchGCKeys           []roachpb.GCRequest_GCKey
 		batchGCKeysBytes      int64
 		haveGarbageForThisKey bool
-		gcTimestampForThisKey hlc.Timestamp
+		gcTimestampForThisKey enginepb.TxnTimestamp
 		sentBatchForThisKey   bool
 	)
 	it := makeGCIterator(desc, snap)
@@ -327,7 +329,7 @@ func processReplicatedKeyRange(
 				Timestamp: gcTimestampForThisKey,
 			})
 			haveGarbageForThisKey = false
-			gcTimestampForThisKey = hlc.Timestamp{}
+			gcTimestampForThisKey = enginepb.TxnTimestamp{}
 
 			// Mark that we sent a batch for this key so we know that we had garbage
 			// even if it turns out that there's no more garbage for this key.
@@ -373,7 +375,7 @@ func processReplicatedKeyRange(
 // guaranteed as described above. However if this were the only rule, then if
 // the most recent write was a delete, it would never be removed. Thus, when a
 // deleted value is the most recent before expiration, it can be deleted.
-func isGarbage(threshold hlc.Timestamp, cur, next *storage.MVCCKeyValue, isNewest bool) bool {
+func isGarbage(threshold enginepb.TxnTimestamp, cur, next *storage.MVCCKeyValue, isNewest bool) bool {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
 		return false
@@ -483,7 +485,7 @@ func processLocalKeyRange(
 	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
-	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, storage.MVCCScanOptions{},
+	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, enginepb.TxnTimestamp{}, storage.MVCCScanOptions{},
 		func(kv roachpb.KeyValue) error {
 			return handleOne(kv)
 		})
@@ -499,7 +501,7 @@ func processAbortSpan(
 	ctx context.Context,
 	snap storage.Reader,
 	rangeID roachpb.RangeID,
-	threshold hlc.Timestamp,
+	threshold enginepb.TxnTimestamp,
 	info *Info,
 	gcer PureGCer,
 ) error {

@@ -71,7 +71,7 @@ type Txn struct {
 
 		// The txn has to be committed by this deadline. A nil value indicates no
 		// deadline.
-		deadline *hlc.Timestamp
+		deadline *enginepb.TxnTimestamp
 	}
 }
 
@@ -281,13 +281,13 @@ func (txn *Txn) String() string {
 // Note a transaction can be internally pushed forward in time before
 // committing so this is not guaranteed to be the commit timestamp.
 // Use CommitTimestamp() when needed.
-func (txn *Txn) ReadTimestamp() hlc.Timestamp {
+func (txn *Txn) ReadTimestamp() enginepb.TxnTimestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.readTimestampLocked()
 }
 
-func (txn *Txn) readTimestampLocked() hlc.Timestamp {
+func (txn *Txn) readTimestampLocked() enginepb.TxnTimestamp {
 	return txn.mu.sender.ReadTimestamp()
 }
 
@@ -295,7 +295,7 @@ func (txn *Txn) readTimestampLocked() hlc.Timestamp {
 // The start timestamp can get pushed but the use of this
 // method will guarantee that if a timestamp push is needed
 // the commit will fail with a retryable error.
-func (txn *Txn) CommitTimestamp() hlc.Timestamp {
+func (txn *Txn) CommitTimestamp() enginepb.TxnTimestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.CommitTimestamp()
@@ -304,7 +304,7 @@ func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 // ProvisionalCommitTimestamp returns the transaction's provisional
 // commit timestamp. This can evolve throughout a txn's lifecycle. See
 // the comment on the WriteTimestamp field of TxnMeta for details.
-func (txn *Txn) ProvisionalCommitTimestamp() hlc.Timestamp {
+func (txn *Txn) ProvisionalCommitTimestamp() enginepb.TxnTimestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.ProvisionalCommitTimestamp()
@@ -387,13 +387,13 @@ func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg protoutil.Mes
 // key can be either a byte slice or a string.
 func (txn *Txn) GetProtoTs(
 	ctx context.Context, key interface{}, msg protoutil.Message,
-) (hlc.Timestamp, error) {
+) (enginepb.TxnTimestamp, error) {
 	r, err := txn.Get(ctx, key)
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return enginepb.TxnTimestamp{}, err
 	}
 	if err := r.ValueProto(msg); err != nil || r.Value == nil {
-		return hlc.Timestamp{}, err
+		return enginepb.TxnTimestamp{}, err
 	}
 	return r.Value.Timestamp, nil
 }
@@ -671,7 +671,7 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 // current one (if any) and the passed value.
 //
 // The deadline cannot be lower than txn.ReadTimestamp.
-func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline enginepb.TxnTimestamp) bool {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadlineMaybe() called on leaf txn"), ctx))
 	}
@@ -685,7 +685,7 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
 				deadline, readTimestamp)
 		}
-		txn.mu.deadline = new(hlc.Timestamp)
+		txn.mu.deadline = new(enginepb.TxnTimestamp)
 		*txn.mu.deadline = deadline
 		return true
 	}
@@ -769,7 +769,7 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
-func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Request {
+func endTxnReq(commit bool, deadline *enginepb.TxnTimestamp, hasTrigger bool) roachpb.Request {
 	req := &roachpb.EndTxnRequest{
 		Commit:   commit,
 		Deadline: deadline,
@@ -1114,7 +1114,7 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 // This is used to support historical queries (AS OF SYSTEM TIME queries and
 // backups). This method must be called on every transaction retry (but note
 // that retries should be rare for read-only queries with no clock uncertainty).
-func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
+func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts enginepb.TxnTimestamp) {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("SetFixedTimestamp() called on leaf txn"), ctx))
@@ -1138,7 +1138,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	now := txn.db.clock.Now()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
+	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, enginepb.TxnTimestamp(now))
 	txn.resetDeadlineLocked()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg,
@@ -1176,7 +1176,7 @@ func (txn *Txn) PrepareRetryableError(ctx context.Context, msg string) error {
 // retryable error is seen.
 // TODO(andrei): this second use should go away once we move to a TxnAttempt
 // model.
-func (txn *Txn) ManualRestart(ctx context.Context, ts hlc.Timestamp) {
+func (txn *Txn) ManualRestart(ctx context.Context, ts enginepb.TxnTimestamp) {
 	if txn.typ != RootTxn {
 		panic(errors.WithContextTags(
 			errors.AssertionFailedf("ManualRestart() called on leaf txn"), ctx))
@@ -1216,7 +1216,7 @@ func (txn *Txn) TestingCloneTxn() *roachpb.Transaction {
 	return txn.mu.sender.TestingCloneTxn()
 }
 
-func (txn *Txn) deadline() *hlc.Timestamp {
+func (txn *Txn) deadline() *enginepb.TxnTimestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.deadline

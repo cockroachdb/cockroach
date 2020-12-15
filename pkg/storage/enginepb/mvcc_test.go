@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -26,7 +25,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := hlc.Timestamp{Logical: 1}
+	ts := enginepb.TxnTimestamp{Logical: 1}
 	tmeta := &enginepb.TxnMeta{
 		Key:            roachpb.Key("a"),
 		ID:             txnID,

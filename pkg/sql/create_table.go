@@ -45,8 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -282,7 +282,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	//
 	// TODO(ajwerner): remove the timestamp from newTableDesc and its friends,
 	// it's	currently relied on in import and restore code and tests.
-	var creationTime hlc.Timestamp
+	var creationTime enginepb.TxnTimestamp
 	if n.n.As() {
 		asCols = planColumns(n.sourcePlan)
 		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
@@ -1225,7 +1225,7 @@ func newTableDescIfAs(
 	params runParams,
 	p *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
-	creationTime hlc.Timestamp,
+	creationTime enginepb.TxnTimestamp,
 	resultColumns []colinfo.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
@@ -1305,7 +1305,7 @@ func NewTableDesc(
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
-	creationTime hlc.Timestamp,
+	creationTime enginepb.TxnTimestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 	semaCtx *tree.SemaContext,
@@ -1939,7 +1939,7 @@ func newTableDesc(
 	params runParams,
 	n *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
-	creationTime hlc.Timestamp,
+	creationTime enginepb.TxnTimestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 ) (ret *tabledesc.Mutable, err error) {

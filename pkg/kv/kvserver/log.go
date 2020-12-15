@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -213,7 +213,7 @@ func (s *Store) logChange(
 // assigned database timestamp. However, in the case of our tests log events
 // *are* the first action in a transaction, and we must elect to use the store's
 // physical time instead.
-func selectEventTimestamp(s *Store, input hlc.Timestamp) time.Time {
+func selectEventTimestamp(s *Store, input enginepb.TxnTimestamp) time.Time {
 	if input.IsEmpty() {
 		return s.Clock().PhysicalTime()
 	}

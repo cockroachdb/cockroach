@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -31,7 +31,7 @@ func declareKeysResolveIntentCombined(
 ) {
 	var status roachpb.TransactionStatus
 	var txnID uuid.UUID
-	var minTxnTS hlc.Timestamp
+	var minTxnTS enginepb.TxnTimestamp
 	switch t := req.(type) {
 	case *roachpb.ResolveIntentRequest:
 		status = t.Status

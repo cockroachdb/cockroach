@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,7 +66,7 @@ func QueryTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	ok, err := storage.MVCCGetProto(
-		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
+		ctx, reader, key, enginepb.TxnTimestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
 	)
 	if err != nil {
 		return result.Result{}, err

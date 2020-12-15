@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -201,7 +201,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 // Returns true if the timestamp was bumped. Returns false if the timestamp could
 // not be bumped.
 func tryBumpBatchTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, ts enginepb.TxnTimestamp, latchSpans *spanset.SpanSet,
 ) bool {
 	if latchSpans.MaxProtectedTimestamp().Less(ts) {
 		// If the batch acquired any read latches with bounded (MVCC) timestamps

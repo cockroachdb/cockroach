@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,7 +27,7 @@ func initBackfillerSpec(
 	desc descpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
-	readAsOf hlc.Timestamp,
+	readAsOf enginepb.TxnTimestamp,
 ) (execinfrapb.BackfillerSpec, error) {
 	ret := execinfrapb.BackfillerSpec{
 		Table:     desc,
@@ -56,7 +56,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,
-	readAsOf hlc.Timestamp,
+	readAsOf enginepb.TxnTimestamp,
 ) (*PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
 	if err != nil {

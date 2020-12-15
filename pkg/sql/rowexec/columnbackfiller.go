@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 // columnBackfiller is a processor for backfilling columns.
@@ -86,7 +86,7 @@ func (cb *columnBackfiller) runChunk(
 	mutations []descpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
-	readAsOf hlc.Timestamp,
+	readAsOf enginepb.TxnTimestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

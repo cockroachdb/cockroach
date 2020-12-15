@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1722,7 +1722,7 @@ func handleTruncatedStateBelowRaft(
 
 			if err := storage.MVCCPutProto(
 				ctx, readWriter, nil /* ms */, prefixBuf.RaftTruncatedStateKey(),
-				hlc.Timestamp{}, nil /* txn */, newTruncatedState,
+				enginepb.TxnTimestamp{}, nil /* txn */, newTruncatedState,
 			); err != nil {
 				return false, errors.Wrap(err, "unable to migrate RaftTruncatedState")
 			}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -158,7 +159,7 @@ func MakeSimpleTableDescriptor(
 		parentID,
 		parentSchemaID,
 		tableID,
-		hlc.Timestamp{WallTime: walltime},
+		enginepb.TxnTimestamp(hlc.Timestamp{WallTime: walltime}),
 		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		affected,
 		semaCtx,

@@ -580,7 +580,8 @@ message MaterializedViewRefresh {
   // NewIndexes are the new set of indexes to backfill the view into.
   repeated IndexDescriptor new_indexes = 2 [(gogoproto.nullable) = false];
   // AsOf is the timestamp to perform the view query at.
-  optional util.hlc.Timestamp as_of = 3 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp as_of = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // ShouldBackfill indicates whether or not the schema changer should backfill
   // the query into the new indexes. This can be false if the `WITH NO DATA` flag
   // was specified for the `REFRESH MATERIALIZED VIEW` statement. `WITH NO DATA`
@@ -804,7 +805,8 @@ message TableDescriptor {
   // should live inside of a Descriptor. The Descriptor.Table() method takes an
   // hlc timestamp to ensure that this field is set properly when extracted from
   // a Descriptor.
-  optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   // A list of draining names. The draining name entries are drained from
   // the cluster wide name caches by incrementing the version for this
   // descriptor and ensuring that there are no leases on prior
@@ -1006,7 +1008,8 @@ message TableDescriptor {
     // transaction which created this replacement. In 20.1 and after it is
     // populated with the read timestamp at which the descriptor being
     // replaced was read.
-    optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
+    optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false,
+        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   }
 
   // ReplacementOf tracks prior IDs by which this table went -- e.g. when
@@ -1059,7 +1062,8 @@ message TableDescriptor {
   // like ModificationTime. See Descriptor.Table().
   // CreateAsOfSystemTime is used for CREATE TABLE ... AS ... and was
   // added in 19.1.
-  optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp create_as_of_time = 35 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
 
   // outbound_fks contains all foreign key constraints that have this table as
   // the origin table.
@@ -1123,7 +1127,8 @@ message DatabaseDescriptor {
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
   // Last modification time of the descriptor.
-  optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp modification_time = 4 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   repeated NameInfo draining_names = 6 [(gogoproto.nullable) = false];
 
@@ -1183,7 +1188,8 @@ message TypeDescriptor {
 
   optional uint32 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   // Last modification time of the descriptor.
-  optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
 
   // privileges contains the privileges for the type.
@@ -1289,7 +1295,8 @@ message SchemaDescriptor {
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
 
   // Last modification time of the descriptor.
-  optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnTimestamp"];
   optional uint32 version = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
   repeated NameInfo draining_names = 7 [(gogoproto.nullable) = false];
 

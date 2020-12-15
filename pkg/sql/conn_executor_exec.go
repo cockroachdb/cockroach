@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -547,7 +548,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if asOfTs != nil {
 			p.semaCtx.AsOfTimestamp = asOfTs
 			p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
-			ex.state.setHistoricalTimestamp(ctx, *asOfTs)
+			ex.state.setHistoricalTimestamp(ctx, enginepb.TxnTimestamp(*asOfTs))
 		}
 	} else {
 		// If we're in an explicit txn, we allow AOST but only if it matches with
@@ -559,7 +560,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if ts != nil {
-			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
+			if readTs := ex.state.getReadTimestamp();  enginepb.TxnTimestamp(*ts) != readTs {
 				err = pgerror.Newf(pgcode.Syntax,
 					"inconsistent AS OF SYSTEM TIME timestamp; expected: %s", readTs)
 				err = errors.WithHint(err, "try SET TRANSACTION AS OF SYSTEM TIME")
@@ -665,7 +666,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				IsCommit:     fsm.FromBool(isCommit(ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			txn.ManualRestart(ctx, ex.server.cfg.Clock.Now())
+			now := ex.server.cfg.Clock.Now()
+			txn.ManualRestart(ctx, enginepb.TxnTimestamp(now))
 			payload := eventRetriableErrPayload{
 				err: roachpb.NewTransactionRetryWithProtoRefreshError(
 					"serializable transaction timestamp pushed (detected by connExecutor)",

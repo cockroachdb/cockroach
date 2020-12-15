@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -239,7 +240,8 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	// write is prevented, or we run out of in-flight writes to query.
 	for len(queryIntentReqs) > 0 {
 		var b kv.Batch
-		b.Header.Timestamp = m.clock.Now()
+		// TODO(nvanbenschoten): how does the QueryIntent work in this case?
+		b.Header.Timestamp = enginepb.TxnTimestamp(m.clock.Now())
 		b.AddRawRequest(&queryTxnReq)
 		for i := 0; i < defaultBatchSize && len(queryIntentReqs) > 0; i++ {
 			b.AddRawRequest(&queryIntentReqs[0])
@@ -292,7 +294,8 @@ func (m *manager) resolveIndeterminateCommitForTxnRecover(
 	ctx context.Context, txn *roachpb.Transaction, preventedIntent bool,
 ) (*roachpb.Transaction, error) {
 	var b kv.Batch
-	b.Header.Timestamp = m.clock.Now()
+	// TODO(nvanbenschoten): how does the RecoverTxn work in this case?
+	b.Header.Timestamp = enginepb.TxnTimestamp(m.clock.Now())
 	b.AddRawRequest(&roachpb.RecoverTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,

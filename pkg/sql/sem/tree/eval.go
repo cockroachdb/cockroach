@@ -3428,7 +3428,8 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	if ts.IsEmpty() {
 		panic(errors.AssertionFailedf("zero cluster timestamp in txn"))
 	}
-	return TimestampToDecimalDatum(ts)
+	// TODO(nvanbenschoten): what if this is synethtic?
+	return TimestampToDecimalDatum(ts.ToClockTimestampUnchecked())
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been

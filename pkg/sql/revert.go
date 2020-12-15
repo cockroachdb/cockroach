@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -34,7 +34,7 @@ func RevertTables(
 	db *kv.DB,
 	execCfg *ExecutorConfig,
 	tables []*tabledesc.Immutable,
-	targetTime hlc.Timestamp,
+	targetTime enginepb.TxnTimestamp,
 	batchSize int64,
 ) error {
 	reverting := make(map[descpb.ID]bool, len(tables))

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -377,7 +376,7 @@ type replicaAppBatch struct {
 	stats enginepb.MVCCStats
 	// maxTS is the maximum timestamp that any command that was staged in this
 	// batch was evaluated at.
-	maxTS hlc.Timestamp
+	maxTS enginepb.TxnTimestamp
 	// migrateToAppliedStateKey tracks whether any command in the batch
 	// triggered a migration to the replica applied state key. If so, this
 	// migration will be performed when the application batch is committed.
@@ -821,7 +820,9 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// received ops without a timestamp specified are guaranteed one higher than
 	// any op already executed for overlapping keys.
 	r := b.r
-	r.store.Clock().Update(b.maxTS)
+	// TODO(nvanbenschoten): what's up with this? Why do we need to update the
+	// clock here?
+	// r.store.Clock().Update(b.maxTS)
 
 	// Add the replica applied state key to the write batch if this change
 	// doesn't remove us.

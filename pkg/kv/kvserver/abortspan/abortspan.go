@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -95,7 +94,7 @@ func (sc *AbortSpan) Get(
 ) (bool, error) {
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	ok, err := storage.MVCCGetProto(ctx, reader, key, hlc.Timestamp{}, entry, storage.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, reader, key, enginepb.TxnTimestamp{}, entry, storage.MVCCGetOptions{})
 	return ok, err
 }
 
@@ -104,7 +103,7 @@ func (sc *AbortSpan) Get(
 func (sc *AbortSpan) Iterate(
 	ctx context.Context, reader storage.Reader, f func(roachpb.Key, roachpb.AbortSpanEntry) error,
 ) error {
-	_, err := storage.MVCCIterate(ctx, reader, sc.min(), sc.max(), hlc.Timestamp{}, storage.MVCCScanOptions{},
+	_, err := storage.MVCCIterate(ctx, reader, sc.min(), sc.max(), enginepb.TxnTimestamp{}, storage.MVCCScanOptions{},
 		func(kv roachpb.KeyValue) error {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
@@ -123,7 +122,7 @@ func (sc *AbortSpan) Del(
 	ctx context.Context, reader storage.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCDelete(ctx, reader, ms, key, hlc.Timestamp{}, nil /* txn */)
+	return storage.MVCCDelete(ctx, reader, ms, key, enginepb.TxnTimestamp{}, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
@@ -135,7 +134,7 @@ func (sc *AbortSpan) Put(
 	entry *roachpb.AbortSpanEntry,
 ) error {
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
+	return storage.MVCCPutProto(ctx, readWriter, ms, key, enginepb.TxnTimestamp{}, nil /* txn */, entry)
 }
 
 // CopyTo copies the abort span entries to the abort span for the range
@@ -151,7 +150,7 @@ func (sc *AbortSpan) CopyTo(
 	r storage.Reader,
 	w storage.ReadWriter,
 	ms *enginepb.MVCCStats,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 	newRangeID roachpb.RangeID,
 ) error {
 	var abortSpanCopyCount, abortSpanSkipCount int
@@ -180,7 +179,7 @@ func (sc *AbortSpan) CopyTo(
 		}
 		return storage.MVCCPutProto(ctx, w, ms,
 			keys.AbortSpanKey(newRangeID, txnID),
-			hlc.Timestamp{}, nil, &entry,
+			enginepb.TxnTimestamp{}, nil, &entry,
 		)
 	}); err != nil {
 		return roachpb.NewReplicaCorruptionError(errors.Wrap(err, "AbortSpan.CopyTo"))

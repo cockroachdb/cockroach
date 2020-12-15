@@ -85,16 +85,17 @@ func (s *Store) Send(
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-		s.cfg.Clock.Update(ba.Timestamp)
-	} else {
-		// If the command appears to come from a node with a bad clock,
-		// reject it now before we reach that point.
-		var err error
-		if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
-			return nil, roachpb.NewError(err)
-		}
-	}
+	// TODO(nvanbenschoten)
+	// if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+	// 	s.cfg.Clock.Update(ba.Timestamp)
+	// } else {
+	// 	// If the command appears to come from a node with a bad clock,
+	// 	// reject it now before we reach that point.
+	// 	var err error
+	// 	if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
+	// 		return nil, roachpb.NewError(err)
+	// 	}
+	// }
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -118,17 +119,17 @@ func (s *Store) Send(
 				}
 				// Update our clock with the outgoing response txn timestamp
 				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
-					s.cfg.Clock.Update(br.Txn.WriteTimestamp)
-				}
+				// if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
+				// 	s.cfg.Clock.Update(br.Txn.WriteTimestamp)
+				// }
 			}
 		} else {
 			if pErr == nil {
 				// Update our clock with the outgoing response timestamp.
 				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Timestamp) {
-					s.cfg.Clock.Update(br.Timestamp)
-				}
+				// if ba.Timestamp.Less(br.Timestamp) {
+				// 	s.cfg.Clock.Update(br.Timestamp)
+				// }
 			}
 		}
 

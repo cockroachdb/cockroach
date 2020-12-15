@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -71,7 +72,7 @@ func (a SpanScope) String() string {
 // timestamp. A zero timestamp indicates it's a non-MVCC access.
 type Span struct {
 	roachpb.Span
-	Timestamp hlc.Timestamp
+	Timestamp enginepb.TxnTimestamp
 }
 
 // SpanSet tracks the set of key spans touched by a command, broken into MVCC
@@ -124,16 +125,16 @@ func (s *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
 // AddNonMVCC adds a non-MVCC span to the span set. This should typically
 // local keys.
 func (s *SpanSet) AddNonMVCC(access SpanAccess, span roachpb.Span) {
-	s.AddMVCC(access, span, hlc.Timestamp{})
+	s.AddMVCC(access, span, enginepb.TxnTimestamp{})
 }
 
 // AddMVCC adds an MVCC span to the span set to be accessed at the given
 // timestamp. This should typically be used for MVCC keys, user keys for e.g.
-func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp) {
+func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp enginepb.TxnTimestamp) {
 	scope := SpanGlobal
 	if keys.IsLocal(span.Key) {
 		scope = SpanLocal
-		timestamp = hlc.Timestamp{}
+		timestamp = enginepb.TxnTimestamp{}
 	}
 
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
@@ -183,8 +184,8 @@ func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
 // declared timestamp forward, so they have no maximum protect timestamp.
 // However, ReadOnly are protected only up to their declared timestamp and
 // are not protected at later timestamps.
-func (s *SpanSet) MaxProtectedTimestamp() hlc.Timestamp {
-	maxTS := hlc.MaxTimestamp
+func (s *SpanSet) MaxProtectedTimestamp() enginepb.TxnTimestamp {
+	maxTS := enginepb.TxnTimestamp(hlc.MaxTimestamp)
 	for ss := SpanScope(0); ss < NumSpanScope; ss++ {
 		for _, cur := range s.GetSpans(SpanReadOnly, ss) {
 			curTS := cur.Timestamp
@@ -248,7 +249,7 @@ func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
 // CheckAllowedAt is like CheckAllowed, except it returns an error if the access
 // is not allowed over the given keyspan at the given timestamp.
 func (s *SpanSet) CheckAllowedAt(
-	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
+	access SpanAccess, span roachpb.Span, timestamp enginepb.TxnTimestamp,
 ) error {
 	mvcc := !timestamp.IsEmpty()
 	return s.checkAllowed(access, span, func(declAccess SpanAccess, declSpan Span) bool {

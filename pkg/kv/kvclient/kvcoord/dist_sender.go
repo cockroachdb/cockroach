@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -579,7 +580,8 @@ func (ds *DistSender) initAndVerifyBatch(
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
 	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp.IsEmpty() {
-		ba.Timestamp = ds.clock.Now()
+		// TODO(nvanbenschoten): split this...
+		ba.Timestamp = enginepb.TxnTimestamp(ds.clock.Now())
 	}
 
 	if len(ba.Requests) < 1 {
@@ -1022,7 +1024,8 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 	ctx context.Context, txn *roachpb.Transaction,
 ) (bool, error) {
 	ba := roachpb.BatchRequest{}
-	ba.Timestamp = ds.clock.Now()
+	// TODO(nvanbenschoten): how does the QueryTxn work in this case?
+	ba.Timestamp = enginepb.TxnTimestamp(ds.clock.Now())
 	ba.Add(&roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.TxnMeta.Key,

@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -53,7 +53,7 @@ type Descriptor interface {
 
 	// Metadata for descriptor leasing.
 	GetVersion() descpb.DescriptorVersion
-	GetModificationTime() hlc.Timestamp
+	GetModificationTime() enginepb.TxnTimestamp
 	GetDrainingNames() []descpb.NameInfo
 
 	GetPrivileges() *descpb.PrivilegeDescriptor

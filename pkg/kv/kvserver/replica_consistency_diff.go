@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/redact"
 )
 
@@ -26,7 +26,7 @@ type ReplicaSnapshotDiff struct {
 	// holder.
 	LeaseHolder bool
 	Key         roachpb.Key
-	Timestamp   hlc.Timestamp
+	Timestamp   enginepb.TxnTimestamp
 	Value       []byte
 }
 

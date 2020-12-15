@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -191,7 +192,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
-		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
+		ts.setHistoricalTimestamp(ts.Ctx, enginepb.TxnTimestamp(*historicalTimestamp))
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
@@ -249,7 +250,7 @@ func (ts *txnState) finishExternalTxn() {
 	ts.mu.Unlock()
 }
 
-func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimestamp hlc.Timestamp) {
+func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimestamp enginepb.TxnTimestamp) {
 	ts.mu.Lock()
 	ts.mu.txn.SetFixedTimestamp(ctx, historicalTimestamp)
 	ts.mu.Unlock()
@@ -257,7 +258,7 @@ func (ts *txnState) setHistoricalTimestamp(ctx context.Context, historicalTimest
 }
 
 // getReadTimestamp returns the transaction's current read timestamp.
-func (ts *txnState) getReadTimestamp() hlc.Timestamp {
+func (ts *txnState) getReadTimestamp() enginepb.TxnTimestamp {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 	return ts.mu.txn.ReadTimestamp()

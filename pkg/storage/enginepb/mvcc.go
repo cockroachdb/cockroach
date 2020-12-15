@@ -16,7 +16,9 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -48,6 +50,102 @@ const (
 	// MaxTxnPriority is the maximum allowed txn priority.
 	MaxTxnPriority TxnPriority = math.MaxInt32
 )
+
+// TxnTimestamp is an MVCC timestamp that a transaction may read or write at.
+// When a transaction commits, it leaves behind MVCC versions for any writes
+// that it performed at its timestamp, denoting at which time these writes are
+// visible to other transactions.
+//
+// Transactions begin life with a timestamp pulled from a clock and reflecting
+// real time, but a transaction's timestamp may diverge from real time due to
+// the closed timestamp on non-blocking ranges or due to conflicts with other
+// transactions whose timestamps have already diverged from real time. In these
+// cases, a TxnTimestamp may represent a "future timestamp" and will have its
+// synthetic flag set. As such, it would be incorrect to introduce back into a
+// clock, so TxnTimestamps should never be converted back to hlc.Timestamps.
+type TxnTimestamp hlc.Timestamp
+
+// TxnTimestamp constant values.
+var (
+	// MaxTxnTimestamp is the max value allowed for TxnTimestamp.
+	MaxTxnTimestamp = TxnTimestamp(hlc.MaxTimestamp)
+	// MinTxnTimestamp is the min value allowed for TxnTimestamp.
+	MinTxnTimestamp = TxnTimestamp(hlc.MinTimestamp)
+)
+
+// NewPopulatedTxnTimestamp ...
+func NewPopulatedTxnTimestamp(r randyMvcc3, easy bool) *TxnTimestamp {
+	return (*TxnTimestamp)(hlc.NewPopulatedTimestamp(r, easy))
+}
+
+// alias for compact casting.
+type hlcTs = hlc.Timestamp
+
+// ToClockTimestampUnchecked ...
+func (t TxnTimestamp) ToClockTimestampUnchecked() hlc.Timestamp { return hlcTs(t) }
+
+// ToLegacyTimestamp ...
+func (t TxnTimestamp) ToLegacyTimestamp() hlc.LegacyTimestamp { return hlcTs(t).ToLegacyTimestamp() }
+
+// EqOrdering ...
+func (t TxnTimestamp) EqOrdering(s TxnTimestamp) bool { return hlcTs(t).EqOrdering(hlcTs(s)) }
+
+// Less ...
+func (t TxnTimestamp) Less(s TxnTimestamp) bool { return hlcTs(t).Less(hlcTs(s)) }
+
+// LessEq  ...
+func (t TxnTimestamp) LessEq(s TxnTimestamp) bool { return hlcTs(t).LessEq(hlcTs(s)) }
+
+// String ...
+func (t TxnTimestamp) String() string { return hlcTs(t).String() }
+
+// SafeValue implements the redact.SafeValue interface.
+func (t TxnTimestamp) SafeValue() {}
+
+// AsOfSystemTime ...
+func (t TxnTimestamp) AsOfSystemTime() string { return hlcTs(t).AsOfSystemTime() }
+
+// IsEmpty ...
+func (t TxnTimestamp) IsEmpty() bool { return hlcTs(t).IsEmpty() }
+
+// GoTime ...
+func (t TxnTimestamp) GoTime() time.Time { return hlcTs(t).GoTime() }
+
+// Add ...
+func (t TxnTimestamp) Add(w int64, l int32) TxnTimestamp { return TxnTimestamp(hlcTs(t).Add(w, l)) }
+
+// Next ...
+func (t TxnTimestamp) Next() TxnTimestamp { return TxnTimestamp(hlcTs(t).Next()) }
+
+// Prev ...
+func (t TxnTimestamp) Prev() TxnTimestamp { return TxnTimestamp(hlcTs(t).Prev()) }
+
+// FloorPrev ...
+func (t TxnTimestamp) FloorPrev() TxnTimestamp { return TxnTimestamp(hlcTs(t).FloorPrev()) }
+
+// Forward ...
+func (t *TxnTimestamp) Forward(s TxnTimestamp) bool { return (*hlcTs)(t).Forward(hlcTs(s)) }
+
+// Backward ...
+func (t *TxnTimestamp) Backward(s TxnTimestamp) { (*hlcTs)(t).Backward(hlcTs(s)) }
+
+// Reset ...
+func (t *TxnTimestamp) Reset() { (*hlcTs)(t).Reset() }
+
+// ProtoMessage ...
+func (t *TxnTimestamp) ProtoMessage() {}
+
+// Size ...
+func (t *TxnTimestamp) Size() int { return (*hlcTs)(t).Size() }
+
+// Equal ...
+func (t *TxnTimestamp) Equal(that interface{}) bool { return (*hlcTs)(t).Equal(that) }
+
+// MarshalTo ...
+func (t *TxnTimestamp) MarshalTo(data []byte) (int, error) { return (*hlcTs)(t).MarshalTo(data) }
+
+// Unmarshal ...
+func (t *TxnTimestamp) Unmarshal(data []byte) error { return (*hlcTs)(t).Unmarshal(data) }
 
 // TxnSeqIsIgnored returns true iff the sequence number overlaps with
 // any range in the ignored array.
@@ -200,6 +298,11 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
+}
+
+// TxnTimestamp ...
+func (meta MVCCMetadata) TxnTimestamp() TxnTimestamp {
+	return TxnTimestamp(meta.Timestamp.ToTimestamp())
 }
 
 // AddToIntentHistory adds the sequence and value to the intent history.

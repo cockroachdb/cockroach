@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -32,7 +31,7 @@ type MVCCIterator struct {
 
 	// Timestamp the access is taking place. If timestamp is zero, access is
 	// considered non-MVCC. If spansOnly is set to true, ts is not consulted.
-	ts hlc.Timestamp
+	ts enginepb.TxnTimestamp
 
 	// Seeking to an invalid key puts the iterator in an error state.
 	err error
@@ -52,7 +51,7 @@ func NewIterator(iter storage.MVCCIterator, spans *SpanSet) *MVCCIterator {
 
 // NewIteratorAt constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet at the given timestamp.
-func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *MVCCIterator {
+func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts enginepb.TxnTimestamp) *MVCCIterator {
 	return &MVCCIterator{i: iter, spans: spans, ts: ts}
 }
 
@@ -327,7 +326,7 @@ type spanSetReader struct {
 	spans *SpanSet
 
 	spansOnly bool
-	ts        hlc.Timestamp
+	ts        enginepb.TxnTimestamp
 }
 
 var _ storage.Reader = spanSetReader{}
@@ -343,7 +342,7 @@ func (s spanSetReader) Closed() bool {
 // ExportMVCCToSst is part of the engine.Reader interface.
 func (s spanSetReader) ExportMVCCToSst(
 	startKey, endKey roachpb.Key,
-	startTS, endTS hlc.Timestamp,
+	startTS, endTS enginepb.TxnTimestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	io storage.IterOptions,
@@ -442,7 +441,7 @@ type spanSetWriter struct {
 	spans *SpanSet
 
 	spansOnly bool
-	ts        hlc.Timestamp
+	ts        enginepb.TxnTimestamp
 }
 
 var _ storage.Writer = spanSetWriter{}
@@ -620,7 +619,7 @@ func makeSpanSetReadWriter(rw storage.ReadWriter, spans *SpanSet) ReadWriter {
 	}
 }
 
-func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) ReadWriter {
+func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts enginepb.TxnTimestamp) ReadWriter {
 	return ReadWriter{
 		spanSetReader: spanSetReader{r: rw, spans: spans, ts: ts},
 		spanSetWriter: spanSetWriter{w: rw, spans: spans, ts: ts},
@@ -636,7 +635,7 @@ func NewReadWriter(rw storage.ReadWriter, spans *SpanSet) storage.ReadWriter {
 // NewReadWriterAt returns an engine.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.
-func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
+func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts enginepb.TxnTimestamp) storage.ReadWriter {
 	return makeSpanSetReadWriterAt(rw, spans, ts)
 }
 
@@ -646,7 +645,7 @@ type spanSetBatch struct {
 	spans *SpanSet
 
 	spansOnly bool
-	ts        hlc.Timestamp
+	ts        enginepb.TxnTimestamp
 }
 
 var _ storage.Batch = spanSetBatch{}
@@ -689,7 +688,7 @@ func NewBatch(b storage.Batch, spans *SpanSet) storage.Batch {
 // NewBatchAt returns an engine.Batch that asserts access of the underlying
 // Batch against the given SpanSet at the given timestamp.
 // If the zero timestamp is used, all accesses are considered non-MVCC.
-func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch {
+func NewBatchAt(b storage.Batch, spans *SpanSet, ts enginepb.TxnTimestamp) storage.Batch {
 	return &spanSetBatch{
 		ReadWriter: makeSpanSetReadWriterAt(b, spans, ts),
 		b:          b,

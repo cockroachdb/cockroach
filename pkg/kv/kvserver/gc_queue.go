@@ -277,7 +277,7 @@ func makeGCQueueScoreImpl(
 	now hlc.Timestamp,
 	ms enginepb.MVCCStats,
 	policy zonepb.GCPolicy,
-	gcThreshold hlc.Timestamp,
+	gcThreshold enginepb.TxnTimestamp,
 ) gcQueueScore {
 	ms.Forward(now.WallTime)
 	var r gcQueueScore
@@ -380,7 +380,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 
 	// Technically not needed since we're talking directly to the Replica.
 	ba.RangeID = r.repl.Desc().RangeID
-	ba.Timestamp = r.repl.Clock().Now()
+	ba.Timestamp = enginepb.TxnTimestamp(r.repl.Clock().Now())
 	ba.Add(&req)
 
 	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
@@ -392,7 +392,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 
 func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) error {
 	req := r.template()
-	req.Threshold = thresh.Key
+	req.Threshold = enginepb.TxnTimestamp(thresh.Key)
 	return r.send(ctx, req)
 }
 
@@ -460,6 +460,7 @@ func (gcq *gcQueue) process(
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold, *zone.GC,
 		&replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
+			// TODO(nvanbenshoten): this is wrong.
 			intentCount, err := repl.store.intentResolver.
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
 			if err == nil {
@@ -468,6 +469,7 @@ func (gcq *gcQueue) process(
 			return err
 		},
 		func(ctx context.Context, txn *roachpb.Transaction) error {
+			// TODO(nvanbenshoten): this is wrong.
 			err := repl.store.intentResolver.
 				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, gcTimestamp,
 					func(pushed, succeeded bool) {

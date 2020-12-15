@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -142,7 +142,7 @@ func (s *Store) tryGetOrCreateReplica(
 	tombstoneKey := keys.RangeTombstoneKey(rangeID)
 	var tombstone roachpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		ctx, s.Engine(), tombstoneKey, enginepb.TxnTimestamp{}, &tombstone, storage.MVCCGetOptions{},
 	); err != nil {
 		return nil, false, err
 	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
@@ -202,7 +202,7 @@ func (s *Store) tryGetOrCreateReplica(
 		// again now, we make sure to synchronize with any goroutine that wrote
 		// a tombstone and then removed an old replica from the Range map.
 		if ok, err := storage.MVCCGetProto(
-			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			ctx, s.Engine(), tombstoneKey, enginepb.TxnTimestamp{}, &tombstone, storage.MVCCGetOptions{},
 		); err != nil {
 			return err
 		} else if ok && replicaID < tombstone.NextReplicaID {

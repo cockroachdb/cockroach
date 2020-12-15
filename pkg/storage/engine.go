@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -242,7 +241,7 @@ type IterOptions struct {
 	// not see some interleaved intents. Currently, the only way to correctly
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
-	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	MinTimestampHint, MaxTimestampHint enginepb.TxnTimestamp
 }
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
@@ -296,7 +295,7 @@ type Reader interface {
 	// This function looks at MVCC versions and intents, and returns an error if an
 	// intent is found.
 	ExportMVCCToSst(
-		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
+		startKey, endKey roachpb.Key, startTS, endTS enginepb.TxnTimestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64,
 		io IterOptions,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)

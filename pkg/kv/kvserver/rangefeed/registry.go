@@ -54,7 +54,7 @@ type Stream interface {
 type registration struct {
 	// Input.
 	span                   roachpb.Span
-	catchupTimestamp       hlc.Timestamp
+	catchupTimestamp       enginepb.TxnTimestamp
 	catchupIterConstructor func() storage.SimpleMVCCIterator
 	withDiff               bool
 	metrics                *Metrics
@@ -85,7 +85,7 @@ type registration struct {
 
 func newRegistration(
 	span roachpb.Span,
-	startTS hlc.Timestamp,
+	startTS enginepb.TxnTimestamp,
 	catchupIterConstructor func() storage.SimpleMVCCIterator,
 	withDiff bool,
 	bufferSz int,
@@ -348,7 +348,7 @@ func (r *registration) maybeRunCatchupScan() error {
 				// immediately after) the provisional key.
 				catchupIter.SeekGE(storage.MVCCKey{
 					Key:       unsafeKey.Key,
-					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
+					Timestamp: meta.TxnTimestamp().Prev(),
 				})
 				continue
 			}
@@ -467,7 +467,7 @@ func (reg *registry) nextID() int64 {
 func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
-	var minTS hlc.Timestamp
+	var minTS enginepb.TxnTimestamp
 	switch t := event.GetValue().(type) {
 	case *roachpb.RangeFeedValue:
 		// Only publish values to registrations with starting
@@ -479,7 +479,7 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		//
 		// TODO(dan): It's unclear if this is the right contract, it's certainly
 		// surprising. Revisit this once RangeFeed has more users.
-		minTS = hlc.MaxTimestamp
+		minTS = enginepb.TxnTimestamp(hlc.MaxTimestamp)
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}

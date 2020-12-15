@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1662,7 +1663,7 @@ func (r *importResumer) dropTables(
 		if details.Walltime == 0 {
 			return errors.Errorf("invalid pre-IMPORT time to rollback")
 		}
-		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
+		ts := enginepb.TxnTimestamp{WallTime: details.Walltime}.Prev()
 		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back partially completed IMPORT")
 		}

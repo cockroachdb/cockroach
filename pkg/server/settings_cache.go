@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -27,9 +26,9 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 	batch := eng.NewBatch()
 	defer batch.Close()
 	for _, kv := range kvs {
-		kv.Value.Timestamp = hlc.Timestamp{} // nb: Timestamp is not part of checksum
+		kv.Value.Timestamp = enginepb.TxnTimestamp{} // nb: Timestamp is not part of checksum
 		if err := storage.MVCCPut(
-			ctx, batch, nil, keys.StoreCachedSettingsKey(kv.Key), hlc.Timestamp{}, kv.Value, nil,
+			ctx, batch, nil, keys.StoreCachedSettingsKey(kv.Key), enginepb.TxnTimestamp{}, kv.Value, nil,
 		); err != nil {
 			return err
 		}

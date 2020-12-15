@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,9 +49,12 @@ func (r *Replica) updateTimestampCache(
 		// Inconsistent reads are excluded from the timestamp cache.
 		return
 	}
-	addToTSCache := r.store.tsCache.Add
+	addToTSCache2 := r.store.tsCache.Add
 	if util.RaceEnabled {
-		addToTSCache = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)
+		addToTSCache2 = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)
+	}
+	addToTSCache := func(start, end roachpb.Key, ts enginepb.TxnTimestamp, txnID uuid.UUID) {
+		addToTSCache2(start, end, ts.ToClockTimestampUnchecked(), txnID)
 	}
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
@@ -260,7 +264,7 @@ func init() {
 // minReadTS, minReadTS (without an associated txn id) will be used instead to
 // adjust the batch's timestamp.
 func (r *Replica) applyTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
+	ctx context.Context, ba *roachpb.BatchRequest, minReadTS enginepb.TxnTimestamp,
 ) bool {
 	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
 	// below is due to the minReadTS.
@@ -274,7 +278,8 @@ func (r *Replica) applyTimestampCache(
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID := r.store.tsCache.GetMax(header.Key, header.EndKey)
+			rTS2, rTxnID := r.store.tsCache.GetMax(header.Key, header.EndKey)
+			rTS := enginepb.TxnTimestamp(rTS2)
 			var forwardedToMinReadTS bool
 			if rTS.Forward(minReadTS) {
 				forwardedToMinReadTS = true
@@ -451,8 +456,8 @@ func (r *Replica) applyTimestampCache(
 // system.
 //
 func (r *Replica) CanCreateTxnRecord(
-	txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason) {
+	txnID uuid.UUID, txnKey []byte, txnMinTS enginepb.TxnTimestamp,
+) (ok bool, minCommitTS enginepb.TxnTimestamp, reason roachpb.TransactionAbortedReason) {
 	// Consult the timestamp cache with the transaction's key. The timestamp
 	// cache is used in two ways for transactions without transaction records.
 	// The timestamp cache is used to push the timestamp of transactions
@@ -470,7 +475,8 @@ func (r *Replica) CanCreateTxnRecord(
 	// transaction, which indicates the minimum timestamp that the transaction
 	// can commit at. This is used by pushers to push the timestamp of a
 	// transaction that hasn't yet written its transaction record.
-	minCommitTS, _ = r.store.tsCache.GetMax(pushKey, nil /* end */)
+	minCommitTS2, _ := r.store.tsCache.GetMax(pushKey, nil /* end */)
+	minCommitTS = enginepb.TxnTimestamp(minCommitTS2)
 
 	// Also look in the timestamp cache to see if there is a tombstone entry for
 	// this transaction, which would indicate this transaction has already been
@@ -479,7 +485,8 @@ func (r *Replica) CanCreateTxnRecord(
 	// then the error will be transformed into an ambiguous one higher up.
 	// Otherwise, if the client is still waiting for a result, then this cannot
 	// be a "replay" of any sort.
-	tombstoneTimestamp, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	tombstoneTimestamp2, tombstomeTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	tombstoneTimestamp := enginepb.TxnTimestamp(tombstoneTimestamp2)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
@@ -497,23 +504,23 @@ func (r *Replica) CanCreateTxnRecord(
 			// If there were other requests in the EndTxn batch, then the client would
 			// still have trouble reconstructing the result, but at least it could
 			// provide a non-ambiguous error to the application.
-			return false, hlc.Timestamp{},
+			return false, enginepb.TxnTimestamp{},
 				roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY
 		case uuid.Nil:
 			lease, _ /* nextLease */ := r.GetLease()
 			// Recognize the case where a lease started recently. Lease transfers bump
 			// the ts cache low water mark.
-			if tombstoneTimestamp == lease.Start {
-				return false, hlc.Timestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
+			if tombstoneTimestamp == enginepb.TxnTimestamp(lease.Start) {
+				return false, enginepb.TxnTimestamp{}, roachpb.ABORT_REASON_NEW_LEASE_PREVENTS_TXN
 			}
-			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
+			return false, enginepb.TxnTimestamp{}, roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED
 		default:
 			// If we find another transaction's ID then that transaction has
 			// aborted us before our transaction record was written. It obeyed
 			// the restriction that it couldn't create a transaction record for
 			// us, so it recorded a tombstone cache instead to prevent us
 			// from ever creating a transaction record.
-			return false, hlc.Timestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+			return false, enginepb.TxnTimestamp{}, roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
 		}
 	}
 	return true, minCommitTS, 0

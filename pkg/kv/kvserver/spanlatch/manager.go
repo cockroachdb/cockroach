@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -85,7 +85,7 @@ func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 type latch struct {
 	id         uint64
 	span       roachpb.Span
-	ts         hlc.Timestamp
+	ts         enginepb.TxnTimestamp
 	done       *signal
 	next, prev *latch // readSet linked-list.
 }
@@ -311,11 +311,11 @@ func (m *Manager) nextIDLocked() uint64 {
 // This is also disabled in the global scope if either of the timestamps are
 // empty. In those cases, we consider the latch without a timestamp to be a
 // non-MVCC operation that affects all timestamps in the key range.
-type ignoreFn func(ts, other hlc.Timestamp) bool
+type ignoreFn func(ts, other enginepb.TxnTimestamp) bool
 
-func ignoreLater(ts, other hlc.Timestamp) bool   { return !ts.IsEmpty() && ts.Less(other) }
-func ignoreEarlier(ts, other hlc.Timestamp) bool { return !other.IsEmpty() && other.Less(ts) }
-func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
+func ignoreLater(ts, other enginepb.TxnTimestamp) bool   { return !ts.IsEmpty() && ts.Less(other) }
+func ignoreEarlier(ts, other enginepb.TxnTimestamp) bool { return !other.IsEmpty() && other.Less(ts) }
+func ignoreNothing(ts, other enginepb.TxnTimestamp) bool { return false }
 
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.

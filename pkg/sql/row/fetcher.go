@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -113,7 +113,7 @@ type tableInfo struct {
 	//
 	// rowLastModified is the timestamp of the last time any family in the row
 	// was modified in any way.
-	rowLastModified hlc.Timestamp
+	rowLastModified enginepb.TxnTimestamp
 	// timestampOutputIdx controls at what row ordinal to write the timestamp.
 	timestampOutputIdx int
 
@@ -571,7 +571,7 @@ func (rf *Fetcher) StartScan(
 func (rf *Fetcher) StartInconsistentScan(
 	ctx context.Context,
 	db *kv.DB,
-	initialTimestamp hlc.Timestamp,
+	initialTimestamp enginepb.TxnTimestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
 	limitBatches bool,
@@ -965,7 +965,7 @@ func (rf *Fetcher) processKV(
 		// set rowLastModified to a sentinel that's before any real timestamp.
 		// As kvs are iterated for this row, it keeps track of the greatest
 		// timestamp seen.
-		table.rowLastModified = hlc.Timestamp{}
+		table.rowLastModified = enginepb.TxnTimestamp{}
 		// All row encodings (both before and after column families) have a
 		// sentinel kv (column family 0) that is always present when a row is
 		// present, even if that row is all NULLs. Thus, a row is deleted if and
@@ -1311,7 +1311,7 @@ func (rf *Fetcher) NextRowDecoded(
 
 // RowLastModified may only be called after NextRow has returned a non-nil row
 // and returns the timestamp of the last modification to that row.
-func (rf *Fetcher) RowLastModified() hlc.Timestamp {
+func (rf *Fetcher) RowLastModified() enginepb.TxnTimestamp {
 	return rf.rowReadyTable.rowLastModified
 }
 
@@ -1519,7 +1519,8 @@ func (rf *Fetcher) finalizeRow() error {
 		// TODO (rohany): Datums are immutable, so we can't store a DDecimal on the
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
-		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified())})
+		// TODO(nvanbenschoten): what's the deal with this?
+		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified().ToClockTimestampUnchecked())})
 		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 	if table.oidOutputIdx != noOutputColumn {

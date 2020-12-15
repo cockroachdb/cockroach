@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -53,7 +53,7 @@ func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
 // MakeRecord makes a protected timestamp record to protect a timestamp on
 // behalf of this job.
 func MakeRecord(
-	id uuid.UUID, jobID int64, tsToProtect hlc.Timestamp, spans []roachpb.Span,
+	id uuid.UUID, jobID int64, tsToProtect enginepb.TxnTimestamp, spans []roachpb.Span,
 ) *ptpb.Record {
 	return &ptpb.Record{
 		ID:        id,

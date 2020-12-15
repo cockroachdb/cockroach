@@ -50,7 +50,7 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 		batch,
 		nil,
 		keys.StoreIdentKey(),
-		hlc.Timestamp{},
+		enginepb.TxnTimestamp{},
 		nil,
 		&ident,
 	); err != nil {
@@ -180,10 +180,10 @@ func WriteInitialClusterData(
 		batch := eng.NewBatch()
 		defer batch.Close()
 
-		now := hlc.Timestamp{
+		now := enginepb.TxnTimestamp(hlc.Timestamp{
 			WallTime: nowNanos,
 			Logical:  0,
-		}
+		})
 
 		// NOTE: We don't do stats computations in any of the puts below. Instead,
 		// we write everything and then compute the stats over the whole range.
@@ -199,7 +199,7 @@ func WriteInitialClusterData(
 		// Replica GC timestamp.
 		if err := storage.MVCCPutProto(
 			ctx, batch, nil /* ms */, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
-			hlc.Timestamp{}, nil /* txn */, &now,
+			enginepb.TxnTimestamp{}, nil /* txn */, &now,
 		); err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ func WriteInitialClusterData(
 			enginepb.MVCCStats{},
 			*desc,
 			lease,
-			hlc.Timestamp{}, /* gcThreshold */
+			enginepb.TxnTimestamp{}, /* gcThreshold */
 			truncStateType,
 		)
 		if err != nil {

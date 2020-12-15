@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -123,7 +123,7 @@ func (c *rowFetcherStatCollector) StartScan(
 func (c *rowFetcherStatCollector) StartInconsistentScan(
 	ctx context.Context,
 	db *kv.DB,
-	initialTimestamp hlc.Timestamp,
+	initialTimestamp enginepb.TxnTimestamp,
 	maxTimestampAge time.Duration,
 	spans roachpb.Spans,
 	limitBatches bool,

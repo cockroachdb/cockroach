@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -167,7 +166,8 @@ func SynthesizeTxnFromMeta(rec EvalContext, txn enginepb.TxnMeta) roachpb.Transa
 		// use this as an indication of client activity. Note that we cannot use
 		// txn.WriteTimestamp for that purpose, as the WriteTimestamp could have
 		// been bumped by other pushers.
-		LastHeartbeat: txn.MinTimestamp,
+		// TODO(nvanbenschoten): what to do here.
+		LastHeartbeat: txn.MinTimestamp.ToClockTimestampUnchecked(),
 	}
 
 	// If the transaction metadata's min timestamp is empty this intent must
@@ -201,7 +201,7 @@ func HasTxnRecord(
 	ctx context.Context, reader storage.Reader, txn *roachpb.Transaction,
 ) (bool, error) {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	val, _, err := storage.MVCCGet(ctx, reader, key, hlc.Timestamp{}, storage.MVCCGetOptions{})
+	val, _, err := storage.MVCCGet(ctx, reader, key, enginepb.TxnTimestamp{}, storage.MVCCGetOptions{})
 	if err != nil {
 		return false, err
 	}

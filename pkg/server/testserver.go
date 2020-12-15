@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1265,7 +1266,7 @@ func (ts *TestServer) ForceTableGC(
 			Key:    tblKey,
 			EndKey: tblKey.PrefixEnd(),
 		},
-		Threshold: timestamp,
+		Threshold: enginepb.TxnTimestamp(timestamp),
 	}
 	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
 	return pErr.GoError()

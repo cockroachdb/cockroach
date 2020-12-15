@@ -18,7 +18,7 @@ import (
 	ctstorage "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -118,18 +118,18 @@ func (r *Replica) canServeFollowerRead(
 // uses an expiration-based lease. Expiration-based leases do not support the
 // closed timestamp subsystem. A zero-value timestamp will be returned if ok
 // is false.
-func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
+func (r *Replica) maxClosed(ctx context.Context) (_ enginepb.TxnTimestamp, ok bool) {
 	r.mu.RLock()
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
 	r.mu.RUnlock()
 	if lease.Expiration != nil {
-		return hlc.Timestamp{}, false
+		return enginepb.TxnTimestamp{}, false
 	}
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
-	maxClosed.Forward(lease.Start)
+	maxClosed.Forward(enginepb.TxnTimestamp(lease.Start))
 	maxClosed.Forward(initialMaxClosed)
 	return maxClosed, true
 }

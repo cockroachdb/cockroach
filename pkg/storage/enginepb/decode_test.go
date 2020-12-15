@@ -17,12 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func BenchmarkScanDecodeKeyValue(b *testing.B) {
 	key := roachpb.Key("blah blah blah")
-	ts := hlc.Timestamp{WallTime: int64(1000000)}
+	ts := enginepb.TxnTimestamp{WallTime: 1000000}
 	value := []byte("foo foo foo")
 	rep := make([]byte, 8)
 	keyBytes := storage.EncodeKey(storage.MVCCKey{Key: key, Timestamp: ts})

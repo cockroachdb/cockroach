@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -260,8 +259,8 @@ type lockTableGuardImpl struct {
 	// Information about this request.
 	txn     *enginepb.TxnMeta
 	spans   *spanset.SpanSet
-	readTS  hlc.Timestamp
-	writeTS hlc.Timestamp
+	readTS  enginepb.TxnTimestamp
+	writeTS enginepb.TxnTimestamp
 
 	// Snapshots of the trees for which this request has some spans. Note that
 	// the lockStates in these snapshots may have been removed from
@@ -511,7 +510,7 @@ type lockHolderInfo struct {
 	seqs []enginepb.TxnSeq
 
 	// The timestamp at which the lock is held.
-	ts hlc.Timestamp
+	ts enginepb.TxnTimestamp
 }
 
 func (lh *lockHolderInfo) isEmpty() bool {
@@ -751,12 +750,12 @@ func (l *lockState) Format(buf *strings.Builder) {
 		fmt.Fprintln(buf, "  empty")
 		return
 	}
-	writeResInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+	writeResInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts enginepb.TxnTimestamp) {
 		// TODO(sbhola): strip the leading 0 bytes from the UUID string since tests are assigning
 		// UUIDs using a counter and makes this output more readable.
 		fmt.Fprintf(b, "txn: %v, ts: %v, seq: %v\n", txn.ID, ts, txn.Sequence)
 	}
-	writeHolderInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+	writeHolderInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts enginepb.TxnTimestamp) {
 		fmt.Fprintf(b, "  holder: txn: %v, ts: %v, info: ", txn.ID, ts)
 		first := true
 		for i := range l.holder.holder {
@@ -991,9 +990,9 @@ func (l *lockState) isLockedBy(id uuid.UUID) bool {
 // Returns information about the current lock holder if the lock is held, else
 // returns nil.
 // REQUIRES: l.mu is locked.
-func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
+func (l *lockState) getLockHolder() (*enginepb.TxnMeta, enginepb.TxnTimestamp) {
 	if !l.holder.locked {
-		return nil, hlc.Timestamp{}
+		return nil, enginepb.TxnTimestamp{}
 	}
 
 	// If the lock is held as both replicated and unreplicated we want to
@@ -1185,7 +1184,7 @@ func (l *lockState) tryActiveWait(g *lockTableGuardImpl, sa spanset.SpanAccess, 
 // that is acquiring the lock.
 // Acquires l.mu.
 func (l *lockState) acquireLock(
-	_ lock.Strength, durability lock.Durability, txn *enginepb.TxnMeta, ts hlc.Timestamp,
+	_ lock.Strength, durability lock.Durability, txn *enginepb.TxnMeta, ts enginepb.TxnTimestamp,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1315,7 +1314,7 @@ func (l *lockState) acquireLock(
 // where g is trying to access this key with access sa.
 // Acquires l.mu.
 func (l *lockState) discoveredLock(
-	txn *enginepb.TxnMeta, ts hlc.Timestamp, g *lockTableGuardImpl, sa spanset.SpanAccess,
+	txn *enginepb.TxnMeta, ts enginepb.TxnTimestamp, g *lockTableGuardImpl, sa spanset.SpanAccess,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1575,7 +1574,7 @@ func (l *lockState) tryUpdateLock(up *roachpb.LockUpdate) (gc bool, err error) {
 // The lock holder timestamp has increased. Some of the waiters may no longer
 // need to wait.
 // REQUIRES: l.mu is locked.
-func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
+func (l *lockState) increasedLockTs(newTs enginepb.TxnTimestamp) {
 	distinguishedRemoved := false
 	for e := l.waitingReaders.Front(); e != nil; {
 		g := e.Value.(*lockTableGuardImpl)

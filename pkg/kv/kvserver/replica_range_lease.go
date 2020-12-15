@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -396,7 +397,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// lease to be applied.
 			if pErr == nil {
 				ba := roachpb.BatchRequest{}
-				ba.Timestamp = p.repl.store.Clock().Now()
+				ba.Timestamp = enginepb.TxnTimestamp(p.repl.store.Clock().Now())
 				ba.RangeID = p.repl.RangeID
 				ba.Add(leaseReq)
 				_, pErr = p.repl.Send(ctx, ba)

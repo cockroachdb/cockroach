@@ -18,9 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
@@ -242,10 +242,10 @@ func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(ctx, db, nil, key, hlc.Timestamp{}, value, nil /* txn */); err != nil {
+		if err := MVCCPut(ctx, db, nil, key, enginepb.TxnTimestamp{}, value, nil /* txn */); err != nil {
 			b.Fatal(err)
 		}
-		if err := MVCCDelete(ctx, db, nil, key, hlc.Timestamp{}, nil /* txn */); err != nil {
+		if err := MVCCDelete(ctx, db, nil, key, enginepb.TxnTimestamp{}, nil /* txn */); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -365,7 +365,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
-			ts := hlc.Timestamp{WallTime: int64(j)}
+			ts := enginepb.TxnTimestamp{WallTime: int64(j)}
 			batch.Put(MVCCKey{key, ts}, value)
 		}
 		batch.Finish()

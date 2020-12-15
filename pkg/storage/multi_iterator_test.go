@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -88,10 +88,10 @@ func TestMultiIterator(t *testing.T) {
 						break
 					}
 					k := []byte{input[i]}
-					ts := hlc.Timestamp{WallTime: int64(input[i+1])}
+					ts := enginepb.TxnTimestamp{WallTime: int64(input[i+1])}
 					var v []byte
 					if i+1 < len(input) && input[i+1] == 'M' {
-						ts = hlc.Timestamp{}
+						ts = enginepb.TxnTimestamp{}
 						v = nil
 					} else if i+2 < len(input) && input[i+2] == 'X' {
 						v = nil

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -110,7 +110,7 @@ func doCreateSequence(
 	//
 	// TODO(ajwerner): remove the timestamp from NewSequenceTableDesc, it's
 	// currently relied on in import and restore code and tests.
-	var creationTime hlc.Timestamp
+	var creationTime enginepb.TxnTimestamp
 	desc, err := NewSequenceTableDesc(
 		params.ctx,
 		name.Object(),
@@ -177,7 +177,7 @@ func NewSequenceTableDesc(
 	parentID descpb.ID,
 	schemaID descpb.ID,
 	id descpb.ID,
-	creationTime hlc.Timestamp,
+	creationTime enginepb.TxnTimestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,

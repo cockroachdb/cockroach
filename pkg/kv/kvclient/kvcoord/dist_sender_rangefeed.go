@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,7 +31,7 @@ import (
 
 type singleRangeInfo struct {
 	rs    roachpb.RSpan
-	ts    hlc.Timestamp
+	ts    enginepb.TxnTimestamp
 	token rangecache.EvictionToken
 }
 
@@ -44,7 +44,7 @@ type singleRangeInfo struct {
 func (ds *DistSender) RangeFeed(
 	ctx context.Context,
 	span roachpb.Span,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 	withDiff bool,
 	eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
@@ -84,7 +84,7 @@ func (ds *DistSender) RangeFeed(
 }
 
 func (ds *DistSender) divideAndSendRangeFeedToRanges(
-	ctx context.Context, rs roachpb.RSpan, ts hlc.Timestamp, rangeCh chan<- singleRangeInfo,
+	ctx context.Context, rs roachpb.RSpan, ts enginepb.TxnTimestamp, rangeCh chan<- singleRangeInfo,
 ) error {
 	// As RangeIterator iterates, it can return overlapping descriptors (and
 	// during splits, this happens frequently), but divideAndSendRangeFeedToRanges
@@ -211,11 +211,11 @@ func (ds *DistSender) partialRangeFeed(
 func (ds *DistSender) singleRangeFeed(
 	ctx context.Context,
 	span roachpb.Span,
-	ts hlc.Timestamp,
+	ts enginepb.TxnTimestamp,
 	withDiff bool,
 	desc *roachpb.RangeDescriptor,
 	eventCh chan<- *roachpb.RangeFeedEvent,
-) (hlc.Timestamp, error) {
+) (enginepb.TxnTimestamp, error) {
 	args := roachpb.RangeFeedRequest{
 		Span: span,
 		Header: roachpb.Header{

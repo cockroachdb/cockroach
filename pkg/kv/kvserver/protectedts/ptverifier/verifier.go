@@ -69,7 +69,7 @@ func getRecordWithTimestamp(
 ) (r *ptpb.Record, readAt hlc.Timestamp, err error) {
 	if err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		r, err = s.GetRecord(ctx, txn, id)
-		readAt = txn.ReadTimestamp()
+		readAt = txn.ReadTimestamp().ToClockTimestampUnchecked()
 		return err
 	}); err != nil {
 		return nil, hlc.Timestamp{}, err

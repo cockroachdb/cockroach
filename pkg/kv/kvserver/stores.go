@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	enginepb "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -219,7 +220,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		s := (*Store)(v)
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		ok, err = storage.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+		ok, err = storage.MVCCGetProto(ctx, s.engine, keys.StoreGossipKey(), enginepb.TxnTimestamp{}, &storeBI,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			return false
@@ -268,7 +269,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
 		s := (*Store)(v)
-		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), hlc.Timestamp{}, nil, bi)
+		err = storage.MVCCPutProto(ctx, s.engine, nil, keys.StoreGossipKey(), enginepb.TxnTimestamp{}, nil, bi)
 		return err == nil
 	})
 	return err
