@@ -6,6 +6,7 @@ go_library(
         "backend_dialer.go",
         "error.go",
         "errorcode_string.go",
+        "frontend_admitter.go",
         "idle_disconnect_connection.go",
         "metrics.go",
         "proxy.go",
@@ -28,6 +29,7 @@ go_library(
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "frontend_admitter_test.go",
         "idle_disconnect_connection_test.go",
         "main_test.go",
         "proxy_test.go",
@@ -46,6 +48,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/jackc/pgconn",
         "//vendor/github.com/jackc/pgproto3/v2:pgproto3",
         "//vendor/github.com/jackc/pgx/v4:pgx",
         "//vendor/github.com/stretchr/testify/require",
