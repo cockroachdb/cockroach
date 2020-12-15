@@ -35,7 +35,7 @@ func (m *CommonSQLPrivilegeEventDetails) Reset()         { *m = CommonSQLPrivile
 func (m *CommonSQLPrivilegeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLPrivilegeEventDetails) ProtoMessage()    {}
 func (*CommonSQLPrivilegeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_928afc621c8bc867, []int{0}
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{0}
 }
 func (m *CommonSQLPrivilegeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -74,7 +74,7 @@ func (m *ChangeDatabasePrivilege) Reset()         { *m = ChangeDatabasePrivilege
 func (m *ChangeDatabasePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeDatabasePrivilege) ProtoMessage()    {}
 func (*ChangeDatabasePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_928afc621c8bc867, []int{1}
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{1}
 }
 func (m *ChangeDatabasePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -113,7 +113,7 @@ func (m *ChangeTablePrivilege) Reset()         { *m = ChangeTablePrivilege{} }
 func (m *ChangeTablePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTablePrivilege) ProtoMessage()    {}
 func (*ChangeTablePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_928afc621c8bc867, []int{2}
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{2}
 }
 func (m *ChangeTablePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -152,7 +152,7 @@ func (m *ChangeSchemaPrivilege) Reset()         { *m = ChangeSchemaPrivilege{} }
 func (m *ChangeSchemaPrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeSchemaPrivilege) ProtoMessage()    {}
 func (*ChangeSchemaPrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_928afc621c8bc867, []int{3}
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{3}
 }
 func (m *ChangeSchemaPrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -191,7 +191,7 @@ func (m *ChangeTypePrivilege) Reset()         { *m = ChangeTypePrivilege{} }
 func (m *ChangeTypePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTypePrivilege) ProtoMessage()    {}
 func (*ChangeTypePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_928afc621c8bc867, []int{4}
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{4}
 }
 func (m *ChangeTypePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -216,12 +216,132 @@ func (m *ChangeTypePrivilege) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ChangeTypePrivilege proto.InternalMessageInfo
 
+// AlterDatabaseOwner is recorded when a database's owner is changed.
+type AlterDatabaseOwner struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	// The name of the database being affected.
+	DatabaseName string `protobuf:"bytes,3,opt,name=database_name,json=databaseName,proto3" json:",omitempty"`
+	// The name of the new owner.
+	Owner string `protobuf:"bytes,4,opt,name=owner,proto3" json:",omitempty"`
+}
+
+func (m *AlterDatabaseOwner) Reset()         { *m = AlterDatabaseOwner{} }
+func (m *AlterDatabaseOwner) String() string { return proto.CompactTextString(m) }
+func (*AlterDatabaseOwner) ProtoMessage()    {}
+func (*AlterDatabaseOwner) Descriptor() ([]byte, []int) {
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{5}
+}
+func (m *AlterDatabaseOwner) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AlterDatabaseOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AlterDatabaseOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterDatabaseOwner.Merge(dst, src)
+}
+func (m *AlterDatabaseOwner) XXX_Size() int {
+	return m.Size()
+}
+func (m *AlterDatabaseOwner) XXX_DiscardUnknown() {
+	xxx_messageInfo_AlterDatabaseOwner.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AlterDatabaseOwner proto.InternalMessageInfo
+
+// AlterSchemaOwner is recorded when a schema's owner is changed.
+type AlterSchemaOwner struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	// The name of the affected schema.
+	SchemaName string `protobuf:"bytes,3,opt,name=schema_name,json=schemaName,proto3" json:",omitempty"`
+	// The name of the new owner.
+	Owner string `protobuf:"bytes,4,opt,name=owner,proto3" json:",omitempty"`
+}
+
+func (m *AlterSchemaOwner) Reset()         { *m = AlterSchemaOwner{} }
+func (m *AlterSchemaOwner) String() string { return proto.CompactTextString(m) }
+func (*AlterSchemaOwner) ProtoMessage()    {}
+func (*AlterSchemaOwner) Descriptor() ([]byte, []int) {
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{6}
+}
+func (m *AlterSchemaOwner) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AlterSchemaOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AlterSchemaOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterSchemaOwner.Merge(dst, src)
+}
+func (m *AlterSchemaOwner) XXX_Size() int {
+	return m.Size()
+}
+func (m *AlterSchemaOwner) XXX_DiscardUnknown() {
+	xxx_messageInfo_AlterSchemaOwner.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AlterSchemaOwner proto.InternalMessageInfo
+
+// AlterTypeOwner is recorded when the owner of a user-defiend type is changed.
+type AlterTypeOwner struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	// The name of the affected type.
+	TypeName string `protobuf:"bytes,3,opt,name=type_name,json=typeName,proto3" json:",omitempty"`
+	// The name of the new owner.
+	Owner string `protobuf:"bytes,4,opt,name=owner,proto3" json:",omitempty"`
+}
+
+func (m *AlterTypeOwner) Reset()         { *m = AlterTypeOwner{} }
+func (m *AlterTypeOwner) String() string { return proto.CompactTextString(m) }
+func (*AlterTypeOwner) ProtoMessage()    {}
+func (*AlterTypeOwner) Descriptor() ([]byte, []int) {
+	return fileDescriptor_privilege_events_089d1fdba272b39e, []int{7}
+}
+func (m *AlterTypeOwner) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AlterTypeOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AlterTypeOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterTypeOwner.Merge(dst, src)
+}
+func (m *AlterTypeOwner) XXX_Size() int {
+	return m.Size()
+}
+func (m *AlterTypeOwner) XXX_DiscardUnknown() {
+	xxx_messageInfo_AlterTypeOwner.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AlterTypeOwner proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*CommonSQLPrivilegeEventDetails)(nil), "cockroach.util.log.eventpb.CommonSQLPrivilegeEventDetails")
 	proto.RegisterType((*ChangeDatabasePrivilege)(nil), "cockroach.util.log.eventpb.ChangeDatabasePrivilege")
 	proto.RegisterType((*ChangeTablePrivilege)(nil), "cockroach.util.log.eventpb.ChangeTablePrivilege")
 	proto.RegisterType((*ChangeSchemaPrivilege)(nil), "cockroach.util.log.eventpb.ChangeSchemaPrivilege")
 	proto.RegisterType((*ChangeTypePrivilege)(nil), "cockroach.util.log.eventpb.ChangeTypePrivilege")
+	proto.RegisterType((*AlterDatabaseOwner)(nil), "cockroach.util.log.eventpb.AlterDatabaseOwner")
+	proto.RegisterType((*AlterSchemaOwner)(nil), "cockroach.util.log.eventpb.AlterSchemaOwner")
+	proto.RegisterType((*AlterTypeOwner)(nil), "cockroach.util.log.eventpb.AlterTypeOwner")
 }
 func (m *CommonSQLPrivilegeEventDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -469,6 +589,144 @@ func (m *ChangeTypePrivilege) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *AlterDatabaseOwner) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AlterDatabaseOwner) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
+	n13, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n13
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
+	n14, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n14
+	if len(m.DatabaseName) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.DatabaseName)))
+		i += copy(dAtA[i:], m.DatabaseName)
+	}
+	if len(m.Owner) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
+		i += copy(dAtA[i:], m.Owner)
+	}
+	return i, nil
+}
+
+func (m *AlterSchemaOwner) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AlterSchemaOwner) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
+	n15, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n15
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
+	n16, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n16
+	if len(m.SchemaName) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.SchemaName)))
+		i += copy(dAtA[i:], m.SchemaName)
+	}
+	if len(m.Owner) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
+		i += copy(dAtA[i:], m.Owner)
+	}
+	return i, nil
+}
+
+func (m *AlterTypeOwner) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AlterTypeOwner) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
+	n17, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n17
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
+	n18, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	if len(m.TypeName) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TypeName)))
+		i += copy(dAtA[i:], m.TypeName)
+	}
+	if len(m.Owner) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
+		i += copy(dAtA[i:], m.Owner)
+	}
+	return i, nil
+}
+
 func encodeVarintPrivilegeEvents(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -573,6 +831,69 @@ func (m *ChangeTypePrivilege) Size() (n int) {
 	l = m.CommonSQLPrivilegeEventDetails.Size()
 	n += 1 + l + sovPrivilegeEvents(uint64(l))
 	l = len(m.TypeName)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	return n
+}
+
+func (m *AlterDatabaseOwner) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = len(m.DatabaseName)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	return n
+}
+
+func (m *AlterSchemaOwner) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = len(m.SchemaName)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	l = len(m.Owner)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	return n
+}
+
+func (m *AlterTypeOwner) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovPrivilegeEvents(uint64(l))
+	l = len(m.TypeName)
+	if l > 0 {
+		n += 1 + l + sovPrivilegeEvents(uint64(l))
+	}
+	l = len(m.Owner)
 	if l > 0 {
 		n += 1 + l + sovPrivilegeEvents(uint64(l))
 	}
@@ -1405,6 +1726,510 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowPrivilegeEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AlterDatabaseOwner: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AlterDatabaseOwner: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DatabaseName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DatabaseName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipPrivilegeEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowPrivilegeEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AlterSchemaOwner: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AlterSchemaOwner: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SchemaName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SchemaName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipPrivilegeEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowPrivilegeEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AlterTypeOwner: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AlterTypeOwner: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TypeName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TypeName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Owner", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowPrivilegeEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Owner = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipPrivilegeEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipPrivilegeEvents(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1511,38 +2336,43 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_privilege_events_928afc621c8bc867)
+	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_privilege_events_089d1fdba272b39e)
 }
 
-var fileDescriptor_privilege_events_928afc621c8bc867 = []byte{
-	// 458 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0xc1, 0x6e, 0xd3, 0x30,
-	0x18, 0xc7, 0xe3, 0x14, 0x36, 0xfa, 0x6d, 0x20, 0x61, 0x86, 0x88, 0x2a, 0xe1, 0x4c, 0xbd, 0x30,
-	0x04, 0x24, 0x82, 0xdd, 0x90, 0xb8, 0x74, 0xe3, 0x36, 0x21, 0xba, 0xee, 0xc4, 0x81, 0xca, 0xc9,
-	0xac, 0x34, 0x5a, 0x12, 0x87, 0xc4, 0x54, 0xea, 0x5b, 0xf0, 0x58, 0x91, 0x90, 0x50, 0x39, 0xb1,
-	0x53, 0x04, 0xe9, 0xad, 0x4f, 0x81, 0xec, 0xa4, 0xa5, 0x90, 0x10, 0x78, 0x80, 0xde, 0xa2, 0xfa,
-	0xff, 0xff, 0xd9, 0xdf, 0xcf, 0x96, 0x0a, 0x8f, 0x3e, 0x0a, 0x3f, 0xb0, 0x03, 0xee, 0xd9, 0x6c,
-	0xca, 0x22, 0x11, 0x3b, 0x76, 0x9c, 0xf8, 0x53, 0x3f, 0x60, 0x1e, 0x1b, 0xab, 0x5f, 0x52, 0x2b,
-	0x4e, 0xb8, 0xe0, 0xb8, 0xe7, 0x72, 0xf7, 0x2a, 0xe1, 0xd4, 0x9d, 0x58, 0xb2, 0x62, 0x05, 0xdc,
-	0xb3, 0xaa, 0x4a, 0xef, 0xc0, 0xe3, 0x1e, 0x57, 0x31, 0x5b, 0x7e, 0x95, 0x8d, 0xde, 0xc3, 0x1a,
-	0x7a, 0x13, 0xd8, 0xcf, 0x10, 0x90, 0x13, 0x1e, 0x86, 0x3c, 0x1a, 0x0d, 0xcf, 0xde, 0xae, 0x36,
-	0x7d, 0x2d, 0x23, 0xa7, 0x4c, 0x50, 0x3f, 0x48, 0xf1, 0x11, 0xec, 0x7a, 0x09, 0x8d, 0x04, 0x63,
-	0x06, 0x3a, 0x44, 0x47, 0xdd, 0xc1, 0x9d, 0x65, 0x6e, 0xc2, 0x53, 0x1e, 0xfa, 0x82, 0x85, 0xb1,
-	0x98, 0x9d, 0xaf, 0x96, 0xf1, 0x2b, 0xc0, 0xe5, 0xe7, 0xe5, 0x78, 0x7d, 0xfe, 0xd4, 0xd0, 0x0f,
-	0x3b, 0x0d, 0xa5, 0xbb, 0x55, 0x72, 0xbd, 0x67, 0x2a, 0xeb, 0x09, 0x9b, 0xf2, 0xab, 0xdf, 0xeb,
-	0x9d, 0xe6, 0x7a, 0x95, 0xfc, 0x55, 0xef, 0x7f, 0xd3, 0xe1, 0xc1, 0xc9, 0x84, 0x46, 0x1e, 0x3b,
-	0xa5, 0x82, 0x3a, 0x34, 0x65, 0xeb, 0x45, 0x7c, 0x01, 0x3b, 0xae, 0x9a, 0x52, 0x8d, 0xb0, 0xf7,
-	0xc2, 0xb2, 0xfe, 0x2e, 0xd2, 0x2a, 0x7d, 0x6c, 0x3a, 0x18, 0xec, 0x67, 0xb9, 0xa9, 0xcd, 0x73,
-	0x13, 0x2d, 0x73, 0x53, 0x3b, 0xaf, 0x58, 0x78, 0x08, 0x9d, 0xf4, 0x43, 0x60, 0xe8, 0x0a, 0xf9,
-	0xfc, 0xdf, 0xc8, 0xd1, 0xf0, 0xac, 0x85, 0x2a, 0x59, 0xf8, 0x3d, 0xdc, 0x94, 0xb3, 0xcb, 0xb1,
-	0x25, 0xf4, 0xe5, 0x7f, 0x41, 0x1b, 0xef, 0xed, 0x0f, 0x7a, 0x89, 0xc5, 0xc7, 0x70, 0xfb, 0xb2,
-	0xb2, 0x33, 0x8e, 0x68, 0xc8, 0x8c, 0x1b, 0x8d, 0x57, 0xba, 0xbf, 0x0a, 0xbd, 0xa1, 0x21, 0xeb,
-	0x7f, 0xd1, 0xe1, 0xa0, 0x34, 0x7b, 0x41, 0x9d, 0x60, 0xab, 0xb5, 0xae, 0xf5, 0x19, 0x80, 0x90,
-	0x6a, 0xda, 0x9c, 0x76, 0x55, 0x42, 0x09, 0xfd, 0xaa, 0xc3, 0xfd, 0x52, 0xe8, 0xc8, 0x9d, 0xb0,
-	0x90, 0x6e, 0x8d, 0xd6, 0x8c, 0xda, 0xb0, 0x97, 0x2a, 0x37, 0x6d, 0x4a, 0xa1, 0x8c, 0x28, 0xa7,
-	0x9f, 0x75, 0xb8, 0x57, 0x3d, 0xd2, 0x59, 0xbc, 0x7d, 0xa3, 0x75, 0xa3, 0x4f, 0xa0, 0x2b, 0x66,
-	0x71, 0xeb, 0x13, 0xbd, 0x25, 0x03, 0xd2, 0xe6, 0xe0, 0x71, 0xf6, 0x83, 0x68, 0x59, 0x41, 0xd0,
-	0xbc, 0x20, 0xe8, 0xba, 0x20, 0xe8, 0x7b, 0x41, 0xd0, 0xa7, 0x05, 0xd1, 0xe6, 0x0b, 0xa2, 0x5d,
-	0x2f, 0x88, 0xf6, 0x6e, 0xb7, 0x3a, 0x8b, 0xb3, 0xa3, 0xfe, 0x49, 0x8e, 0x7f, 0x06, 0x00, 0x00,
-	0xff, 0xff, 0x8d, 0xf2, 0x28, 0x10, 0xc5, 0x06, 0x00, 0x00,
+var fileDescriptor_privilege_events_089d1fdba272b39e = []byte{
+	// 536 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0x4f, 0x6f, 0xd3, 0x30,
+	0x18, 0xc6, 0x13, 0x87, 0x6d, 0xf4, 0xdd, 0x98, 0xc0, 0x0c, 0x51, 0x55, 0xc2, 0x9d, 0x2a, 0x24,
+	0x86, 0x80, 0x54, 0xb0, 0x1b, 0x12, 0x07, 0xba, 0x71, 0x9b, 0x80, 0xae, 0x3b, 0x71, 0xa0, 0x72,
+	0x33, 0x2b, 0x8d, 0x96, 0xc4, 0x21, 0x31, 0x45, 0xfd, 0x0e, 0x1c, 0x10, 0x27, 0x3e, 0x52, 0x25,
+	0x24, 0x54, 0x4e, 0xec, 0x54, 0x41, 0x7b, 0xdb, 0xa7, 0x40, 0xb6, 0xd3, 0xee, 0x4f, 0xba, 0xb4,
+	0xd7, 0x4a, 0xbd, 0x59, 0xf1, 0xf3, 0x3c, 0xf6, 0xfb, 0xb3, 0x5f, 0x2b, 0xf0, 0xe8, 0xb3, 0xf0,
+	0xfc, 0xaa, 0xcf, 0xdd, 0x2a, 0xeb, 0xb0, 0x50, 0x44, 0xad, 0x6a, 0x14, 0x7b, 0x1d, 0xcf, 0x67,
+	0x2e, 0x6b, 0xaa, 0x2f, 0x89, 0x1d, 0xc5, 0x5c, 0x70, 0x5c, 0x72, 0xb8, 0x73, 0x12, 0x73, 0xea,
+	0xb4, 0x6d, 0x69, 0xb1, 0x7d, 0xee, 0xda, 0xa9, 0xa5, 0xb4, 0xe5, 0x72, 0x97, 0x2b, 0x59, 0x55,
+	0x8e, 0xb4, 0xa3, 0xf4, 0x20, 0x13, 0x7d, 0x31, 0xb0, 0xd2, 0x33, 0x81, 0xec, 0xf1, 0x20, 0xe0,
+	0x61, 0xa3, 0x7e, 0xf0, 0x7e, 0xbc, 0xe8, 0x1b, 0x29, 0xd9, 0x67, 0x82, 0x7a, 0x7e, 0x82, 0x77,
+	0x60, 0xcd, 0x8d, 0x69, 0x28, 0x18, 0x2b, 0x9a, 0xdb, 0xe6, 0x4e, 0xa1, 0xb6, 0x79, 0x36, 0x28,
+	0xc3, 0x53, 0x1e, 0x78, 0x82, 0x05, 0x91, 0xe8, 0x1e, 0x8e, 0xa7, 0xf1, 0x2b, 0xc0, 0x7a, 0x78,
+	0xdc, 0x9c, 0xec, 0x3f, 0x29, 0xa2, 0x6d, 0x6b, 0x8a, 0xe9, 0x4e, 0xaa, 0x9c, 0xac, 0x99, 0x48,
+	0x7b, 0xcc, 0x3a, 0xfc, 0xe4, 0xb2, 0xdd, 0x9a, 0x6e, 0x4f, 0x95, 0xe7, 0xf6, 0xca, 0x1f, 0x04,
+	0xf7, 0xf7, 0xda, 0x34, 0x74, 0xd9, 0x3e, 0x15, 0xb4, 0x45, 0x13, 0x36, 0x99, 0xc4, 0x47, 0xb0,
+	0xea, 0xa8, 0x2a, 0x55, 0x09, 0xeb, 0x2f, 0x6c, 0xfb, 0x7a, 0x90, 0xb6, 0xe6, 0x71, 0x91, 0x41,
+	0x6d, 0xa3, 0x37, 0x28, 0x1b, 0xfd, 0x41, 0xd9, 0x3c, 0x1b, 0x94, 0x8d, 0xc3, 0x34, 0x0b, 0xd7,
+	0xc1, 0x4a, 0x3e, 0xf9, 0x45, 0xa4, 0x22, 0x9f, 0xcf, 0x8e, 0x6c, 0xd4, 0x0f, 0x72, 0x52, 0x65,
+	0x16, 0xfe, 0x08, 0x2b, 0xb2, 0x76, 0x59, 0xb6, 0x0c, 0x7d, 0x39, 0x57, 0xe8, 0xd4, 0x73, 0xbb,
+	0x92, 0xae, 0x63, 0xf1, 0x2e, 0xdc, 0x3a, 0x4e, 0xe9, 0x34, 0x43, 0x1a, 0xb0, 0xe2, 0x8d, 0xa9,
+	0x47, 0xba, 0x31, 0x16, 0xbd, 0xa5, 0x01, 0xab, 0xfc, 0x42, 0xb0, 0xa5, 0xc9, 0x1e, 0xd1, 0x96,
+	0xbf, 0xc4, 0x9a, 0xc5, 0xfa, 0x0c, 0x40, 0x48, 0x34, 0x79, 0x4c, 0x0b, 0x4a, 0xa1, 0x80, 0xfe,
+	0x46, 0x70, 0x4f, 0x03, 0x6d, 0x38, 0x6d, 0x16, 0xd0, 0x25, 0xd1, 0x0c, 0xd1, 0x2a, 0xac, 0x27,
+	0x8a, 0x4d, 0x1e, 0x52, 0xd0, 0x12, 0xc5, 0xf4, 0x27, 0x82, 0xbb, 0xe9, 0x25, 0xed, 0x46, 0xcb,
+	0x3b, 0x9a, 0x25, 0xfa, 0x04, 0x0a, 0xa2, 0x1b, 0xe5, 0x5e, 0xd1, 0x9b, 0x52, 0xa0, 0x68, 0xfe,
+	0x40, 0x80, 0x5f, 0xfb, 0x82, 0xc5, 0xe3, 0xb7, 0xf4, 0xdd, 0x97, 0x90, 0xc5, 0x8b, 0x03, 0x33,
+	0xf3, 0xce, 0x59, 0xb3, 0xdf, 0x39, 0xfc, 0x10, 0x56, 0xb8, 0x2c, 0xf3, 0x1a, 0x3a, 0x7a, 0xb2,
+	0xf2, 0x1d, 0xc1, 0x6d, 0x85, 0x46, 0xf7, 0xee, 0x82, 0x81, 0xb9, 0xd2, 0x57, 0xd6, 0xac, 0xbe,
+	0x9a, 0x13, 0xca, 0x57, 0x04, 0x9b, 0x0a, 0x8a, 0x6c, 0xbe, 0x05, 0x43, 0x72, 0xa9, 0x31, 0xac,
+	0xfc, 0xc6, 0x98, 0x0f, 0x47, 0xed, 0x71, 0xef, 0x1f, 0x31, 0x7a, 0x43, 0x62, 0xf6, 0x87, 0xc4,
+	0x3c, 0x1d, 0x12, 0xf3, 0xef, 0x90, 0x98, 0xdf, 0x46, 0xc4, 0xe8, 0x8f, 0x88, 0x71, 0x3a, 0x22,
+	0xc6, 0x87, 0xb5, 0x74, 0x9b, 0xad, 0x55, 0xf5, 0x23, 0xb6, 0xfb, 0x3f, 0x00, 0x00, 0xff, 0xff,
+	0xfe, 0x55, 0x7b, 0x80, 0x04, 0x0a, 0x00, 0x00,
 }

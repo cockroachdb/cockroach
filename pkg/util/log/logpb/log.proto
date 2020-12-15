@@ -83,8 +83,42 @@ enum Channel {
   // numbering and synchronous writes.
   SESSIONS = 4;
 
-  // TODO(knz): Add the USER_ADMIN and PRIVILEGES channels.
-  reserved 5,6;
+  // SQL_SCHEMA is the channel used to report changes to the
+  // SQL logical schema, excluding privilege and ownership changes
+  // (which are reported on the separate channel PRIVILEGES) and
+  // zone config changes (which go to OPS).
+  //
+  // This includes:
+  //
+  // - database/schema/table/sequence/view/type creation
+  // - adding/removing/changing table columns
+  // - changing sequence parameters
+  //
+  // etc., more generally changes to the schema that affect the
+  // functional behavior of client apps using stored objects.
+  SQL_SCHEMA = 5;
+
+  // USER_ADMIN is the channel used to report changes
+  // in users and roles, including:
+  //
+  // - users added/dropped.
+  // - changes to authentication credentials, incl passwords, validity etc.
+  // - role grants/revocations.
+  // - role option grants/revocations.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  USER_ADMIN = 6;
+
+  // PRIVILEGES is the channel used to report data
+  // authorization changes, including:
+  //
+  // - privilege grants/revocations on database, objects etc.
+  // - object ownership changes.
+  //
+  // This is typically configured in "audit" mode, with event
+  // numbering and synchronous writes.
+  PRIVILEGES = 7;
 
   // SENSITIVE_ACCESS is the channel used to report SQL
   // data access to sensitive data (when enabled):
@@ -95,14 +129,14 @@ enum Channel {
   //
   // This is typically configured in "audit" mode, with event
   // numbering and synchronous writes.
-  SENSITIVE_ACCESS = 7;
+  SENSITIVE_ACCESS = 8;
 
   // SQL_EXEC is the channel used to report SQL execution on
   // behalf of client connections:
   //
   // - logical SQL statement executions (if enabled)
   // - pgwire events (if enabled)
-  SQL_EXEC = 8;
+  SQL_EXEC = 9;
 
   // SQL_PERF is the channel used to report SQL executions
   // that are marked to be highlighted as "out of the ordinary"
@@ -113,13 +147,13 @@ enum Channel {
   // However, we keep them separate for backward-compatibility
   // with previous versions, where the corresponding events
   // were redirected to separate files.
-  SQL_PERF = 9;
+  SQL_PERF = 10;
 
   // SQL_INTERNAL_PERF is like the SQL perf channel above but aimed at
   // helping developers of CockroachDB itself. It exists as a separate
   // channel so as to not pollute the SQL perf logging output with
   // internal troubleshooting details.
-  SQL_INTERNAL_PERF = 10;
+  SQL_INTERNAL_PERF = 11;
 }
 
 // Entry represents a cockroach structured log entry.

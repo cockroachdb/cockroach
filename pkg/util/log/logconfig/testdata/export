@@ -7,6 +7,9 @@ component sources {
 () DEV
 () STORAGE
 () SESSIONS
+() SQL_SCHEMA
+() USER_ADMIN
+() PRIVILEGES
 () SENSITIVE_ACCESS
 () SQL_EXEC
 () SQL_PERF
@@ -24,6 +27,9 @@ artifact files {
 DEV --> p__1
 STORAGE --> p__1
 SESSIONS --> p__1
+SQL_SCHEMA --> p__1
+USER_ADMIN --> p__1
+PRIVILEGES --> p__1
 SENSITIVE_ACCESS --> p__1
 SQL_EXEC --> p__1
 SQL_PERF --> p__1
@@ -31,7 +37,7 @@ SQL_INTERNAL_PERF --> p__1
 p__1 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/L99FIyD04CNl-oc6dFGGfLSFqjAk4f1Kcr8y267TFsrmcwcp4q6atrsoczBab3VlFRApFtOUM15tHo-yTGoCGCt-m60QifeRR8N6umbRsp84x4ZR07_YvXPMSjT_gkrwitYMKSggAjPbbNHP5TjY9-l5SYchvBszrF9TBY_wLMwUBheejt9JBWPJU-mC12Rr2of05jL7QucGGYREuhkpdON0nX89hSZ0gQvdiUkGZeeVD9dF_6UM2KNSEAKPNEFZxk3G6qkGtHlhLESvDmrbVH0huD9_DEelGgKFTnxtsILCHqOvAUKf6BfdSHOhkOCyVuoBYO7Io1XOZPqfiL4oS9iwFQYfCs5uZIAPVd8paP3sm_KYOcvRqp-0_m000F__
+# http://www.plantuml.com/plantuml/uml/L99FRvj04CNl-ob6dDe3hNpjeJB2KnV9nYxheXmYeSt-iL4mwmnBf2ZoTuzsmSQSUFFUOu0Vk-oS8DUV6zPeuy1PeFfuSg1gqjBLjcNIdY-srQs3plOaTGUVxDjtM67fB_omAv8r1ecSPxkS1_rlK_7qBsuJF_tdM5J9QflbVjeNMPbjS8r34tEU7R8IgoHDaT_lnYTCRtgFnP-Rpl835daochAnlOBEaVW0qK4Kr7EhYInr4Rkojrxt6ZgdD16JWXHSgceHkiRIMRXVajHB_Bw8c21N6o4TcBe9Nmd6DaeJH3-LDg9lNAngYdmGAc26FTBALx92dduqzXZTmk6HGSvAyH2CtIkxiXMM4CU_muknaUU3CL9zSEvi9syYF7aJvyTjSzhphPxvtF6GvywC_nG5gduo2pRy3ZzC4DXIjyeViwy0003__m00
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS

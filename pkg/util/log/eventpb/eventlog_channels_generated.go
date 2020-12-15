@@ -24,146 +24,146 @@ func (m *NodeRestart) LoggingChannel() logpb.Channel { return logpb.Channel_DEV 
 func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterDatabaseOwner) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterIndex) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterSequence) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterSchemaOwner) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterSequence) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CommentOnColumn) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterType) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CommentOnDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterTypeOwner) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CommentOnIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CommentOnColumn) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CommentOnTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CommentOnDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ConvertToSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CommentOnIndex) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CommentOnTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ConvertToSchema) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateSequence) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateIndex) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateStatistics) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateSchema) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateSequence) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateStatistics) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateView) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateType) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateView) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropSequence) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropIndex) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropSchema) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropSequence) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropView) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *FinishSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropType) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *FinishSchemaChangeRollback) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropView) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *FinishSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *RenameDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *FinishSchemaChangeRollback) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *RenameSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RemoveZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *RenameTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RenameDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *RenameType) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RenameSchema) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ReverseSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RenameTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *SetZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *RenameType) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *TruncateTable) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ReverseSchemaChange) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *UnsafeDeleteDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *SetZoneConfig) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *UnsafeDeleteNamespaceEntry) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *TruncateTable) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *UnsafeUpsertDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *UnsafeDeleteDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *UnsafeUpsertNamespaceEntry) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *UnsafeDeleteNamespaceEntry) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterDatabaseOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *UnsafeUpsertDescriptor) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterSchemaOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *UnsafeUpsertNamespaceEntry) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterTypeOwner) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ChangeDatabasePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ChangeDatabasePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ChangeSchemaPrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ChangeSchemaPrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ChangeTablePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ChangeTablePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *ChangeTypePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *ChangeTypePrivilege) LoggingChannel() logpb.Channel { return logpb.Channel_PRIVILEGES }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_DEV }
+func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
