@@ -54,6 +54,12 @@ func (t *TypeName) String() string {
 	return AsString(t)
 }
 
+// SQLString implements the ResolvableTypeReference interface.
+func (t *TypeName) SQLString() string {
+	// FmtBareIdentifiers prevents the TypeName string from being wrapped in quotations.
+	return AsStringWithFlags(t, FmtBareIdentifiers)
+}
+
 // FQString renders the type name in full, not omitting the prefix
 // schema and catalog names. Suitable for logging, etc.
 func (t *TypeName) FQString() string {
@@ -79,6 +85,17 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 func MakeUnqualifiedTypeName(typ Name) TypeName {
 	return TypeName{objName{
 		ObjectName: typ,
+	}}
+}
+
+// MakeSchemaQualifiedTypeName returns a new type name.
+func MakeSchemaQualifiedTypeName(schema, typ string) TypeName {
+	return TypeName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			ExplicitSchema: true,
+			SchemaName:     Name(schema),
+		},
+		ObjectName: Name(typ),
 	}}
 }
 
@@ -228,7 +245,8 @@ func (node *ArrayTypeReference) SQLString() string {
 
 // SQLString implements the ResolvableTypeReference interface.
 func (name *UnresolvedObjectName) SQLString() string {
-	return name.String()
+	// FmtBareIdentifiers prevents the TypeName string from being wrapped in quotations.
+	return AsStringWithFlags(name, FmtBareIdentifiers)
 }
 
 // IsReferenceSerialType returns whether the input reference is a known
