@@ -217,3 +217,36 @@ FROM
     LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
 ----
 error (0A000): CTEs may not be correlated
+
+# Regression test for #57821: error deriving WithUses caused by MutationOps
+# that don't use a MutationPrivate.
+norm
+WITH vals AS (VALUES (1), (2)),
+     cte AS (ALTER TABLE xy SPLIT AT (VALUES (1), (2)))
+SELECT * FROM cte
+----
+with &2 (cte)
+ ├── columns: key:9(bytes) pretty:10(string) split_enforced_until:11(timestamp)
+ ├── volatile, mutations
+ ├── prune: (9-11)
+ ├── alter-table-split xy
+ │    ├── columns: key:3(bytes) pretty:4(string) split_enforced_until:5(timestamp)
+ │    ├── volatile, mutations
+ │    ├── values
+ │    │    ├── columns: column1:2(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── prune: (2)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 1 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 2 [type=int]
+ │    └── null [type=string]
+ └── with-scan &2 (cte)
+      ├── columns: key:9(bytes) pretty:10(string) split_enforced_until:11(timestamp)
+      ├── mapping:
+      │    ├──  key:3(bytes) => key:9(bytes)
+      │    ├──  pretty:4(string) => pretty:10(string)
+      │    └──  split_enforced_until:5(timestamp) => split_enforced_until:11(timestamp)
+      ├── prune: (9-11)
+      └── cte-uses
+           └── &2: count=1 used-columns=(3-5)
