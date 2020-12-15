@@ -52,10 +52,11 @@ import (
 const defaultLeniencySetting = 60 * time.Second
 
 var (
-	gcSetting = settings.RegisterPublicDurationSetting(
+	gcSetting = settings.RegisterDurationSetting(
 		"jobs.retention_time",
 		"the amount of time to retain records for completed jobs before",
-		time.Hour*24*14)
+		time.Hour*24*14,
+	).WithPublic()
 )
 
 // adoptedJobs represents a the epoch and cancelation of a job id being run

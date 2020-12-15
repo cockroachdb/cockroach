@@ -51,12 +51,13 @@ const (
 // minLeaseTransferInterval controls how frequently leases can be transferred
 // for rebalancing. It does not prevent transferring leases in order to allow
 // a replica to be removed from a range.
-var minLeaseTransferInterval = settings.RegisterNonNegativeDurationSetting(
+var minLeaseTransferInterval = settings.RegisterDurationSetting(
 	"kv.allocator.min_lease_transfer_interval",
 	"controls how frequently leases can be transferred for rebalancing. "+
 		"It does not prevent transferring leases in order to allow a "+
 		"replica to be removed from a range.",
 	1*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // TODO(aayush): Expand this metric set to include metrics about non-voting replicas.

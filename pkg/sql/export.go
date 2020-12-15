@@ -83,10 +83,11 @@ const exportFilePatternDefault = exportFilePatternPart + ".csv"
 const exportCompressionCodec = "gzip"
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
-var featureExportEnabled = settings.RegisterPublicBoolSetting(
+var featureExportEnabled = settings.RegisterBoolSetting(
 	"feature.export.enabled",
 	"set to true to enable exports, false to disable; default is true",
-	featureflag.FeatureFlagEnabledDefault)
+	featureflag.FeatureFlagEnabledDefault,
+).WithPublic()
 
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(

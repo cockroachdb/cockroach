@@ -38,7 +38,7 @@ var pollingInterval = settings.RegisterDurationSetting(
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second)
 
-var bundleChunkSize = settings.RegisterValidatedByteSizeSetting(
+var bundleChunkSize = settings.RegisterByteSizeSetting(
 	"sql.stmt_diagnostics.bundle_chunk_size",
 	"chunk size for statement diagnostic bundles",
 	1024*1024,

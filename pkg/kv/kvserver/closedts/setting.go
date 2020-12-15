@@ -18,15 +18,16 @@ import (
 )
 
 // TargetDuration is the follower reads closed timestamp update target duration.
-var TargetDuration = settings.RegisterNonNegativeDurationSetting(
+var TargetDuration = settings.RegisterDurationSetting(
 	"kv.closed_timestamp.target_duration",
 	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
 	3*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // CloseFraction is the fraction of TargetDuration determining how often closed
 // timestamp updates are to be attempted.
-var CloseFraction = settings.RegisterValidatedFloatSetting(
+var CloseFraction = settings.RegisterFloatSetting(
 	"kv.closed_timestamp.close_fraction",
 	"fraction of closed timestamp target duration specifying how frequently the closed timestamp is advanced",
 	0.2,
