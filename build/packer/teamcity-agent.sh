@@ -34,9 +34,11 @@ apt-get install --yes \
   docker-ce \
   docker-compose \
   gnome-keyring \
+  gnupg2 \
   git \
   golang-go \
   openjdk-11-jre-headless \
+  pass \
   unzip
 # Installing gnome-keyring prevents the error described in
 # https://github.com/moby/moby/issues/34048
