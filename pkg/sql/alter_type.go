@@ -111,13 +111,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err = params.p.alterTypeOwner(params.ctx, n, t.Owner); err != nil {
 			return err
 		}
-		err = params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterTypeOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName: n.desc.Name,
-			Owner:    t.Owner.Normalized(),
-		})
-		eventLogDone = true
+		eventLogDone = true // done inside alterTypeOwner().
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -391,7 +385,24 @@ func (p *planner) checkCanAlterTypeAndSetNewOwner(
 	// Also have to change the owner of the implicit array type.
 	arrayTypeDesc.Privileges.SetOwner(newOwner)
 
-	return nil
+	if err := p.logEvent(ctx,
+		typeDesc.GetID(),
+		&eventpb.AlterTypeOwner{
+			// TODO(knz): This name is insufficiently qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57734
+			TypeName: typeDesc.GetName(),
+			Owner:    newOwner.Normalized(),
+		}); err != nil {
+		return err
+	}
+	return p.logEvent(ctx,
+		arrayTypeDesc.GetID(),
+		&eventpb.AlterTypeOwner{
+			// TODO(knz): This name is insufficiently qualified.
+			// See: https://github.com/cockroachdb/cockroach/issues/57734
+			TypeName: arrayTypeDesc.GetName(),
+			Owner:    newOwner.Normalized(),
+		})
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }

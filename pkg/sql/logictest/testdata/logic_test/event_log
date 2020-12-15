@@ -418,22 +418,6 @@ WHERE "eventType" = 'rename_database'
 statement ok
 SET DATABASE = test
 
-# set owner of database.
-##################
-
-statement ok
-CREATE USER u
-
-statement ok
-ALTER DATABASE eventlogtonewname OWNER TO u
-
-query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog
-WHERE "eventType" = 'alter_database_owner'
-----
-1  {"DatabaseName": "eventlogtonewname", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE eventlogtonewname OWNER TO u", "User": "root"}
-
 # convert database to schema
 ##################
 
@@ -449,9 +433,6 @@ WHERE "eventType" = 'convert_to_schema'
 
 statement ok
 DROP SCHEMA eventlogtonewname
-
-statement ok
-DROP USER u
 
 ##################
 # Cluster Settings
@@ -691,17 +672,10 @@ WHERE "eventType" = 'rename_schema'
 1  {"EventType": "rename_schema", "NewSchemaName": "t", "SchemaName": "u", "Statement": "ALTER SCHEMA \"\".u RENAME TO t", "User": "root"}
 
 statement ok
-ALTER SCHEMA t OWNER TO root
-
-query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog
-WHERE "eventType" = 'alter_schema_owner'
-----
-1  {"EventType": "alter_schema_owner", "Owner": "root", "SchemaName": "t", "Statement": "ALTER SCHEMA \"\".t OWNER TO root", "User": "root"}
+DROP SCHEMA s, t
 
 statement ok
-DROP SCHEMA s, t
+DROP USER u
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
@@ -734,4 +708,149 @@ WHERE "eventType" LIKE '%_role' AND info LIKE '%invisible%'
 
 
 statement ok
-SET CLUSTER SETTING server.eventlog.enabled = false
+SET CLUSTER SETTING server.eventlog.enabled = true
+
+
+
+subtest alter_owner
+
+statement ok
+CREATE DATABASE atest;
+
+statement ok
+GRANT CREATE ON DATABASE atest TO testuser
+
+user testuser
+
+statement ok
+CREATE SCHEMA atest.sc;
+  CREATE TABLE atest.sc.t(x INT);
+  CREATE TYPE atest.sc.ty AS ENUM ('foo');
+  CREATE VIEW atest.sc.v AS SELECT x FROM atest.sc.t;
+  CREATE SEQUENCE atest.sc.s
+
+user root
+
+
+# Observe the current ownership.
+statement ok
+PREPARE showOwners AS
+  WITH db_id AS (
+                SELECT id
+                  FROM system.namespace
+                 WHERE "parentID" = 0
+                   AND "parentSchemaID" = 0
+                   AND name = $1
+             ),
+       entities AS (
+                    SELECT ns.id
+                      FROM system.namespace AS ns
+                      JOIN db_id ON (ns."parentID" = db_id.id)
+                ),
+      descs AS (
+         SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS jdesc
+           FROM system.descriptor AS sd
+           JOIN entities ON (entities.id = sd.id)
+      )
+SELECT jdesc->'schema'->>'name' AS schema, jdesc->'schema'->'privileges'->>'ownerProto' AS owner,
+       jdesc->'type'->>'name' AS type, jdesc->'type'->'privileges'->>'ownerProto' AS owner,
+       jdesc->'table'->>'name' AS object, jdesc->'table'->'privileges'->>'ownerProto' AS owner
+       FROM descs
+ORDER BY 1,2,3,4,5,6
+
+query TTTTTT
+EXECUTE showOwners('atest')
+----
+NULL  NULL      NULL  NULL      s     testuser
+NULL  NULL      NULL  NULL      t     testuser
+NULL  NULL      NULL  NULL      v     testuser
+NULL  NULL      _ty   testuser  NULL  NULL
+NULL  NULL      ty    testuser  NULL  NULL
+sc    testuser  NULL  NULL      NULL  NULL
+
+statement ok
+CREATE USER u;
+  GRANT CREATE ON DATABASE atest TO u
+
+statement ok
+ALTER DATABASE atest OWNER TO u;
+  ALTER SCHEMA atest.sc OWNER TO u;
+  ALTER TABLE atest.sc.t OWNER TO u;
+  ALTER TYPE atest.sc.ty OWNER TO u
+
+# TODO(knz): ALTER VIEW OWNER is not supported yet
+# TODO(knz): ALTER SEQUENCE OWNER is not supported yet
+# See: https://github.com/cockroachdb/cockroach/issues/57965
+
+# Observe/verify the ownership change.
+query TTTTTT
+EXECUTE showOwners('atest')
+----
+NULL  NULL  NULL  NULL  s     testuser
+NULL  NULL  NULL  NULL  t     u
+NULL  NULL  NULL  NULL  v     testuser
+NULL  NULL  _ty   u     NULL  NULL
+NULL  NULL  ty    u     NULL  NULL
+sc    u     NULL  NULL  NULL  NULL
+
+# Verify that events were logged.
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+  FROM system.eventlog
+ WHERE "eventType" LIKE '%_owner'
+ORDER BY "timestamp", info
+----
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "t", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "_ty", "User": "root"}
+
+subtest alter_owner
+
+statement ok
+CREATE USER v;
+  GRANT CREATE ON DATABASE atest TO v
+
+statement ok
+USE atest -- REASSIGN only works on the current database
+
+statement ok
+REASSIGN OWNED BY u TO testuser
+
+statement ok
+REASSIGN OWNED BY testuser TO v
+
+# Observe/verify the ownership change.
+query TTTTTT
+EXECUTE showOwners('atest')
+----
+NULL  NULL  NULL  NULL  s     v
+NULL  NULL  NULL  NULL  t     v
+NULL  NULL  NULL  NULL  v     v
+NULL  NULL  _ty   v     NULL  NULL
+NULL  NULL  ty    v     NULL  NULL
+sc    v     NULL  NULL  NULL  NULL
+
+# Verify that the ownership was transferred to v even including the view and sequence.
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+  FROM system.eventlog
+ WHERE "eventType" LIKE '%_owner' AND info::JSONB->>'Owner' = 'v'
+ORDER BY "timestamp", info
+----
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "sc", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "t", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "v", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "s", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "_ty", "User": "root"}
+
+statement ok
+USE defaultdb
+
+statement ok
+DROP DATABASE atest CASCADE;
+ DROP USER v;
+ DROP USER u

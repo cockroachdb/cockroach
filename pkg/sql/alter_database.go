@@ -67,12 +67,7 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Log Alter Database Owner event. This is an auditable log event and is recorded
-	// in the same transaction as the table descriptor update.
-	return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.AlterDatabaseOwner{
-		DatabaseName: n.n.Name.String(),
-		Owner:        newOwner.Normalized(),
-	})
+	return nil
 }
 
 // checkCanAlterDatabaseAndSetNewOwner handles privilege checking and setting new owner.
@@ -92,7 +87,14 @@ func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	return nil
+	// Log Alter Database Owner event. This is an auditable log event and is recorded
+	// in the same transaction as the table descriptor update.
+	return p.logEvent(ctx,
+		desc.GetID(),
+		&eventpb.AlterDatabaseOwner{
+			DatabaseName: desc.GetName(),
+			Owner:        newOwner.Normalized(),
+		})
 }
 
 func (n *alterDatabaseOwnerNode) Next(runParams) (bool, error) { return false, nil }

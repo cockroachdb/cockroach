@@ -982,6 +982,27 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 | `User` | The user account that triggered the event. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 
+## `alter_table_owner`
+
+An event of type `alter_table_owner` is recorded when the owner of a table, view or sequence is changed.
+
+
+| Field | Description |
+|--|--|
+| `TableName` | The name of the affected object. |
+| `Owner` | The name of the new owner. |
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+
 ## `alter_type_owner`
 
 An event of type `alter_type_owner` is recorded when the owner of a user-defiend type is changed.
