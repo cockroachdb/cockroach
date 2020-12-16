@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -202,23 +201,23 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 						return NewHashAggregator(args, nil /* newSpillingQueueArgs */)
 					},
-					name: "tracking=false",
+					//name: "tracking=false",
 				},
-				{
-					new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
-						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
-						memAccounts = append(memAccounts, &spillingQueueMemAcc)
-						return NewHashAggregator(args, &NewSpillingQueueArgs{
-							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
-							Types:              args.InputTypes,
-							MemoryLimit:        defaultMemoryLimit,
-							DiskQueueCfg:       queueCfg,
-							FDSemaphore:        &colexecbase.TestingSemaphore{},
-							DiskAcc:            testDiskAcc,
-						})
-					},
-					name: "tracking=true",
-				},
+				//{
+				//	new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+				//		spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
+				//		memAccounts = append(memAccounts, &spillingQueueMemAcc)
+				//		return NewHashAggregator(args, &NewSpillingQueueArgs{
+				//			UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
+				//			Types:              args.InputTypes,
+				//			MemoryLimit:        defaultMemoryLimit,
+				//			DiskQueueCfg:       queueCfg,
+				//			FDSemaphore:        &colexecbase.TestingSemaphore{},
+				//			DiskAcc:            testDiskAcc,
+				//		})
+				//	},
+				//	//name: "tracking=true",
+				//},
 			} {
 				benchmarkAggregateFunction(
 					b, agg, aggFn, []*types.T{types.Int}, groupSize,
