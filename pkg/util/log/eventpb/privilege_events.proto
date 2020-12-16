@@ -113,6 +113,12 @@ message AlterTypeOwner {
   string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
-// TODO(knz): add AlterTableOwner here.
-// see: https://github.com/cockroachdb/cockroach/issues/57901
-
+// AlterTableOwner is recorded when the owner of a table, view or sequence is changed.
+message AlterTableOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected object.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}

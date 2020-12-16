@@ -1286,5 +1286,12 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	return nil
+	return p.logEvent(ctx,
+		desc.ID,
+		&eventpb.AlterTableOwner{
+			// TODO(knz): Properly qualify this.
+			// See: https://github.com/cockroachdb/cockroach/issues/57960
+			TableName: desc.Name,
+			Owner:     newOwner.Normalized(),
+		})
 }
