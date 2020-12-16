@@ -1882,6 +1882,7 @@ default_tablespace                                    ·                   NULL 
 default_transaction_isolation                         serializable        NULL      NULL        NULL        string
 default_transaction_priority                          normal              NULL      NULL        NULL        string
 default_transaction_read_only                         off                 NULL      NULL        NULL        string
+default_transaction_use_follower_reads                off                 NULL      NULL        NULL        string
 disable_partially_distributed_plans                   off                 NULL      NULL        NULL        string
 disallow_full_table_scans                             off                 NULL      NULL        NULL        string
 distsql                                               off                 NULL      NULL        NULL        string
@@ -1956,6 +1957,7 @@ default_tablespace                                    ·                   NULL 
 default_transaction_isolation                         serializable        NULL  user     NULL      default             default
 default_transaction_priority                          normal              NULL  user     NULL      normal              normal
 default_transaction_read_only                         off                 NULL  user     NULL      off                 off
+default_transaction_use_follower_reads                off                 NULL  user     NULL      off                 off
 disable_partially_distributed_plans                   off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                             off                 NULL  user     NULL      off                 off
 distsql                                               off                 NULL  user     NULL      off                 off
@@ -2026,6 +2028,7 @@ default_tablespace                                    NULL    NULL     NULL     
 default_transaction_isolation                         NULL    NULL     NULL     NULL        NULL
 default_transaction_priority                          NULL    NULL     NULL     NULL        NULL
 default_transaction_read_only                         NULL    NULL     NULL     NULL        NULL
+default_transaction_use_follower_reads                NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                   NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                             NULL    NULL     NULL     NULL        NULL
 distsql                                               NULL    NULL     NULL     NULL        NULL
