@@ -250,7 +250,7 @@ func initCRowFetcher(
 
 	cols := desc.Columns
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns
+		cols = desc.ReadableColumns()
 	}
 	// Add on any requested system columns. We slice cols to avoid modifying
 	// the underlying table descriptor.
