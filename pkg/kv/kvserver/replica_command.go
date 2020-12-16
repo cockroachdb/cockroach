@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -929,10 +930,10 @@ func (r *Replica) ChangeReplicas(
 		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
 	}
 
-	// If there are testing knobs, we're definitely in a test.
-	// Try to catch tests that use manual replication while the
-	// replication queue is active. Such tests are often flaky.
-	if knobs := r.store.TestingKnobs(); knobs != nil &&
+	// If in testing (for lack of a better mechanism, we restrict to race builds),
+	// try to catch tests that use manual replication while the replication queue
+	// is active. Such tests are often flaky.
+	if knobs := r.store.TestingKnobs(); util.RaceEnabled &&
 		!knobs.DisableReplicateQueue &&
 		!knobs.AllowUnsynchronizedReplicationChanges {
 		bq := r.store.replicateQueue.baseQueue
