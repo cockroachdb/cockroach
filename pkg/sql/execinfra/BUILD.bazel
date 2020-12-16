@@ -6,8 +6,6 @@ go_library(
         "base.go",
         "consumerstatus_string.go",
         "flow_context.go",
-        "metadata_test_receiver.go",
-        "metadata_test_sender.go",
         "metrics.go",
         "operator.go",
         "outboxbase.go",

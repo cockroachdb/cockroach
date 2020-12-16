@@ -82,10 +82,6 @@ type DistSQLPlanner struct {
 	distSQLSrv    *distsql.ServerImpl
 	spanResolver  physicalplan.SpanResolver
 
-	// metadataTestTolerance is the minimum level required to plan metadata test
-	// processors.
-	metadataTestTolerance execinfra.MetadataTestLevel
-
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
 	runnerChan chan runnerRequest
@@ -151,18 +147,13 @@ func NewDistSQLPlanner(
 			connHealth: nodeDialer.ConnHealth,
 			isLive:     isLive,
 		},
-		distSender:            distSender,
-		nodeDescs:             nodeDescs,
-		rpcCtx:                rpcCtx,
-		metadataTestTolerance: execinfra.NoExplain,
+		distSender: distSender,
+		nodeDescs:  nodeDescs,
+		rpcCtx:     rpcCtx,
 	}
 
 	dsp.initRunners(ctx)
 	return dsp
-}
-
-func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
-	return dsp.distSQLSrv.TestingKnobs.MetadataTestLevel >= dsp.metadataTestTolerance
 }
 
 // SetNodeInfo sets the planner's node descriptor.
@@ -2751,24 +2742,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
 	}
 
-	if dsp.shouldPlanTestMetadata() {
-		if err := plan.CheckLastStagePost(); err != nil {
-			log.Fatalf(planCtx.ctx, "%v", err)
-		}
-		plan.AddNoGroupingStageWithCoreFunc(
-			func(_ int, _ *physicalplan.Processor) execinfrapb.ProcessorCoreUnion {
-				return execinfrapb.ProcessorCoreUnion{
-					MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
-						ID: uuid.MakeV4().String(),
-					},
-				}
-			},
-			execinfrapb.PostProcessSpec{},
-			plan.GetResultTypes(),
-			plan.MergeOrdering,
-		)
-	}
-
 	return plan, err
 }
 
@@ -3607,15 +3580,6 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
 func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan) {
-	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
-	// knows how many sender IDs it should expect.
-	var metadataSenders []string
-	for _, proc := range plan.Processors {
-		if proc.Spec.Core.MetadataTestSender != nil {
-			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
-		}
-	}
-
 	// Add a final "result" stage if necessary.
 	plan.EnsureSingleStreamOnGateway()
 
@@ -3630,19 +3594,6 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 	plan.AddProjection(projection)
 	// Update PlanToStreamColMap to nil since it is no longer necessary.
 	plan.PlanToStreamColMap = nil
-
-	if len(metadataSenders) > 0 {
-		plan.AddSingleGroupStage(
-			dsp.gatewayNodeID,
-			execinfrapb.ProcessorCoreUnion{
-				MetadataTestReceiver: &execinfrapb.MetadataTestReceiverSpec{
-					SenderIDs: metadataSenders,
-				},
-			},
-			execinfrapb.PostProcessSpec{},
-			plan.GetResultTypes(),
-		)
-	}
 
 	// Set up the endpoints for plan.Streams.
 	plan.PopulateEndpoints()

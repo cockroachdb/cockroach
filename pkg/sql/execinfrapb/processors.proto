@@ -90,19 +90,19 @@ message ProcessorCoreUnion {
   optional JoinReaderSpec joinReader = 3;
   optional SorterSpec sorter = 4;
   optional AggregatorSpec aggregator = 5;
+  reserved 6;
   optional DistinctSpec distinct = 7;
   optional MergeJoinerSpec mergeJoiner = 8;
   optional HashJoinerSpec hashJoiner = 9;
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
+  reserved 12;
   optional ReadImportDataSpec readImport = 13;
   reserved 14;
   optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
-  reserved 17;
-  optional MetadataTestSenderSpec metadataTestSender = 18;
-  optional MetadataTestReceiverSpec metadataTestReceiver = 19;
+  reserved 17, 18, 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
   optional ProjectSetSpec projectSet = 22;
   optional WindowerSpec windower = 23;
@@ -117,8 +117,6 @@ message ProcessorCoreUnion {
   optional SplitAndScatterSpec splitAndScatter = 32;
   optional RestoreDataSpec restoreData = 33;
   optional FiltererSpec filterer = 34;
-
-  reserved 6, 12;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -139,13 +137,3 @@ message LocalPlanNodeSpec {
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
 }
-
-message MetadataTestSenderSpec {
-  optional string id = 1 [(gogoproto.nullable) = false,
-                         (gogoproto.customname) = "ID"];
-}
-
-message MetadataTestReceiverSpec {
-  repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
-}
-

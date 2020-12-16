@@ -271,8 +271,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 var (
 	errCoreUnsupportedNatively        = errors.New("unsupported processor core")
 	errLocalPlanNodeWrap              = errors.New("core.LocalPlanNode is not supported")
-	errMetadataTestSenderWrap         = errors.New("core.MetadataTestSender is not supported")
-	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
 	errChangeFrontierWrap             = errors.New("core.ChangeFrontier is not supported")
 	errInvertedFiltererWrap           = errors.New("core.InvertedFilterer is not supported")
@@ -311,16 +309,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 		return errSamplerWrap
 	case spec.Core.SampleAggregator != nil:
 		return errSampleAggregatorWrap
-	case spec.Core.MetadataTestSender != nil:
-		// We do not wrap MetadataTestSender because of the way metadata is
-		// propagated through the vectorized flow - it is drained at the flow
-		// shutdown unlike these test processors expect.
-		return errMetadataTestSenderWrap
-	case spec.Core.MetadataTestReceiver != nil:
-		// We do not wrap MetadataTestReceiver because of the way metadata is
-		// propagated through the vectorized flow - it is drained at the flow
-		// shutdown unlike these test processors expect.
-		return errMetadataTestReceiverWrap
 	case spec.Core.ZigzagJoiner != nil:
 	case spec.Core.ProjectSet != nil:
 	case spec.Core.Windower != nil:

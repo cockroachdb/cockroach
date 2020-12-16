@@ -444,8 +444,6 @@ type testClusterConfig struct {
 	// fall back to disk do so immediately, using only their disk-based
 	// implementation.
 	sqlExecUseDisk bool
-	// if set, enables DistSQL metadata propagation tests.
-	distSQLMetadataTestEnabled bool
 	// if set and the -test.short flag is passed, skip this config.
 	skipShort bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
@@ -529,15 +527,6 @@ var logicTestConfigs = []testClusterConfig{
 		overrideVectorize:   "off",
 	},
 	{
-		name:                       "fakedist-metadata",
-		numNodes:                   3,
-		useFakeSpanResolver:        true,
-		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
-		distSQLMetadataTestEnabled: true,
-		skipShort:                  true,
-	},
-	{
 		name:                "fakedist-disk",
 		numNodes:            3,
 		useFakeSpanResolver: true,
@@ -559,14 +548,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-	},
-	{
-		name:                       "5node-metadata",
-		numNodes:                   5,
-		overrideDistSQLMode:        "on",
-		overrideAutoStats:          "false",
-		distSQLMetadataTestEnabled: true,
-		skipShort:                  true,
 	},
 	{
 		name:                "5node-disk",
@@ -695,7 +676,6 @@ var (
 		"local-spec-planning",
 		"fakedist",
 		"fakedist-vec-off",
-		"fakedist-metadata",
 		"fakedist-disk",
 		"fakedist-spec-planning",
 	}
@@ -703,7 +683,6 @@ var (
 	fiveNodeDefaultConfigName  = "5node-default-configs"
 	fiveNodeDefaultConfigNames = []string{
 		"5node",
-		"5node-metadata",
 		"5node-disk",
 		"5node-spec-planning",
 	}
@@ -1294,15 +1273,11 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	}
 
 	distSQLKnobs := &execinfra.TestingKnobs{
-		MetadataTestLevel:                    execinfra.Off,
 		GenerateMockContentionEvents:         true,
 		CheckVectorizedFlowIsClosedCorrectly: true,
 	}
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
-	}
-	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
 	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
 		distSQLKnobs.EnableVectorizedInvariantsChecker = true

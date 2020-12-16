@@ -739,15 +739,9 @@ func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatu
 		pb.MoveToDraining(nil /* err */)
 	}
 	// Note that outRow might be nil here.
-	// TODO(yuzefovich): there is a problem with this logging when MetadataTest*
-	// processors are planned - there is a mismatch between the row and the
-	// output types (rendering is added to the stage of test processors and the
-	// actual processors that are inputs to the test ones have an unset post
-	// processing; I think that we need to set the post processing on the stages
-	// of processors below the test ones).
-	//if outRow != nil && log.V(3) && pb.Ctx != nil {
-	//	log.InfofDepth(pb.Ctx, 1, "pushing row %s", outRow.String(pb.Out.OutputTypes))
-	//}
+	if outRow != nil && log.V(3) && pb.Ctx != nil {
+		log.InfofDepth(pb.Ctx, 1, "pushing row %s", outRow.String(pb.Out.OutputTypes))
+	}
 	return outRow
 }
 
