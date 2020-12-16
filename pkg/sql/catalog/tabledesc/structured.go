@@ -2307,6 +2307,20 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 		return ErrMissingPrimaryKey
 	}
 
+	var virtualCols catalog.TableColSet
+	for i := range desc.Columns {
+		if desc.Columns[i].Virtual {
+			virtualCols.Add(desc.Columns[i].ID)
+		}
+	}
+
+	// Verify that the primary index columns are not virtual.
+	for i, col := range desc.PrimaryIndex.ColumnIDs {
+		if virtualCols.Contains(col) {
+			return fmt.Errorf("primary index column %q cannot be virtual", desc.PrimaryIndex.ColumnNames[i])
+		}
+	}
+
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, index := range desc.AllNonDropIndexes() {
@@ -2349,6 +2363,12 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
 				len(index.ColumnIDs), len(index.ColumnDirections))
 		}
+		// In the old STORING encoding, stored columns are in ExtraColumnIDs;
+		// tolerate a longer list of column names.
+		if len(index.StoreColumnIDs) > len(index.StoreColumnNames) {
+			return fmt.Errorf("mismatched STORING column IDs (%d) and names (%d)",
+				len(index.StoreColumnIDs), len(index.StoreColumnNames))
+		}
 
 		if len(index.ColumnIDs) == 0 {
 			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
@@ -2390,6 +2410,17 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 			if !valid {
 				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
 					index.Name, index.Predicate)
+			}
+		}
+		// Ensure that indexes do not STORE virtual columns.
+		for _, col := range index.ExtraColumnIDs {
+			if virtualCols.Contains(col) {
+				return fmt.Errorf("index %q cannot store virtual column %d", index.Name, col)
+			}
+		}
+		for i, col := range index.StoreColumnIDs {
+			if virtualCols.Contains(col) {
+				return fmt.Errorf("index %q cannot store virtual column %q", index.Name, index.StoreColumnNames[i])
 			}
 		}
 	}
