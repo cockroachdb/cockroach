@@ -1003,15 +1003,24 @@ type connExecutor struct {
 		// connExecutor's closure.
 		prepStmtsNamespaceMemAcc mon.BoundAccount
 
-		// onTxnFinish (if non-nil) will be called when txn is finished (either
-		// committed or aborted). It is set when txn is started but can remain
-		// unset when txn is executed within another higher-level txn.
-		onTxnFinish func(txnEvent)
+		// shouldExecuteTxnFinish indicates that ex.onTxnFinish will be called
+		// when txn is finished (either committed or aborted). It is true when txn
+		// is started but can remain false when txn is executed within another
+		// higher-level txn.
+		shouldExecuteTxnFinish bool
 
-		// onTxnRestart (if non-nil) will be called when a txn is being retried. It
-		// is set when the txn is started but can remain unset when a txn is
-		// executed within another higher-level txn.
-		onTxnRestart func()
+		// txnFinishClosure contains fields that ex.onTxnFinish uses to execute.
+		txnFinishClosure struct {
+			// txnStartTime is the time that the transaction started.
+			txnStartTime time.Time
+			// implicit is whether or not the transaction was implicit.
+			implicit bool
+		}
+
+		// shouldExecuteTxnRestart indicates that ex.onTxnRestart will be called
+		// when txn is being retried. It is true when txn is started but can remain
+		// false when txn is executed within another higher-level txn.
+		shouldExecuteTxnRestart bool
 
 		// savepoints maintains the stack of savepoints currently open.
 		savepoints savepointStack
@@ -1235,15 +1244,9 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 	switch ev {
 	case txnCommit, txnRollback:
 		ex.extraTxnState.savepoints.clear()
-		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
-		if ex.extraTxnState.onTxnFinish != nil {
-			ex.extraTxnState.onTxnFinish(ev)
-			ex.extraTxnState.onTxnFinish = nil
-		}
+		ex.onTransactionFinish(ev)
 	case txnRestart:
-		if ex.extraTxnState.onTxnRestart != nil {
-			ex.extraTxnState.onTxnRestart()
-		}
+		ex.onTransactionRestart()
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
@@ -2231,7 +2234,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
-		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
+		ex.recordTransactionStart()
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(

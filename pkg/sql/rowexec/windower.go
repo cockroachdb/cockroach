@@ -70,7 +70,7 @@ type windower struct {
 	diskMonitor  *mon.BytesMonitor
 
 	scratch       []byte
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	partitionBy                []uint32
 	allRowsPartitioned         *rowcontainer.HashDiskBackedRowContainer

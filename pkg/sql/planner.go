@@ -179,7 +179,7 @@ type planner struct {
 
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
-	cancelChecker *cancelchecker.CancelChecker
+	cancelChecker cancelchecker.CancelChecker
 
 	// isPreparing is true if this planner is currently preparing.
 	isPreparing bool

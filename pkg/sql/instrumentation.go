@@ -69,9 +69,9 @@ type instrumentationHelper struct {
 	// See EXECUTE .. DISCARD ROWS.
 	discardRows bool
 
-	diagRequestID               stmtdiagnostics.RequestID
-	finishCollectionDiagnostics func()
-	withStatementTrace          func(trace tracing.Recording, stmt string)
+	diagRequestID           stmtdiagnostics.RequestID
+	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
+	withStatementTrace      func(trace tracing.Recording, stmt string)
 
 	sp      *tracing.Span
 	origCtx context.Context
@@ -136,10 +136,11 @@ func (ih *instrumentationHelper) Setup(
 		ih.discardRows = true
 
 	default:
-		ih.collectBundle, ih.diagRequestID, ih.finishCollectionDiagnostics =
+		ih.collectBundle, ih.diagRequestID =
 			stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint)
 	}
 
+	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
@@ -214,10 +215,8 @@ func (ih *instrumentationHelper) Finish(
 			ih.origCtx, cfg.DB, ie, &p.curPlan, planStr, trace, placeholders,
 		)
 		bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID)
-		if ih.finishCollectionDiagnostics != nil {
-			ih.finishCollectionDiagnostics()
-			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
-		}
+		ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID)
+		telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)
 
 		// Handle EXPLAIN ANALYZE (DEBUG). If there was a communication error
 		// already, no point in setting any results.

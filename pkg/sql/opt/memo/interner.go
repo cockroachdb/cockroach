@@ -400,9 +400,36 @@ func (h *hasher) hashDatumsWithType(datums tree.Datums, typ *types.T, alwaysHash
 }
 
 func (h *hasher) HashType(val *types.T) {
-	// NOTE: type.String() is not a perfect hash of the type, as items such as
-	// precision and width may be lost. Collision handling must still occur.
-	h.HashString(val.String())
+	// NOTE: we don't construct a perfect hash of the type, because it's
+	// expensive. We used to hash the type's String(), but it's expensive to
+	// construct the string as it allocates on every invocation for non scalar
+	// types. Even hashing String() requires collision handling, since it's also
+	// imprecise. Instead, we hash the type's OID and a few important fields.
+	// The OID is sufficient to distinguish between all static types (those
+	// without type parameters). Type modifiers like precision, width, tuple
+	// contents, locale, and geo metadata must still be distinguished.
+	//
+	// tl;dr: Collision handling must still occur.
+	h.HashInt(int(val.Oid()))
+	if precision := val.InternalType.Precision; precision != 0 {
+		h.HashInt(int(precision))
+	}
+	if width := val.InternalType.Width; width != 0 {
+		h.HashInt(int(width))
+	}
+	for _, t := range val.TupleContents() {
+		h.HashType(t)
+	}
+	for _, l := range val.TupleLabels() {
+		h.HashString(l)
+	}
+	if locale := val.Locale(); locale != "" {
+		h.HashString(locale)
+	}
+	if geo := val.InternalType.GeoMetadata; geo != nil {
+		h.HashInt(int(geo.SRID))
+		h.HashInt(int(geo.ShapeType))
+	}
 }
 
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {

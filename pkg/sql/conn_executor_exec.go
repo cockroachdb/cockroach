@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -268,25 +269,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
-	queryTimedOut := false
-	doneAfterFunc := make(chan struct{}, 1)
+	queryTimedOut := int32(0)
 
-	// Canceling a query cancels its transaction's context so we take a reference
-	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(ast, stmt.SQL, queryID, ex.state.cancel)
+	ex.addActiveQuery(ast, stmt.SQL, queryID, ex.state.cancel)
 
 	// queryDone is a cleanup function dealing with unregistering a query.
 	// It also deals with overwriting res.Error to a more user-friendly message in
 	// case of query cancelation. res can be nil to opt out of this.
 	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
 		if timeoutTicker != nil {
-			if !timeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// queryTimedOut.
-				<-doneAfterFunc
-			}
+			timeoutTicker.Stop()
 		}
-		unregisterFn()
+		ex.removeActiveQuery(queryID, ast)
 
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
@@ -315,7 +309,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// not have been canceled (eg. We never even start executing a query
 		// because the timeout has already expired), and therefore this check needs
 		// to happen outside the canceled query check above.
-		if queryTimedOut {
+		if atomic.LoadInt32(&queryTimedOut) == 1 {
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
 			retEv = eventNonRetriableErr{
@@ -400,15 +394,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		timerDuration := ex.sessionData.StmtTimeout - timeutil.Since(ex.phaseTimes[sessionQueryReceived])
 		// There's no need to proceed with execution if the timer has already expired.
 		if timerDuration < 0 {
-			queryTimedOut = true
+			queryTimedOut = 1
 			return makeErrEvent(sqlerrors.QueryTimeoutError)
 		}
 		timeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
 				ex.cancelQuery(queryID)
-				queryTimedOut = true
-				doneAfterFunc <- struct{}{}
+				atomic.StoreInt32(&queryTimedOut, 1)
 			})
 	}
 
@@ -1061,6 +1054,11 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	return tree.ReadOnly, ts.GoTime(), &ts, nil
 }
 
+var (
+	eventStartImplicitTxn = fsm.Event(eventTxnStart{ImplicitTxn: fsm.True})
+	eventStartExplicitTxn = fsm.Event(eventTxnStart{ImplicitTxn: fsm.False})
+)
+
 // execStmtInNoTxnState "executes" a statement when no transaction is in scope.
 // For anything but BEGIN, this method doesn't actually execute the statement;
 // it just returns an Event that will generate a transaction. The statement will
@@ -1085,7 +1083,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		if err != nil {
 			return ex.makeErrEvent(err, s)
 		}
-		return eventTxnStart{ImplicitTxn: fsm.False},
+		return eventStartExplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(s.Modes.UserPriority),
 				mode,
@@ -1099,7 +1097,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		// NB: Implicit transactions are created without a historical timestamp even
 		// though the statement might contain an AOST clause. In these cases the
 		// clause is evaluated and applied execStmtInOpenState.
-		return eventTxnStart{ImplicitTxn: fsm.True},
+		return eventStartImplicitTxn,
 			makeEventTxnStartPayload(
 				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
 				ex.readWriteModeWithSessionDefault(tree.UnspecifiedReadWriteMode),
@@ -1337,7 +1335,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 // that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
 	ast tree.Statement, rawStmt string, queryID ClusterWideID, cancelFun context.CancelFunc,
-) func() {
+) {
 	_, hidden := ast.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
@@ -1351,18 +1349,19 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.Lock()
 	ex.mu.ActiveQueries[queryID] = qm
 	ex.mu.Unlock()
-	return func() {
-		ex.mu.Lock()
-		_, ok := ex.mu.ActiveQueries[queryID]
-		if !ok {
-			ex.mu.Unlock()
-			panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
-		}
-		delete(ex.mu.ActiveQueries, queryID)
-		ex.mu.LastActiveQuery = ast
+}
 
+func (ex *connExecutor) removeActiveQuery(queryID ClusterWideID, ast tree.Statement) {
+	ex.mu.Lock()
+	_, ok := ex.mu.ActiveQueries[queryID]
+	if !ok {
 		ex.mu.Unlock()
+		panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 	}
+	delete(ex.mu.ActiveQueries, queryID)
+	ex.mu.LastActiveQuery = ast
+
+	ex.mu.Unlock()
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed
@@ -1423,7 +1422,7 @@ func payloadHasError(payload fsm.EventPayload) bool {
 // recordTransactionStart records the start of the transaction and returns
 // closures to be called once the transaction finishes or if the transaction
 // restarts.
-func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
+func (ex *connExecutor) recordTransactionStart() {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1438,17 +1437,30 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
-	onTxnFinish = func(ev txnEvent) {
+	ex.extraTxnState.shouldExecuteTxnFinish = true
+	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
+	ex.extraTxnState.txnFinishClosure.implicit = implicit
+	ex.extraTxnState.shouldExecuteTxnRestart = true
+}
+
+func (ex *connExecutor) onTransactionFinish(ev txnEvent) {
+	if ex.extraTxnState.shouldExecuteTxnFinish {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
-		ex.recordTransaction(ev, implicit, txnStart)
+		ex.recordTransaction(ev,
+			ex.extraTxnState.txnFinishClosure.implicit,
+			ex.extraTxnState.txnFinishClosure.txnStartTime,
+		)
+		ex.extraTxnState.shouldExecuteTxnFinish = false
 	}
-	onTxnRestart = func() {
+}
+
+func (ex *connExecutor) onTransactionRestart() {
+	if ex.extraTxnState.shouldExecuteTxnRestart {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
 	}
-	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {

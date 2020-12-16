@@ -265,7 +265,8 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (Re
 	return reqID, nil
 }
 
-func (r *Registry) removeOngoing(requestID RequestID) {
+// RemoveOngoing removes the given request from the list of ongoing queries.
+func (r *Registry) RemoveOngoing(requestID RequestID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Remove the request from r.mu.ongoing.
@@ -281,13 +282,13 @@ func (r *Registry) removeOngoing(requestID RequestID) {
 // was collected and inserted (even if failures were encountered).
 func (r *Registry) ShouldCollectDiagnostics(
 	ctx context.Context, fingerprint string,
-) (shouldCollect bool, reqID RequestID, finishFn func()) {
+) (shouldCollect bool, reqID RequestID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Return quickly if we have no requests to trace.
 	if len(r.mu.requestFingerprints) == 0 {
-		return false, 0, nil
+		return false, 0
 	}
 
 	for id, f := range r.mu.requestFingerprints {
@@ -297,7 +298,7 @@ func (r *Registry) ShouldCollectDiagnostics(
 		}
 	}
 	if reqID == 0 {
-		return false, 0, nil
+		return false, 0
 	}
 
 	// Remove the request.
@@ -307,9 +308,7 @@ func (r *Registry) ShouldCollectDiagnostics(
 	}
 
 	r.mu.ongoing[reqID] = struct{}{}
-	return true, reqID, func() {
-		r.removeOngoing(reqID)
-	}
+	return true, reqID
 }
 
 // InsertStatementDiagnostics inserts a trace into system.statement_diagnostics.
