@@ -806,6 +806,7 @@ LOG_TARGETS = \
 	pkg/util/log/severity/severity_generated.go \
 	pkg/util/log/channel/channel_generated.go \
 	pkg/util/log/eventpb/eventlog_channels_generated.go \
+	pkg/util/log/eventpb/json_encode_generated.go \
 	pkg/util/log/log_channels_generated.go
 
 SQLPARSER_TARGETS = \
@@ -1552,7 +1553,11 @@ docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin
 	mv -f $@.tmp $@
 
 pkg/util/log/eventpb/eventlog_channels_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog_channels $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+
+pkg/util/log/eventpb/json_encode_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
+	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
