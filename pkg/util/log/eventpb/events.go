@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/redact"
 )
 
 // GetEventTypeName retrieves the system.eventlog type name for the given payload.
@@ -36,8 +37,21 @@ func GetEventTypeName(event EventPayload) string {
 
 // EventPayload is implemented by CommonEventDetails.
 type EventPayload interface {
+	// CommonDetails gives access to the common payload.
 	CommonDetails() *CommonEventDetails
+	// LoggingChannel indicates which logging channel to send this event to.
+	// This is defined by the event category, at the top of each .proto file.
 	LoggingChannel() logpb.Channel
+	// AppendJSONFields appends the JSON representation of the event's
+	// fields to the given redactable byte slice. Note that the
+	// representation is missing the outside '{' and '}'
+	// delimiters. This is intended so that the outside printer can
+	// decide how to embed the event in a larger payload.
+	//
+	// The printComma, if true, indicates whether to print a comma
+	// before the first field. The returned bool value indicates whether
+	// to print a comma when appending more fields afterwards.
+	AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes)
 }
 
 // CommonDetails implements the EventWithCommonPayload interface.

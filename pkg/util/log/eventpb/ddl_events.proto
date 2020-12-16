@@ -320,7 +320,7 @@ message ReverseSchemaChange {
   // The specific format of the error is variable and can change across releases without warning.
   string error = 4 [(gogoproto.jsontag) = ",omitempty"];
   // The SQLSTATE code for the error.
-  string sqlstate = 5 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty"];
+  string sqlstate = 5 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // FinishSchemaChange is recorded when a previously initiated schema

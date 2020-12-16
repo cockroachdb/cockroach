@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "eventpb",
@@ -9,6 +9,7 @@ go_library(
         "eventlog_channels_generated.go",
         "events.go",
         "events.pb.go",
+        "json_encode_generated.go",
         "misc_sql_events.pb.go",
         "privilege_events.pb.go",
         "role_events.pb.go",
@@ -17,7 +18,19 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/jsonbytes",
         "//pkg/util/log/logpb",
+        "//vendor/github.com/cockroachdb/redact",
         "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)
+
+go_test(
+    name = "eventpb_test",
+    srcs = ["event_test.go"],
+    embed = [":eventpb"],
+    deps = [
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/stretchr/testify/assert",
     ],
 )
