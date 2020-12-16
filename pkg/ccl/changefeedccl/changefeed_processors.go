@@ -42,6 +42,7 @@ import (
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
+	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeAggregatorSpec
@@ -407,6 +408,7 @@ const (
 
 type changeFrontier struct {
 	execinfra.ProcessorBase
+	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeFrontierSpec

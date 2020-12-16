@@ -257,6 +257,7 @@ func TestInternalErrorReporting(t *testing.T) {
 		`\*errutil.withPrefix: crdb_internal.force_assertion_error\(\) \(2\)\n`+
 		`eval.go:\d+: \*withstack.withStack \(3\)\n`+
 		`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(4\)\n`+
+		`\*colexecerror.notInternalError\n`+
 		`\(check the extra data payloads\)`, p.Message)
 
 	expectedExtra := []struct {
