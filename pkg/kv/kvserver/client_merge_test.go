@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2591,7 +2592,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 // RHS does not erroneously permit traffic after the merge commits.
 func TestStoreRangeMergeWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
+	skip.WithIssue(t, 57925, "flaky test")
 	testutils.RunTrueAndFalse(t, "inject-failures", testMergeWatcher)
 }
 
