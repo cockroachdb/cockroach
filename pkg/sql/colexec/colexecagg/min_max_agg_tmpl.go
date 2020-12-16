@@ -222,6 +222,13 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// {{end}}
 }
 
+func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.foundNonNullForCurrentGroup = false
+}
+
 type _AGG_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []_AGG_TYPE_AGGKINDAgg

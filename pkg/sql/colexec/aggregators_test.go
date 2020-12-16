@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/stretchr/testify/require"
@@ -69,39 +67,13 @@ type aggregatorTestCase struct {
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new func(
-		allocator *colmem.Allocator,
-		memAccount *mon.BoundAccount,
-		input colexecbase.Operator,
-		inputTypes []*types.T,
-		spec *execinfrapb.AggregatorSpec,
-		evalCtx *tree.EvalContext,
-		constructors []execinfrapb.AggregateConstructor,
-		constArguments []tree.Datums,
-		outputTypes []*types.T,
-		isScalar bool,
-	) (colexecbase.Operator, error)
+	new  func(*colexecagg.NewAggregatorArgs) (ResettableOperator, error)
 	name string
 }
 
 var aggTypes = []aggType{
 	{
-		// This is a wrapper around NewHashAggregator so its signature is compatible
-		// with orderedAggregator.
-		new: func(
-			allocator *colmem.Allocator,
-			memAccount *mon.BoundAccount,
-			input colexecbase.Operator,
-			inputTypes []*types.T,
-			spec *execinfrapb.AggregatorSpec,
-			evalCtx *tree.EvalContext,
-			constructors []execinfrapb.AggregateConstructor,
-			constArguments []tree.Datums,
-			outputTypes []*types.T,
-			_ bool,
-		) (colexecbase.Operator, error) {
-			return NewHashAggregator(allocator, memAccount, input, inputTypes, spec, evalCtx, constructors, constArguments, outputTypes)
-		},
+		new:  NewHashAggregator,
 		name: "hash",
 	},
 	{
@@ -341,7 +313,6 @@ func TestAggregatorOneFunc(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	// Run tests with deliberate batch sizes and no selection vectors.
 	ctx := context.Background()
 	for _, tc := range testCases {
 		if err := tc.init(); err != nil {
@@ -360,10 +331,17 @@ func TestAggregatorOneFunc(t *testing.T) {
 			log.Infof(ctx, "%s/%s", tc.name, agg.name)
 			runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return agg.new(
-						testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
-						constructors, constArguments, outputTypes, false, /* isScalar */
-					)
+					return agg.new(&colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
+					})
 				})
 		}
 	}
@@ -582,10 +560,17 @@ func TestAggregatorMultiFunc(t *testing.T) {
 			require.NoError(t, err)
 			runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return agg.new(
-						testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
-						constructors, constArguments, outputTypes, false, /* isScalar */
-					)
+					return agg.new(&colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
+					})
 				})
 		}
 	}
@@ -807,10 +792,17 @@ func TestAggregatorAllFunctions(t *testing.T) {
 				tc.expected,
 				verifier,
 				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return agg.new(
-						testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
-						constructors, constArguments, outputTypes, false, /* isScalar */
-					)
+					return agg.new(&colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          input[0],
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
+					})
 				})
 		}
 	}
@@ -919,10 +911,17 @@ func TestAggregatorRandom(t *testing.T) {
 						&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 					)
 					require.NoError(t, err)
-					a, err := agg.new(
-						testAllocator, testMemAcc, source, tc.typs, tc.spec, &evalCtx,
-						constructors, constArguments, outputTypes, false, /* isScalar */
-					)
+					a, err := agg.new(&colexecagg.NewAggregatorArgs{
+						Allocator:      testAllocator,
+						MemAccount:     testMemAcc,
+						Input:          source,
+						InputTypes:     tc.typs,
+						Spec:           tc.spec,
+						EvalCtx:        &evalCtx,
+						Constructors:   constructors,
+						ConstArguments: constArguments,
+						OutputTypes:    outputTypes,
+					})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1070,10 +1069,17 @@ func benchmarkAggregateFunction(
 			b.SetBytes(int64(argumentsSize * numInputRows))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				a, err := agg.new(
-					testAllocator, testMemAcc, source, typs, tc.spec, &evalCtx,
-					constructors, constArguments, outputTypes, false, /* isScalar */
-				)
+				a, err := agg.new(&colexecagg.NewAggregatorArgs{
+					Allocator:      testAllocator,
+					MemAccount:     testMemAcc,
+					Input:          source,
+					InputTypes:     tc.typs,
+					Spec:           tc.spec,
+					EvalCtx:        &evalCtx,
+					Constructors:   constructors,
+					ConstArguments: constArguments,
+					OutputTypes:    outputTypes,
+				})
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -1295,10 +1301,17 @@ func TestHashAggregator(t *testing.T) {
 		)
 		require.NoError(t, err)
 		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewHashAggregator(
-				testAllocator, testMemAcc, sources[0], tc.typs, tc.spec,
-				&evalCtx, constructors, constArguments, outputTypes,
-			)
+			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
+				Allocator:      testAllocator,
+				MemAccount:     testMemAcc,
+				Input:          sources[0],
+				InputTypes:     tc.typs,
+				Spec:           tc.spec,
+				EvalCtx:        &evalCtx,
+				Constructors:   constructors,
+				ConstArguments: constArguments,
+				OutputTypes:    outputTypes,
+			})
 		})
 	}
 }

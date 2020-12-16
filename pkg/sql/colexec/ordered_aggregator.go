@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -122,8 +120,6 @@ type orderedAggregator struct {
 	// groups.
 	bucket    aggBucket
 	aggHelper aggregatorHelper
-	// isScalar indicates whether an aggregator is in scalar context.
-	isScalar bool
 	// seenNonEmptyBatch indicates whether a non-empty input batch has been
 	// observed.
 	seenNonEmptyBatch bool
@@ -131,35 +127,20 @@ type orderedAggregator struct {
 	toClose           colexecbase.Closers
 }
 
+var _ ResettableOperator = &orderedAggregator{}
 var _ closableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator on the given grouping
 // columns. aggCols is a slice where each index represents a new aggregation
 // function. The slice at that index specifies the columns of the input batch
 // that the aggregate function should work on.
-func NewOrderedAggregator(
-	allocator *colmem.Allocator,
-	memAccount *mon.BoundAccount,
-	input colexecbase.Operator,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	evalCtx *tree.EvalContext,
-	constructors []execinfrapb.AggregateConstructor,
-	constArguments []tree.Datums,
-	outputTypes []*types.T,
-	isScalar bool,
-) (colexecbase.Operator, error) {
-	for _, aggFn := range spec.Aggregations {
+func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
+	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
 		}
 	}
-	var (
-		op       colexecbase.Operator
-		groupCol []bool
-		err      error
-	)
-	op, groupCol, err = OrderedDistinctColsToOperators(input, spec.GroupCols, inputTypes)
+	op, groupCol, err := OrderedDistinctColsToOperators(args.Input, args.Spec.GroupCols, args.InputTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -167,8 +148,7 @@ func NewOrderedAggregator(
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
 	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
-		outputTypes, 1 /* allocSize */, false, /* isHashAgg */
+		args, 1 /* allocSize */, false, /* isHashAgg */
 	)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
@@ -178,16 +158,15 @@ func NewOrderedAggregator(
 
 	a := &orderedAggregator{
 		OneInputNode:       NewOneInputNode(op),
-		allocator:          allocator,
-		spec:               spec,
+		allocator:          args.Allocator,
+		spec:               args.Spec,
 		groupCol:           groupCol,
 		bucket:             aggBucket{fns: funcsAlloc.MakeAggregateFuncs()},
-		isScalar:           isScalar,
-		outputTypes:        outputTypes,
+		outputTypes:        args.OutputTypes,
 		inputArgsConverter: inputArgsConverter,
 		toClose:            toClose,
 	}
-	a.aggHelper = newAggregatorHelper(allocator, memAccount, inputTypes, spec, &a.datumAlloc, false /* isHashAgg */, coldata.BatchSize())
+	a.aggHelper = newAggregatorHelper(args, &a.datumAlloc, false /* isHashAgg */, coldata.BatchSize())
 	return a, nil
 }
 
@@ -239,7 +218,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			a.seenNonEmptyBatch = a.seenNonEmptyBatch || batchLength > 0
 			if !a.seenNonEmptyBatch {
 				// The input has zero rows.
-				if a.isScalar {
+				if a.spec.IsScalar() {
 					for _, fn := range a.bucket.fns {
 						fn.HandleEmptyInputScalar()
 					}
@@ -383,6 +362,20 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected orderedAggregatorState %d", a.state))
 		}
+	}
+}
+
+func (a *orderedAggregator) reset(ctx context.Context) {
+	if r, ok := a.input.(resetter); ok {
+		r.reset(ctx)
+	}
+	a.state = orderedAggregatorAggregating
+	a.scratch.shouldResetInternalBatch = true
+	a.scratch.resumeIdx = 0
+	a.lastReadBatch = nil
+	a.seenNonEmptyBatch = false
+	for _, fn := range a.bucket.fns {
+		fn.Reset()
 	}
 }
 

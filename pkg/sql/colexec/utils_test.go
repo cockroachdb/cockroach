@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/assert"
@@ -386,6 +388,13 @@ func runTestsWithoutAllNullsInjection(
 		if err := verifyFn(out); err != nil {
 			t.Fatal(err)
 		}
+		if isOperatorChainResettable(op) {
+			log.Info(ctx, "reusing after reset")
+			out.reset(ctx)
+			if err := verifyFn(out); err != nil {
+				t.Fatal(err)
+			}
+		}
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -670,11 +679,14 @@ type opTestInput struct {
 
 	batchSize int
 	tuples    tuples
-	batch     coldata.Batch
-	useSel    bool
-	rng       *rand.Rand
-	selection []int
-	evalCtx   *tree.EvalContext
+	// initialTuples are tuples passed in into the constructor, and we keep the
+	// reference to them in order to be able to reset the operator.
+	initialTuples tuples
+	batch         coldata.Batch
+	useSel        bool
+	rng           *rand.Rand
+	selection     []int
+	evalCtx       *tree.EvalContext
 
 	// injectAllNulls determines whether opTestInput will replace all values in
 	// the input tuples with nulls.
@@ -685,29 +697,31 @@ type opTestInput struct {
 	injectRandomNulls bool
 }
 
-var _ colexecbase.Operator = &opTestInput{}
+var _ ResettableOperator = &opTestInput{}
 
 // newOpTestInput returns a new opTestInput with the given input tuples and the
 // given type schema. If typs is nil, the input tuples are translated into
 // types automatically, using simple rules (e.g. integers always become Int64).
 func newOpTestInput(batchSize int, tuples tuples, typs []*types.T) *opTestInput {
 	ret := &opTestInput{
-		batchSize: batchSize,
-		tuples:    tuples,
-		typs:      typs,
-		evalCtx:   tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		batchSize:     batchSize,
+		tuples:        tuples,
+		initialTuples: tuples,
+		typs:          typs,
+		evalCtx:       tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	return ret
 }
 
 func newOpTestSelInput(rng *rand.Rand, batchSize int, tuples tuples, typs []*types.T) *opTestInput {
 	ret := &opTestInput{
-		useSel:    true,
-		rng:       rng,
-		batchSize: batchSize,
-		tuples:    tuples,
-		typs:      typs,
-		evalCtx:   tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		useSel:        true,
+		rng:           rng,
+		batchSize:     batchSize,
+		tuples:        tuples,
+		initialTuples: tuples,
+		typs:          typs,
+		evalCtx:       tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
 	return ret
 }
@@ -788,7 +802,7 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 		}
 	}
 
-	rng := rand.New(rand.NewSource(123))
+	rng, _ := randutil.NewPseudoRand()
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
@@ -825,11 +839,22 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						setColVal(vec, outputIdx, duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63()), s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
+						case types.CollatedStringFamily:
+							collatedStringType := types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+							randomBytes := make([]byte, rng.Intn(16)+1)
+							rng.Read(randomBytes)
+							d, err := tree.NewDCollatedString(string(randomBytes), collatedStringType.Locale(), &tree.CollationEnvironment{})
+							if err != nil {
+								colexecerror.InternalError(err)
+							}
+							setColVal(vec, outputIdx, d, s.evalCtx)
 						case types.JsonFamily:
 							newBytes := make([]byte, rng.Intn(16)+1)
 							rng.Read(newBytes)
 							j := json.FromString(string(newBytes))
 							setColVal(vec, outputIdx, j, s.evalCtx)
+						case types.TimeTZFamily:
+							setColVal(vec, outputIdx, tree.NewDTimeTZFromOffset(timeofday.FromInt(rng.Int63()), rng.Int31()), s.evalCtx)
 						case types.TupleFamily:
 							setColVal(vec, outputIdx, stringToDatum("(NULL)", vec.Type(), s.evalCtx), s.evalCtx)
 						default:
@@ -853,6 +878,10 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 	return s.batch
 }
 
+func (s *opTestInput) reset(context.Context) {
+	s.tuples = s.initialTuples
+}
+
 type opFixedSelTestInput struct {
 	colexecbase.ZeroInputNode
 
@@ -869,7 +898,7 @@ type opFixedSelTestInput struct {
 	idx int
 }
 
-var _ colexecbase.Operator = &opFixedSelTestInput{}
+var _ ResettableOperator = &opFixedSelTestInput{}
 
 // newOpFixedSelTestInput returns a new opFixedSelTestInput with the given
 // input tuples and selection vector. The input tuples are translated into
@@ -969,6 +998,10 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 	return s.batch
 }
 
+func (s *opFixedSelTestInput) reset(context.Context) {
+	s.idx = 0
+}
+
 // opTestOutput is a test verification struct that ensures its input batches
 // match some expected output tuples.
 type opTestOutput struct {
@@ -1036,6 +1069,14 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 	ret := getTupleFromBatch(r.batch, r.curIdx)
 	r.curIdx++
 	return ret
+}
+
+func (r *opTestOutput) reset(ctx context.Context) {
+	if r, ok := r.input.(resetter); ok {
+		r.reset(ctx)
+	}
+	r.curIdx = 0
+	r.batch = nil
 }
 
 // Verify ensures that the input to this opTestOutput produced the same results

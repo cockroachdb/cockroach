@@ -152,6 +152,12 @@ func (a *avgInt16HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgInt16HashAgg) Reset() {
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgInt16HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgInt16HashAgg
@@ -275,6 +281,12 @@ func (a *avgInt32HashAgg) Flush(outputIdx int) {
 			colexecerror.InternalError(err)
 		}
 	}
+}
+
+func (a *avgInt32HashAgg) Reset() {
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
 }
 
 type avgInt32HashAggAlloc struct {
@@ -402,6 +414,12 @@ func (a *avgInt64HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgInt64HashAgg) Reset() {
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgInt64HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgInt64HashAgg
@@ -521,6 +539,12 @@ func (a *avgDecimalHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgDecimalHashAgg) Reset() {
+	a.curSum = zeroDecimalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgDecimalHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgDecimalHashAgg
@@ -630,6 +654,12 @@ func (a *avgFloat64HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avgFloat64HashAgg) Reset() {
+	a.curSum = zeroFloat64Value
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avgFloat64HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avgFloat64HashAgg
@@ -727,6 +757,12 @@ func (a *avgIntervalHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curSum.Div(int64(a.curCount))
 	}
+}
+
+func (a *avgIntervalHashAgg) Reset() {
+	a.curSum = zeroIntervalValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
 }
 
 type avgIntervalHashAggAlloc struct {

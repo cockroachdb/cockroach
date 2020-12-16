@@ -128,6 +128,11 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumIntInt16HashAgg) Reset() {
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumIntInt16HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumIntInt16HashAgg
@@ -237,6 +242,11 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sumIntInt32HashAgg) Reset() {
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sumIntInt32HashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sumIntInt32HashAgg
@@ -344,6 +354,11 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 	} else {
 		a.col[outputIdx] = a.curAgg
 	}
+}
+
+func (a *sumIntInt64HashAgg) Reset() {
+	a.curAgg = zeroInt64Value
+	a.foundNonNullForCurrentGroup = false
 }
 
 type sumIntInt64HashAggAlloc struct {
