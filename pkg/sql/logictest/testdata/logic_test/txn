@@ -1038,3 +1038,60 @@ ROLLBACK
 # restore the default
 statement ok
 SET default_transaction_read_only = false
+
+# Transaction AS OF SYSTEM TIME clauses can be assigned a default value.
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO TRUE
+
+# NOTE: run SHOW statement at different AS OF SYSTEM TIME time to avoid schema
+# resolution complications.
+query T
+BEGIN AS OF SYSTEM TIME '-1us'; SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS; COMMIT
+----
+on
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME follower_read_timestamp()
+
+# NOTE: run SHOW statement at different AS OF SYSTEM TIME time to avoid schema
+# resolution complications.
+query T
+BEGIN AS OF SYSTEM TIME '-1us'; SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS; COMMIT
+----
+on
+
+statement error pgcode 22023 unsupported default as of system time expression, only follower_read_timestamp\(\) allowed
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME now()
+
+statement error pgcode 22023 unsupported default as of system time expression, only follower_read_timestamp\(\) allowed
+SET SESSION CHARACTERISTICS AS TRANSACTION AS OF SYSTEM TIME '-1m'
+
+statement ok
+SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+query T
+SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS
+----
+off
+
+# Transaction deferrability can be assigned a default value.
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET SESSION CHARACTERISTICS AS TRANSACTION DEFERRABLE

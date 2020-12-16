@@ -2061,12 +2061,31 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 	mode tree.ReadWriteMode,
 ) tree.ReadWriteMode {
 	if mode == tree.UnspecifiedReadWriteMode {
-		if ex.sessionData.DefaultReadOnly {
+		if ex.sessionData.DefaultTxnReadOnly {
 			return tree.ReadOnly
 		}
 		return tree.ReadWrite
 	}
 	return mode
+}
+
+// followerReadTimestampExpr is the function which can be used with AOST clauses
+// to generate a timestamp likely to be safe for follower reads.
+//
+// NOTE: this cannot live in pkg/sql/sem/tree due to the call to WrapFunction,
+// which fails before the pkg/sql/sem/builtins package has been initialized.
+var followerReadTimestampExpr = &tree.FuncExpr{
+	Func: tree.WrapFunction(tree.FollowerReadTimestampFunctionName),
+}
+
+func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.AsOfClause {
+	if expr.Expr == nil {
+		if ex.sessionData.DefaultTxnUseFollowerReads {
+			return tree.AsOfClause{Expr: followerReadTimestampExpr}
+		}
+		return tree.AsOfClause{}
+	}
+	return expr
 }
 
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the

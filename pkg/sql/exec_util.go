@@ -2053,8 +2053,12 @@ func (m *sessionDataMutator) SetDefaultTransactionPriority(val tree.UserPriority
 	m.data.DefaultTxnPriority = int(val)
 }
 
-func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
-	m.data.DefaultReadOnly = val
+func (m *sessionDataMutator) SetDefaultTransactionReadOnly(val bool) {
+	m.data.DefaultTxnReadOnly = val
+}
+
+func (m *sessionDataMutator) SetDefaultTransactionUseFollowerReads(val bool) {
+	m.data.DefaultTxnUseFollowerReads = val
 }
 
 func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
