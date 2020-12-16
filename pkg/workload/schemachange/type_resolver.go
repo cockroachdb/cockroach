@@ -12,7 +12,6 @@ package schemachange
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -29,62 +28,79 @@ type txTypeResolver struct {
 	tx *pgx.Tx
 }
 
+// ResolveType implements the TypeReferenceResolver interface.
+// Note: If the name has an explicit schema, it will be resolved as
+// a user defined enum.
 func (t txTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	schemaClause := ""
+
 	if name.HasExplicitSchema() {
-		schemaClause = fmt.Sprintf("AND nspname = '%s'", name.Schema())
-	}
-	rows, err := t.tx.Query(fmt.Sprintf(`
+		rows, err := t.tx.Query(`
   SELECT enumlabel, enumsortorder, pgt.oid::int
     FROM pg_enum AS pge, pg_type AS pgt, pg_namespace AS pgn
    WHERE (pgt.typnamespace = pgn.oid AND pgt.oid = pge.enumtypid)
          AND typcategory = 'E'
          AND typname = $1
-				 %s
-ORDER BY enumsortorder`, schemaClause), name.Object())
-	if err != nil {
-		return nil, err
-	}
-	var logicalReps []string
-	var physicalReps [][]byte
-	var readOnly []bool
-	var objectID oid.Oid
-	for rows.Next() {
-		var logicalRep string
-		var order int64
-		if err := rows.Scan(&logicalRep, &order, &objectID); err != nil {
+				 AND nspname = $2
+ORDER BY enumsortorder`, name.Object(), name.Schema())
+		if err != nil {
 			return nil, err
 		}
-		logicalReps = append(logicalReps, logicalRep)
-		physicalReps = append(physicalReps, encoding.EncodeUntaggedIntValue(nil, order))
-		readOnly = append(readOnly, false)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	// TODO(ajwerner): Fill in some more fields here to generate better errors
-	// down the line.
-	n := types.UserDefinedTypeName{Name: name.Object()}
-	if name.HasExplicitSchema() {
+		var logicalReps []string
+		var physicalReps [][]byte
+		var readOnly []bool
+		var objectID oid.Oid
+		for rows.Next() {
+			var logicalRep string
+			var order int64
+			if err := rows.Scan(&logicalRep, &order, &objectID); err != nil {
+				return nil, err
+			}
+			logicalReps = append(logicalReps, logicalRep)
+			physicalReps = append(physicalReps, encoding.EncodeUntaggedIntValue(nil, order))
+			readOnly = append(readOnly, false)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		// TODO(ajwerner): Fill in some more fields here to generate better errors
+		// down the line.
+		n := types.UserDefinedTypeName{Name: name.Object()}
 		n.Schema = name.Schema()
 		n.ExplicitSchema = true
-	}
-	return &types.T{
-		InternalType: types.InternalType{
-			Family: types.EnumFamily,
-			Oid:    objectID,
-		},
-		TypeMeta: types.UserDefinedTypeMetadata{
-			Name: &n,
-			EnumData: &types.EnumMetadata{
-				LogicalRepresentations:  logicalReps,
-				PhysicalRepresentations: physicalReps,
-				IsMemberReadOnly:        readOnly,
+		return &types.T{
+			InternalType: types.InternalType{
+				Family: types.EnumFamily,
+				Oid:    objectID,
 			},
-		},
-	}, nil
+			TypeMeta: types.UserDefinedTypeMetadata{
+				Name: &n,
+				EnumData: &types.EnumMetadata{
+					LogicalRepresentations:  logicalReps,
+					PhysicalRepresentations: physicalReps,
+					IsMemberReadOnly:        readOnly,
+				},
+			},
+		}, nil
+	}
+
+	// Since the type is not a user defined schema type, it is a primitive type.
+	var objectID oid.Oid
+	if err := t.tx.QueryRow(`
+  SELECT oid::int
+    FROM pg_type
+   WHERE typname = $1
+  `, name.Object(),
+	).Scan(&objectID); err != nil {
+		return nil, err
+	}
+
+	if _, exists := types.OidToType[objectID]; !exists {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "type %s with oid %s does not exist", name.Object(), objectID)
+	}
+
+	return types.OidToType[objectID], nil
 }
 
 func (t txTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
