@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-metadata
+
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 
@@ -173,13 +175,19 @@ system     node  NULL  {}  NULL
 t          root  NULL  {}  NULL
 v          root  NULL  {}  NULL
 
+statement ok
+SET vectorize=on
+
 query T
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • rename database
+
+statement ok
+RESET vectorize
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
 query TTTTT colnames

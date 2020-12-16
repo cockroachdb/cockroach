@@ -32,22 +32,22 @@ import (
 type crdbVersion int
 
 const (
-	tpchVecVersion19_2 crdbVersion = iota
-	tpchVecVersion20_1
-	tpchVecVersion20_2
-	tpchVecVersion21_1
+	crdbVersion19_2 crdbVersion = iota
+	crdbVersion20_1
+	crdbVersion20_2
+	crdbVersion21_1
 )
 
 func toCRDBVersion(v string) (crdbVersion, error) {
 	switch {
 	case strings.HasPrefix(v, "v19.2"):
-		return tpchVecVersion19_2, nil
+		return crdbVersion19_2, nil
 	case strings.HasPrefix(v, "v20.1"):
-		return tpchVecVersion20_1, nil
+		return crdbVersion20_1, nil
 	case strings.HasPrefix(v, "v20.2"):
-		return tpchVecVersion20_2, nil
+		return crdbVersion20_2, nil
 	case strings.HasPrefix(v, "v21.1"):
-		return tpchVecVersion21_1, nil
+		return crdbVersion21_1, nil
 	default:
 		return 0, errors.Errorf("unrecognized version: %s", v)
 	}
@@ -58,7 +58,7 @@ func vectorizeOptionToSetting(vectorize bool, version crdbVersion) string {
 		return "off"
 	}
 	switch version {
-	case tpchVecVersion19_2:
+	case crdbVersion19_2:
 		return "experimental_on"
 	default:
 		return "on"
@@ -69,7 +69,7 @@ func vectorizeOptionToSetting(vectorize bool, version crdbVersion) string {
 // to be skipped for the given version (as well as the reasons for why they are
 // skipped).
 var queriesToSkipByVersion = map[crdbVersion]map[int]string{
-	tpchVecVersion19_2: {
+	crdbVersion19_2: {
 		5:  "can cause OOM",
 		7:  "can cause OOM",
 		8:  "can cause OOM",

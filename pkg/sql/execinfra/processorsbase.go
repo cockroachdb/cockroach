@@ -936,10 +936,18 @@ func NewLimitedMonitor(
 // these objects at creation time.
 type LocalProcessor interface {
 	RowSourcedProcessor
+	StreamingProcessor
 	// InitWithOutput initializes this processor.
 	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
 	SetInput(ctx context.Context, input RowSource) error
+}
+
+// StreamingProcessor is a marker interface that indicates that the processor is
+// of "streaming" nature and is expected to emit the output one tuple at a time
+// (in both row-by-row and the vectorized engines).
+type StreamingProcessor interface {
+	mustBeStreaming()
 }

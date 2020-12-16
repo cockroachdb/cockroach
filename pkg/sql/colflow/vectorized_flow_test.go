@@ -232,7 +232,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		nil /* fdSemaphore */, descs.DistSQLTypeResolver{},
 	)
 
-	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
+	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, flowinfra.FuseNormally)
 	defer vfc.cleanup(ctx)
 	require.NoError(t, err)
 

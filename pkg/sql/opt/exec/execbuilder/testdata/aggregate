@@ -122,7 +122,7 @@ regr_intercept(1, 1), regr_r2(1, 1), regr_slope(1, 1), regr_sxx(1, 1), regr_sxy(
 regr_count(1, 1), regr_avgx(1, 1), regr_avgy(1, 1)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • render
 │ columns: (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string, corr float, covar_pop float, covar_samp float, sqrdiff decimal, regr_intercept float, regr_r2 float, regr_slope float, regr_sxx float, regr_sxy float, regr_syy float, regr_count int, regr_avgx float, regr_avgy float)

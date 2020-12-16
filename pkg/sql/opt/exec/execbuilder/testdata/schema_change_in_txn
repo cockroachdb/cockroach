@@ -7,7 +7,7 @@ CREATE TABLE t (
   c TEXT COLLATE en_US DEFAULT('empty' COLLATE en_US),
   d DECIMAL(10,2) NOT NULL,
   e TIME,
-  f DECIMAL AS (a + b + d) STORED,
+  f DECIMAL(10,1) AS (a + b + d) STORED,
   --UNIQUE INDEX t_secondary (c, d), -- Fails due to #46276
   FAMILY (a, b, c),
   FAMILY (d, e, f)

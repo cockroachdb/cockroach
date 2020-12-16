@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -255,6 +256,11 @@ func startConnExecutor(
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	gw := gossip.MakeOptionalGossip(nil)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	defer tempEngine.Close()
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
@@ -276,6 +282,7 @@ func startConnExecutor(
 				Stopper:        stopper,
 				Metrics:        &distSQLMetrics,
 				NodeID:         nodeID,
+				TempFS:         tempFS,
 			}),
 			nil, /* distSender */
 			nil, /* nodeDescs */

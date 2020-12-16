@@ -1,3 +1,5 @@
+# LogicTest: !fakedist-metadata
+
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -160,13 +162,19 @@ subtest truncate_30547
 statement ok
 CREATE TABLE tt AS SELECT 'foo'
 
+statement ok
+SET vectorize=on
+
 query T
 EXPLAIN TRUNCATE TABLE tt
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • truncate
+
+statement ok
+RESET vectorize
 
 # Verify that EXPLAIN did not cause the truncate to be performed.
 query T

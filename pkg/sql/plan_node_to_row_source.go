@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type metadataForwarder interface {
@@ -27,7 +28,9 @@ type metadataForwarder interface {
 
 type planNodeToRowSource struct {
 	execinfra.ProcessorBase
+	execinfra.StreamingProcessor
 
+	input   execinfra.RowSource
 	started bool
 
 	fastPath bool
@@ -41,6 +44,8 @@ type planNodeToRowSource struct {
 	// run time state machine values
 	row rowenc.EncDatumRow
 }
+
+var _ execinfra.OpNode = &planNodeToRowSource{}
 
 func makePlanNodeToRowSource(
 	source planNode, params runParams, fastPath bool,
@@ -95,6 +100,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 		// tree had no DistSQL-plannable subtrees.
 		return nil
 	}
+	p.input = input
 	p.AddInputToDrain(input)
 	// Search the plan we're wrapping for firstNotWrapped, which is the planNode
 	// that DistSQL planning resumed in. Replace that planNode with input,
@@ -195,24 +201,31 @@ func (p *planNodeToRowSource) ConsumerClosed() {
 	p.InternalClose()
 }
 
-// IsException implements the VectorizeAlwaysException interface.
-func (p *planNodeToRowSource) IsException() bool {
-	if _, ok := p.node.(*setVarNode); ok {
-		// We need to make an exception for changing a session variable.
-		return true
-	}
-	if d, ok := p.node.(*delayedNode); ok {
-		// We want to make an exception for retrieving the current database
-		// name (which is done via a scan of 'session_variables' virtual table.
-		return d.name == "session_variables@primary"
-	}
-	return false
-}
-
 // forwardMetadata will be called by any upstream rowSourceToPlanNode processors
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
 // trailing metadata and expect us to forward it further.
 func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
+}
+
+// ChildCount is part of the execinfra.OpNode interface.
+func (p *planNodeToRowSource) ChildCount(verbose bool) int {
+	if _, ok := p.input.(execinfra.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execinfra.OpNode interface.
+func (p *planNodeToRowSource) Child(nth int, verbose bool) execinfra.OpNode {
+	switch nth {
+	case 0:
+		if n, ok := p.input.(execinfra.OpNode); ok {
+			return n
+		}
+		panic("input to planNodeToRowSource is not an execinfra.OpNode")
+	default:
+		panic(errors.AssertionFailedf("invalid index %d", nth))
+	}
 }
