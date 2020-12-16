@@ -10,7 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/langgen",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/sql/opt/optgen/lang",
+        "//pkg/sql/opt/optgen/lang:",
         "//vendor/github.com/cockroachdb/errors",
     ],
 )

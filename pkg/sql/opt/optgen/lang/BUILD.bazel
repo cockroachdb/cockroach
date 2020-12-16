@@ -7,12 +7,29 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
-        "expr.og.go",  # keep
-        "operator.og.go",  # keep
-        "operator_string.go",
         "parser.go",
         "scanner.go",
         "token_string.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_library(
+    name = "operator-lang",
+    srcs = [
+    ":gen-operator-lang",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+go_library(
+    name = "expr-lang",
+    srcs = [
+    ":gen-expr-go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
@@ -32,4 +49,25 @@ go_test(
         "//vendor/github.com/cockroachdb/datadriven",
         "//vendor/github.com/cockroachdb/errors",
     ],
+)
+
+# Define the generator for the operator definitions and functions.
+genrule(
+    name = "gen-operator-lang",
+    srcs = ["lang.opt"],
+    outs = ["operator.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(locations :lang.opt)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+)
+
+genrule(
+    name = "gen-expr-go",
+    srcs = ["lang.opt"],
+    outs = ["expr.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(locations :lang.opt)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
 )
