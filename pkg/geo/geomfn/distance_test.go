@@ -743,10 +743,10 @@ func TestFrechetDistanceDensify(t *testing.T) {
 	pf := func(f float64) *float64 { return &f }
 
 	testCases := []struct {
-		a        string
-		b        string
-		densify  float64
-		expected *float64
+		a           string
+		b           string
+		densifyFrac float64
+		expected    *float64
 	}{
 		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
 		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING EMPTY", 0.5, nil},
@@ -763,13 +763,13 @@ func TestFrechetDistanceDensify(t *testing.T) {
 
 	for _, tc := range testCases {
 		tc := tc
-		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densify), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densifyFrac), func(t *testing.T) {
 			a, err := geo.ParseGeometry(tc.a)
 			require.NoError(t, err)
 			b, err := geo.ParseGeometry(tc.b)
 			require.NoError(t, err)
 
-			ret, err := FrechetDistanceDensify(a, b, tc.densify)
+			ret, err := FrechetDistanceDensify(a, b, tc.densifyFrac)
 			require.NoError(t, err)
 			if tc.expected != nil && ret != nil {
 				require.Equal(t, *tc.expected, *ret)
@@ -782,6 +782,39 @@ func TestFrechetDistanceDensify(t *testing.T) {
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := FrechetDistanceDensify(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB, 0.5)
 		requireMismatchingSRIDError(t, err)
+	})
+
+	errorTestCases := []struct {
+		a           string
+		b           string
+		densifyFrac float64
+	}{
+		// Very small densifyFrac causes a SIGFPE in GEOS due to division-by-zero.
+		// The threshold was empirically found to be at 1e-20, while at 1e-19
+		// GEOS instead returns the error "geos error: vector". We explicitly
+		// disallow <1e-19 in the code, and test that both of these error. We do
+		// not test larger values, since very small densify values consume a
+		// large amount of memory causing out-of-memory errors.
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-19},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-20},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-100},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1e-19},
+		{"LINESTRING (0 0, 3 7, 5 5)", "LINESTRING (0 0, 9 1, 2 2)", 1e-20},
+	}
+
+	t.Run("errors on invalid densify fraction", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			tc := tc
+			t.Run(fmt.Sprintf("%v %v densify %v", tc.a, tc.b, tc.densifyFrac), func(t *testing.T) {
+				a, err := geo.ParseGeometry(tc.a)
+				require.NoError(t, err)
+				b, err := geo.ParseGeometry(tc.b)
+				require.NoError(t, err)
+
+				_, err = FrechetDistanceDensify(a, b, tc.densifyFrac)
+				require.Error(t, err)
+			})
+		}
 	})
 }
 
@@ -834,6 +867,8 @@ func TestHausdorffDistanceDensify(t *testing.T) {
 		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING EMPTY", 0.5, nil},
 		{"LINESTRING EMPTY", "LINESTRING (10 10, 10 150, 130 10)", 0.5, nil},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-100, pf(14.142135623730951)},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-20, pf(14.142135623730951)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.2, pf(66)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.4, pf(56.66666666666667)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.6, pf(70)},
