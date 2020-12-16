@@ -42,10 +42,10 @@ func runInitialSQL(
 		// 1 so as to avoid warning messages and unnecessary rebalance
 		// churn.
 		if err := cliDisableReplication(ctx, s); err != nil {
-			log.Errorf(ctx, "could not disable replication: %v", err)
+			log.Ops.Errorf(ctx, "could not disable replication: %v", err)
 			return "", err
 		}
-		log.Infof(ctx, "Replication was disabled for this cluster.\n"+
+		log.Ops.Infof(ctx, "Replication was disabled for this cluster.\n"+
 			"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
 	}
 

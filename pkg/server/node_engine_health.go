@@ -48,7 +48,7 @@ func (n *Node) startAssertEngineHealth(
 
 func guaranteedExitFatal(ctx context.Context, msg string, args ...interface{}) {
 	// NB: log.Shout sets up a timer that guarantees process termination.
-	log.Shoutf(ctx, severity.FATAL, msg, args...)
+	log.Health.Shoutf(ctx, severity.FATAL, msg, args...)
 }
 
 func (n *Node) assertEngineHealth(

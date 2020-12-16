@@ -8,7 +8,7 @@ tenants cannot contain a copy of cluster-level events; conversely,
 the system.eventlog table in the system tenant cannot contain the
 SQL-level events for individual tenants.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to channel OPS.
 
 
 ## `node_decommissioned`
@@ -691,26 +691,6 @@ initiated schema change rollback has completed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `MutationID` | The descriptor mutation that this schema change was processing. |
 
-## `remove_zone_config`
-
-An event of type `remove_zone_config` is recorded when a zone config is removed.
-
-
-
-
-### Common fields
-
-| Field | Description |
-|--|--|
-| `Timestamp` | The timestamp of the event. |
-| `EventType` | The type of the event. |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. |
-| `User` | The user account that triggered the event. |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
-| `Target` | The target object of the zone config change. |
-| `Config` | The applied zone config in YAML format. |
-| `Options` | The SQL representation of the applied zone config options. |
-
 ## `rename_database`
 
 An event of type `rename_database` is recorded when a database is renamed.
@@ -816,26 +796,6 @@ encounters a problem and is reversed.
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
 | `MutationID` | The descriptor mutation that this schema change was processing. |
-
-## `set_zone_config`
-
-An event of type `set_zone_config` is recorded when a zone config is changed.
-
-
-
-
-### Common fields
-
-| Field | Description |
-|--|--|
-| `Timestamp` | The timestamp of the event. |
-| `EventType` | The type of the event. |
-| `Statement` | A normalized copy of the SQL statement that triggered the event. |
-| `User` | The user account that triggered the event. |
-| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
-| `Target` | The target object of the zone config change. |
-| `Config` | The applied zone config in YAML format. |
-| `Options` | The SQL representation of the applied zone config options. |
 
 ## `truncate_table`
 
@@ -1211,5 +1171,61 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+
+# Zone config events
+
+Events in this category pertain to zone config changes on
+the SQL schema or system ranges.
+
+When zone configs apply to individual tables or other objects in a
+SQL logical schema, they are relative to a particular SQL tenant.
+In a multi-tenant setup, copies of these zone config events are preserved
+in each tenant's own system.eventlog table.
+
+When they apply to cluster-level ranges (e.g.  the system zone config),
+they are stored in the system tenant's own system.eventlog table.
+
+Events in this category are logged to channel OPS.
+
+
+## `remove_zone_config`
+
+An event of type `remove_zone_config` is recorded when a zone config is removed.
+
+
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+| `Target` | The target object of the zone config change. |
+| `Config` | The applied zone config in YAML format. |
+| `Options` | The SQL representation of the applied zone config options. |
+
+## `set_zone_config`
+
+An event of type `set_zone_config` is recorded when a zone config is changed.
+
+
+
+
+### Common fields
+
+| Field | Description |
+|--|--|
+| `Timestamp` | The timestamp of the event. |
+| `EventType` | The type of the event. |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. |
+| `User` | The user account that triggered the event. |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
+| `Target` | The target object of the zone config change. |
+| `Config` | The applied zone config in YAML format. |
+| `Options` | The SQL representation of the applied zone config options. |
 
 

@@ -54,13 +54,13 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 	doDrain := req.DoDrain
 
-	log.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
+	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
 	if doDrain {
 		remaining, info, err := s.server.Drain(ctx)
 		if err != nil {
-			log.Errorf(ctx, "drain failed: %v", err)
+			log.Ops.Errorf(ctx, "drain failed: %v", err)
 			return err
 		}
 		res.DrainRemainingIndicator = remaining
@@ -78,7 +78,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		if doDrain {
 			// The condition "if doDrain" is because we don't need an info
 			// message for just a probe.
-			log.Infof(ctx, "drain request completed without server shutdown")
+			log.Ops.Infof(ctx, "drain request completed without server shutdown")
 		}
 		return nil
 	}
@@ -154,9 +154,9 @@ func (s *Server) Drain(
 			comma = ", "
 		}
 		info = redact.RedactableString(descBuf.String())
-		log.Infof(ctx, "drain remaining: %d", remaining)
+		log.Ops.Infof(ctx, "drain remaining: %d", remaining)
 		if info != "" {
-			log.Infof(ctx, "drain details: %s", info)
+			log.Ops.Infof(ctx, "drain details: %s", info)
 		}
 	}()
 

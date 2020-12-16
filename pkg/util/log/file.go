@@ -242,7 +242,12 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 	// If we can't flush or sync within this duration, exit the process.
 	t := time.AfterFunc(maxSyncDuration, func() {
 		// NB: the disk-stall-detected roachtest matches on this message.
-		Shoutf(context.Background(), severity.FATAL,
+		//
+		// NB2: it is important to log this on the Ops channel to avoid a
+		// recursive back-and-forth between the copy of FATAL events to
+		// OPS and disk slowness detection here. (See the implementation
+		// of logfDepth for details.)
+		Ops.Shoutf(context.Background(), severity.FATAL,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
 		)
 	})
@@ -250,7 +255,8 @@ func (l *fileSink) flushAndSyncLocked(doSync bool) {
 	// If we can't flush sync within this duration, print a warning to the log and to
 	// stderr.
 	t2 := time.AfterFunc(syncWarnDuration, func() {
-		Shoutf(context.Background(), severity.WARNING,
+		// See the comment above about why we use the OPS channel here.
+		Ops.Shoutf(context.Background(), severity.WARNING,
 			"disk slowness detected: unable to sync log files within %s", syncWarnDuration,
 		)
 	})

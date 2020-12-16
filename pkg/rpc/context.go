@@ -642,12 +642,12 @@ func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
 		ctx.conns.Delete(key)
 	}
 	if log.V(1) {
-		log.Infof(ctx.masterCtx, "closing %+v", keys)
+		log.Health.Infof(ctx.masterCtx, "closing %+v", keys)
 	}
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		if err := grpcConn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
 			if log.V(1) {
-				log.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
+				log.Health.Errorf(ctx.masterCtx, "failed to close client connection: %v", err)
 			}
 		}
 	}
@@ -962,7 +962,7 @@ func (ctx *Context) grpcDialRaw(
 	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
 	if log.V(1) {
-		log.Infof(ctx.masterCtx, "dialing %s", target)
+		log.Health.Infof(ctx.masterCtx, "dialing %s", target)
 	}
 	conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
 	return conn, dialer.redialChan, err
@@ -987,7 +987,7 @@ func (ctx *Context) GRPCDialNode(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	if remoteNodeID == 0 && !ctx.TestingAllowNamedRPCToAnonymousServer {
-		log.Fatalf(context.TODO(), "invalid node ID 0 in GRPCDialNode()")
+		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
 }
@@ -1035,7 +1035,7 @@ func (ctx *Context) grpcDialNodeInternal(
 					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
 						err := ctx.runHeartbeat(conn, target, redialChan)
 						if err != nil && !grpcutil.IsClosedConnection(err) {
-							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
+							log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 						}
 						ctx.removeConn(conn, thisConnKeys...)
 					})

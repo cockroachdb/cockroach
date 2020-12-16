@@ -5,6 +5,8 @@ yaml
 left to right direction
 component sources {
 () DEV
+() OPS
+() HEALTH
 () STORAGE
 () SESSIONS
 () SQL_SCHEMA
@@ -25,6 +27,8 @@ artifact files {
  }
 }
 DEV --> p__1
+OPS --> p__1
+HEALTH --> p__1
 STORAGE --> p__1
 SESSIONS --> p__1
 SQL_SCHEMA --> p__1
@@ -37,7 +41,7 @@ SQL_INTERNAL_PERF --> p__1
 p__1 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/L99FRvj04CNl-ob6dDe3hNpjeJB2KnV9nYxheXmYeSt-iL4mwmnBf2ZoTuzsmSQSUFFUOu0Vk-oS8DUV6zPeuy1PeFfuSg1gqjBLjcNIdY-srQs3plOaTGUVxDjtM67fB_omAv8r1ecSPxkS1_rlK_7qBsuJF_tdM5J9QflbVjeNMPbjS8r34tEU7R8IgoHDaT_lnYTCRtgFnP-Rpl835daochAnlOBEaVW0qK4Kr7EhYInr4Rkojrxt6ZgdD16JWXHSgceHkiRIMRXVajHB_Bw8c21N6o4TcBe9Nmd6DaeJH3-LDg9lNAngYdmGAc26FTBALx92dduqzXZTmk6HGSvAyH2CtIkxiXMM4CU_muknaUU3CL9zSEvi9syYF7aJvyTjSzhphPxvtF6GvywC_nG5gduo2pRy3ZzC4DXIjyeViwy0003__m00
+# http://www.plantuml.com/plantuml/uml/L59DZvim5BpxLpnnQW-qohM7QX5vtI1bWMAAUgY4N7_ieXAyVPXALPN_NjcGTJXvPjxmW1a_p4wGMouZ6xLnu2pGyFpYG0safHlinAIzlDf9Jmvckv3KC_nZxzx34Jj_L3NtnmcpStloYBTLaprYWCXvKPN1mB-UUvwVy2dpx1l7fi-EJqNfMTqKNN76HroTMFAYBJhiipn7_lOqViVyXcjiljnmKRRObDacoj4k2cP7uY-86PA0VaoQoDASi2lxlUX5m-oK9c9Ia8BNlZy4hx5q4UwJ9FKp_ND8c20t624Tc64Clmt6ZaeJ91-LDc8PNQe6IlmWMC2iUwILlyWA-V9XjC_9RRY-Ci2TALq7c_VAhko87QJfv_1XhAfv96lCaMzXtmbRv7VAM_1HY_57BPPmlsrVnNwhBsIl-0RsogwSE0gHUsOEREtAavWGUz2JyfVoVm000F__
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS

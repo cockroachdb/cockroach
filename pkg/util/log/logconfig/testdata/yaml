@@ -58,7 +58,7 @@ sinks: { stderr: { channels: 'all except DEV,SESSIONS' } }
 ----
 sinks:
   stderr:
-    channels: STORAGE,SQL_SCHEMA,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+    channels: OPS,HEALTH,STORAGE,SQL_SCHEMA,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
 
 
 # Try populating all the fields.
@@ -88,15 +88,29 @@ sinks:
     redact: false
     redactable: true
 
-  fluent-servers:
-   default:
-     address: 127.0.0.1:5170
-   other:
-     net: udp
-     address: 127.0.0.1:5111
 ----
-ERROR: yaml: unmarshal errors:
-  line 26: field fluent-servers not found in type logconfig.SinkConfig
+file-defaults:
+  dir: /default/dir
+  max-file-size: 9.5MiB
+  max-group-size: 95MiB
+  filter: ERROR
+  redact: true
+  redactable: false
+sinks:
+  file-groups:
+    auth:
+      dir: /hello/world
+      max-group-size: 954MiB
+    debug:
+      dir: universe
+      max-file-size: 977KiB
+    perf:
+      filter: INFO
+      redact: true
+  stderr:
+    filter: WARNING
+    redact: false
+    redactable: true
 
 # Check that duplicate channels are refused.
 yaml

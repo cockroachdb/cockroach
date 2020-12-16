@@ -16,7 +16,7 @@ import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
 
 // Category: Cluster-level events
-// Channel: DEV
+// Channel: OPS
 //
 // Events in this category pertain to an entire cluster and are
 // not relative to any particular tenant.

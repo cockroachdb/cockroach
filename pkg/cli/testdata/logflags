@@ -13,7 +13,7 @@ run
 start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
@@ -28,7 +28,7 @@ run
 start-single-node
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
@@ -98,7 +98,7 @@ start
 --store=path=/pathB
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
@@ -115,7 +115,7 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
@@ -133,7 +133,7 @@ start
 --log=file-defaults: {dir: /pathA/logs}
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
@@ -156,7 +156,7 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
@@ -172,7 +172,7 @@ start
 --log=sinks: {stderr: {filter: ERROR}}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
@@ -189,7 +189,7 @@ start
 --log=capture-stray-errors: {enable: false}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
@@ -236,7 +236,7 @@ start
 --log-dir=/mypath
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
@@ -254,7 +254,7 @@ start
 --log-dir=/pathA
 ----
 config: {<stdFileDefaults(/pathA)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],/pathA,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],/pathA,true,crdb-v1-count)>,
@@ -287,7 +287,7 @@ start
 --logtostderr=INFO
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
@@ -303,7 +303,7 @@ start
 --logtostderr
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
 pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
 sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
 sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,

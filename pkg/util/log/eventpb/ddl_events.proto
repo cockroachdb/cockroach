@@ -374,31 +374,6 @@ message RenameType {
   string new_type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
-// CommonZoneConfigDetails is common to zone config change events.
-message CommonZoneConfigDetails {
-  // The target object of the zone config change.
-  string target = 1 [(gogoproto.jsontag) = ",omitempty"];
-  // The applied zone config in YAML format.
-  string config = 2 [(gogoproto.jsontag) = ",omitempty"];
-  // The SQL representation of the applied zone config options.
-  repeated string options = 3 [(gogoproto.jsontag) = ",omitempty"];
-}
-
-// SetZoneConfig is recorded when a zone config is changed.
-message SetZoneConfig {
-  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-}
-
-// RemoveZoneConfig is recorded when a zone config is removed.
-message RemoveZoneConfig {
-  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-}
-
-
 // CreateStatistics is recorded when statistics are collected for a
 // table.
 //
@@ -410,8 +385,6 @@ message CreateStatistics {
   // The name of the table for which the statistics were created.
   string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
-
-
 
 // UnsafeUpsertDescriptor is recorded when a descriptor is written
 // using crdb_internal.unsafe_upsert_descriptor().
