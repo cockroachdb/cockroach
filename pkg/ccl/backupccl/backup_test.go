@@ -5893,7 +5893,7 @@ func getMockTableDesc(
 		PrimaryIndex: pkIndex,
 		Indexes:      indexes,
 	}
-	mockImmutableTableDesc := tabledesc.Immutable{TableDescriptor: mockTableDescriptor}
+	mockImmutableTableDesc := tabledesc.MakeImmutable(mockTableDescriptor)
 	return mockImmutableTableDesc
 }
 
