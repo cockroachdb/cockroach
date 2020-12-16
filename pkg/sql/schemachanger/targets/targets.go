@@ -16,11 +16,13 @@ type Target interface {
 func (*AddCheckConstraint) target()            {}
 func (*AddCheckConstraintUnvalidated) target() {}
 func (*AddColumn) target()                     {}
-func (*AddColumnFamilyDependency) target()     {}
+func (*AddColumnFamily) target()               {}
 func (*AddIndex) target()                      {}
+func (*AddPrimaryIndex) target()               {}
 func (*AddSequenceDependency) target()         {}
 func (*AddUniqueConstraint) target()           {}
 func (*DropCheckConstraint) target()           {}
 func (*DropColumn) target()                    {}
 func (*DropIndex) target()                     {}
+func (*DropPrimaryIndex) target()              {}
 func (*DropUniqueConstraint) target()          {}

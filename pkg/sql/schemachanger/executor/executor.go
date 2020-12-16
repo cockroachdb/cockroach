@@ -6,9 +6,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,6 +61,18 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 			err = ex.executeAddCheckConstraint(ctx, op)
 		case ops.AddIndexDescriptor:
 			err = ex.executeAddIndexDescriptor(ctx, op)
+		case ops.MakeAddedPrimaryIndexDeleteOnly:
+			err = ex.executeMakeAddedPrimaryIndexDeleteOnly(ctx, op)
+		case ops.MakeAddedIndexDeleteAndWriteOnly:
+			err = ex.executeMakeAddedIndexDeleteAndWriteOnly(ctx, op)
+		case ops.MakeAddedPrimaryIndexPublic:
+			err = ex.executeMakeAddedPrimaryIndexPublic(ctx, op)
+		case ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly:
+			err = ex.executeMakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
+		case ops.MakeDroppedIndexDeleteOnly:
+			err = ex.executeMakeDroppedIndexDeleteOnly(ctx, op)
+		case ops.MakeDroppedIndexAbsent:
+			err = ex.executeMakeDroppedIndexAbsent(ctx, op)
 		case ops.AddColumnDescriptor:
 			err = ex.executeAddColumnDescriptor(ctx, op)
 		case ops.ColumnDescriptorStateChange:
@@ -75,6 +89,155 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 	return nil
 }
 
+func (ex *Executor) executeMakeAddedPrimaryIndexDeleteOnly(
+	ctx context.Context, op ops.MakeAddedPrimaryIndexDeleteOnly,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+
+	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
+	// or what-not.
+	if op.Index.ID >= table.NextIndexID {
+		table.NextIndexID = op.Index.ID + 1
+	}
+	// Make some adjustments to the index descriptor so that it behaves correctly
+	// as a secondary index while being added.
+	idx := protoutil.Clone(&op.Index).(*descpb.IndexDescriptor)
+	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.StoreColumnIDs = op.StoreColumnIDs
+	idx.StoreColumnNames = op.StoreColumnNames
+	if err := table.AddIndexMutation(idx, descpb.DescriptorMutation_ADD); err != nil {
+		return err
+	}
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeMakeAddedIndexDeleteAndWriteOnly(
+	ctx context.Context, op ops.MakeAddedIndexDeleteAndWriteOnly,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	mut, _, err := getIndexMutation(table, op.IndexID)
+	if err != nil {
+		return err
+	}
+	if mut.Direction != descpb.DescriptorMutation_ADD ||
+		mut.State != descpb.DescriptorMutation_DELETE_ONLY {
+		return errors.AssertionFailedf("unexpected state")
+	}
+	mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeMakeAddedPrimaryIndexPublic(
+	ctx context.Context, op ops.MakeAddedPrimaryIndexPublic,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	mut, foundIdx, err := getIndexMutation(table, op.IndexID)
+	if err != nil {
+		return err
+	}
+	if mut.Direction != descpb.DescriptorMutation_ADD ||
+		mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+		return errors.AssertionFailedf("unexpected state")
+	}
+	idx := mut.GetIndex()
+	table.PrimaryIndex = *idx
+	// Most of this logic is taken from MakeMutationComplete().
+	// TODO (lucy): We do this in the alter PK implementation, but why does it
+	// work? Do we ever rename the old primary index to something else?
+	table.PrimaryIndex.Name = "primary"
+	table.PrimaryIndex.StoreColumnIDs = nil
+	table.PrimaryIndex.StoreColumnNames = nil
+	table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeMakeDroppedPrimaryIndexDeleteAndWriteOnly(
+	ctx context.Context, op ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	// TODO (lucy): Figure out whether we want to do anything different here for
+	// the drop constraint PK + add constraint PK case. Or consider just merging
+	// the PK swap into a single op (and target) so we don't have to worry about
+	// the ordering of the add and drop ops.
+	idx := table.PrimaryIndex
+	if idx.ID != op.IndexID {
+		return errors.AssertionFailedf("unexpected index ID")
+	}
+	// Most of this logic is taken from MakeMutationComplete().
+	idx.EncodingType = descpb.PrimaryIndexEncoding
+	idx.StoreColumnIDs = op.StoreColumnIDs
+	idx.StoreColumnNames = op.StoreColumnNames
+	if err := table.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP); err != nil {
+		return err
+	}
+	table.PrimaryIndex = descpb.IndexDescriptor{}
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeMakeDroppedIndexDeleteOnly(
+	ctx context.Context, op ops.MakeDroppedIndexDeleteOnly,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	mut, _, err := getIndexMutation(table, op.IndexID)
+	if err != nil {
+		return err
+	}
+	if mut.Direction != descpb.DescriptorMutation_DROP ||
+		mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+		return errors.AssertionFailedf("unexpected state")
+	}
+	mut.State = descpb.DescriptorMutation_DELETE_ONLY
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeMakeDroppedIndexAbsent(
+	ctx context.Context, op ops.MakeDroppedIndexAbsent,
+) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	mut, foundIdx, err := getIndexMutation(table, op.IndexID)
+	if err != nil {
+		return err
+	}
+	if mut.Direction != descpb.DescriptorMutation_DROP ||
+		mut.State != descpb.DescriptorMutation_DELETE_ONLY {
+		return errors.AssertionFailedf("unexpected state")
+	}
+	table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func getIndexMutation(
+	table *tabledesc.Mutable, idxID descpb.IndexID,
+) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
+	mutations := table.GetMutations()
+	for i := range mutations {
+		mut := &mutations[i]
+		idx := mut.GetIndex()
+		if idx != nil && idx.ID == idxID {
+			return mut, i, nil
+		}
+	}
+	return nil, 0, errors.AssertionFailedf("mutation not found")
+}
+
 func (ex *Executor) executeIndexDescriptorStateChange(
 	ctx context.Context, op ops.IndexDescriptorStateChange,
 ) error {
@@ -85,43 +248,24 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 	// We want to find the index and then change its state.
 	if op.State == targets.State_PUBLIC && op.NextState == targets.State_DELETE_AND_WRITE_ONLY {
 		var idx descpb.IndexDescriptor
-		if op.IsPrimary {
-			if table.PrimaryIndex.ID != op.IndexID {
-				// TODO(ajwerner): Better error.
-				return errors.AssertionFailedf("expected index to be primary")
+		for i := range table.Indexes {
+			if table.Indexes[i].ID != op.IndexID {
+				continue
 			}
-			idx = table.PrimaryIndex
-			table.PrimaryIndex = descpb.IndexDescriptor{}
-		} else {
-			for i := range table.Indexes {
-				if table.Indexes[i].ID != op.IndexID {
-					continue
-				}
-				idx = table.Indexes[i]
-				table.Indexes = append(table.Indexes[:i], table.Indexes[i+1:]...)
-				break
-			}
-			if idx.ID == 0 {
-				return errors.AssertionFailedf("failed to find index")
-			}
+			idx = table.Indexes[i]
+			table.Indexes = append(table.Indexes[:i], table.Indexes[i+1:]...)
+			break
+		}
+		if idx.ID == 0 {
+			return errors.AssertionFailedf("failed to find index")
 		}
 		table.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
 	} else {
 		// Moving from a mutation to something.
-		mutations := table.GetMutations()
-		foundIdx := -1
-		for i := range mutations {
-			mut := &mutations[i]
-			idx := mut.GetIndex()
-			if idx != nil && idx.ID == op.IndexID {
-				foundIdx = i
-				break
-			}
+		mut, foundIdx, err := getIndexMutation(table, op.IndexID)
+		if err != nil {
+			return err
 		}
-		if foundIdx == -1 {
-			return errors.AssertionFailedf("")
-		}
-		mut := &mutations[foundIdx]
 		idx := mut.GetIndex()
 		switch op.NextState {
 
@@ -131,7 +275,7 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_ONLY, op.NextState, mut.State)
 			}
-			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+			table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
 		case targets.State_DELETE_AND_WRITE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
 		case targets.State_DELETE_ONLY:
@@ -141,15 +285,12 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
 			}
-			if op.IsPrimary {
-				if table.PrimaryIndex.ID != 0 {
-					return errors.AssertionFailedf("expected primary index to be unset")
-				}
-				table.PrimaryIndex = *idx
-			} else {
-				table.Indexes = append(table.Indexes, *idx)
+			if table.PrimaryIndex.ID != 0 {
+				return errors.AssertionFailedf("expected primary index to be unset")
 			}
-			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
+			table.PrimaryIndex = *idx
+			table.Indexes = append(table.Indexes, *idx)
+			table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
 		default:
 			return errors.AssertionFailedf("unknown transition for index to %s", op.NextState)
 		}

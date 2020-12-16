@@ -17,17 +17,17 @@ import "gogoproto/gogo.proto";
 
 message TargetProto {
   option (gogoproto.onlyone) = true;
-  AddColumn AddColumn = 1;
-  DropColumn DropColumn = 2;
-  AddIndex AddIndex = 3;
-  DropIndex DropIndex = 4;
-  AddSequenceDependency AddSequenceDependency = 5;
-  AddColumnFamilyDependency AddColumnFamilyDependency = 6;
-  AddUniqueConstraint AddUniqueConstraint = 7;
-  DropUniqueConstraint DropUniqueConstraint = 8;
-  AddCheckConstraint AddCheckConstraint = 9;
-  AddCheckConstraintUnvalidated AddCheckConstraintUnvalidated = 10;
-  DropCheckConstraint DropCheckConstraint = 11;
+  AddColumn add_column = 1;
+  DropColumn drop_column = 2;
+  AddIndex add_index = 3;
+  DropIndex drop_index = 4;
+  AddSequenceDependency add_sequence_dependency = 5;
+  AddColumnFamily add_column_family_dependency = 6;
+  AddUniqueConstraint add_unique_constraint = 7;
+  DropUniqueConstraint drop_unique_constraint = 8;
+  AddCheckConstraint add_check_constraint = 9;
+  AddCheckConstraintUnvalidated add_check_constraint_unvalidated = 10;
+  DropCheckConstraint drop_check_constraint = 11;
 }
 
 message AddColumn {
@@ -49,8 +49,7 @@ message AddIndex {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
   uint32 primary_index = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
-  bool primary = 4;
-  uint32 replacement_for = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  uint32 replacement_for = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 }
 
 message DropIndex {
@@ -69,7 +68,7 @@ message AddSequenceDependency {
   uint32 sequence_id = 3 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 }
 
-message AddColumnFamilyDependency {
+message AddColumnFamily {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   cockroach.sql.sqlbase.ColumnFamilyDescriptor family = 2 [(gogoproto.nullable) = false];
@@ -109,6 +108,25 @@ message DropCheckConstraint {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string name = 2;
+}
+
+message AddPrimaryIndex {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
+  uint32 primary_index = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  uint32 replacement_for = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated uint32 store_column_ids = 5 [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated string store_column_names = 6 [(gogoproto.customname) = "StoreColumnNames"];
+}
+
+message DropPrimaryIndex {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
+  uint32 replaced_by = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated uint32 store_column_ids = 4 [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated string store_column_names = 5 [(gogoproto.customname) = "StoreColumnNames"];
 }
 
 enum State {

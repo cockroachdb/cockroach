@@ -20,8 +20,12 @@ func generateOpEdges(g *SchemaChange, t targets.Target, s targets.State, flags C
 		return generateAddCheckConstraintOpEdges(g, t, s, flags)
 	case *targets.DropIndex:
 		return generateDropIndexOpEdges(g, t, s, flags)
+	case *targets.DropPrimaryIndex:
+		return generateDropPrimaryIndexOpEdges(g, t, s, flags)
 	case *targets.AddIndex:
 		return generateAddIndexOpEdges(g, t, s, flags)
+	case *targets.AddPrimaryIndex:
+		return generateAddPrimaryIndexOpEdges(g, t, s, flags)
 	case *targets.DropColumn:
 		return generateDropColumnOpEdges(g, t, s, flags)
 	default:
@@ -89,7 +93,6 @@ func generateAddIndexOpEdges(
 				ops.AddIndexDescriptor{
 					TableID: t.TableID,
 					Index:   t.Index,
-					Primary: t.Primary,
 				})
 		case targets.State_DELETE_ONLY:
 			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
@@ -101,7 +104,6 @@ func generateAddIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
-					IsPrimary: t.Primary,
 					State:     s,
 					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
@@ -133,9 +135,74 @@ func generateAddIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.Index.ID,
-					IsPrimary: t.Primary,
 					State:     s,
 					NextState: targets.State_PUBLIC,
+				})
+		case targets.State_PUBLIC:
+			return nil
+		default:
+			return errors.AssertionFailedf("unexpected state %s for %T", s, t)
+		}
+	}
+}
+
+func generateAddPrimaryIndexOpEdges(
+	g *SchemaChange, t *targets.AddPrimaryIndex, s targets.State, flags CompileFlags,
+) error {
+	for {
+		switch s {
+		case targets.State_ABSENT:
+			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
+				flags.ExecutionPhase == PostStatementPhase {
+				return nil
+			}
+			s = g.addOpEdge(t, s,
+				targets.State_DELETE_ONLY,
+				ops.MakeAddedPrimaryIndexDeleteOnly{
+					TableID:          t.TableID,
+					Index:            t.Index,
+					StoreColumnIDs:   t.StoreColumnIDs,
+					StoreColumnNames: t.StoreColumnNames,
+				})
+		case targets.State_DELETE_ONLY:
+			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
+				flags.ExecutionPhase == PreCommitPhase {
+				return nil
+			}
+			s = g.addOpEdge(t, s,
+				targets.State_DELETE_AND_WRITE_ONLY,
+				ops.MakeAddedIndexDeleteAndWriteOnly{
+					TableID: t.TableID,
+					IndexID: t.Index.ID,
+				})
+		case targets.State_DELETE_AND_WRITE_ONLY:
+			// TODO(ajwerner): In the case of a primary index swap, we only need to
+			// validate if the columns being used did not previously contain a unique
+			// and NOT NULL constraints.
+			var next targets.State
+			if !t.Index.Unique {
+				next = targets.State_VALIDATED
+			} else {
+				next = targets.State_BACKFILLED
+			}
+			s = g.addOpEdge(t, s, next, ops.IndexBackfill{
+				TableID: t.TableID,
+				IndexID: t.Index.ID,
+			})
+		case targets.State_BACKFILLED:
+			s = g.addOpEdge(t, s,
+				targets.State_VALIDATED,
+				ops.UniqueIndexValidation{
+					TableID:        t.TableID,
+					PrimaryIndexID: t.PrimaryIndex,
+					IndexID:        t.Index.ID,
+				})
+		case targets.State_VALIDATED:
+			s = g.addOpEdge(t, s,
+				targets.State_PUBLIC,
+				ops.MakeAddedPrimaryIndexPublic{
+					TableID: t.TableID,
+					IndexID: t.Index.ID,
 				})
 		case targets.State_PUBLIC:
 			return nil
@@ -160,7 +227,6 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
-					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
 					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
@@ -174,7 +240,6 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
-					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
 					NextState: targets.State_DELETE_ONLY,
 				})
@@ -184,9 +249,52 @@ func generateDropIndexOpEdges(
 				ops.IndexDescriptorStateChange{
 					TableID:   t.TableID,
 					IndexID:   t.IndexID,
-					IsPrimary: t.ReplacedBy != 0,
 					State:     s,
 					NextState: targets.State_ABSENT,
+				})
+		case targets.State_ABSENT:
+			return nil
+		default:
+			return errors.AssertionFailedf("unexpected state %s for %T", s, t)
+		}
+	}
+}
+
+func generateDropPrimaryIndexOpEdges(
+	g *SchemaChange, t *targets.DropPrimaryIndex, s targets.State, flags CompileFlags,
+) error {
+	for {
+		switch s {
+		case targets.State_PUBLIC:
+			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
+				flags.ExecutionPhase == PostStatementPhase {
+				return nil
+			}
+			s = g.addOpEdge(t, s,
+				targets.State_DELETE_AND_WRITE_ONLY,
+				ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
+					TableID:          t.TableID,
+					IndexID:          t.Index.ID,
+					StoreColumnIDs:   t.StoreColumnIDs,
+					StoreColumnNames: t.StoreColumnNames,
+				})
+		case targets.State_DELETE_AND_WRITE_ONLY:
+			if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
+				flags.ExecutionPhase == PreCommitPhase {
+				return nil
+			}
+			s = g.addOpEdge(t, s,
+				targets.State_DELETE_ONLY,
+				ops.MakeDroppedIndexDeleteOnly{
+					TableID: t.TableID,
+					IndexID: t.Index.ID,
+				})
+		case targets.State_DELETE_ONLY:
+			s = g.addOpEdge(t, s,
+				targets.State_ABSENT,
+				ops.MakeDroppedIndexAbsent{
+					TableID: t.TableID,
+					IndexID: t.Index.ID,
 				})
 		case targets.State_ABSENT:
 			return nil

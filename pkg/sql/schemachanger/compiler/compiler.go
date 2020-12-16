@@ -315,18 +315,26 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 			}
 			// TODO(ajwerner): Make this way better
 			sort.Slice(s.ops, func(i, j int) bool {
-				ii, iOk := s.ops[i].(ops.IndexDescriptorStateChange)
-				jj, jOk := s.ops[j].(ops.IndexDescriptorStateChange)
-				if iOk && !jOk {
-					return true
+				// This is terrible. We just need to drop indexes before adding indexes
+				// so that replacing an index doesn't cause the index we want to remove
+				// from being overwritten before we copy it to the mutations list.
+				sortVal := func(op ops.Op) int {
+					switch t := op.(type) {
+					case ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
+						ops.MakeDroppedIndexDeleteOnly,
+						ops.MakeDroppedIndexAbsent:
+						return -1
+					case ops.MakeAddedPrimaryIndexDeleteOnly,
+						ops.MakeAddedIndexDeleteAndWriteOnly,
+						ops.MakeAddedPrimaryIndexPublic:
+						return 0
+					case ops.IndexDescriptorStateChange:
+						return int(t.State)
+					default:
+						return 10
+					}
 				}
-				if jOk && !iOk {
-					return false
-				}
-				if !iOk && !jOk {
-					return false
-				}
-				return ii.State > jj.State
+				return sortVal(s.ops[i]) < sortVal(s.ops[j])
 			})
 			s.next = next
 			g.stages = append(g.stages, s)

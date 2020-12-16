@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO (lucy): Update the tests in this file with our new index targets (or
+// figure out a better way to specify expected results).
+
 func TestCompiler(t *testing.T) {
 	for _, tc := range []struct {
 		ts    []targets.TargetState
@@ -35,7 +38,6 @@ func TestCompiler(t *testing.T) {
 						},
 						PrimaryIndex:   1,
 						ReplacementFor: 1,
-						Primary:        true,
 					},
 					targets.State_ABSENT,
 				},
@@ -279,7 +281,6 @@ func TestCompile(t *testing.T) {
 				ColumnIDs: []descpb.ColumnID{newColID},
 				Unique:    true,
 			},
-			Primary:        true,
 			ReplacementFor: oldPrimaryIdxID,
 		}
 		dropIdxTarget := targets.DropIndex{
@@ -322,7 +323,6 @@ func TestCompile(t *testing.T) {
 										ColumnIDs: []descpb.ColumnID{newColID},
 										Unique:    true,
 									},
-									Primary: true,
 								},
 							},
 							[]targets.TargetState{
@@ -473,7 +473,6 @@ func TestCompile(t *testing.T) {
 				// TODO: ColumnIDs....
 			},
 			ReplacementFor: oldPrimaryIdxID,
-			Primary:        true,
 		}
 		dropPrimaryIdxTargetStmt1 := targets.DropIndex{
 			TableID:    tableID,
@@ -488,7 +487,6 @@ func TestCompile(t *testing.T) {
 				// TODO: ColumnIDs....
 			},
 			ReplacementFor: oldPrimaryIdxID,
-			Primary:        true,
 		}
 		dropPrimaryIdxTarget := targets.DropIndex{
 			TableID:    tableID,
@@ -575,7 +573,6 @@ func TestCompile(t *testing.T) {
 										Unique: true,
 										// TODO: ColumnIDs....
 									},
-									Primary: true,
 								},
 							},
 							[]targets.TargetState{
@@ -895,7 +892,6 @@ func TestDebugScratch(t *testing.T) {
 			},
 			PrimaryIndex:   1,
 			ReplacementFor: 1,
-			Primary:        true,
 		},
 		&targets.AddColumn{
 			TableID:      10,

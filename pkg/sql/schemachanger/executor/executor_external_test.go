@@ -226,22 +226,21 @@ func TestSchemaChanger(t *testing.T) {
 			//  ALTER TABLE foo ADD COLUMN j INT;
 			//
 			targetSlice = []targets.Target{
-				&targets.AddIndex{
+				&targets.AddPrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
-						Name:             "primary 2",
+						Name:             "new_primary_key",
 						ID:               2,
 						ColumnIDs:        []descpb.ColumnID{1},
 						ColumnNames:      []string{"i"},
 						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-						StoreColumnIDs:   []descpb.ColumnID{2},
-						StoreColumnNames: []string{"j"},
 						Unique:           true,
 						Type:             descpb.IndexDescriptor_FORWARD,
 					},
-					PrimaryIndex:   fooTable.GetPrimaryIndexID(),
-					ReplacementFor: fooTable.GetPrimaryIndexID(),
-					Primary:        true,
+					PrimaryIndex:     fooTable.GetPrimaryIndexID(),
+					ReplacementFor:   fooTable.GetPrimaryIndexID(),
+					StoreColumnIDs:   []descpb.ColumnID{2},
+					StoreColumnNames: []string{"j"},
 				},
 				&targets.AddColumn{
 					TableID:      fooTable.GetID(),
@@ -254,11 +253,20 @@ func TestSchemaChanger(t *testing.T) {
 						PGAttributeNum: 2,
 					},
 				},
-				&targets.DropIndex{
-					TableID:    fooTable.GetID(),
-					IndexID:    fooTable.GetPrimaryIndexID(),
-					ReplacedBy: 2,
-					ColumnIDs:  []descpb.ColumnID{1},
+				&targets.DropPrimaryIndex{
+					TableID: fooTable.GetID(),
+					Index: descpb.IndexDescriptor{
+						Name:             "primary",
+						ID:               1,
+						ColumnIDs:        []descpb.ColumnID{1},
+						ColumnNames:      []string{"i"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Unique:           true,
+						Type:             descpb.IndexDescriptor_FORWARD,
+					},
+					ReplacedBy:       2,
+					StoreColumnIDs:   []descpb.ColumnID{},
+					StoreColumnNames: []string{},
 				},
 			}
 

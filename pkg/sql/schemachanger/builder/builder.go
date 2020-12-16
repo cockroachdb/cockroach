@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
@@ -151,7 +152,7 @@ func (b *Builder) alterTableAddColumn(
 		targets.State_ABSENT,
 	)
 
-	newIdxID := b.maybeAddPrimaryIndexTargetsForColumnChange(table)
+	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForColumnChange(table, colID, col.Name)
 
 	if idx != nil {
 		idxID := b.nextIndexID(table)
@@ -160,21 +161,25 @@ func (b *Builder) alterTableAddColumn(
 			&targets.AddIndex{
 				TableID:      table.GetID(),
 				Index:        *idx,
-				PrimaryIndex: newIdxID,
+				PrimaryIndex: newPrimaryIdxID,
 			},
 			targets.State_ABSENT,
 		)
 	}
 
 	if d.HasColumnFamily() {
-		if err := b.createOrUpdateColumnFamily(
-			table, col, d.Family.Name, d.Family.Create, d.Family.IfNotExists,
+		// TODO (lucy): Also assign the column ID on the column descriptor?
+		if err := b.maybeAddColumnFamily(
+			table, string(d.Family.Name), d.Family.Create, d.Family.IfNotExists,
 		); err != nil {
 			return err
 		}
 	}
 
 	if d.IsComputed() {
+		if d.IsVirtual() {
+			return unimplemented.NewWithIssue(57608, "virtual computed columns")
+		}
 		computedColValidator := schemaexpr.MakeComputedColumnValidator(
 			ctx,
 			table,
@@ -201,22 +206,6 @@ func (b *Builder) validateColumnName(
 		}
 		return sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.Name)
 	}
-	// We still need to look at the mutations to find columns being added from
-	// other ongoing schema changes.
-	if m := table.FindColumnMutationByName(d.Name); m != nil {
-		switch m.Direction {
-		case descpb.DescriptorMutation_ADD:
-			return pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public",
-				col.Name)
-		case descpb.DescriptorMutation_DROP:
-			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"column %q being dropped, try again later", col.Name)
-		default:
-			return errors.AssertionFailedf("invalid direction %s for column mutation %d",
-				errors.Safe(m.Direction), col.ID)
-		}
-	}
 	for _, ts := range b.targetStates {
 		switch t := ts.Target.(type) {
 		case *targets.AddColumn:
@@ -233,19 +222,13 @@ func (b *Builder) validateColumnName(
 	return nil
 }
 
-// TODO: Deal with the rest of the logic in allocateColumnFamilyIDs.
-func (b *Builder) createOrUpdateColumnFamily(
-	table *tabledesc.Immutable,
-	col *descpb.ColumnDescriptor,
-	family tree.Name,
-	create bool,
-	ifNotExists bool,
+func (b *Builder) maybeAddColumnFamily(
+	table *tabledesc.Immutable, family string, create bool, ifNotExists bool,
 ) error {
-	panic("unimplemented")
 	idx := -1
 	if len(family) > 0 {
 		for i := range table.Families {
-			if table.Families[i].Name == string(family) {
+			if table.Families[i].Name == family {
 				idx = i
 				break
 			}
@@ -253,18 +236,23 @@ func (b *Builder) createOrUpdateColumnFamily(
 	}
 
 	if idx == -1 {
-		if create {
-			b.addTargetState(&targets.AddColumnFamilyDependency{
-				TableID: table.GetID(),
-				Family: descpb.ColumnFamilyDescriptor{
-					Name:            string(family),
-					ID:              0,
-					ColumnNames:     []string{col.Name},
-					ColumnIDs:       []descpb.ColumnID{col.ID},
-					DefaultColumnID: 0,
-				},
-			}, targets.State_ABSENT)
+		if !create {
+			return errors.Errorf("unknown family %q", family)
 		}
+		b.addTargetState(&targets.AddColumnFamily{
+			TableID: table.GetID(),
+			Family: descpb.ColumnFamilyDescriptor{
+				Name:            family,
+				ID:              b.nextFamilyID(table),
+				ColumnNames:     []string{},
+				ColumnIDs:       []descpb.ColumnID{},
+				DefaultColumnID: 0,
+			},
+		}, targets.State_ABSENT)
+		return nil
+	}
+	if create && !ifNotExists {
+		return errors.Errorf("family %q already exists", family)
 	}
 	return nil
 }
@@ -274,30 +262,30 @@ func (b *Builder) alterTableDropColumn(
 ) error {
 	panic("unimplemented")
 
-	colToDrop, dropped, err := table.FindColumnByName(t.Column)
-	if err != nil {
-		if t.IfExists {
-			// Noop.
-			return nil
-		}
-		return err
-	}
-	// TODO: this check should be coming from the targets, not the descriptor.
-	if dropped {
-		return err
-	}
-
-	// TODO: validation, cascades, etc.
-
+	// colToDrop, dropped, err := table.FindColumnByName(t.Column)
+	// if err != nil {
+	// 	if t.IfExists {
+	// 		// Noop.
+	// 		return nil
+	// 	}
+	// 	return err
+	// }
+	// // TODO: this check should be coming from the targets, not the descriptor.
+	// if dropped {
+	// 	return err
+	// }
+	//
+	// // TODO: validation, cascades, etc.
+	//
 	// Assume we've validated that the column isn't part of the PK.
-	b.maybeAddPrimaryIndexTargetsForColumnChange(table)
-	b.addTargetState(
-		&targets.DropColumn{
-			TableID:  table.GetID(),
-			ColumnID: colToDrop.ID,
-		},
-		targets.State_PUBLIC,
-	)
+	// b.addOrUpdatePrimaryIndexTargetsForColumnChange(table)
+	// b.addTargetState(
+	// 	&targets.DropColumn{
+	// 		TableID:  table.GetID(),
+	// 		ColumnID: colToDrop.ID,
+	// 	},
+	// 	targets.State_PUBLIC,
+	// )
 	return nil
 }
 
@@ -339,22 +327,23 @@ func (b *Builder) maybeAddSequenceDependencies(
 	return nil
 }
 
-func (b *Builder) maybeAddPrimaryIndexTargetsForColumnChange(
-	table *tabledesc.Immutable,
-) (newIdxID descpb.IndexID) {
-	// We need to build a new primary index in the presence of any column changes,
-	// but the index doesn't otherwise depend any other metadata about the column
-	// changes themselves, since the primary key itself is unaffected.
+func (b *Builder) addOrUpdatePrimaryIndexTargetsForColumnChange(
+	table *tabledesc.Immutable, colID descpb.ColumnID, colName string,
+) (idxID descpb.IndexID) {
+	// Check whether a target to add a PK already exists. If so, update its
+	// storing columns.
 	for i := range b.targetStates {
-		if t, ok := b.targetStates[i].Target.(*targets.AddIndex); ok &&
-			t.TableID == table.GetID() && t.Primary && t.ReplacementFor != 0 {
+		if t, ok := b.targetStates[i].Target.(*targets.AddPrimaryIndex); ok &&
+			t.TableID == table.GetID() {
+			t.StoreColumnIDs = append(t.StoreColumnIDs, colID)
+			t.StoreColumnNames = append(t.StoreColumnNames, colName)
 			return t.Index.ID
 		}
 	}
 
 	// Create a new primary index, identical to the existing one except for its
 	// ID and name.
-	newIdxID = b.nextIndexID(table)
+	idxID = b.nextIndexID(table)
 	newIdx := protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)
 	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
 		"new_primary_key",
@@ -364,31 +353,49 @@ func (b *Builder) maybeAddPrimaryIndexTargetsForColumnChange(
 			return err == nil
 		},
 	)
-	newIdx.ID = newIdxID
+	newIdx.ID = idxID
+
+	var storeColIDs []descpb.ColumnID
+	var storeColNames []string
+	for _, col := range table.Columns {
+		containsCol := false
+		for _, colID := range newIdx.ColumnIDs {
+			if colID == col.ID {
+				containsCol = true
+				break
+			}
+		}
+		if !containsCol {
+			storeColIDs = append(storeColIDs, col.ID)
+			storeColNames = append(storeColNames, col.Name)
+		}
+	}
 
 	b.addTargetState(
-		&targets.AddIndex{
-			TableID:        table.GetID(),
-			Index:          *newIdx,
-			PrimaryIndex:   table.GetPrimaryIndexID(),
-			ReplacementFor: table.GetPrimaryIndexID(),
-			Primary:        true,
+		&targets.AddPrimaryIndex{
+			TableID:          table.GetID(),
+			Index:            *newIdx,
+			PrimaryIndex:     table.GetPrimaryIndexID(),
+			ReplacementFor:   table.GetPrimaryIndexID(),
+			StoreColumnIDs:   append(storeColIDs, colID),
+			StoreColumnNames: append(storeColNames, colName),
 		},
 		targets.State_ABSENT,
 	)
 
 	// Drop the existing primary index.
 	b.addTargetState(
-		&targets.DropIndex{
-			TableID:    table.GetID(),
-			IndexID:    table.GetPrimaryIndexID(),
-			ReplacedBy: newIdxID,
-			ColumnIDs:  table.PrimaryIndex.ColumnIDs,
+		&targets.DropPrimaryIndex{
+			TableID:          table.GetID(),
+			Index:            *(protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)),
+			ReplacedBy:       idxID,
+			StoreColumnIDs:   storeColIDs,
+			StoreColumnNames: storeColNames,
 		},
 		targets.State_PUBLIC,
 	)
 
-	return newIdxID
+	return idxID
 }
 
 func (b *Builder) nextColumnID(table *tabledesc.Immutable) descpb.ColumnID {
@@ -415,6 +422,10 @@ func (b *Builder) nextIndexID(table *tabledesc.Immutable) descpb.IndexID {
 			if ai.Index.ID > maxIdxID {
 				maxIdxID = ai.Index.ID
 			}
+		} else if ai, ok := ts.Target.(*targets.AddPrimaryIndex); ok && ai.TableID == table.GetID() {
+			if ai.Index.ID > maxIdxID {
+				maxIdxID = ai.Index.ID
+			}
 		}
 	}
 	if maxIdxID != 0 {
@@ -427,7 +438,7 @@ func (b *Builder) nextFamilyID(table *tabledesc.Immutable) descpb.FamilyID {
 	nextMaxID := table.GetNextFamilyID()
 	var maxFamilyID descpb.FamilyID
 	for _, ts := range b.targetStates {
-		if af, ok := ts.Target.(*targets.AddColumnFamilyDependency); ok &&
+		if af, ok := ts.Target.(*targets.AddColumnFamily); ok &&
 			af.TableID == table.GetID() {
 			if af.Family.ID > maxFamilyID {
 				maxFamilyID = af.Family.ID

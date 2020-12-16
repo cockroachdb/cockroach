@@ -12,6 +12,10 @@ func generateTargetStateDepEdges(g *SchemaChange, t targets.Target, s targets.St
 		generateAddIndexDepEdges(g, t, s)
 	case *targets.DropIndex:
 		generateDropIndexDepEdges(g, t, s)
+	case *targets.AddPrimaryIndex:
+		generateAddPrimaryIndexDepEdges(g, t, s)
+	case *targets.DropPrimaryIndex:
+		generateDropPrimaryIndexDepEdges(g, t, s)
 	}
 	return nil
 }
@@ -26,6 +30,13 @@ func generateAddColumnDepEdges(g *SchemaChange, t *targets.AddColumn, s targets.
 					(!columnsContainsID(ot.Index.ColumnIDs, t.Column.ID) &&
 						!columnsContainsID(ot.Index.StoreColumnIDs, t.Column.ID) &&
 						!columnsContainsID(ot.Index.ExtraColumnIDs, t.Column.ID)) {
+					continue
+				}
+				g.addDepEdge(t, s, ot, s)
+			case *targets.AddPrimaryIndex:
+				if t.TableID != ot.TableID ||
+					(!columnsContainsID(ot.Index.ColumnIDs, t.Column.ID) &&
+						!columnsContainsID(ot.StoreColumnIDs, t.Column.ID)) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, s)
@@ -53,6 +64,28 @@ func generateDropIndexDepEdges(g *SchemaChange, t *targets.DropIndex, s targets.
 	}
 }
 
+func generateDropPrimaryIndexDepEdges(
+	g *SchemaChange, t *targets.DropPrimaryIndex, s targets.State,
+) {
+	switch s {
+	case targets.State_DELETE_AND_WRITE_ONLY:
+		for _, ot := range g.targets {
+			switch ot := ot.(type) {
+			case *targets.AddPrimaryIndex:
+				if ot.Index.ID == t.ReplacedBy {
+					g.addDepEdge(t, s, ot, targets.State_PUBLIC)
+				}
+			case *targets.DropColumn:
+				// TODO (lucy): Does StoreColumnIDs matter here?
+				if t.TableID != ot.TableID || !columnsContainsID(t.Index.ColumnIDs, ot.ColumnID) {
+					continue
+				}
+				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
+			}
+		}
+	}
+}
+
 func generateAddIndexDepEdges(g *SchemaChange, t *targets.AddIndex, s targets.State) {
 	// AddIndex in the Public state depends on any DropIndex it is replacing being
 	// in the DeleteAndWriteOnly state
@@ -69,6 +102,22 @@ func generateAddIndexDepEdges(g *SchemaChange, t *targets.AddIndex, s targets.St
 	}
 }
 
+func generateAddPrimaryIndexDepEdges(g *SchemaChange, t *targets.AddPrimaryIndex, s targets.State) {
+	// AddPrimaryIndex in the Public state depends on any DropPrimaryIndex it is
+	// replacing being in the DeleteAndWriteOnly state.
+	switch s {
+	case targets.State_PUBLIC:
+		for _, ot := range g.targets {
+			switch ot := ot.(type) {
+			case *targets.DropPrimaryIndex:
+				if ot.Index.ID == t.ReplacementFor {
+					g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
+				}
+			}
+		}
+	}
+}
+
 func generateDropColumnDepEdges(g *SchemaChange, t *targets.DropColumn, s targets.State) {
 	switch s {
 	case targets.State_DELETE_AND_WRITE_ONLY:
@@ -76,6 +125,12 @@ func generateDropColumnDepEdges(g *SchemaChange, t *targets.DropColumn, s target
 			switch ot := ot.(type) {
 			case *targets.DropIndex:
 				if t.TableID != ot.TableID || !columnsContainsID(ot.ColumnIDs, t.ColumnID) {
+					continue
+				}
+				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
+			case *targets.DropPrimaryIndex:
+				// TODO (lucy): Does StoreColumnIDs matter here?
+				if t.TableID != ot.TableID || !columnsContainsID(ot.Index.ColumnIDs, t.ColumnID) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)

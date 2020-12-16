@@ -58,28 +58,28 @@ func (x State) String() string {
 	return proto.EnumName(State_name, int32(x))
 }
 func (State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{0}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{0}
 }
 
 type TargetProto struct {
-	AddColumn                     *AddColumn                     `protobuf:"bytes,1,opt,name=AddColumn,proto3" json:"AddColumn,omitempty"`
-	DropColumn                    *DropColumn                    `protobuf:"bytes,2,opt,name=DropColumn,proto3" json:"DropColumn,omitempty"`
-	AddIndex                      *AddIndex                      `protobuf:"bytes,3,opt,name=AddIndex,proto3" json:"AddIndex,omitempty"`
-	DropIndex                     *DropIndex                     `protobuf:"bytes,4,opt,name=DropIndex,proto3" json:"DropIndex,omitempty"`
-	AddSequenceDependency         *AddSequenceDependency         `protobuf:"bytes,5,opt,name=AddSequenceDependency,proto3" json:"AddSequenceDependency,omitempty"`
-	AddColumnFamilyDependency     *AddColumnFamilyDependency     `protobuf:"bytes,6,opt,name=AddColumnFamilyDependency,proto3" json:"AddColumnFamilyDependency,omitempty"`
-	AddUniqueConstraint           *AddUniqueConstraint           `protobuf:"bytes,7,opt,name=AddUniqueConstraint,proto3" json:"AddUniqueConstraint,omitempty"`
-	DropUniqueConstraint          *DropUniqueConstraint          `protobuf:"bytes,8,opt,name=DropUniqueConstraint,proto3" json:"DropUniqueConstraint,omitempty"`
-	AddCheckConstraint            *AddCheckConstraint            `protobuf:"bytes,9,opt,name=AddCheckConstraint,proto3" json:"AddCheckConstraint,omitempty"`
-	AddCheckConstraintUnvalidated *AddCheckConstraintUnvalidated `protobuf:"bytes,10,opt,name=AddCheckConstraintUnvalidated,proto3" json:"AddCheckConstraintUnvalidated,omitempty"`
-	DropCheckConstraint           *DropCheckConstraint           `protobuf:"bytes,11,opt,name=DropCheckConstraint,proto3" json:"DropCheckConstraint,omitempty"`
+	AddColumn                     *AddColumn                     `protobuf:"bytes,1,opt,name=add_column,json=addColumn,proto3" json:"add_column,omitempty"`
+	DropColumn                    *DropColumn                    `protobuf:"bytes,2,opt,name=drop_column,json=dropColumn,proto3" json:"drop_column,omitempty"`
+	AddIndex                      *AddIndex                      `protobuf:"bytes,3,opt,name=add_index,json=addIndex,proto3" json:"add_index,omitempty"`
+	DropIndex                     *DropIndex                     `protobuf:"bytes,4,opt,name=drop_index,json=dropIndex,proto3" json:"drop_index,omitempty"`
+	AddSequenceDependency         *AddSequenceDependency         `protobuf:"bytes,5,opt,name=add_sequence_dependency,json=addSequenceDependency,proto3" json:"add_sequence_dependency,omitempty"`
+	AddColumnFamilyDependency     *AddColumnFamily               `protobuf:"bytes,6,opt,name=add_column_family_dependency,json=addColumnFamilyDependency,proto3" json:"add_column_family_dependency,omitempty"`
+	AddUniqueConstraint           *AddUniqueConstraint           `protobuf:"bytes,7,opt,name=add_unique_constraint,json=addUniqueConstraint,proto3" json:"add_unique_constraint,omitempty"`
+	DropUniqueConstraint          *DropUniqueConstraint          `protobuf:"bytes,8,opt,name=drop_unique_constraint,json=dropUniqueConstraint,proto3" json:"drop_unique_constraint,omitempty"`
+	AddCheckConstraint            *AddCheckConstraint            `protobuf:"bytes,9,opt,name=add_check_constraint,json=addCheckConstraint,proto3" json:"add_check_constraint,omitempty"`
+	AddCheckConstraintUnvalidated *AddCheckConstraintUnvalidated `protobuf:"bytes,10,opt,name=add_check_constraint_unvalidated,json=addCheckConstraintUnvalidated,proto3" json:"add_check_constraint_unvalidated,omitempty"`
+	DropCheckConstraint           *DropCheckConstraint           `protobuf:"bytes,11,opt,name=drop_check_constraint,json=dropCheckConstraint,proto3" json:"drop_check_constraint,omitempty"`
 }
 
 func (m *TargetProto) Reset()         { *m = TargetProto{} }
 func (m *TargetProto) String() string { return proto.CompactTextString(m) }
 func (*TargetProto) ProtoMessage()    {}
 func (*TargetProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{0}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{0}
 }
 func (m *TargetProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -114,7 +114,7 @@ func (m *AddColumn) Reset()         { *m = AddColumn{} }
 func (m *AddColumn) String() string { return proto.CompactTextString(m) }
 func (*AddColumn) ProtoMessage()    {}
 func (*AddColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{1}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{1}
 }
 func (m *AddColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *DropColumn) Reset()         { *m = DropColumn{} }
 func (m *DropColumn) String() string { return proto.CompactTextString(m) }
 func (*DropColumn) ProtoMessage()    {}
 func (*DropColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{2}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{2}
 }
 func (m *DropColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -178,15 +178,14 @@ type AddIndex struct {
 	TableID        github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID      `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
 	Index          descpb.IndexDescriptor                                          `protobuf:"bytes,2,opt,name=index,proto3" json:"index"`
 	PrimaryIndex   github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID `protobuf:"varint,3,opt,name=primary_index,json=primaryIndex,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"primary_index,omitempty"`
-	Primary        bool                                                            `protobuf:"varint,4,opt,name=primary,proto3" json:"primary,omitempty"`
-	ReplacementFor github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID `protobuf:"varint,5,opt,name=replacement_for,json=replacementFor,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"replacement_for,omitempty"`
+	ReplacementFor github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID `protobuf:"varint,4,opt,name=replacement_for,json=replacementFor,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"replacement_for,omitempty"`
 }
 
 func (m *AddIndex) Reset()         { *m = AddIndex{} }
 func (m *AddIndex) String() string { return proto.CompactTextString(m) }
 func (*AddIndex) ProtoMessage()    {}
 func (*AddIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{3}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{3}
 }
 func (m *AddIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -223,7 +222,7 @@ func (m *DropIndex) Reset()         { *m = DropIndex{} }
 func (m *DropIndex) String() string { return proto.CompactTextString(m) }
 func (*DropIndex) ProtoMessage()    {}
 func (*DropIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{4}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{4}
 }
 func (m *DropIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -258,7 +257,7 @@ func (m *AddSequenceDependency) Reset()         { *m = AddSequenceDependency{} }
 func (m *AddSequenceDependency) String() string { return proto.CompactTextString(m) }
 func (*AddSequenceDependency) ProtoMessage()    {}
 func (*AddSequenceDependency) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{5}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{5}
 }
 func (m *AddSequenceDependency) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -283,21 +282,21 @@ func (m *AddSequenceDependency) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AddSequenceDependency proto.InternalMessageInfo
 
-type AddColumnFamilyDependency struct {
+type AddColumnFamily struct {
 	TableID github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
 	Family  descpb.ColumnFamilyDescriptor                              `protobuf:"bytes,2,opt,name=family,proto3" json:"family"`
 }
 
-func (m *AddColumnFamilyDependency) Reset()         { *m = AddColumnFamilyDependency{} }
-func (m *AddColumnFamilyDependency) String() string { return proto.CompactTextString(m) }
-func (*AddColumnFamilyDependency) ProtoMessage()    {}
-func (*AddColumnFamilyDependency) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{6}
+func (m *AddColumnFamily) Reset()         { *m = AddColumnFamily{} }
+func (m *AddColumnFamily) String() string { return proto.CompactTextString(m) }
+func (*AddColumnFamily) ProtoMessage()    {}
+func (*AddColumnFamily) Descriptor() ([]byte, []int) {
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{6}
 }
-func (m *AddColumnFamilyDependency) XXX_Unmarshal(b []byte) error {
+func (m *AddColumnFamily) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AddColumnFamilyDependency) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AddColumnFamily) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -305,17 +304,17 @@ func (m *AddColumnFamilyDependency) XXX_Marshal(b []byte, deterministic bool) ([
 	}
 	return b[:n], nil
 }
-func (dst *AddColumnFamilyDependency) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AddColumnFamilyDependency.Merge(dst, src)
+func (dst *AddColumnFamily) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddColumnFamily.Merge(dst, src)
 }
-func (m *AddColumnFamilyDependency) XXX_Size() int {
+func (m *AddColumnFamily) XXX_Size() int {
 	return m.Size()
 }
-func (m *AddColumnFamilyDependency) XXX_DiscardUnknown() {
-	xxx_messageInfo_AddColumnFamilyDependency.DiscardUnknown(m)
+func (m *AddColumnFamily) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddColumnFamily.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AddColumnFamilyDependency proto.InternalMessageInfo
+var xxx_messageInfo_AddColumnFamily proto.InternalMessageInfo
 
 type AddUniqueConstraint struct {
 	TableID   github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
@@ -327,7 +326,7 @@ func (m *AddUniqueConstraint) Reset()         { *m = AddUniqueConstraint{} }
 func (m *AddUniqueConstraint) String() string { return proto.CompactTextString(m) }
 func (*AddUniqueConstraint) ProtoMessage()    {}
 func (*AddUniqueConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{7}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{7}
 }
 func (m *AddUniqueConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -362,7 +361,7 @@ func (m *DropUniqueConstraint) Reset()         { *m = DropUniqueConstraint{} }
 func (m *DropUniqueConstraint) String() string { return proto.CompactTextString(m) }
 func (*DropUniqueConstraint) ProtoMessage()    {}
 func (*DropUniqueConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{8}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{8}
 }
 func (m *DropUniqueConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -398,7 +397,7 @@ func (m *AddCheckConstraint) Reset()         { *m = AddCheckConstraint{} }
 func (m *AddCheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*AddCheckConstraint) ProtoMessage()    {}
 func (*AddCheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{9}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{9}
 }
 func (m *AddCheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -434,7 +433,7 @@ func (m *AddCheckConstraintUnvalidated) Reset()         { *m = AddCheckConstrain
 func (m *AddCheckConstraintUnvalidated) String() string { return proto.CompactTextString(m) }
 func (*AddCheckConstraintUnvalidated) ProtoMessage()    {}
 func (*AddCheckConstraintUnvalidated) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{10}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{10}
 }
 func (m *AddCheckConstraintUnvalidated) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -468,7 +467,7 @@ func (m *DropCheckConstraint) Reset()         { *m = DropCheckConstraint{} }
 func (m *DropCheckConstraint) String() string { return proto.CompactTextString(m) }
 func (*DropCheckConstraint) ProtoMessage()    {}
 func (*DropCheckConstraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_targets_0ced52f4a9468fdb, []int{11}
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{11}
 }
 func (m *DropCheckConstraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -493,6 +492,81 @@ func (m *DropCheckConstraint) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DropCheckConstraint proto.InternalMessageInfo
 
+type AddPrimaryIndex struct {
+	TableID          github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
+	Index            descpb.IndexDescriptor                                             `protobuf:"bytes,2,opt,name=index,proto3" json:"index"`
+	PrimaryIndex     github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID    `protobuf:"varint,3,opt,name=primary_index,json=primaryIndex,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"primary_index,omitempty"`
+	ReplacementFor   github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID    `protobuf:"varint,4,opt,name=replacement_for,json=replacementFor,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"replacement_for,omitempty"`
+	StoreColumnIDs   []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,5,rep,packed,name=store_column_ids,json=storeColumnIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"store_column_ids,omitempty"`
+	StoreColumnNames []string                                                           `protobuf:"bytes,6,rep,name=store_column_names,json=storeColumnNames,proto3" json:"store_column_names,omitempty"`
+}
+
+func (m *AddPrimaryIndex) Reset()         { *m = AddPrimaryIndex{} }
+func (m *AddPrimaryIndex) String() string { return proto.CompactTextString(m) }
+func (*AddPrimaryIndex) ProtoMessage()    {}
+func (*AddPrimaryIndex) Descriptor() ([]byte, []int) {
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{12}
+}
+func (m *AddPrimaryIndex) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AddPrimaryIndex) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AddPrimaryIndex) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddPrimaryIndex.Merge(dst, src)
+}
+func (m *AddPrimaryIndex) XXX_Size() int {
+	return m.Size()
+}
+func (m *AddPrimaryIndex) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddPrimaryIndex.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AddPrimaryIndex proto.InternalMessageInfo
+
+type DropPrimaryIndex struct {
+	TableID          github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
+	Index            descpb.IndexDescriptor                                             `protobuf:"bytes,2,opt,name=index,proto3" json:"index"`
+	ReplacedBy       github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID    `protobuf:"varint,3,opt,name=replaced_by,json=replacedBy,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID" json:"replaced_by,omitempty"`
+	StoreColumnIDs   []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,4,rep,packed,name=store_column_ids,json=storeColumnIds,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"store_column_ids,omitempty"`
+	StoreColumnNames []string                                                           `protobuf:"bytes,5,rep,name=store_column_names,json=storeColumnNames,proto3" json:"store_column_names,omitempty"`
+}
+
+func (m *DropPrimaryIndex) Reset()         { *m = DropPrimaryIndex{} }
+func (m *DropPrimaryIndex) String() string { return proto.CompactTextString(m) }
+func (*DropPrimaryIndex) ProtoMessage()    {}
+func (*DropPrimaryIndex) Descriptor() ([]byte, []int) {
+	return fileDescriptor_targets_a8c921ef1b75503b, []int{13}
+}
+func (m *DropPrimaryIndex) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DropPrimaryIndex) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *DropPrimaryIndex) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DropPrimaryIndex.Merge(dst, src)
+}
+func (m *DropPrimaryIndex) XXX_Size() int {
+	return m.Size()
+}
+func (m *DropPrimaryIndex) XXX_DiscardUnknown() {
+	xxx_messageInfo_DropPrimaryIndex.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DropPrimaryIndex proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*TargetProto)(nil), "cockroach.sql.schemachanger.targets.TargetProto")
 	proto.RegisterType((*AddColumn)(nil), "cockroach.sql.schemachanger.targets.AddColumn")
@@ -500,12 +574,14 @@ func init() {
 	proto.RegisterType((*AddIndex)(nil), "cockroach.sql.schemachanger.targets.AddIndex")
 	proto.RegisterType((*DropIndex)(nil), "cockroach.sql.schemachanger.targets.DropIndex")
 	proto.RegisterType((*AddSequenceDependency)(nil), "cockroach.sql.schemachanger.targets.AddSequenceDependency")
-	proto.RegisterType((*AddColumnFamilyDependency)(nil), "cockroach.sql.schemachanger.targets.AddColumnFamilyDependency")
+	proto.RegisterType((*AddColumnFamily)(nil), "cockroach.sql.schemachanger.targets.AddColumnFamily")
 	proto.RegisterType((*AddUniqueConstraint)(nil), "cockroach.sql.schemachanger.targets.AddUniqueConstraint")
 	proto.RegisterType((*DropUniqueConstraint)(nil), "cockroach.sql.schemachanger.targets.DropUniqueConstraint")
 	proto.RegisterType((*AddCheckConstraint)(nil), "cockroach.sql.schemachanger.targets.AddCheckConstraint")
 	proto.RegisterType((*AddCheckConstraintUnvalidated)(nil), "cockroach.sql.schemachanger.targets.AddCheckConstraintUnvalidated")
 	proto.RegisterType((*DropCheckConstraint)(nil), "cockroach.sql.schemachanger.targets.DropCheckConstraint")
+	proto.RegisterType((*AddPrimaryIndex)(nil), "cockroach.sql.schemachanger.targets.AddPrimaryIndex")
+	proto.RegisterType((*DropPrimaryIndex)(nil), "cockroach.sql.schemachanger.targets.DropPrimaryIndex")
 	proto.RegisterEnum("cockroach.sql.schemachanger.targets.State", State_name, State_value)
 }
 func (this *AddColumn) Equal(that interface{}) bool {
@@ -593,9 +669,6 @@ func (this *AddIndex) Equal(that interface{}) bool {
 	if this.PrimaryIndex != that1.PrimaryIndex {
 		return false
 	}
-	if this.Primary != that1.Primary {
-		return false
-	}
 	if this.ReplacementFor != that1.ReplacementFor {
 		return false
 	}
@@ -669,14 +742,14 @@ func (this *AddSequenceDependency) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *AddColumnFamilyDependency) Equal(that interface{}) bool {
+func (this *AddColumnFamily) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*AddColumnFamilyDependency)
+	that1, ok := that.(*AddColumnFamily)
 	if !ok {
-		that2, ok := that.(AddColumnFamilyDependency)
+		that2, ok := that.(AddColumnFamily)
 		if ok {
 			that1 = &that2
 		} else {
@@ -866,6 +939,101 @@ func (this *DropCheckConstraint) Equal(that interface{}) bool {
 	}
 	if this.Name != that1.Name {
 		return false
+	}
+	return true
+}
+func (this *AddPrimaryIndex) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*AddPrimaryIndex)
+	if !ok {
+		that2, ok := that.(AddPrimaryIndex)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.TableID != that1.TableID {
+		return false
+	}
+	if !this.Index.Equal(&that1.Index) {
+		return false
+	}
+	if this.PrimaryIndex != that1.PrimaryIndex {
+		return false
+	}
+	if this.ReplacementFor != that1.ReplacementFor {
+		return false
+	}
+	if len(this.StoreColumnIDs) != len(that1.StoreColumnIDs) {
+		return false
+	}
+	for i := range this.StoreColumnIDs {
+		if this.StoreColumnIDs[i] != that1.StoreColumnIDs[i] {
+			return false
+		}
+	}
+	if len(this.StoreColumnNames) != len(that1.StoreColumnNames) {
+		return false
+	}
+	for i := range this.StoreColumnNames {
+		if this.StoreColumnNames[i] != that1.StoreColumnNames[i] {
+			return false
+		}
+	}
+	return true
+}
+func (this *DropPrimaryIndex) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*DropPrimaryIndex)
+	if !ok {
+		that2, ok := that.(DropPrimaryIndex)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.TableID != that1.TableID {
+		return false
+	}
+	if !this.Index.Equal(&that1.Index) {
+		return false
+	}
+	if this.ReplacedBy != that1.ReplacedBy {
+		return false
+	}
+	if len(this.StoreColumnIDs) != len(that1.StoreColumnIDs) {
+		return false
+	}
+	for i := range this.StoreColumnIDs {
+		if this.StoreColumnIDs[i] != that1.StoreColumnIDs[i] {
+			return false
+		}
+	}
+	if len(this.StoreColumnNames) != len(that1.StoreColumnNames) {
+		return false
+	}
+	for i := range this.StoreColumnNames {
+		if this.StoreColumnNames[i] != that1.StoreColumnNames[i] {
+			return false
+		}
 	}
 	return true
 }
@@ -1094,18 +1262,8 @@ func (m *AddIndex) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintTargets(dAtA, i, uint64(m.PrimaryIndex))
 	}
-	if m.Primary {
-		dAtA[i] = 0x20
-		i++
-		if m.Primary {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
-	}
 	if m.ReplacementFor != 0 {
-		dAtA[i] = 0x28
+		dAtA[i] = 0x20
 		i++
 		i = encodeVarintTargets(dAtA, i, uint64(m.ReplacementFor))
 	}
@@ -1195,7 +1353,7 @@ func (m *AddSequenceDependency) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *AddColumnFamilyDependency) Marshal() (dAtA []byte, err error) {
+func (m *AddColumnFamily) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -1205,7 +1363,7 @@ func (m *AddColumnFamilyDependency) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AddColumnFamilyDependency) MarshalTo(dAtA []byte) (int, error) {
+func (m *AddColumnFamily) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1449,6 +1607,147 @@ func (m *DropCheckConstraint) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *AddPrimaryIndex) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AddPrimaryIndex) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.TableID))
+	}
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintTargets(dAtA, i, uint64(m.Index.Size()))
+	n25, err := m.Index.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n25
+	if m.PrimaryIndex != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.PrimaryIndex))
+	}
+	if m.ReplacementFor != 0 {
+		dAtA[i] = 0x20
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.ReplacementFor))
+	}
+	if len(m.StoreColumnIDs) > 0 {
+		dAtA27 := make([]byte, len(m.StoreColumnIDs)*10)
+		var j26 int
+		for _, num := range m.StoreColumnIDs {
+			for num >= 1<<7 {
+				dAtA27[j26] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j26++
+			}
+			dAtA27[j26] = uint8(num)
+			j26++
+		}
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(j26))
+		i += copy(dAtA[i:], dAtA27[:j26])
+	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			dAtA[i] = 0x32
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	return i, nil
+}
+
+func (m *DropPrimaryIndex) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DropPrimaryIndex) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.TableID))
+	}
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintTargets(dAtA, i, uint64(m.Index.Size()))
+	n28, err := m.Index.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n28
+	if m.ReplacedBy != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(m.ReplacedBy))
+	}
+	if len(m.StoreColumnIDs) > 0 {
+		dAtA30 := make([]byte, len(m.StoreColumnIDs)*10)
+		var j29 int
+		for _, num := range m.StoreColumnIDs {
+			for num >= 1<<7 {
+				dAtA30[j29] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j29++
+			}
+			dAtA30[j29] = uint8(num)
+			j29++
+		}
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintTargets(dAtA, i, uint64(j29))
+		i += copy(dAtA[i:], dAtA30[:j29])
+	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			dAtA[i] = 0x2a
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	return i, nil
+}
+
 func encodeVarintTargets(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -1557,9 +1856,6 @@ func (m *AddIndex) Size() (n int) {
 	if m.PrimaryIndex != 0 {
 		n += 1 + sovTargets(uint64(m.PrimaryIndex))
 	}
-	if m.Primary {
-		n += 2
-	}
 	if m.ReplacementFor != 0 {
 		n += 1 + sovTargets(uint64(m.ReplacementFor))
 	}
@@ -1609,7 +1905,7 @@ func (m *AddSequenceDependency) Size() (n int) {
 	return n
 }
 
-func (m *AddColumnFamilyDependency) Size() (n int) {
+func (m *AddColumnFamily) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1737,6 +2033,69 @@ func (m *DropCheckConstraint) Size() (n int) {
 	return n
 }
 
+func (m *AddPrimaryIndex) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		n += 1 + sovTargets(uint64(m.TableID))
+	}
+	l = m.Index.Size()
+	n += 1 + l + sovTargets(uint64(l))
+	if m.PrimaryIndex != 0 {
+		n += 1 + sovTargets(uint64(m.PrimaryIndex))
+	}
+	if m.ReplacementFor != 0 {
+		n += 1 + sovTargets(uint64(m.ReplacementFor))
+	}
+	if len(m.StoreColumnIDs) > 0 {
+		l = 0
+		for _, e := range m.StoreColumnIDs {
+			l += sovTargets(uint64(e))
+		}
+		n += 1 + sovTargets(uint64(l)) + l
+	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			l = len(s)
+			n += 1 + l + sovTargets(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *DropPrimaryIndex) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		n += 1 + sovTargets(uint64(m.TableID))
+	}
+	l = m.Index.Size()
+	n += 1 + l + sovTargets(uint64(l))
+	if m.ReplacedBy != 0 {
+		n += 1 + sovTargets(uint64(m.ReplacedBy))
+	}
+	if len(m.StoreColumnIDs) > 0 {
+		l = 0
+		for _, e := range m.StoreColumnIDs {
+			l += sovTargets(uint64(e))
+		}
+		n += 1 + sovTargets(uint64(l)) + l
+	}
+	if len(m.StoreColumnNames) > 0 {
+		for _, s := range m.StoreColumnNames {
+			l = len(s)
+			n += 1 + l + sovTargets(uint64(l))
+		}
+	}
+	return n
+}
+
 func sovTargets(x uint64) (n int) {
 	for {
 		n++
@@ -1799,7 +2158,7 @@ func (this *TargetProto) SetValue(value interface{}) bool {
 		this.DropIndex = vt
 	case *AddSequenceDependency:
 		this.AddSequenceDependency = vt
-	case *AddColumnFamilyDependency:
+	case *AddColumnFamily:
 		this.AddColumnFamilyDependency = vt
 	case *AddUniqueConstraint:
 		this.AddUniqueConstraint = vt
@@ -2037,7 +2396,7 @@ func (m *TargetProto) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.AddColumnFamilyDependency == nil {
-				m.AddColumnFamilyDependency = &AddColumnFamilyDependency{}
+				m.AddColumnFamilyDependency = &AddColumnFamily{}
 			}
 			if err := m.AddColumnFamilyDependency.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2534,26 +2893,6 @@ func (m *AddIndex) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Primary", wireType)
-			}
-			var v int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTargets
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				v |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			m.Primary = bool(v != 0)
-		case 5:
-			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ReplacementFor", wireType)
 			}
 			m.ReplacementFor = 0
@@ -2879,7 +3218,7 @@ func (m *AddSequenceDependency) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AddColumnFamilyDependency) Unmarshal(dAtA []byte) error {
+func (m *AddColumnFamily) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2902,10 +3241,10 @@ func (m *AddColumnFamilyDependency) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AddColumnFamilyDependency: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddColumnFamily: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AddColumnFamilyDependency: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddColumnFamily: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3798,6 +4137,465 @@ func (m *DropCheckConstraint) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *AddPrimaryIndex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTargets
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AddPrimaryIndex: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AddPrimaryIndex: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Index.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PrimaryIndex", wireType)
+			}
+			m.PrimaryIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PrimaryIndex |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplacementFor", wireType)
+			}
+			m.ReplacementFor = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReplacementFor |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTargets
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.StoreColumnIDs = append(m.StoreColumnIDs, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTargets
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthTargets
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.StoreColumnIDs) == 0 {
+					m.StoreColumnIDs = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowTargets
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.StoreColumnIDs = append(m.StoreColumnIDs, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnIDs", wireType)
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnNames", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StoreColumnNames = append(m.StoreColumnNames, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTargets(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthTargets
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DropPrimaryIndex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTargets
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DropPrimaryIndex: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DropPrimaryIndex: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Index", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Index.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplacedBy", wireType)
+			}
+			m.ReplacedBy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReplacedBy |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.IndexID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTargets
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.StoreColumnIDs = append(m.StoreColumnIDs, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTargets
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthTargets
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.StoreColumnIDs) == 0 {
+					m.StoreColumnIDs = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowTargets
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.StoreColumnIDs = append(m.StoreColumnIDs, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnIDs", wireType)
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StoreColumnNames", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTargets
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTargets
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.StoreColumnNames = append(m.StoreColumnNames, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTargets(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthTargets
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipTargets(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3904,75 +4702,83 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/schemachanger/targets/targets.proto", fileDescriptor_targets_0ced52f4a9468fdb)
+	proto.RegisterFile("sql/schemachanger/targets/targets.proto", fileDescriptor_targets_a8c921ef1b75503b)
 }
 
-var fileDescriptor_targets_0ced52f4a9468fdb = []byte{
-	// 1041 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0x4f, 0x8f, 0xdb, 0x44,
-	0x14, 0x8f, 0x93, 0x6c, 0xfe, 0xbc, 0x90, 0x36, 0x1a, 0x5a, 0x29, 0xad, 0x44, 0x52, 0xb5, 0x12,
-	0x2d, 0x48, 0x38, 0x12, 0x1c, 0x80, 0x3d, 0x00, 0x76, 0x9c, 0x4a, 0xd6, 0x46, 0xd9, 0x65, 0x36,
-	0x4b, 0x05, 0x97, 0xc8, 0xf1, 0x4c, 0x13, 0xb3, 0xfe, 0x17, 0xdb, 0x81, 0x46, 0xe2, 0x03, 0x70,
-	0xe4, 0xc2, 0x85, 0x13, 0x17, 0x0e, 0x48, 0x7c, 0x02, 0x3e, 0xc1, 0x1e, 0x7b, 0xe0, 0xd0, 0x53,
-	0xa0, 0xd9, 0x03, 0x7c, 0x02, 0x0e, 0x3d, 0x21, 0x8f, 0xed, 0xc4, 0x9b, 0x78, 0x4b, 0x76, 0x1b,
-	0xa5, 0x52, 0xd5, 0x53, 0xc6, 0x93, 0xbc, 0xdf, 0xef, 0xbd, 0xdf, 0xf3, 0x7b, 0x6f, 0x26, 0x70,
-	0xd7, 0x1d, 0xe9, 0x0d, 0x57, 0x1d, 0x52, 0x43, 0x51, 0x87, 0x8a, 0x39, 0xa0, 0x4e, 0xc3, 0x53,
-	0x9c, 0x01, 0xf5, 0xdc, 0xe8, 0x93, 0xb7, 0x1d, 0xcb, 0xb3, 0xd0, 0x1d, 0xd5, 0x52, 0x8f, 0x1d,
-	0x4b, 0x51, 0x87, 0xbc, 0x3b, 0xd2, 0xf9, 0x33, 0x26, 0x7c, 0xf8, 0xd3, 0x9b, 0x77, 0x7c, 0x34,
-	0x55, 0xf1, 0x14, 0xdd, 0x1a, 0x34, 0x08, 0x75, 0x55, 0xbb, 0xdf, 0x70, 0x3d, 0x67, 0xac, 0x7a,
-	0x63, 0x87, 0x92, 0x00, 0xe9, 0xe6, 0xb5, 0x81, 0x35, 0xb0, 0xd8, 0xb2, 0xe1, 0xaf, 0x82, 0xdd,
-	0xdb, 0xff, 0x16, 0xa0, 0xd4, 0x65, 0x30, 0x07, 0x8c, 0xaf, 0x0d, 0x45, 0x81, 0x90, 0xa6, 0xa5,
-	0x8f, 0x0d, 0xb3, 0xca, 0xdd, 0xe2, 0xee, 0x95, 0xde, 0xe7, 0xf9, 0x35, 0x7c, 0xe0, 0xe7, 0x56,
-	0x78, 0x01, 0x80, 0xf6, 0x01, 0x24, 0xc7, 0xb2, 0x43, 0xb8, 0x34, 0x83, 0x6b, 0xac, 0x05, 0xb7,
-	0x30, 0xc3, 0x31, 0x08, 0x24, 0x43, 0x41, 0x20, 0x44, 0x36, 0x09, 0x7d, 0x54, 0xcd, 0x30, 0xb8,
-	0xf7, 0xd6, 0xf5, 0x8e, 0x19, 0xe1, 0xb9, 0xb9, 0x1f, 0xa9, 0x0f, 0x1c, 0x60, 0x65, 0x2f, 0x10,
-	0xe9, 0xdc, 0x0a, 0x2f, 0x00, 0x90, 0x0d, 0xd7, 0x05, 0x42, 0x0e, 0xe9, 0x68, 0x4c, 0x4d, 0x95,
-	0x4a, 0xd4, 0xa6, 0x26, 0xa1, 0xa6, 0x3a, 0xa9, 0xee, 0x30, 0xe4, 0xdd, 0x75, 0xbd, 0x5c, 0x45,
-	0xc0, 0xc9, 0xc0, 0xe8, 0x3b, 0xb8, 0x31, 0x17, 0xfa, 0xbe, 0x62, 0x68, 0xfa, 0x24, 0xc6, 0x9a,
-	0x63, 0xac, 0x9f, 0x5c, 0x2c, 0x73, 0xcb, 0x28, 0xf8, 0x7c, 0x02, 0xf4, 0x35, 0xbc, 0x29, 0x10,
-	0x72, 0x64, 0x6a, 0xa3, 0x31, 0x6d, 0x5a, 0xa6, 0xeb, 0x39, 0x8a, 0x66, 0x7a, 0xd5, 0x3c, 0xe3,
-	0xfd, 0x68, 0x5d, 0xde, 0x65, 0x7b, 0x9c, 0x04, 0x8a, 0x0c, 0xb8, 0xe6, 0x0b, 0xbd, 0x42, 0x56,
-	0x60, 0x64, 0x1f, 0xaf, 0x9d, 0xb4, 0x15, 0xb6, 0x44, 0x58, 0x34, 0x00, 0xe4, 0xc7, 0x3d, 0xa4,
-	0xea, 0x71, 0x8c, 0xac, 0xc8, 0xc8, 0x3e, 0x5c, 0x5b, 0xd1, 0xb3, 0xe6, 0x38, 0x01, 0x12, 0x7d,
-	0xcf, 0xc1, 0x5b, 0xab, 0xdb, 0x47, 0xe6, 0x37, 0x8a, 0xae, 0x11, 0xc5, 0xa3, 0xa4, 0x0a, 0x8c,
-	0x54, 0xbc, 0x24, 0x69, 0x0c, 0x09, 0x3f, 0x9f, 0xc8, 0x4f, 0x27, 0xab, 0xb2, 0xa5, 0xa0, 0x4b,
-	0x17, 0x48, 0x67, 0x82, 0x3d, 0x4e, 0x02, 0xdd, 0xcd, 0x9e, 0xfc, 0x5c, 0xe7, 0x6e, 0xff, 0x9a,
-	0x8e, 0x75, 0x1a, 0x44, 0xa0, 0xe0, 0x29, 0x7d, 0x9d, 0xf6, 0x34, 0xc2, 0xba, 0x4e, 0x59, 0x94,
-	0x67, 0xd3, 0x7a, 0xbe, 0xeb, 0xef, 0xc9, 0xd2, 0xb3, 0x69, 0x7d, 0x77, 0xa0, 0x79, 0xc3, 0x71,
-	0x9f, 0x57, 0x2d, 0xa3, 0x31, 0xf7, 0x86, 0xf4, 0x17, 0xeb, 0x86, 0x7d, 0x3c, 0x68, 0xac, 0xf6,
-	0x41, 0x5e, 0x96, 0x70, 0x9e, 0x41, 0xcb, 0x04, 0x69, 0x50, 0x56, 0x19, 0x5f, 0xef, 0x21, 0x7b,
-	0x9f, 0x59, 0x47, 0x2a, 0x8b, 0x3e, 0xfe, 0x67, 0x97, 0xc5, 0x0f, 0x2a, 0x43, 0x96, 0xf0, 0x1b,
-	0x6a, 0xac, 0x52, 0x50, 0x0b, 0x72, 0xc1, 0x73, 0xd8, 0xa6, 0xee, 0x2e, 0x6b, 0x38, 0xd2, 0xfb,
-	0x8a, 0x4b, 0xf9, 0x20, 0x7e, 0x89, 0xba, 0xaa, 0xa3, 0xd9, 0x9e, 0xe5, 0x88, 0xd9, 0x93, 0x69,
-	0x3d, 0x85, 0x43, 0xe3, 0xdd, 0xec, 0x3f, 0xbe, 0x56, 0x7f, 0x73, 0xf1, 0x3e, 0xba, 0x25, 0xb1,
-	0x0c, 0x28, 0x86, 0x62, 0x69, 0x24, 0x14, 0xea, 0x60, 0x36, 0xad, 0x17, 0x02, 0x27, 0xe4, 0x17,
-	0x12, 0x2d, 0xc2, 0xc0, 0x85, 0x80, 0x42, 0x26, 0x61, 0xa4, 0xbf, 0x65, 0x16, 0x0d, 0x7e, 0x4b,
-	0x71, 0x8a, 0xb0, 0xa3, 0xb1, 0x19, 0x10, 0x8c, 0xa7, 0xb7, 0xcf, 0x49, 0x14, 0x73, 0x69, 0x25,
-	0x4f, 0x81, 0x29, 0x1a, 0x42, 0xd9, 0x76, 0x34, 0x43, 0x71, 0x26, 0x3d, 0x6d, 0x3e, 0x9b, 0xca,
-	0x62, 0xf3, 0xd9, 0xb4, 0xfe, 0xe9, 0xa5, 0x7d, 0xf4, 0x81, 0xfc, 0xf7, 0x2a, 0x44, 0x0e, 0x34,
-	0xa9, 0x42, 0x3e, 0x7c, 0x66, 0x33, 0xab, 0x80, 0xa3, 0x47, 0xa4, 0xc3, 0x55, 0x87, 0xda, 0xba,
-	0xa2, 0x52, 0x83, 0x9a, 0x5e, 0xef, 0xa1, 0xe5, 0xb0, 0xd9, 0xb3, 0x21, 0x2f, 0xae, 0xc4, 0xb0,
-	0xef, 0x5b, 0x4e, 0x98, 0xae, 0xdf, 0x33, 0xb1, 0x21, 0xba, 0xb5, 0x22, 0x2e, 0x30, 0x8d, 0x17,
-	0xaf, 0x65, 0xc7, 0x67, 0x09, 0x1d, 0xdd, 0x44, 0xac, 0x79, 0x86, 0x2f, 0x13, 0x44, 0xa0, 0x14,
-	0x86, 0x4d, 0x7a, 0xfd, 0xc9, 0x26, 0x93, 0x0a, 0x11, 0xae, 0x38, 0x41, 0x36, 0xc0, 0xbc, 0xd0,
-	0xdc, 0x6a, 0xf6, 0x56, 0xe6, 0x5e, 0x59, 0xfc, 0x7c, 0x36, 0xad, 0x17, 0xa3, 0x2a, 0x71, 0x37,
-	0x52, 0x6a, 0xc5, 0xa8, 0xd4, 0xdc, 0x30, 0x79, 0x4f, 0xd3, 0xe7, 0x9c, 0x59, 0x5e, 0xc9, 0x06,
-	0x83, 0x0c, 0x28, 0xb9, 0x61, 0xa8, 0x3e, 0x61, 0x90, 0xcc, 0xf6, 0x6c, 0x5a, 0x87, 0x48, 0x81,
-	0x17, 0x0e, 0x0d, 0x22, 0x82, 0x79, 0x3f, 0xfb, 0x83, 0x7b, 0xce, 0x29, 0x6d, 0x4b, 0x3a, 0xef,
-	0x41, 0x2e, 0x36, 0xee, 0x12, 0x4e, 0xcc, 0x67, 0x46, 0x51, 0xe4, 0xe4, 0xf2, 0x40, 0x0a, 0x20,
-	0xc2, 0xb0, 0xa6, 0xe9, 0xc4, 0xe3, 0xdf, 0xab, 0xd7, 0x01, 0xce, 0xd6, 0x66, 0x66, 0x6b, 0xb5,
-	0xf9, 0x67, 0x3a, 0xf9, 0xcc, 0xfb, 0x5a, 0xe1, 0x4d, 0x29, 0xfc, 0x53, 0x3a, 0xe9, 0x98, 0xbf,
-	0x25, 0x7d, 0x11, 0x64, 0x4d, 0xc5, 0xa0, 0x4c, 0xdb, 0x22, 0x66, 0x6b, 0x7f, 0x8f, 0x3e, 0xb2,
-	0x1d, 0xd6, 0x98, 0x8a, 0x98, 0xad, 0x5f, 0xda, 0x68, 0xf8, 0x25, 0xfd, 0x3f, 0x37, 0x93, 0xd7,
-	0x3a, 0x31, 0x9d, 0x7e, 0xe4, 0x12, 0xef, 0x4d, 0x2f, 0x4f, 0x9d, 0xc0, 0xaf, 0x77, 0xbf, 0x85,
-	0x9d, 0x43, 0x4f, 0xf1, 0x28, 0x2a, 0x41, 0xfe, 0xa8, 0xb3, 0xd7, 0xd9, 0x7f, 0xd0, 0xa9, 0xa4,
-	0x10, 0x40, 0x4e, 0x10, 0x0f, 0x5b, 0x9d, 0x6e, 0x85, 0x43, 0x57, 0xa1, 0x24, 0xb5, 0xda, 0xad,
-	0x6e, 0xab, 0xb7, 0xdf, 0x69, 0x7f, 0x59, 0x49, 0xa3, 0x1b, 0x70, 0x3d, 0xdc, 0x10, 0x3a, 0x52,
-	0xef, 0x01, 0x96, 0xa3, 0xaf, 0x32, 0xe8, 0x0a, 0x80, 0x28, 0x34, 0xf7, 0xee, 0xcb, 0xed, 0x76,
-	0x4b, 0xaa, 0x64, 0x51, 0x19, 0x8a, 0x5f, 0x08, 0x6d, 0x59, 0x12, 0xba, 0x2d, 0xa9, 0xb2, 0xe3,
-	0xc3, 0x1e, 0x1c, 0x89, 0x6d, 0xb9, 0x59, 0xc9, 0x89, 0xef, 0x9c, 0x3c, 0xad, 0xa5, 0x4e, 0x66,
-	0x35, 0xee, 0xf1, 0xac, 0xc6, 0x3d, 0x99, 0xd5, 0xb8, 0xbf, 0x66, 0x35, 0xee, 0x87, 0xd3, 0x5a,
-	0xea, 0xf1, 0x69, 0x2d, 0xf5, 0xe4, 0xb4, 0x96, 0xfa, 0x2a, 0x1f, 0xde, 0x17, 0xfb, 0x39, 0xf6,
-	0x07, 0xd4, 0x07, 0xff, 0x05, 0x00, 0x00, 0xff, 0xff, 0x4a, 0x0f, 0xd0, 0x7d, 0x0b, 0x13, 0x00,
-	0x00,
+var fileDescriptor_targets_a8c921ef1b75503b = []byte{
+	// 1172 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0xcf, 0x6f, 0x1b, 0xc5,
+	0x17, 0xf7, 0xfa, 0xf7, 0x3e, 0x7f, 0x9d, 0x5a, 0x93, 0xf4, 0x8b, 0x5b, 0x51, 0x3b, 0x6a, 0x25,
+	0x1a, 0x90, 0xb0, 0x25, 0x40, 0x02, 0x72, 0x01, 0x6f, 0xec, 0x48, 0x4b, 0x8c, 0x1b, 0x36, 0x49,
+	0x2b, 0xb8, 0xac, 0xc6, 0x3b, 0x53, 0x7b, 0x95, 0xf5, 0xee, 0x66, 0x77, 0x0d, 0xcd, 0xad, 0x77,
+	0x2e, 0x08, 0x89, 0x0b, 0x27, 0x2e, 0x1c, 0xf8, 0x17, 0xf8, 0x0b, 0x22, 0x4e, 0x3d, 0xf6, 0x64,
+	0x5a, 0xe7, 0x00, 0x37, 0xee, 0x3d, 0xa1, 0x99, 0xdd, 0x75, 0xd6, 0x3f, 0xa8, 0x9c, 0xd4, 0x72,
+	0xa0, 0xca, 0x29, 0xa3, 0x37, 0x99, 0xcf, 0x7b, 0xef, 0xf3, 0x7e, 0x7a, 0xe1, 0xae, 0x7b, 0x64,
+	0x54, 0x5d, 0xad, 0x4b, 0x7b, 0x58, 0xeb, 0x62, 0xb3, 0x43, 0x9d, 0xaa, 0x87, 0x9d, 0x0e, 0xf5,
+	0xdc, 0xf0, 0x6f, 0xc5, 0x76, 0x2c, 0xcf, 0x42, 0x77, 0x34, 0x4b, 0x3b, 0x74, 0x2c, 0xac, 0x75,
+	0x2b, 0xee, 0x91, 0x51, 0x19, 0x7b, 0x52, 0x09, 0xfe, 0xf5, 0xe6, 0x1d, 0x86, 0xa6, 0x61, 0x0f,
+	0x1b, 0x56, 0xa7, 0x4a, 0xa8, 0xab, 0xd9, 0xed, 0xaa, 0xeb, 0x39, 0x7d, 0xcd, 0xeb, 0x3b, 0x94,
+	0xf8, 0x48, 0x37, 0xd7, 0x3a, 0x56, 0xc7, 0xe2, 0xc7, 0x2a, 0x3b, 0xf9, 0xd2, 0xdb, 0x8f, 0x45,
+	0xc8, 0xed, 0x73, 0x98, 0x5d, 0xae, 0xef, 0x73, 0x00, 0x4c, 0x88, 0xaa, 0x59, 0x46, 0xbf, 0x67,
+	0x16, 0x85, 0x75, 0x61, 0x23, 0xf7, 0x5e, 0xa5, 0x32, 0x87, 0x11, 0x95, 0x1a, 0x21, 0x5b, 0xfc,
+	0x95, 0x22, 0xe2, 0xf0, 0x88, 0x76, 0x21, 0x47, 0x1c, 0xcb, 0x0e, 0xf1, 0xe2, 0x1c, 0xaf, 0x3a,
+	0x17, 0x5e, 0xdd, 0xb1, 0xec, 0x00, 0x10, 0xc8, 0xe8, 0x8c, 0x3e, 0x03, 0x06, 0xaf, 0xea, 0x26,
+	0xa1, 0x8f, 0x8a, 0x09, 0x8e, 0xf7, 0xee, 0xbc, 0xf6, 0xc9, 0xec, 0x91, 0x92, 0xc5, 0xc1, 0x89,
+	0x39, 0xcb, 0xad, 0xf3, 0xc1, 0x92, 0xe7, 0x70, 0x96, 0x19, 0xe7, 0xa3, 0x89, 0x24, 0x3c, 0x22,
+	0x07, 0xde, 0x60, 0xa6, 0xb9, 0xf4, 0xa8, 0x4f, 0x4d, 0x8d, 0xaa, 0x84, 0xda, 0xd4, 0x24, 0xd4,
+	0xd4, 0x8e, 0x8b, 0x29, 0x8e, 0xbd, 0x39, 0xaf, 0xa1, 0x7b, 0x01, 0x44, 0x7d, 0x84, 0xa0, 0x5c,
+	0xc7, 0xb3, 0xc4, 0xa8, 0x0f, 0x6f, 0x9e, 0xc5, 0x4b, 0x7d, 0x88, 0x7b, 0xba, 0x71, 0x1c, 0x55,
+	0x9c, 0xe6, 0x8a, 0x3f, 0x38, 0x5f, 0x04, 0xb7, 0x39, 0x8c, 0x72, 0x03, 0x8f, 0x0b, 0x22, 0x6a,
+	0x0d, 0x60, 0xf6, 0xa8, 0x7d, 0x53, 0x3f, 0xea, 0x53, 0x55, 0xb3, 0x4c, 0xd7, 0x73, 0xb0, 0x6e,
+	0x7a, 0xc5, 0x0c, 0xd7, 0xf7, 0xd1, 0xbc, 0xfa, 0x0e, 0x38, 0xc0, 0xd6, 0xe8, 0xbd, 0xb2, 0x8a,
+	0xa7, 0x85, 0xc8, 0x82, 0xff, 0xf3, 0x38, 0x4d, 0xab, 0xcb, 0x72, 0x75, 0x1f, 0xcf, 0x1d, 0xb3,
+	0x29, 0x7d, 0x6b, 0x64, 0x86, 0x14, 0xe9, 0xb0, 0xc6, 0x59, 0xed, 0x52, 0xed, 0x30, 0xaa, 0x4e,
+	0xe4, 0xea, 0x3e, 0x9c, 0x9b, 0x4d, 0xf6, 0x3e, 0xa2, 0x0c, 0xe1, 0x29, 0x19, 0xfa, 0x56, 0x80,
+	0xf5, 0x59, 0xba, 0xd4, 0xbe, 0xf9, 0x35, 0x36, 0x74, 0x82, 0x3d, 0x4a, 0x8a, 0xc0, 0xf5, 0x4a,
+	0x17, 0xd4, 0x7b, 0x70, 0x86, 0xa4, 0xdc, 0xc2, 0x2f, 0xbb, 0x66, 0x71, 0xf5, 0xeb, 0x75, 0xd2,
+	0xf3, 0xdc, 0x39, 0xe2, 0xca, 0x2b, 0x77, 0xc2, 0xf5, 0x55, 0x32, 0x2d, 0xdc, 0x4c, 0x9e, 0xfc,
+	0x54, 0x16, 0x6e, 0xff, 0x12, 0x07, 0x71, 0x94, 0x7a, 0x88, 0x40, 0xd6, 0xc3, 0x6d, 0x83, 0xaa,
+	0x3a, 0xe1, 0xed, 0x27, 0x2f, 0xc9, 0xc3, 0x41, 0x39, 0xb3, 0xcf, 0x64, 0x72, 0xfd, 0xc5, 0xa0,
+	0xbc, 0xd9, 0xd1, 0xbd, 0x6e, 0xbf, 0x5d, 0xd1, 0xac, 0x5e, 0x75, 0x64, 0x0d, 0x69, 0x9f, 0x9d,
+	0xab, 0xf6, 0x61, 0xa7, 0x3a, 0xdd, 0x11, 0x2b, 0x72, 0x5d, 0xc9, 0x70, 0x68, 0x99, 0x20, 0x1d,
+	0xf2, 0x63, 0x25, 0xc3, 0x3b, 0x53, 0x5e, 0x62, 0xf8, 0x9f, 0x5e, 0x14, 0xdf, 0x2f, 0x12, 0xb9,
+	0xae, 0xfc, 0x4f, 0x8b, 0x14, 0x0d, 0x6a, 0x40, 0x3a, 0xe8, 0x7e, 0x7e, 0xb7, 0xba, 0x3b, 0xc9,
+	0xe1, 0x91, 0xd1, 0xc6, 0x2e, 0xad, 0xf8, 0xfe, 0xd7, 0xa9, 0xab, 0x39, 0xba, 0xed, 0x59, 0x8e,
+	0x94, 0x3c, 0x19, 0x94, 0x63, 0x4a, 0xf0, 0x78, 0x33, 0xf9, 0x27, 0xe3, 0xea, 0x0f, 0x01, 0xe0,
+	0xac, 0x31, 0x2e, 0x89, 0xac, 0x1e, 0x88, 0x01, 0x59, 0x3a, 0x09, 0x88, 0xda, 0x1d, 0x0e, 0xca,
+	0x59, 0xdf, 0x08, 0xf9, 0x95, 0x48, 0x0b, 0x31, 0x94, 0xac, 0xaf, 0x42, 0x26, 0x81, 0xa7, 0xdf,
+	0x27, 0x20, 0x1b, 0xb6, 0xec, 0x25, 0xf9, 0x29, 0x41, 0xca, 0x9f, 0x04, 0xfe, 0x98, 0x7a, 0xeb,
+	0x1f, 0x02, 0xc5, 0x4d, 0x9a, 0x8a, 0x93, 0xff, 0x14, 0x75, 0x21, 0x6f, 0x3b, 0x7a, 0x0f, 0x3b,
+	0xc7, 0x91, 0x11, 0x95, 0x97, 0xb6, 0x5e, 0x0c, 0xca, 0x9f, 0x5c, 0xd8, 0x46, 0x06, 0xc4, 0xf2,
+	0x2a, 0x40, 0xf6, 0x39, 0x31, 0xe0, 0x9a, 0x43, 0x6d, 0x03, 0x6b, 0xb4, 0x47, 0x4d, 0x4f, 0x7d,
+	0x68, 0x39, 0x7c, 0x82, 0x2d, 0x48, 0xd7, 0x4a, 0x04, 0x7b, 0xdb, 0x72, 0x82, 0xa0, 0xfc, 0x9a,
+	0x00, 0x71, 0x34, 0xfa, 0x96, 0x56, 0xaa, 0x59, 0xce, 0xe4, 0x59, 0xf2, 0xb5, 0x98, 0x96, 0xc0,
+	0xd0, 0x45, 0xf8, 0x9a, 0xe1, 0xf8, 0x32, 0x41, 0x04, 0x72, 0x81, 0xdb, 0x44, 0x6d, 0x1f, 0x2f,
+	0x32, 0x74, 0x10, 0xe2, 0x4a, 0xc7, 0xc8, 0x06, 0x18, 0x95, 0x93, 0x5b, 0x4c, 0xae, 0x27, 0x36,
+	0xf2, 0xd2, 0x17, 0xc3, 0x41, 0x59, 0x0c, 0x6b, 0xc1, 0x5d, 0x48, 0x41, 0x89, 0x61, 0x41, 0xb9,
+	0x41, 0xf0, 0x9e, 0xc7, 0xe1, 0xfa, 0xcc, 0xdd, 0xe2, 0xb5, 0x6c, 0x23, 0xa8, 0x07, 0xb9, 0xd1,
+	0x26, 0xa6, 0x93, 0x20, 0x98, 0xcd, 0xe1, 0xa0, 0x0c, 0x21, 0x03, 0xaf, 0xec, 0x1a, 0x84, 0x0a,
+	0x46, 0x5d, 0xeb, 0x37, 0x01, 0xae, 0x4d, 0xac, 0x51, 0x4b, 0x62, 0x77, 0x07, 0xd2, 0x91, 0x51,
+	0x36, 0x63, 0x29, 0x1e, 0x1b, 0x33, 0xe1, 0x42, 0x37, 0x39, 0x6c, 0x7c, 0x88, 0xc0, 0x99, 0x41,
+	0x1c, 0x56, 0x67, 0xec, 0x68, 0xaf, 0x5f, 0xdd, 0x8f, 0x57, 0x64, 0x62, 0x69, 0x15, 0xf9, 0x7b,
+	0x1c, 0xd6, 0x66, 0x6d, 0xa5, 0x57, 0x0c, 0x2f, 0x8a, 0xe1, 0x1f, 0xe3, 0x80, 0xa6, 0x17, 0xe2,
+	0x25, 0xf1, 0x8b, 0x20, 0x69, 0xe2, 0x1e, 0xe5, 0xdc, 0x8a, 0x0a, 0x3f, 0x33, 0x19, 0x7d, 0x64,
+	0x3b, 0xbc, 0x1d, 0x89, 0x0a, 0x3f, 0x5f, 0xda, 0x40, 0xf8, 0x39, 0x0e, 0xb7, 0x5e, 0xfa, 0x6b,
+	0xe1, 0x8a, 0x27, 0xce, 0xd3, 0x0f, 0x02, 0xac, 0xce, 0xf8, 0x4d, 0x73, 0x79, 0xec, 0x04, 0x76,
+	0x3d, 0x4b, 0xf2, 0x61, 0xb3, 0x1b, 0xdd, 0x0a, 0xaf, 0x36, 0xe5, 0x4b, 0xde, 0x94, 0xd1, 0x63,
+	0x01, 0x0a, 0xae, 0x67, 0x39, 0x54, 0x8d, 0x24, 0x6b, 0x8a, 0x27, 0xeb, 0xfd, 0xe1, 0xa0, 0xbc,
+	0xb2, 0xc7, 0xee, 0x16, 0x9b, 0xb1, 0x2b, 0x6e, 0x04, 0x93, 0xb8, 0x48, 0x02, 0x34, 0x66, 0x01,
+	0xcb, 0x19, 0xb7, 0x98, 0x5e, 0x4f, 0x6c, 0x88, 0xd2, 0xda, 0x70, 0x50, 0x2e, 0x44, 0x6c, 0x68,
+	0xb1, 0x3b, 0xa5, 0xe0, 0x4e, 0x48, 0x82, 0x14, 0xfb, 0x2b, 0x01, 0x05, 0x96, 0xfa, 0xff, 0xd1,
+	0x1c, 0x5b, 0xce, 0x42, 0x3f, 0x33, 0xe2, 0xc9, 0x7f, 0x41, 0xc4, 0x53, 0xe7, 0x8f, 0xf8, 0x3b,
+	0xdf, 0x40, 0x6a, 0xcf, 0xc3, 0x1e, 0x45, 0x39, 0xc8, 0x1c, 0xb4, 0x76, 0x5a, 0xf7, 0x1e, 0xb4,
+	0x0a, 0x31, 0x04, 0x90, 0xae, 0x49, 0x7b, 0x8d, 0xd6, 0x7e, 0x41, 0x40, 0xd7, 0x20, 0x57, 0x6f,
+	0x34, 0x1b, 0xfb, 0x0d, 0xf5, 0x5e, 0xab, 0xf9, 0x65, 0x21, 0x8e, 0x6e, 0xc0, 0xf5, 0x40, 0x50,
+	0x6b, 0xd5, 0xd5, 0x07, 0x8a, 0x1c, 0x5e, 0x25, 0xd0, 0x0a, 0x80, 0x54, 0xdb, 0xda, 0xd9, 0x96,
+	0x9b, 0xcd, 0x46, 0xbd, 0x90, 0x44, 0x79, 0x10, 0xef, 0xd7, 0x9a, 0x72, 0xbd, 0xb6, 0xdf, 0xa8,
+	0x17, 0x52, 0x0c, 0x76, 0xf7, 0x40, 0x6a, 0xca, 0x5b, 0x85, 0xb4, 0xf4, 0xf6, 0xc9, 0xf3, 0x52,
+	0xec, 0x64, 0x58, 0x12, 0x9e, 0x0c, 0x4b, 0xc2, 0xd3, 0x61, 0x49, 0x78, 0x36, 0x2c, 0x09, 0xdf,
+	0x9d, 0x96, 0x62, 0x4f, 0x4e, 0x4b, 0xb1, 0xa7, 0xa7, 0xa5, 0xd8, 0x57, 0x99, 0xe0, 0x03, 0x53,
+	0x3b, 0xcd, 0xbf, 0x5d, 0xbf, 0xff, 0x77, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xf6, 0x98, 0xb8,
+	0x46, 0x17, 0x00, 0x00,
 }

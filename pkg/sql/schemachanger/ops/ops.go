@@ -40,14 +40,12 @@ type AddIndexDescriptor struct {
 	descriptorMutationOp
 	TableID descpb.ID
 	Index   descpb.IndexDescriptor
-	Primary bool
 }
 
 type IndexDescriptorStateChange struct {
 	descriptorMutationOp
 	TableID   descpb.ID
 	IndexID   descpb.IndexID
-	IsPrimary bool
 	State     targets.State
 	NextState targets.State
 }
@@ -63,6 +61,52 @@ type UniqueIndexValidation struct {
 	TableID        descpb.ID
 	PrimaryIndexID descpb.IndexID
 	IndexID        descpb.IndexID
+}
+
+type MakeAddedPrimaryIndexDeleteOnly struct {
+	descriptorMutationOp
+	TableID          descpb.ID
+	Index            descpb.IndexDescriptor
+	StoreColumnIDs   []descpb.ColumnID
+	StoreColumnNames []string
+}
+
+// Once we split up the secondary index ops into separate types, this can be
+// reused.
+type MakeAddedIndexDeleteAndWriteOnly struct {
+	descriptorMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+type MakeAddedPrimaryIndexPublic struct {
+	descriptorMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
+	descriptorMutationOp
+	TableID          descpb.ID
+	IndexID          descpb.IndexID
+	StoreColumnIDs   []descpb.ColumnID
+	StoreColumnNames []string
+}
+
+// Once we split up the secondary index ops into separate types, this can be
+// reused.
+type MakeDroppedIndexDeleteOnly struct {
+	descriptorMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
+}
+
+// Once we split up the secondary index ops into separate types, this can be
+// reused.
+type MakeDroppedIndexAbsent struct {
+	descriptorMutationOp
+	TableID descpb.ID
+	IndexID descpb.IndexID
 }
 
 type AddColumnDescriptor struct {

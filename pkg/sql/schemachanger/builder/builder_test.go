@@ -76,21 +76,29 @@ func TestBuilder(t *testing.T) {
 					targets.State_ABSENT,
 				},
 				{
-					&targets.AddIndex{
-						TableID:        tableID,
-						Index:          descpb.IndexDescriptor{},
-						PrimaryIndex:   1,
-						ReplacementFor: 1,
-						Primary:        true,
+					&targets.AddPrimaryIndex{
+						TableID: tableID,
+						Index: descpb.IndexDescriptor{
+							ID:   2,
+							Name: "new_primary_key",
+						},
+						PrimaryIndex:     1,
+						ReplacementFor:   1,
+						StoreColumnIDs:   []descpb.ColumnID{2},
+						StoreColumnNames: []string{"j"},
 					},
 					targets.State_ABSENT,
 				},
 				{
-					&targets.DropIndex{
-						TableID:    tableID,
-						IndexID:    1,
-						ReplacedBy: 2,
-						ColumnIDs:  []descpb.ColumnID{1},
+					&targets.DropPrimaryIndex{
+						TableID: tableID,
+						Index: descpb.IndexDescriptor{
+							ID:   1,
+							Name: "primary",
+						},
+						ReplacedBy:       2,
+						StoreColumnIDs:   nil,
+						StoreColumnNames: nil,
 					},
 					targets.State_PUBLIC,
 				},
@@ -118,21 +126,26 @@ func TestBuilder(t *testing.T) {
 				switch target := actual.Target.(type) {
 				case *targets.AddColumn:
 					e := exp.Target.(*targets.AddColumn)
-					require.Equal(t, target.TableID, e.TableID)
-					require.Equal(t, target.Column.ID, e.Column.ID)
-					require.Equal(t, target.Column.Name, e.Column.Name)
-				case *targets.AddIndex:
-					e := exp.Target.(*targets.AddIndex)
-					require.Equal(t, target.TableID, e.TableID)
-					require.Equal(t, target.PrimaryIndex, e.PrimaryIndex)
-					require.Equal(t, target.ReplacementFor, e.ReplacementFor)
-					require.Equal(t, target.Primary, e.Primary)
-				case *targets.DropIndex:
-					e := exp.Target.(*targets.DropIndex)
-					require.Equal(t, target.TableID, e.TableID)
-					require.Equal(t, target.IndexID, e.IndexID)
-					require.Equal(t, target.ReplacedBy, e.ReplacedBy)
-					require.Equal(t, target.ColumnIDs, e.ColumnIDs)
+					require.Equal(t, e.TableID, target.TableID)
+					require.Equal(t, e.Column.ID, target.Column.ID)
+					require.Equal(t, e.Column.Name, target.Column.Name)
+				case *targets.AddPrimaryIndex:
+					e := exp.Target.(*targets.AddPrimaryIndex)
+					require.Equal(t, e.TableID, target.TableID)
+					require.Equal(t, e.Index.ID, target.Index.ID)
+					require.Equal(t, e.Index.Name, target.Index.Name)
+					require.Equal(t, e.PrimaryIndex, target.PrimaryIndex)
+					require.Equal(t, e.ReplacementFor, target.ReplacementFor)
+					require.Equal(t, e.StoreColumnIDs, target.StoreColumnIDs)
+					require.Equal(t, e.StoreColumnNames, target.StoreColumnNames)
+				case *targets.DropPrimaryIndex:
+					e := exp.Target.(*targets.DropPrimaryIndex)
+					require.Equal(t, e.TableID, target.TableID)
+					require.Equal(t, e.Index.ID, target.Index.ID)
+					require.Equal(t, e.Index.Name, target.Index.Name)
+					require.Equal(t, e.ReplacedBy, target.ReplacedBy)
+					require.Equal(t, e.StoreColumnIDs, target.StoreColumnIDs)
+					require.Equal(t, e.StoreColumnNames, target.StoreColumnNames)
 				default:
 					t.Fatalf("unsupported type for now")
 				}
