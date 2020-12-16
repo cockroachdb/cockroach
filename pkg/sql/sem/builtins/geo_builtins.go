@@ -2991,8 +2991,10 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 				return tree.NewDFloat(tree.DFloat(*ret)), nil
 			},
 			Info: infoBuilder{
-				info: `Returns the Frechet distance between the given geometries, with the given ` +
-					`segment densification (range 0.0-1.0, -1 to disable).`,
+				info: "Returns the Frechet distance between the given geometries, with the given " +
+					"segment densification (range 0.0-1.0, -1 to disable).\n\n" +
+					"Smaller densify_frac gives a more accurate Fréchet distance. However, the computation " +
+					"time and memory usage increases with the square of the number of subsegments.",
 				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,

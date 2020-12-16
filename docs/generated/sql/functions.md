@@ -1681,6 +1681,7 @@ Bottom Left.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_frechetdistance"></a><code>st_frechetdistance(geometry_a: geometry, geometry_b: geometry, densify_frac: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Frechet distance between the given geometries, with the given segment densification (range 0.0-1.0, -1 to disable).</p>
+<p>Smaller densify_frac gives a more accurate Fréchet distance. However, the computation time and memory usage increases with the square of the number of subsegments.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_geogfromewkb"></a><code>st_geogfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKB representation.</p>
