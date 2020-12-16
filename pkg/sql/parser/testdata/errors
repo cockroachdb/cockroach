@@ -566,6 +566,30 @@ EXPLAIN (PLAN, DEBUG) SELECT 1
                               ^
 
 error
+EXPLAIN (JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
+DETAIL: source SQL:
+EXPLAIN (JSON) SELECT 1
+                       ^
+
+error
+EXPLAIN (PLAN, JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
+DETAIL: source SQL:
+EXPLAIN (PLAN, JSON) SELECT 1
+                             ^
+
+error
+EXPLAIN ANALYZE (DISTSQL, JSON) SELECT 1
+----
+at or near "EOF": syntax error: the JSON flag cannot be used with ANALYZE
+DETAIL: source SQL:
+EXPLAIN ANALYZE (DISTSQL, JSON) SELECT 1
+                                        ^
+
+error
 SELECT $0
 ----
 lexical error: placeholder index must be between 1 and 65536

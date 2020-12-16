@@ -404,7 +404,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// of the splits and still holds the state after the first dummy query at the
 	// beginning of the test, which had everything on the first node.
 	query := `SELECT count(1) FROM "left" INNER JOIN "right" USING (num)`
-	row := db3.QueryRow(fmt.Sprintf(`SELECT json FROM [EXPLAIN (DISTSQL) %v]`, query))
+	row := db3.QueryRow(fmt.Sprintf(`EXPLAIN (DISTSQL, JSON) %v`, query))
 	var json string
 	if err := row.Scan(&json); err != nil {
 		t.Fatal(err)
@@ -431,7 +431,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// Now assert that new plans correctly contain all the nodes. This is expected
 	// to be a result of the caches having been updated on the gateway by the
 	// previous query.
-	row = db3.QueryRow(fmt.Sprintf(`SELECT json FROM [EXPLAIN (DISTSQL) %v]`, query))
+	row = db3.QueryRow(fmt.Sprintf(`EXPLAIN (DISTSQL, JSON) %v`, query))
 	if err := row.Scan(&json); err != nil {
 		t.Fatal(err)
 	}
