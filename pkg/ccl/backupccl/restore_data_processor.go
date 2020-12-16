@@ -10,7 +10,12 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"io/ioutil"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -35,6 +40,12 @@ import (
 // Progress is streamed to the coordinator through metadata.
 var restoreDataOutputTypes = []*types.T{}
 
+var importLeadMultiplier = settings.RegisterIntSetting(
+	"bulkio.import_lead_multiplier",
+	"a description",
+	2,
+)
+
 type restoreDataProcessor struct {
 	execinfra.ProcessorBase
 
@@ -43,8 +54,20 @@ type restoreDataProcessor struct {
 	input   execinfra.RowSource
 	output  execinfra.RowReceiver
 
+	progCh chan *RestoreProgress
+	restoreErr error
+
 	alloc rowenc.DatumAlloc
 	kr    *storageccl.KeyRewriter
+
+	beforeNext map[int]time.Time
+	totalNext map[int]time.Duration
+
+	beforeIngest map[int]time.Time
+	totalIngest map[int]time.Duration
+
+	beforeProgSend map[int]time.Time
+	totalProgSend map[int]time.Duration
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -79,13 +102,21 @@ func newRestoreDataProcessor(
 		}); err != nil {
 		return nil, err
 	}
+	mult := int(importLeadMultiplier.Get(&rd.EvalCtx.Settings.SV))
+	numWorkers := int(kvserver.ImportRequestsLimit.Get(&rd.EvalCtx.Settings.SV)) * mult
+	rd.progCh = make(chan *RestoreProgress, numWorkers)
 	return rd, nil
 }
 
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) context.Context {
 	rd.input.Start(ctx)
-	return rd.StartInternal(ctx, restoreDataProcName)
+	ctx = rd.StartInternal(ctx, restoreDataProcName)
+	go func() {
+		defer close(rd.progCh)
+		rd.restoreErr = rd.runRestore()
+	}()
+	return ctx
 }
 
 // Next is part of the RowSource interface.
@@ -93,67 +124,25 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	if rd.State != execinfra.StateRunning {
 		return nil, rd.DrainHelper()
 	}
-	// We read rows from the SplitAndScatter processor. We expect each row to
-	// contain 2 columns. The first is used to route the row to this processor,
-	// and the second contains the RestoreSpanEntry that we're interested in.
-	row, meta := rd.input.Next()
-	if meta != nil {
-		if meta.Err != nil {
-			rd.MoveToDraining(nil /* err */)
+
+	for progDetails := range rd.progCh {
+		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+		details, err := gogotypes.MarshalAny(progDetails)
+		if err != nil {
+			rd.MoveToDraining(err)
+			return nil, rd.DrainHelper()
 		}
-		return nil, meta
+		prog.ProgressDetails = *details
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 	}
-	if row == nil {
-		rd.MoveToDraining(nil /* err */)
+
+	if rd.restoreErr != nil {
+		rd.MoveToDraining(rd.restoreErr)
 		return nil, rd.DrainHelper()
 	}
 
-	if len(row) != 2 {
-		rd.MoveToDraining(errors.New("expected input rows to have exactly 2 columns"))
-		return nil, rd.DrainHelper()
-	}
-	if err := row[1].EnsureDecoded(types.Bytes, &rd.alloc); err != nil {
-		rd.MoveToDraining(err)
-		return nil, rd.DrainHelper()
-	}
-	datum := row[1].Datum
-	entryDatumBytes, ok := datum.(*tree.DBytes)
-	if !ok {
-		rd.MoveToDraining(errors.AssertionFailedf(`unexpected datum type %T: %+v`, datum, row))
-		return nil, rd.DrainHelper()
-	}
-
-	var entry execinfrapb.RestoreSpanEntry
-	if err := protoutil.Unmarshal([]byte(*entryDatumBytes), &entry); err != nil {
-		rd.MoveToDraining(errors.Wrap(err, "un-marshaling restore span entry"))
-		return nil, rd.DrainHelper()
-	}
-
-	newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
-	if err != nil {
-		rd.MoveToDraining(errors.Wrap(err, "re-writing span key to import"))
-		return nil, rd.DrainHelper()
-	}
-
-	log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", entry.Span)
-	summary, err := rd.processRestoreSpanEntry(entry, newSpanKey)
-	if err != nil {
-		rd.MoveToDraining(err)
-		return nil, rd.DrainHelper()
-	}
-
-	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	progDetails := RestoreProgress{}
-	progDetails.Summary = countRows(summary, rd.spec.PKIDs)
-	progDetails.ProgressIdx = entry.ProgressIdx
-	progDetails.DataSpan = entry.Span
-	details, err := gogotypes.MarshalAny(&progDetails)
-	if err != nil {
-		rd.MoveToDraining(err)
-		return nil, rd.DrainHelper()
-	}
-	prog.ProgressDetails = *details
-	return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
+	rd.MoveToDraining(nil /* err */)
+	return nil, rd.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -161,9 +150,71 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	rd.InternalClose()
 }
 
-func init() {
-	rowexec.NewRestoreDataProcessor = newRestoreDataProcessor
+func (rd *restoreDataProcessor) runRestore() error {
+	mult := int(importLeadMultiplier.Get(&rd.EvalCtx.Settings.SV))
+	numWorkers := int(kvserver.ImportRequestsLimit.Get(&rd.EvalCtx.Settings.SV)) * mult
+	return ctxgroup.GroupWorkers(rd.Ctx, numWorkers, func(ctx context.Context, workerID int) error {
+		for {
+			// We read rows from the SplitAndScatter processor. We expect each row to
+			// contain 2 columns. The first is used to route the row to this processor,
+			// and the second contains the RestoreSpanEntry that we're interested in.
+			beforeNext := timeutil.Now()
+			row, meta := rd.input.Next()
+			rd.totalNext[workerID] += timeutil.Since(beforeNext)
+			if meta != nil {
+				if meta.Err != nil {
+					// We got an error.
+					return meta.Err
+				}
+
+				// TODO: This currently ignores all metadata.
+				// TODO: Should this be fwding metadata?
+			}
+			if row == nil {
+				// Done consuming rows.
+				return nil
+			}
+
+			if len(row) != 2 {
+				return errors.New("expected input rows to have exactly 2 columns")
+			}
+			if err := row[1].EnsureDecoded(types.Bytes, &rd.alloc); err != nil {
+				return err
+			}
+			datum := row[1].Datum
+			entryDatumBytes, ok := datum.(*tree.DBytes)
+			if !ok {
+				return errors.AssertionFailedf(`unexpected datum type %T: %+v`, datum, row)
+			}
+
+			var entry execinfrapb.RestoreSpanEntry
+			if err := protoutil.Unmarshal([]byte(*entryDatumBytes), &entry); err != nil {
+				return errors.Wrap(err, "un-marshaling restore span entry")
+			}
+
+			newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
+			if err != nil {
+				return errors.Wrap(err, "re-writing span key to import")
+			}
+
+			beforeImport := timeutil.Now()
+			log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", newSpanKey)
+			summary, err := rd.processRestoreSpanEntry(entry, entry.Span.Key)
+			if err != nil {
+				return err
+			}
+			rd.totalIngest[workerID] += timeutil.Since(beforeImport)
+
+			progDetails := &RestoreProgress{}
+			progDetails.Summary = countRows(summary, rd.spec.PKIDs)
+			progDetails.ProgressIdx = entry.ProgressIdx
+				progDetails.DataSpan = entry.Span
+
+			rd.progCh <- progDetails
+		}
+	})
 }
+
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry, newSpanKey roachpb.Key,
@@ -304,4 +355,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 
 	return batcher.GetSummary(), nil
+}
+
+func init() {
+	rowexec.NewRestoreDataProcessor = newRestoreDataProcessor
 }

@@ -61,13 +61,15 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 	defer cleanup()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
-	bankData := bank.FromRows(b.N).Tables()[0]
+	bankData := bank.FromRows(100000).Tables()[0]
 	if _, err := sampledataccl.ToBackup(b, bankData, dir, "foo"); err != nil {
-		b.Fatalf("%+v", err)
+		b.Fatalf("%+v", err	)
 	}
 
 	b.ResetTimer()
-	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal://0/foo'`)
+	for i := 0; i < b.N; i++ {
+		sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM 'nodelocal://0/foo' WITH into_db='data_%d'`, i))
+	}
 	b.StopTimer()
 }
 
