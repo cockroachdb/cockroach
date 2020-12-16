@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -183,6 +184,8 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeBytesAscending(b, t.PhysicalRep), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.PhysicalRep), nil
+	case *tree.DJSON:
+		return nil, unimplemented.NewWithIssue(35706, "unable to encode JSON as a table key")
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
