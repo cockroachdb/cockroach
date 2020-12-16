@@ -632,7 +632,7 @@ func (r *fkSelfResolver) LookupObject(
 		if lookupFlags.RequireMutable {
 			return true, table, nil
 		}
-		return true, &table.Immutable, nil
+		return true, table.ImmutableCopy(), nil
 	}
 	lookupFlags.IncludeOffline = false
 	return r.SchemaResolver.LookupObject(ctx, lookupFlags, dbName, scName, tbName)
