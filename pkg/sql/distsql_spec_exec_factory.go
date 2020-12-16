@@ -748,10 +748,6 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
 	}
-	if options.Mode == tree.ExplainPlan {
-		// TODO(radu): all we need to do here is wrap an explainPlanNode.
-		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain plan")
-	}
 
 	// We cannot create the explained plan in the same PlanInfrastructure with the
 	// "outer" plan. Create a separate factory.
@@ -761,14 +757,21 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 		return nil, err
 	}
 
-	// TODO(yuzefovich): make sure to return the same nice error in some
-	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	p := plan.(*explain.Plan).WrappedPlan.(*planComponents)
-	explain, err := constructExplainDistSQLOrVecNode(options, stmtType, p, e.planner)
-	if err != nil {
-		return nil, err
+	var explainNode planNode
+	if options.Mode == tree.ExplainVec {
+		explainNode = &explainVecNode{
+			options: options,
+			plan:    *p,
+		}
+	} else {
+		explainNode = &explainPlanNode{
+			options: options,
+			flags:   explain.MakeFlags(options),
+			plan:    plan.(*explain.Plan),
+		}
 	}
-	explainNode := explain.(planNode)
+
 	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode)
 	if err != nil {
 		return nil, err
