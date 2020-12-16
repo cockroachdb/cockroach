@@ -60,7 +60,7 @@ func TestTraceAnalyzer(t *testing.T) {
 						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
 							flowMetadata := execstats.NewFlowMetadata(flows)
 							analyzer := execstats.MakeTraceAnalyzer(flowMetadata)
-							analyzerChan <- &analyzer
+							analyzerChan <- analyzer
 							return nil
 						}
 					},
@@ -122,6 +122,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		trace := sp.GetRecording()
 		analyzer := <-analyzerChan
 		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
+		require.NoError(t, analyzer.ProcessStats())
 		switch vectorizeMode {
 		case sessiondatapb.VectorizeOff:
 			rowexecTraceAnalyzer = analyzer
@@ -136,20 +137,17 @@ func TestTraceAnalyzer(t *testing.T) {
 		for _, analyzer := range []*execstats.TraceAnalyzer{
 			rowexecTraceAnalyzer, colexecTraceAnalyzer,
 		} {
-			networkBytesGroupedByNode, err := analyzer.GetNetworkBytesSent()
-			require.NoError(t, err)
+			nodeLevelStats := analyzer.GetNodeLevelStats()
 			require.Equal(
-				t, numNodes-1, len(networkBytesGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
+				t, numNodes-1, len(nodeLevelStats.NetworkBytesSentGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
 			)
 
-			var actualBytes int64
-			for _, bytes := range networkBytesGroupedByNode {
-				actualBytes += bytes
-			}
+			queryLevelStats := analyzer.GetQueryLevelStats()
+
 			// The stats don't count the actual bytes, but they are a synthetic value
 			// based on the number of tuples. In this test 21 tuples flow over the
 			// network.
-			require.Equal(t, actualBytes, int64(21*8))
+			require.Equal(t, queryLevelStats.NetworkBytesSent, int64(21*8))
 		}
 	})
 
@@ -167,9 +165,9 @@ func TestTraceAnalyzer(t *testing.T) {
 				expectedMaxMemUsage: int64(30720),
 			},
 		} {
-			actualMaxMemUsage := tc.analyzer.GetMaxMemoryUsage()
+			queryLevelStats := tc.analyzer.GetQueryLevelStats()
 
-			require.Equal(t, tc.expectedMaxMemUsage, actualMaxMemUsage)
+			require.Equal(t, tc.expectedMaxMemUsage, queryLevelStats.MaxMemUsage)
 		}
 	})
 }
