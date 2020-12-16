@@ -86,7 +86,7 @@ vectorized: true
 # ·                    spans           ALL                ·                               ·
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY c,d)]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY c,d)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzElk9v2kwQxu_vp4jm9FbZCu_a_LNUiWsqNanS3ioODt6CJcKitZEaRXz3ChyEbMM-ni6yjwR-3tmZ3-TxO21Mqh-TV51T_IskCVIkKCRBEQka0lzQ1pqFznNjDz8pgYf0D8WBoGyz3RWHP88FLYzVFL9TkRVrTTH9TF7W-lknqbaDgASlukiy9fGYrc1eE_s2S5MiIUFPuyK-m0kxUzTfCzK74uOp54e9vN2tknxVfcwJmQvKi2SpKZZ78W8FDlsUGIpZVCvwfLLinPzD2ELbgQzq97kXM3Xv24TwainnRxmbaqvTq-e3_uWF233Tdqm_mmxzuGKtsWv9u_j_g_70xWbL1fljxQThbnfkf8cLlT-az2Y7UNWxXCthWClBtndN9rIMjAJHt10GcPJpGWQHyyD7XYZRF8ug2g9a9WIio8DxbU0EJ59MVB2YqPo1cdyFiWH7QYe9mMgocHJbE8HJJxPDDkwM-zVx0oWJUftBR72YyChwelsTwcknE6MOTIz6NXHa9avqhYKedb41m1y3egMNDlfS6VKXDcvNzi70d2sWx2PKj09H7vjmk-q8KL8Nyw8Pm_KrQ4Ht4YkPLJUXPfKhVeCmZZ0OKnQFDuqwYjRc8eCJD1xrOJce-dC1hjfo0NnwyD2tyD0t6R7X0Gc_3DDYDzeM9gPQYD_cNNqPkbPjY3fDxz774YbBfrhhtB-ABvvhptF-THz2Y-pjuBsGhrthZDiggeFuGiZAI0AqHZfgn4psJAhHckADywGNNEc48BzgSHTZyBGO6bKRIxzVAQ1cBzSSHeHAdoBD3d0ZKodAd06INmfOSVEuDXVn5SgXh7q7kxTpzolSLo10Z4UpG0e6s-K0ibvzVE6B7pxEbc6cE6lcGurOClUujnRX7lSt6z7f__c3AAD__68_ThQ=
 # 
@@ -115,7 +115,7 @@ vectorized: true
 # ·                    spans           ALL                ·                               ·
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY a,b)]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY a,b)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzElk9v2kwQxu_vp4jm9FbZCu_a_LNUiWsqNanS3ioODt6CJcKitZEaRXz3ChyEbMM-ni6yjwR-3tmZ3-TxO21Mqh-TV51T_IskCVIkKCRBEQka0lzQ1pqFznNjDz8pgYf0D8WBoGyz3RWHP88FLYzVFL9TkRVrTTH9TF7W-lknqbaDgASlukiy9fGYrc1eE_s2S5MiIUFPuyK-m0kxUzTfCzK74uOp54e9vN2tknxVfcwJmQvKi2SpKZZ78W8FDlsUGIpZVCvwfLLinPzD2ELbgQzq97kXM3Xv24TwainnRxmbaqvTq-e3_uWF233Tdqm_mmxzuGKtsWv9u_j_g_70xWbL1fljxQThbnfkf8cLlT-az2Y7UNWxXCthWClBtndN9rIMjAJHt10GcPJpGWQHyyD7XYZRF8ug2g9a9WIio8DxbU0EJ59MVB2YqPo1cdyFiWH7QYe9mMgocHJbE8HJJxPDDkwM-zVx0oWJUftBR72YyChwelsTwcknE6MOTIz6NXHa9avqhYKedb41m1y3egMNDlfS6VKXDcvNzi70d2sWx2PKj09H7vjmk-q8KL8Nyw8Pm_KrQ4Ht4YkPLJUXPfKhVeCmZZ0OKnQFDuqwYjRc8eCJD1xrOJce-dC1hjfo0NnwyD2tyD0t6R7X0Gc_3DDYDzeM9gPQYD_cNNqPkbPjY3fDxz774YbBfrhhtB-ABvvhptF-THz2Y-pjuBsGhrthZDiggeFuGiZAI0AqHZfgn4psJAhHckADywGNNEc48BzgSHTZyBGO6bKRIxzVAQ1cBzSSHeHAdoBD3d0ZKodAd06INmfOSVEuDXVn5SgXh7q7kxTpzolSLo10Z4UpG0e6s-K0ibvzVE6B7pxEbc6cE6lcGurOClUujnRX7lSt6z7f__c3AAD__68_ThQ=
 
@@ -150,26 +150,45 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)]
+EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1v-jYUh-_3KaxzBatRsBPeIlWiW5lG1UEHvdhUcWGIV5Bowpwgrar63aeERm0I9Yn_hlxVCX7iX3ye05M3iP_dgg_z0f3o10eyV1vy22z6B3ka_fVwfzOekMbteP44__O-SRofa34-rMgvBSXLw51AJILczLO_rEnupin-sWpFSVBexcl0djuakV_-zhY0yXRCGoJck1WT3ExuSWNJrrPb-aolJaK5AAphFMiJeJEx-E_AgAIHCi5Q8IBCBxYUdipayTiOVLrkLQPGwX_gtylswt0-SW8vKKwiJcF_g2STbCX48CiWWzmTIpDKaQOFQCZis822SRMPd2rzItQrUJjvRBj7pOUwIsKAMBIla6mAwnSf-GTI6JDD4p1CtE8-tvvcZflK1iJeF5-fIwsKcSKeJfjsnf5Y8o5NcpcOPdvk_Nvkn4_ah5EKpJJB4WGLlMSWnHj930W8vos2oVQOOyrcVv6TNLKMzWu1eV7nF4Va0VPv_flCrkkp5pFK0hxHZRjyKzpkV9_u4VU4tFPn8eXBJ8JMola0c3j7-JRPRugUIrDqxrEqxjms5fCausUge9cu-_n7hdXcL-zS_YIUI--Xrk2_8OoF55UKzluOW5OsBtl7dtnPLyuvWVZ-aVmRYuSy9mxkdasX3K1UcLfleDXJapC9b5f9_LK6NcvqXlpWpBi5rH0bWb3qBfcqFdxrOZ2aZDXIPrDLfn5ZvZpl9S4tK1KMXNbBuT6bT-wxk_EuCmNZ6Wu4nZ6YDJ7loQJxtFcr-aCiVbbN4XKacdknTiDj5PArP1yMw8NPacDqcM8GZsyK7ljRAz3NDM6Mm8E9G_jozEzpjhU90NP8mG5_pd0C3D6GXS3s6avlaWHO9Ft3bPpDDyP9oYex_kBopD8QGumPrk1_6GGkP_Qw1h8IjfQHQiP90dNa2tdL2rfpj4GN4XoYMVwPY4YjNGI4QmMTwGRslv-TmsxNUxodAkaT0xhHNGelKVJQlXG96Ew_RhDTWWmOmKiO0IjrCI3JjuGI7RiO6V6aoUa662lMdz2N6o7gmO4IjuleGqRF3buI7qWZYqR7aaYY6a6nMd31NKo7gmO6Izime2meGumupzHd9TSqO4JjuiM4pntpqha_tdt63Xlptmh1X7z_9H8AAAD__wzmvEs=
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +b,+a
+│
+└── • hash join
+    │ equality: (a, b) = (c, d)
+    │
+    ├── • scan
+    │     missing stats
+    │     table: data@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: data@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lt9u4jgUh-_3KaxzBVujYCf8i1SJ7pbVUnWgA72Y0YgLQzwFiSaME6Spqr77KKFMG0J94jHkqkrwF__i852ePEP8Yw0-DL7c3V4NR6R2PZzeTz_f1kltOrgd_HtP_ib_Tcaffl8KSua7O4FIBLmaZn9ZndyMU_x11YKSoLiKk_HkejAh_3zNFtTJeERqglySRZ1cja5JbU4us9v7VXNKRB0ohFEgR-JRxuB_AwYUOFBwgYIHFFowo7BR0ULGcaTSJc8ZMAx-gt-ksAo32yS9PaOwiJQE_xmSVbKW4MO9mK_lRIpAKqcJFAKZiNU62yYN3N-o1aNQT0BhuhFh7JOGw4gIA8JIlCylAgrjbeKTPqN9DrMXCtE2ed3ubZf5E1mKeJl__h6ZUYgT8SDBZy_0z5K3bJK7tO_ZJucfJn971DaMVCCVDHIPm6UktuTI6_8v4uVNtAqlcthB4dbye1LLMtYv1ephub_I1Yoee--3F3JNSjGNVJLmOChDn1_QPrv4cA-vxKEdO493Dz4SZhQ1oo3Dm4enfDRCKxeBlTeOlTHOYQ2HV9QtBtnbdtlP3y-s4n5h5-4XpBj7fmnb9AsvX3BequC84bgVyWqQvWOX_fSy8opl5eeWFSnGXtaOjaxu-YK7pQruNhyvIlkNsnftsp9eVrdiWd1zy4oUYy9r10ZWr3zBvVIF9xpOqyJZDbL37LKfXlavYlm9c8uKFGMva-9Un81H9pjIeBOFsSz1NdxMT0wGD3JXgTjaqoW8U9Ei22Z3Oc647BMnkHGy-5XvLobh7qc0YHm4YwMzZkW3rOienmYGZ8bN4I4NfHBmpnTLiu7paX5IN9_Tbg5uHsKuFvb01fK0MGf6rVs2_aGHkf7Qw1h_IDTSHwiN9Efbpj_0MNIfehjrD4RG-gOhkf7oaC3t6iXt2vRHz8ZwPYwYrocxwxEaMRyhsQlgMjaL_0lN5qYpjQ4Bo8lpjCOas8IUyanKuF50ph8jiOmsMEdMVEdoxHWExmTHcMR2DMd0L8xQI931NKa7nkZ1R3BMdwTHdC8M0rzubUT3wkwx0r0wU4x019OY7noa1R3BMd0RHNO9ME-NdNfTmO56GtUdwTHdERzTvTBV89_aTb3uvDBbtLrPXv76FQAA__9PLrbs
 
 # TODO(radu): rework these tests (the inner ORDER BY aren't useful anymore).
 #
 # # Merge joins should be planned for (FULL|LEFT|RIGHT) OUTER joins
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) FULL OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) FULL OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl0Fv2kAQhe_9FWhOrbJVvGNDwFIlLq2UKA1VmpwqDg7eEiTCorWRGkX57xUQhAxh3zqD8NHBb994Zj6_-IVmNjc32ZMpKP1DmhQxKYpJUUKK2jRUNHd2ZIrCuuUta8Fl_o_SSNFkNl-Uyz8PFY2sM5S-UDkpp4ZSussepubWZLlx5xEpyk2ZTaYrm7mbPGXuuZ9nZUaKBosybfW16jMNXxXZRfl26vawh-fWY1Y8Vo_ZSIaKijIbG0r1q_pYge2AAmPVT3YK3DpzHeff1pXGneto93nOVJ_PpE2ID5ayPcq63DiTH_QPvvOdp_tp3Nhc2cls-Yg7jb17npu09eP--ro1uL_7ftu6GlzekKKp-Vt-fjv1yzc3GT9uLysbovxjSD4wBg4aw9ajLe_vO8Xc2K92fs7Vfh0qoVMpQYfvuW4ExBoFdo4LInDegKhPAKJuFsROkyCGjYGDxnAIRA5fMm6EghoFXhyXAuC8oYBPQAE3S8FFkxSEjYGDxnCIgjh8yeJGKKhRYPe4FADnDQXxCSiIm6Wg2yQFYWPgoDEcoiAJX7KkEQpqFNg7LgXAeUNBcgIKkmYp6DVJQdgYOGgMIZ8m73jcmmJuZ4UJ-uKIlu00-dish1XYhRuZX86OVjbry8FKt_pvLzdFuf41Xl9cztY_LQsMF_ckYp2I1CJvBt56Vx1V1BVxtCvmGg3neuKeRLzT8LpqkTcD79jb8MTf8MQrbvtH3faPuuO37kjg8ovBgvvFCC6gFnkjuC68He_6G96VwOUXgwX3ixFcQC3yRnD1vA3Xkb_jeu9VWgcvvfcqrUMIUIM1BWrECJLL3GEE7b1Qq1OLwdT23qh1QAFqsK1AjVBBcpk7gkX700S3Qd_9eYJoEeUJUKN9lSUKksvcIS3-UNEgVbQoVoAa7assWJBc5g5p8WcLg2xhUbawKFuAGuwrUCNakFzmjmhhf7YwyBYWZQtQo88MWbYgucwd0cL-bGGQLVwvW4avn_4HAAD__9-kdhE=
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) LEFT OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) LEFT OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl0Fv2k4Qxe__T4Hm9K-yVbxjQ8BSJS6plKgNVUpPFQcHbwkSYdHaSI2ifPcKCEKGsG-dQfjo4LdvPDM_v_iF5jY3d9mTKSj9TZoUMSmKSVFCito0UrRwdmyKwrrVLRvBTf6X0kjRdL5Ylqs_jxSNrTOUvlA5LWeGUhpmDzNzb7LcuMuIFOWmzKaztc3CTZ8y99zPszIjRYNlmbb6WvWZRq-K7LJ8O3V32MNz6zErHqvHbCUjRUWZTQyl-lV9rMB2QIGx6id7Be6cuY7zT-tK4y51tP88F6rPF9ImxEdL2R1lXW6cyY_6B9_5ztN9N25ibu10vnrEvcYOnxcmbX27_jpsDX4Nr-9bt4ObO1I0M3_K_99O_fTFTSePu8vKhij_GJIPjIGDxrDzaMv7-04xd_azXVxytV_HSuhUStDhe64bAbFGgZ3TggictyDqM4ComwWx0ySIYWPgoDEcA5HDl4wboaBGgVenpQA4byngM1DAzVJw1SQFYWPgoDEcoyAOX7K4EQpqFNg9LQXAeUtBfAYK4mYp6DZJQdgYOGgMxyhIwpcsaYSCGgX2TksBcN5SkJyBgqRZCnpNUhA2Bg4aQ8inyTse96ZY2Hlhgr44olU7TT4xm2EVdunG5oez47XN5nKw1q3_28tNUW5-jTcXN_PNT6sCw8U9iVgnIrXIm4G33ldHFXVFHO2LuUbDuZ64JxHvNbyuWuTNwDv2NjzxNzzxitv-Ubf9o-74rTsSuPxisOB-MYILqEXeCK4rb8e7_oZ3JXD5xWDB_WIEF1CLvBFcPW_DdeTvuD54ldbBSx-8SusQAtRgTYEaMYLkMncYQQcv1OrUYjC1gzdqHVCAGmwrUCNUkFzmjmDR_jTRbdB3f54gWkR5AtRoX2WJguQyd0iLP1Q0SBUtihWgRvsqCxYkl7lDWvzZwiBbWJQtLMoWoAb7CtSIFiSXuSNa2J8tDLKFRdkC1OgzQ5YtSC5zR7SwP1sYZAvXy5bR63__AgAA__86O3Xp
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) RIGHT OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) RIGHT OUTER JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c and b=d ORDER BY a,b)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl0Fv2kAQhe_9FWhOrbJV2LEhYKkSl6olUkNF6ani4OAtQSIsWhupUZT_XgFByBD2rTMIHx389o1n5vOLn2lhM3OXPpqckj-kSRGToogUxaSoRWNFS2cnJs-tW9-yFfSzf5Q0Fc0Wy1Wx_vNY0cQ6Q8kzFbNibiihUXo_N0OTZsZdN0lRZop0Nt_YLN3sMXVPvSwtUlI0WBVJo6dVj2n8osiuitdT94fdPzUe0vyhfMxOMlaUF-nUUKJf1PsKbAUUGKlefFDg3pmrOP-yrjDuWjcPn-dK9fhK2oToZCn7o6zLjDPZSf_gO994uh_GTc2tnS3Wj3jQ2NHT0iSNYf_b91Fj8Hv0ddi4HfTvSNHc_C0-vh776YubTR_2l6UVUf45xO-YAwfNYe_Rkjf4jWLu7Ge7vOZyw06V0C6VoMMXXddCYoUC2-clETjvSNQXIFHXS2K7VhLD5sBBczhFIodvGdeCQYUCb86LAXDeYcAXwIDrxeCmVgzC5sBBcziFQRS-ZVEtGFQosHNeDIDzDoPoAhhE9WLQqRWDsDlw0BxOYRCHb1lcCwYVCuyeFwPgvMMgvgAGcb0YdGvFIGwOHDSHkM-TNzyGJl_aRW6Cvjqa636abGq208rtyk3MT2cnG5vt5WCj2_zDl5m82P4abS_6i-1P6wLDxV2JWMcitcibgbc-VDdL6pK4eSjmCg3nauKuRHzQ8KpqkTcD78jb8Njf8NgrbvlH3fKPuu23bkvg8ovBgvvFCC6gFnkjuG68He_4G96RwOUXgwX3ixFcQC3yRnB1vQ3XTX_H9dGrtApe-uhVWoUQoAZrCtSIESSXucMIOnqhlqcWgakdvVGrgALUYFuBGqGC5DJ3BIv2p4lugb778wTRIsoToEb7KksUJJe5Q1r8oaJBqmhRrAA12ldZsCC5zB3S4s8WBtnComxhUbYANdhXoEa0ILnMHdHC_mxhkC0syhagRp8ZsmxBcpk7ooX92cIgW7hatoxfPvwPAAD__wYqd4g=
 #
@@ -208,7 +227,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1v-jYUh-_3KaxzBatRsB
 # ·                              spans           ALL                                  ·                                                                               ·
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d)))]
+# EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d)))
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJzMmE1v2kwQx-_Pp4jm9FTZKt61eZUq-ZpKTaq0t4qDg7cEiWBkG6lRxHevgFBiL5m_xxY2R15-zOxk9-d_9pWWSWzvomeb0fgXaVJkSJFPigJS1KOJolWaTG2WJen2K3vgNv5DY0_RfLla59u3J4qmSWpp_Er5PF9YGtPP6HFhH2wU2_TGI0WxzaP5Yldmlc6fo_QljKM8oslGUbLO337oyD--XD1F2VORDLUKjQp9FQY02UwUZXk0szTWG1Wvsx7TmaL7dT6-2tWs0WahQVO3Qc3N7tDh2zzed3gs7UtK_0jSfFu1V17QtQrNddMpBB-2cvypJI1tauMP61f-5onVfbPpzH5N5kub3pjSYBf2d_7_G_3pSzqfPR1fFraCOjXumvu213AgKvSvVRgIBvOOQAPqfTygw6-UBvXvbe7sHFffr7D69fLUak42f5d8TlY3vlf65unag0JtLTiQ7bpM0Fm_E5dJRsfNrobLQOmDy_otuEx36zJ9cS6TD-SsLuu36zJT_VCYdn0i6GzQiU8EDWpudjV8AkoffDJowSemW5-Yi_OJfCBn9cmgXZ_41Q-F365PBJ0NO_GJoEHNza6GT0Dpg0-GLfjE79Yn_sX5RD6Qs_pk2K5PguqHImjXJ4LORp34RNCg5mZXwyeg9MEnoxZ8EnTrk-DifCIfyFl9Muru7uZEaw82WyXLzFa6mfG2i7PxzO5HmSXrdGq_p8l0V2b_8n7H7f7LjG2W7z_t7V_cLvcfbRusDmvTiB42oU3QhPY9ntYsDUrzsNaN6EET2viN6BFPmzLtFUZegL0y7AsmbmRwaeJSetCELk1cSo94OhCcbSFcOttSetiENuDPzdOls-3QPXab9vk93uf3uOY3-aCJi3kYuRjQwMU8jVzM08jFwyYu5mHkYkADF_M0cjGggYtH7D7VHr9PNf_0BMcT0EjHCAc-BjgSMsKBkTX_CAVKBjRyMsKBlAGOrAxwpGXNxwfgZc0_SIFaAY3cinAgV4AjuwIcRl3-aYqKgxyAwi7AUdoFOQLFXYADx2o-Seg-kKyTJUSS5WkoWYAjyfI4lCzAkWQlOUpKQ8mKkpQUh5IVZSkXd1KFSLJOqhBJlqehZAGOJMvjULI8jiRrJIFKSiPJIhxIFuBIsghHlwpOqijsWGN4yRonVUgkC2gkWYQDyQIcSRbhQLJGkqikNJIswoFkAY4kC3AkWePEColkjZMqJJIFNJIswoFkAY4kC3AoWUmgktJQsqJAJcWhZEWBysWdVFGU7BBIVnJF4x4X0R2NGEeSFd3SiHEkWUmiktJQsqJEJcWhZEWJyr04d2IFK9nJ5r-_AQAA__9IVxsL
 # 
@@ -217,7 +236,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1v-jYUh-_3KaxzBatRsB
 # CREATE TABLE distsql_mj_test (k INT, v INT)
 # 
 # query T
-# SELECT url FROM [EXPLAIN (DISTSQL) (SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k)]
+# EXPLAIN (DISTSQL) (SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k)
 # ----
 # https://cockroachdb.github.io/distsqlplan/decode.html#eJyskk9Lw0AQxe9-CpmT0pVk06SHgJBrBVup3qSUmB3jSpqNsxtQSr-7JHtIE8z2D952Z-f35r1ldlAqgYt0ixriV-DAIII1g4pUhlorasq2aS6-IfYZyLKqTVNeM8gUIcQ7MNIUCDEs1J2qvAgYCDSpLNq2PQNVmw7SJs0R4tmeHQhzt_BL-lbgClOB5Pk9eahIblP6SYTURn8Vm-3nxqA2wGBZm_g64TDmgJ_j4FmRQfJ4f3jCJ6PywaUBg_8KOL0g4PT0gOGofKdal4oEEorhThxv-cPjI1KOD0qWSF7YN1rgu7lJ-OT2nmT-YY_dF7EkGI0R9WIc2fAV6kqVGk9acb_JgCJH-yda1ZThE6msHWOvy5ZrCwK1sa8ze5mX9qkxeAhzJxy44cAJRz2YD-GpEw7dk8MzJgdDOHLC_mDyen_1GwAA___yFZqv
 

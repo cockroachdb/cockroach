@@ -69,26 +69,86 @@ NULL       /10      {1}       1
 
 # Filter with a fully-specified array. This should use a zigzag join.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1, 2]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v1DAQxe98itFcCsLSxtmbT6E0iK2WTUkq8WeJKjcZIpfUE2wHAat8d5QEFRbaVfc48-a995PlHfqvLSos0nX68hJ618KrPHsD2_T9xfrFagNPz1bFZfF2_Qx-n-j54MazvQr6Gt69TvMUriH51EfRkuBkKwXE5Qlk-Vmaw-kH0CUKtFzTRt-SR7VFiaXAznFF3rMbV7vpYFV_RxUJNLbrw7guBVbsCNUOgwktocKPpvmpm3M2ltwiQoE1BW3aKbcwNUGk7uCSz8xXxn5DMUvyXinrg4JEYjkI5D78qfZBN4RKDuLxeCNYTromt5D7cHfNnTO32v1AgWvmL30HN2wssJ0gBGYbSJb_PadS6rzINqeP4I2P4S3YBXKLeJ81kc8fjF8eE5-T79h62ot_KDkaSoFUNzT_CM-9q-jCcTXVzGM2-aZFTT7MqpyHlZ2lEfBvszxojg-b44Pm5T_mcnjyKwAA___NrxBc
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[1, 2]'
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk1v1DAQhu_8itFcCsLSxtmbT6E0iK1CUpJKfJSocpMhctl6gu0gYJX_jpJIhQW66h5n3jzvPIq8Q_91iwrT9xfZi00OT8821WX1NnsGVZqlLy9Bw6uyeAO3nu110Dfw7nVapnADyachitYEJ1dSQFyfQFGepSWcfgCNAi23lOs78qiuUGItsHfckPfsptVu_mDTfkcVCTS2H8K0rgU27AjVDoMJW0KFH033U3fnbCy5VYQCWwrabOfeyrQEkbp3Sz4zXxv7DcUSyf9GxRAUJBLrUSAP4fdpH3RHqOQoHq83iZWkW3IruS93f7l35k67HygwY_4y9HDLxgLbWUJgkUOy_udvKqXOqyI_fYRvfIxvxS6QW8X7rol8_mD9-pj6knzP1tNe_UPN0VgLpLaj5UV4HlxDF46b-cwyFjM3L1ryYUnlMmzsEk2Cf8LyIBwfhuOD8PovuB6f_AoAAP__JdwK_Q==
 
 # Combine predicates with AND. Should have the same output as b @> '[1, 2]'.
 # This should use a zigzag join.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v00AQfOdXrPalqTgpPuftntwSI1IFu9iV-AhWdY2X6Ep6a-7OCIjy35HtqtSojZrHm9mZnVndDv2PLSos02X65gpat4W3Rf4eVumny-XZIoPJfFFelR-Wp3A_ooeBW8_2Ougb-PguLVKY3EDytY2iGcHJSlYnp3CWzcdo3KF5MU8LOP8MukKBlmvK9B15VCuUWAlsHK_Je3YdtOsHFvUvVJFAY5s2dHAlcM2OUO0wmLAlVPjFbP7ozQUbS24aocCagjbb3rc0NUGkHhIn35ivjf2JYqDkk1TeBgWJxGovkNvwb7UPekOo5F68PF4XrCBdk5vKcbiHzY0zd9r9RoFL5u9tA7dsLLDtQwjMM5gks_GNlVIXZZ6d3996RMeP6Be0iY9pU7IL5KbxuEkiXz9rPzvGviDfsPU0sn_OOdpXAqne0PBfPLduTZeO1_2a4Zn3uh6oyYeBlcNjYQeqC_hYLA-K48Pi-KB49p-42r_6GwAA__8MxBzL
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b @> '[1]') AND (b @> '[2]')
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUl1v00AQfOdXrPalqTgpPuftntwSI1IFu9iV-ChWdY2X6Ep6a-7OCIj835FtVGpEo-ZxZ25mZ1a3R_9thwrTD5frs1UGs-WqvCrfrU-hTNfpqyvQ8LrI38KdZ3sT9C28f5MWKcxuIfncRtGC4ORaViencJYtp2jco3mxTAs4_wgaBVquKdP35FFdo8RKYON4Q96z66H98GBV_0AVCTS2aUMPVwI37AjVHoMJO0KFn8z2l95esLHk5hEKrClosxt8S1MTROohcPKF-cbY7yhGSv6XytugIJFYdQK5DX9X-6C3hEp24vnx-mAF6ZrcXE7DPWxunLnX7icKXDN_bRu4Y2OB7RBCYJ7BLFlMT6yUuijz7PzPqSd0_Ih-Rpv4mDYlu0BuHk-bJPLlk_aLY-wL8g1bTxP7p5yjrhJI9ZbG_-K5dRu6dLwZ1oxjPugGoCYfRlaOw8qOVB_wsVgeFMeHxfFB8eIfcdW9-B0AAP__VW0XbA==
 
 # Filter with a nested array. This index expression is not tight.
 # This should use a zigzag join.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM json_tab WHERE b @> '[[1, 2]]' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSAsNU7f_BTGguhUmpFM4k-xJq-5VB6Zb7AdBFT57igJGnTaqvXx3nPPOT9Z3mH43qDCKl_mry-h8w28KYt3sM4_XixfLVbw_GxRXVbvly_g74mZDm4Cu6toruHD27zM4RqyL12SzAlO1mspINX6BIryLC_h9BMYjQId17QytxRQrVGiFth63lAI7IfVbjxY1D9RJQKta7s4rLXADXtCtcNoY0Oo8LPd_jbbc7aO_CxBgTVFY5sxt7I1QaLu8LKvzFfW_UAxSfJBqeiigkyi7gVyF_9Vh2i2hEr24ul4A1hJpiY_k_twd82tt7fG_0KBS-ZvXQs3bB2wGyEEFivI5g88qFLqvCpWp08gTo8hrthH8rN0nzaTLx-Nnx8TX1Jo2QXai38sOem1QKq3NP2JwJ3f0IXnzVgzjcXoGxc1hTipchoWbpIGwP_N8qA5PWxOD5rn98y6f_YnAAD__2R8Ecw=
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> '[[1, 2]]'
+    │
+    └── • zigzag join
+          left table: json_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: json_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk1v1DAQhu_8itFcCsLSxtmbT6E0iK1CUpJKfCxR5SZD5LL1BNtBwCr_HSWRCovaVXucefO88yjyHv33HSpMP15krzY5PD_bVJfV--wFVGmWvr4EDW_K4h3ceLZXQV_Dh7dpmcI1JF-GKFoTnGy3UkBc1ydQlGdpCaefQKNAyy3l-pY8qi1KrAX2jhvynt202s8fbNqfqCKBxvZDmNa1wIYdodpjMGFHqPCz6X7r7pyNJbeKUGBLQZvd3FuZliBSd3bJV-YrY3-gWCJ5b1QMQUEisR4F8hD-nvZBd4RKjuLxepNYSbolt5KHcneXe2dutfuFAjPmb0MPN2wssJ0lBBY5JOt7_qdS6rwq8tNHGMdPMa7YBXKr-NA2kS8frF8_pb4k37P1dFD_UHM01gKp7Wh5E54H19CF42Y-s4zFzM2LlnxYUrkMG7tEk-C_sDwKx8fh-Ci8_g-ux2d_AgAA__-nIAxt
 
 subtest array
 
@@ -126,7 +186,27 @@ NULL       /3       {1}       1
 
 # This should use a zigzag join.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a]
+EXPLAIN (DISTSQL)
+SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkkFv00AQhe_8itFcCmKleJ0L2pMDNcIoxGUdCUqwqm08RAvpjtldI0rk_45iV5RAG7U3z7x5732ydofh-xYVVvk8f7WEzm_htS7fwSr_eDafFQt4elpUy-r9_BncnJjxwHhvri-iucy-MF9Y9wM-vMl1DpeQfe6SZEpwspMC0v4ESn2aa3h5DqZGgY4bWpgrCqhWKLEW2HpeUwjs96vdcFA0P1ElAq1ru7hf1wLX7AnVDqONW0KFn-zml9m8ZevITxIU2FA0djvkVrYhSNT_lChGTd6tlV1UkEmse4HcxdvyEM2GUMlePBxwj6bJNOQn8hDvtrr19sr4axQ4Z_7WtfCVrQN2A4XAcgHZ9M8fnWk9O19JpVSxWL4Q6c1H_QDw9DHgFftIfpIeQmfy-b3x08fEawotu0AH8fclJ30tkJoNjY8jcOfXdOZ5PdSMYzn4hkVDIY6qHIfCjdIe8G-zPGpOj5vTo-bpP-a6f_I7AAD__5XSF-k=
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +a
+│
+└── • lookup join
+    │ table: array_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b @> ARRAY[1,2]
+    │
+    └── • zigzag join
+          left table: array_tab@foo_inv
+          left columns: (a)
+          left fixed values: 1 column
+          right table: array_tab@foo_inv
+          right columns: ()
+          right fixed values: 1 column
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFv0zAUhd_5FVf3ZSAsNU5fkJ9SWBBBpRlOJRgjmrzmUhk632A7iFHlv6MkiFFg1fbme4_POZ8s7zF83aHC_P3ZclGs4PFpUa2rt8snUOXL_MUaDLzU5Rsw3puby2iusk_Ml9Z9g3evcp3DFWQfuySZE5zspYC0P4FSn-Yanp-DQYGOG1qZawqoLlBiLbD1vKEQ2A-r_XihaL6jSgRa13ZxWNcCN-wJ1R6jjTtChR_s9ofZvmbryM8SFNhQNHY35la2IUjUv5AoJk3-Xyu7qCCTWPcCuYu35SGaLaGSvbg_4ICmyTTkZ_IQ77a69fba-BsUuGT-0rXwma0DdiOFwHIF2fz3gy60XpxfSKVUsVo_E-mvQ30P8PQh4BX7SH6WHkJn8umd8fOHxGsKLbtAB_F3JSd9LZCaLU2fI3DnN3TmeTPWTGM5-sZFQyFOqpyGwk3SAPinWR41p8fN6VHz_C9z3T_6GQAA__-B9BKK
