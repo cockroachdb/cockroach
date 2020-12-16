@@ -19,10 +19,27 @@ CREATE TABLE rtable(
 )
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
-SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)]
+EXPLAIN (DISTSQL)
+SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGO0zAQhu88xWhOW2lgm3Th4FMQFCmr0ixtD0iraBWSUWWa2sF2UFHVd0e2K5YUWm1vmfH_jT9NvEf7o0WBy-ls-mEFvWnh06L4DI_Trw-z9_kcbj7my9Xyy2wEx0i7ITCbJMZaV31rGe6LfA4mfGdr1tsnqRreQTEH656kcmws187exPgbH0noCIRqVCKh0g3Pqy1bFI-YYEnYGV2ztdr41j4E8maHYkwoVdc73y4Ja20YxR6ddC2jwJWfu-CqYXM7RsKGXSXbMDYaZJ2R28r8QsJlVykr4DUSFr0TkCWUpVgeCHXvnq-wrloziuRAL9fI1U82jpt7LRWb22Ro8s-6kP4Q011nTlaXpQTZ3WigSdmEsrdnZdNrZL3kcWXpf0WfVzbTetN38F1LBVoJ8BZ3Xuz0dwfndwPnyVnbyTW2C7adVpYHpucmjw8lITdrjq_I6t7U_GB0Ha6JZRG40GjYuniaxCJX8cgL_g0nF-H0MpxehCcncHl49TsAAP__Nmgycw==
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: rtable@primary
+│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality cols are key
+│ pred: st_intersects(geom1, geom)
+│
+└── • inverted join
+    │ table: rtable@geom_index
+    │
+    └── • scan
+          missing stats
+          table: ltable@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGO0zAQhu88xWhOW2lgm3Th4JMRFCmr0ixtD0goWoV4VJmmdrAdVFT13ZGdFUsLregtM55v_OmP9-i_tyhw-vlh9raYw837YrlafpqNYDmdTd-toN0QuE0GHxblR2hD_bVluC-LObj0Lddst4_aKN5BOQcfHrUJ7Dw3wd8M46_iSEZPQKpGSGis4nm9ZY_iC2ZYEXbONuy9dbG1TwOF2qEYE2rT9SG2K8LGOkaxx6BDyyhwFdcuuFbsbsdIqDjUuk1rBwHZOb2t3U8kXHa18QJeImHZBwEyI5ljdSC0fXi-wod6zSiyA_2_RmF-sAus7q027G6zY5O_0kL6TUx3nTtJTuYE8m50pElyQvL1Wdn8Gtko-RRZ_k_R58hm1m76Dr5ZbcAaAdHiLoqd_u3k_ObIeXLWdnKN7YJ9Z43nI9Nzm8eHipDVmodX5G3vGn5wtknXDGWZuNRQ7MNwmg1FYYajKPgnnF2E88twfhGenMDV4cWvAAAA__-3vS0U
 
 query T
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
