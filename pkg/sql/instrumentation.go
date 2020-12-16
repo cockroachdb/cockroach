@@ -191,9 +191,9 @@ func (ih *instrumentationHelper) Finish(
 		for _, flowInfo := range p.curPlan.distSQLFlowInfos {
 			flowMetadata = append(flowMetadata, flowInfo.flowMetadata)
 		}
-		queryLevelStats, errors := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
-		for i := 0; i < len(errors); i++ {
-			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %v", ast, errors[i])
+		queryLevelStats, error := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowMetadata)
+		if error != nil {
+			log.VInfof(ctx, 1, "error getting query level stats for statement %s: %+v", ast, error)
 		}
 
 		stmtStats.mu.Lock()
