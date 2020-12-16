@@ -186,6 +186,14 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.curAgg = zero_RET_TYPEValue
+	a.foundNonNullForCurrentGroup = false
+}
+
 type sum_SUMKIND_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []sum_SUMKIND_TYPE_AGGKINDAgg

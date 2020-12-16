@@ -91,6 +91,10 @@ type AggregateFunc interface {
 	// when the aggregate function is in scalar context. The output must always
 	// be a single value (either null or zero, depending on the function).
 	HandleEmptyInputScalar()
+
+	// Reset resets the aggregate function which allows for reusing the same
+	// instance for computation without the need to create a new instance.
+	Reset()
 }
 
 type orderedAggregateFuncBase struct {
@@ -109,7 +113,7 @@ type orderedAggregateFuncBase struct {
 
 func (o *orderedAggregateFuncBase) Init(groups []bool) {
 	o.groups = groups
-	o.isFirstGroup = true
+	o.Reset()
 }
 
 func (o *orderedAggregateFuncBase) SetOutput(vec coldata.Vec) {
@@ -130,6 +134,11 @@ func (o *orderedAggregateFuncBase) HandleEmptyInputScalar() {
 	// in the scalar context (the exceptions are COUNT aggregates which need
 	// to overwrite this method).
 	o.nulls.SetNull(0)
+}
+
+func (o *orderedAggregateFuncBase) Reset() {
+	o.curIdx = 0
+	o.isFirstGroup = true
 }
 
 type hashAggregateFuncBase struct {
@@ -191,20 +200,12 @@ type AggregateFuncsAlloc struct {
 
 // NewAggregateFuncsAlloc returns a new AggregateFuncsAlloc.
 func NewAggregateFuncsAlloc(
-	allocator *colmem.Allocator,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	evalCtx *tree.EvalContext,
-	constructors []execinfrapb.AggregateConstructor,
-	constArguments []tree.Datums,
-	outputTypes []*types.T,
-	allocSize int64,
-	isHashAgg bool,
+	args *NewAggregatorArgs, allocSize int64, isHashAgg bool,
 ) (*AggregateFuncsAlloc, *colconv.VecToDatumConverter, colexecbase.Closers, error) {
-	funcAllocs := make([]aggregateFuncAlloc, len(spec.Aggregations))
+	funcAllocs := make([]aggregateFuncAlloc, len(args.Spec.Aggregations))
 	var toClose colexecbase.Closers
 	var vecIdxsToConvert []int
-	for _, aggFn := range spec.Aggregations {
+	for _, aggFn := range args.Spec.Aggregations {
 		if !IsAggOptimized(aggFn.Func) {
 			for _, vecIdx := range aggFn.ColIdx {
 				found := false
@@ -220,75 +221,75 @@ func NewAggregateFuncsAlloc(
 			}
 		}
 	}
-	inputArgsConverter := colconv.NewVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
-	for i, aggFn := range spec.Aggregations {
+	inputArgsConverter := colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert)
+	for i, aggFn := range args.Spec.Aggregations {
 		var err error
 		switch aggFn.Func {
 		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
 			if isHashAgg {
-				funcAllocs[i], err = newAnyNotNullHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newAnyNotNullHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_AVG:
 			if isHashAgg {
-				funcAllocs[i], err = newAvgHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newAvgHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newAvgOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newAvgOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_SUM:
 			if isHashAgg {
-				funcAllocs[i], err = newSumHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newSumHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newSumOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newSumOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_SUM_INT:
 			if isHashAgg {
-				funcAllocs[i], err = newSumIntHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newSumIntHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i], err = newSumIntOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i], err = newSumIntOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_CONCAT_AGG:
 			if isHashAgg {
-				funcAllocs[i] = newConcatHashAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newConcatHashAggAlloc(args.Allocator, allocSize)
 			} else {
-				funcAllocs[i] = newConcatOrderedAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
 			}
 		case execinfrapb.AggregatorSpec_COUNT_ROWS:
 			if isHashAgg {
-				funcAllocs[i] = newCountRowsHashAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newCountRowsHashAggAlloc(args.Allocator, allocSize)
 			} else {
-				funcAllocs[i] = newCountRowsOrderedAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
 			}
 		case execinfrapb.AggregatorSpec_COUNT:
 			if isHashAgg {
-				funcAllocs[i] = newCountHashAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newCountHashAggAlloc(args.Allocator, allocSize)
 			} else {
-				funcAllocs[i] = newCountOrderedAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newCountOrderedAggAlloc(args.Allocator, allocSize)
 			}
 		case execinfrapb.AggregatorSpec_MIN:
 			if isHashAgg {
-				funcAllocs[i] = newMinHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i] = newMinHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i] = newMinOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i] = newMinOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_MAX:
 			if isHashAgg {
-				funcAllocs[i] = newMaxHashAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i] = newMaxHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
-				funcAllocs[i] = newMaxOrderedAggAlloc(allocator, inputTypes[aggFn.ColIdx[0]], allocSize)
+				funcAllocs[i] = newMaxOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
 		case execinfrapb.AggregatorSpec_BOOL_AND:
 			if isHashAgg {
-				funcAllocs[i] = newBoolAndHashAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
 			} else {
-				funcAllocs[i] = newBoolAndOrderedAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
 			}
 		case execinfrapb.AggregatorSpec_BOOL_OR:
 			if isHashAgg {
-				funcAllocs[i] = newBoolOrHashAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
 			} else {
-				funcAllocs[i] = newBoolOrOrderedAggAlloc(allocator, allocSize)
+				funcAllocs[i] = newBoolOrOrderedAggAlloc(args.Allocator, allocSize)
 			}
 		// NOTE: if you're adding an implementation of a new aggregate
 		// function, make sure to account for the memory under that struct in
@@ -296,13 +297,13 @@ func NewAggregateFuncsAlloc(
 		default:
 			if isHashAgg {
 				funcAllocs[i] = newDefaultHashAggAlloc(
-					allocator, constructors[i], evalCtx, inputArgsConverter,
-					len(aggFn.ColIdx), constArguments[i], outputTypes[i], allocSize,
+					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
+					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
 			} else {
 				funcAllocs[i] = newDefaultOrderedAggAlloc(
-					allocator, constructors[i], evalCtx, inputArgsConverter,
-					len(aggFn.ColIdx), constArguments[i], outputTypes[i], allocSize,
+					args.Allocator, args.Constructors[i], args.EvalCtx, inputArgsConverter,
+					len(aggFn.ColIdx), args.ConstArguments[i], args.OutputTypes[i], allocSize,
 				)
 			}
 			toClose = append(toClose, funcAllocs[i].(colexecbase.Closer))
@@ -313,7 +314,7 @@ func NewAggregateFuncsAlloc(
 		}
 	}
 	return &AggregateFuncsAlloc{
-		allocator:     allocator,
+		allocator:     args.Allocator,
 		allocSize:     allocSize,
 		aggFuncAllocs: funcAllocs,
 	}, inputArgsConverter, toClose, nil

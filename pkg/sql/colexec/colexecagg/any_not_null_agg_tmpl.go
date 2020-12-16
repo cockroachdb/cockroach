@@ -178,6 +178,13 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// {{end}}
 }
 
+func (a *anyNotNull_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.foundNonNullForCurrentGroup = false
+}
+
 type anyNotNull_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []anyNotNull_TYPE_AGGKINDAgg

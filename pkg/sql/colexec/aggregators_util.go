@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/errors"
 )
@@ -52,17 +51,14 @@ type aggregatorHelper interface {
 // DISTINCT or FILTER aggregation, then the defaultAggregatorHelper
 // is returned which has negligible performance overhead.
 func newAggregatorHelper(
-	allocator *colmem.Allocator,
-	memAccount *mon.BoundAccount,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
+	args *colexecagg.NewAggregatorArgs,
 	datumAlloc *rowenc.DatumAlloc,
 	isHashAgg bool,
 	maxBatchSize int,
 ) aggregatorHelper {
 	hasDistinct, hasFilterAgg := false, false
-	aggFilter := make([]int, len(spec.Aggregations))
-	for i, aggFn := range spec.Aggregations {
+	aggFilter := make([]int, len(args.Spec.Aggregations))
+	for i, aggFn := range args.Spec.Aggregations {
 		if aggFn.Distinct {
 			hasDistinct = true
 		}
@@ -74,7 +70,7 @@ func newAggregatorHelper(
 		}
 	}
 	if !hasDistinct && !hasFilterAgg {
-		return newDefaultAggregatorHelper(spec)
+		return newDefaultAggregatorHelper(args.Spec)
 	}
 	if !isHashAgg {
 		if hasFilterAgg {
@@ -82,16 +78,16 @@ func newAggregatorHelper(
 				"filtering ordered aggregation is not supported",
 			))
 		}
-		return newDistinctOrderedAggregatorHelper(memAccount, inputTypes, spec, datumAlloc, maxBatchSize)
+		return newDistinctOrderedAggregatorHelper(args, datumAlloc, maxBatchSize)
 	}
-	filters := make([]*filteringSingleFunctionHashHelper, len(spec.Aggregations))
+	filters := make([]*filteringSingleFunctionHashHelper, len(args.Spec.Aggregations))
 	for i, filterIdx := range aggFilter {
-		filters[i] = newFilteringHashAggHelper(allocator, inputTypes, filterIdx, maxBatchSize)
+		filters[i] = newFilteringHashAggHelper(args, filterIdx, maxBatchSize)
 	}
 	if !hasDistinct {
-		return newFilteringHashAggregatorHelper(spec, filters, maxBatchSize)
+		return newFilteringHashAggregatorHelper(args.Spec, filters, maxBatchSize)
 	}
-	return newFilteringDistinctHashAggregatorHelper(memAccount, inputTypes, spec, filters, datumAlloc, maxBatchSize)
+	return newFilteringDistinctHashAggregatorHelper(args, filters, datumAlloc, maxBatchSize)
 }
 
 // defaultAggregatorHelper is the default aggregatorHelper for the case
@@ -169,12 +165,12 @@ var noFilterHashAggHelper = &filteringSingleFunctionHashHelper{}
 // tree.NoColumnIdx index can be used to indicate that there is no FILTER
 // clause for the aggregate function.
 func newFilteringHashAggHelper(
-	allocator *colmem.Allocator, typs []*types.T, filterIdx int, maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, filterIdx int, maxBatchSize int,
 ) *filteringSingleFunctionHashHelper {
 	if filterIdx == tree.NoColumnIdx {
 		return noFilterHashAggHelper
 	}
-	filterInput := newSingleBatchOperator(allocator, typs, maxBatchSize)
+	filterInput := newSingleBatchOperator(args.Allocator, args.InputTypes, maxBatchSize)
 	h := &filteringSingleFunctionHashHelper{
 		filter:      newBoolVecToSelOp(filterInput, filterIdx),
 		filterInput: filterInput,
@@ -272,20 +268,16 @@ type distinctAggregatorHelperBase struct {
 }
 
 func newDistinctAggregatorHelperBase(
-	memAccount *mon.BoundAccount,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *rowenc.DatumAlloc,
-	maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, datumAlloc *rowenc.DatumAlloc, maxBatchSize int,
 ) *distinctAggregatorHelperBase {
 	b := &distinctAggregatorHelperBase{
-		aggregatorHelperBase: newAggregatorHelperBase(spec, maxBatchSize),
-		inputTypes:           inputTypes,
-		arena:                stringarena.Make(memAccount),
+		aggregatorHelperBase: newAggregatorHelperBase(args.Spec, maxBatchSize),
+		inputTypes:           args.InputTypes,
+		arena:                stringarena.Make(args.MemAccount),
 		datumAlloc:           datumAlloc,
 	}
 	var vecIdxsToConvert []int
-	for _, aggFn := range spec.Aggregations {
+	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.Distinct {
 			for _, aggCol := range aggFn.ColIdx {
 				found := false
@@ -301,7 +293,7 @@ func newDistinctAggregatorHelperBase(
 			}
 		}
 	}
-	b.aggColsConverter = colconv.NewVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
+	b.aggColsConverter = colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert)
 	b.scratch.converted = []tree.Datum{nil}
 	b.scratch.sel = make([]int, maxBatchSize)
 	return b
@@ -398,18 +390,14 @@ type filteringDistinctHashAggregatorHelper struct {
 var _ aggregatorHelper = &filteringDistinctHashAggregatorHelper{}
 
 func newFilteringDistinctHashAggregatorHelper(
-	memAccount *mon.BoundAccount,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
+	args *colexecagg.NewAggregatorArgs,
 	filters []*filteringSingleFunctionHashHelper,
 	datumAlloc *rowenc.DatumAlloc,
 	maxBatchSize int,
 ) aggregatorHelper {
 	return &filteringDistinctHashAggregatorHelper{
 		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(
-			memAccount,
-			inputTypes,
-			spec,
+			args,
 			datumAlloc,
 			maxBatchSize,
 		),
@@ -462,17 +450,11 @@ type distinctOrderedAggregatorHelper struct {
 var _ aggregatorHelper = &distinctOrderedAggregatorHelper{}
 
 func newDistinctOrderedAggregatorHelper(
-	memAccount *mon.BoundAccount,
-	inputTypes []*types.T,
-	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *rowenc.DatumAlloc,
-	maxBatchSize int,
+	args *colexecagg.NewAggregatorArgs, datumAlloc *rowenc.DatumAlloc, maxBatchSize int,
 ) aggregatorHelper {
 	return &distinctOrderedAggregatorHelper{
 		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(
-			memAccount,
-			inputTypes,
-			spec,
+			args,
 			datumAlloc,
 			maxBatchSize,
 		),

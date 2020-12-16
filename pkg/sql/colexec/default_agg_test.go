@@ -147,10 +147,17 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				require.NoError(t, err)
 				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return agg.new(
-							testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
-							constructors, constArguments, outputTypes, false, /* isScalar */
-						)
+						return agg.new(&colexecagg.NewAggregatorArgs{
+							Allocator:      testAllocator,
+							MemAccount:     testMemAcc,
+							Input:          input[0],
+							InputTypes:     tc.typs,
+							Spec:           tc.spec,
+							EvalCtx:        &evalCtx,
+							Constructors:   constructors,
+							ConstArguments: constArguments,
+							OutputTypes:    outputTypes,
+						})
 					})
 			})
 		}

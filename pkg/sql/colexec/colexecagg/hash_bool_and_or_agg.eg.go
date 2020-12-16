@@ -92,6 +92,10 @@ func (a *boolAndHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *boolAndHashAgg) Reset() {
+	a.curAgg = true
+}
+
 type boolAndHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []boolAndHashAgg
@@ -109,8 +113,8 @@ func (a *boolAndHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
+	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
-	f.curAgg = true
 	return f
 }
 
@@ -186,6 +190,10 @@ func (a *boolOrHashAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *boolOrHashAgg) Reset() {
+	a.curAgg = false
+}
+
 type boolOrHashAggAlloc struct {
 	aggAllocBase
 	aggFuncs []boolOrHashAgg
@@ -203,7 +211,7 @@ func (a *boolOrHashAggAlloc) newAggFunc() AggregateFunc {
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
+	f.Reset()
 	a.aggFuncs = a.aggFuncs[1:]
-	f.curAgg = false
 	return f
 }

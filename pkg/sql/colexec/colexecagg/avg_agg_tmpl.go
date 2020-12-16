@@ -192,6 +192,15 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	}
 }
 
+func (a *avg_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{end}}
+	a.curSum = zero_RET_TYPEValue
+	a.curCount = 0
+	a.foundNonNullForCurrentGroup = false
+}
+
 type avg_TYPE_AGGKINDAggAlloc struct {
 	aggAllocBase
 	aggFuncs []avg_TYPE_AGGKINDAgg

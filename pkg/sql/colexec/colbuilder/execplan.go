@@ -815,15 +815,20 @@ func NewColOperator(
 			}
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
-			var constructors []execinfrapb.AggregateConstructor
-			var constArguments []tree.Datums
+			args := &colexecagg.NewAggregatorArgs{
+				Input:      inputs[0],
+				InputTypes: inputTypes,
+				Spec:       aggSpec,
+				EvalCtx:    evalCtx,
+			}
 			semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(evalCtx.Txn)
-			constructors, constArguments, result.ColumnTypes, err = colexecagg.ProcessAggregations(
+			args.Constructors, args.ConstArguments, args.OutputTypes, err = colexecagg.ProcessAggregations(
 				evalCtx, semaCtx, aggSpec.Aggregations, inputTypes,
 			)
 			if err != nil {
 				return r, err
 			}
+			result.ColumnTypes = args.OutputTypes
 
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
@@ -837,17 +842,14 @@ func NewColOperator(
 					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				evalCtx.SingleDatumAggMemAccount = hashAggregatorMemAccount
-				result.Op, err = colexec.NewHashAggregator(
-					colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory),
-					hashAggregatorMemAccount, inputs[0], inputTypes, aggSpec,
-					evalCtx, constructors, constArguments, result.ColumnTypes,
-				)
+				args.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
+				args.MemAccount = hashAggregatorMemAccount
+				result.Op, err = colexec.NewHashAggregator(args)
 			} else {
 				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
-				result.Op, err = colexec.NewOrderedAggregator(
-					streamingAllocator, streamingMemAccount, inputs[0], inputTypes, aggSpec,
-					evalCtx, constructors, constArguments, result.ColumnTypes, aggSpec.IsScalar(),
-				)
+				args.Allocator = streamingAllocator
+				args.MemAccount = streamingMemAccount
+				result.Op, err = colexec.NewOrderedAggregator(args)
 			}
 			result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 
