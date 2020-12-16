@@ -1593,7 +1593,7 @@ func (s *adminServer) QueryPlan(
 	}
 
 	explain := fmt.Sprintf(
-		"SELECT json FROM [EXPLAIN (DISTSQL) %s]",
+		"EXPLAIN (DISTSQL, JSON) %s",
 		strings.Trim(req.Query, ";"))
 	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
 		ctx, "admin-query-plan", nil, /* txn */

@@ -13,6 +13,12 @@ SET distsql=auto
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
+# Verify the JSON variant.
+query T
+EXPLAIN (DISTSQL, JSON) SELECT 1
+----
+{"sql":"EXPLAIN (DISTSQL, JSON) SELECT 1","nodeNames":["1"],"processors":[{"nodeIdx":0,"inputs":[],"core":{"title":"local values 0/0","details":[]},"outputs":[],"stage":1},{"nodeIdx":0,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}],"edges":[{"sourceProc":0,"sourceOutput":0,"destProc":1,"destInput":0}]}
+
 # Full table scan - distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'

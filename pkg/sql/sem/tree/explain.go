@@ -104,6 +104,7 @@ const (
 	ExplainFlagTypes
 	ExplainFlagEnv
 	ExplainFlagCatalog
+	ExplainFlagJSON
 	numExplainFlags = iota
 )
 
@@ -112,6 +113,7 @@ var explainFlagStrings = [...]string{
 	ExplainFlagTypes:   "TYPES",
 	ExplainFlagEnv:     "ENV",
 	ExplainFlagCatalog: "CATALOG",
+	ExplainFlagJSON:    "JSON",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -235,6 +237,14 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	if opts.Mode == 0 {
 		// Default mode is ExplainPlan.
 		opts.Mode = ExplainPlan
+	}
+	if opts.Flags[ExplainFlagJSON] {
+		if opts.Mode != ExplainDistSQL {
+			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag can only be used with DISTSQL")
+		}
+		if analyze {
+			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag cannot be used with ANALYZE")
+		}
 	}
 
 	if analyze {
