@@ -53,5 +53,5 @@ message AlterRole {
   // The name of the affected user/role.
   string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
   // The options set on the user/role.
-  repeated string options = 4 [(gogoproto.jsontag) = ",omitempty"];
+  repeated string options = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }

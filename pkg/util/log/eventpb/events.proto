@@ -28,7 +28,7 @@ message CommonEventDetails {
   // the Unix epoch.
   int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
   // The type of the event.
-  string event_type = 2 [(gogoproto.jsontag) = ",omitempty"];
+  string event_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CommonSQLEventDetails contains the fields common to all
