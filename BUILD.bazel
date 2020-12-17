@@ -13,16 +13,20 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
 
-# We disable protobuf generation for our dependencies
+# We disable protobuf generation for our dependencies.
 #
 # gazelle:proto disable_global
 
-# Gazelle is unable to resolve this specific package.
+# Gazelle needs the following resolve hints.
 #
 # TODO(irfansharif): I'm not sure why this is. Is it because it's a proto only
 # package?
 #
 # gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal //vendor/github.com/grpc-ecosystem/grpc-gateway/internal
+
+# See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang //pkg/sql/opt/optgen/lang
 
 # We exclude a few things from gazelle consideration:
 # - The protobuf C dependency, it's are already bazel-ified, lest we overwrite
