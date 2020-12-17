@@ -11,14 +11,11 @@
 package log
 
 import (
-	"context"
 	"os"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -122,22 +119,16 @@ var strippedMarker = redact.RedactableBytes(redact.RedactedMarker()).StripMarker
 // sensitive data or keep it, or strip the redaction markers or keep them,
 // or a combination of both. The specific behavior is selected
 // by the provided redactEditor.
-func maybeRedactEntry(entry logpb.Entry, editor redactEditor) logpb.Entry {
+func maybeRedactEntry(payload entryPayload, editor redactEditor) entryPayload {
 	r := redactablePackage{
-		redactable: entry.Redactable,
-		msg:        []byte(entry.Message),
+		redactable: payload.redactable,
+		msg:        []byte(payload.message),
 	}
 	r = editor(r)
-	entry.Message = string(r.msg)
-	entry.Redactable = r.redactable
-
-	r = redactablePackage{
-		redactable: entry.Redactable,
-		msg:        []byte(entry.Tags),
+	return entryPayload{
+		redactable: r.redactable,
+		message:    string(r.msg),
 	}
-	r = editor(r)
-	entry.Tags = string(r.msg)
-	return entry
 }
 
 // Safe constructs a SafeFormatter / SafeMessager.
@@ -183,23 +174,24 @@ const redactableIndicator = "⋮"
 
 var redactableIndicatorBytes = []byte(redactableIndicator)
 
-func renderTagsAsRedactable(ctx context.Context, buf *strings.Builder) {
-	tags := logtags.FromContext(ctx)
+func renderTagsAsRedactable(tags *logtags.Buffer) redact.RedactableString {
 	if tags == nil {
-		return
+		return ""
 	}
-	comma := ""
+	var buf redact.StringBuilder
+	comma := redact.SafeString("")
 	for _, t := range tags.Get() {
-		buf.WriteString(comma)
-		buf.WriteString(t.Key())
+		buf.SafeString(comma)
+		buf.Print(redact.Safe(t.Key()))
 		if v := t.Value(); v != nil && v != "" {
 			if len(t.Key()) > 1 {
-				buf.WriteByte('=')
+				buf.SafeRune('=')
 			}
-			redact.Fprint(buf, v)
+			buf.Print(v)
 		}
 		comma = ","
 	}
+	return buf.RedactableString()
 }
 
 // TestingSetRedactable sets the redactable flag on the file output of

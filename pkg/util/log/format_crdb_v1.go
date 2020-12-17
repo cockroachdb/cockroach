@@ -24,10 +24,9 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
-// FormatEntry writes the log entry to the specified writer.
-func FormatEntry(e logpb.Entry, w io.Writer) error {
-	var f formatCrdbV1WithCounter
-	buf := f.formatEntry(e, nil)
+// FormatLegacyEntry writes the legacy log entry to the specified writer.
+func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
+	buf := formatLogEntryInternal(e, true /*showCounter*/, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
@@ -39,8 +38,8 @@ type formatCrdbV1 struct{}
 
 func (formatCrdbV1) formatterName() string { return "crdb-v1" }
 
-func (formatCrdbV1) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
-	return formatLogEntryInternal(entry, false /*showCounter*/, nil, stacks)
+func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternal(entry.convertToLegacy(), false /*showCounter*/, nil)
 }
 
 // formatCrdbV1WithCounter is the canonical log format including a
@@ -49,8 +48,8 @@ type formatCrdbV1WithCounter struct{}
 
 func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
-func (formatCrdbV1WithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
-	return formatLogEntryInternal(entry, true /*showCounter*/, nil, stacks)
+func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
+	return formatLogEntryInternal(entry.convertToLegacy(), true /*showCounter*/, nil)
 }
 
 // formatCrdbV1TTY is like formatCrdbV1 and includes VT color codes if
@@ -60,12 +59,12 @@ type formatCrdbV1TTY struct{}
 
 func (formatCrdbV1TTY) formatterName() string { return "crdb-v1-tty" }
 
-func (formatCrdbV1TTY) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
 	cp := ttycolor.StderrProfile
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry, false /*showCounter*/, cp, stacks)
+	return formatLogEntryInternal(entry.convertToLegacy(), false /*showCounter*/, cp)
 }
 
 // formatCrdbV1ColorWithCounter is like formatCrdbV1WithCounter and
@@ -75,13 +74,15 @@ type formatCrdbV1TTYWithCounter struct{}
 
 func (formatCrdbV1TTYWithCounter) formatterName() string { return "crdb-v1-tty-count" }
 
-func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) *buffer {
+func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
 	cp := ttycolor.StderrProfile
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry, true /*showCounter*/, cp, stacks)
+	return formatLogEntryInternal(entry.convertToLegacy(), true /*showCounter*/, cp)
 }
+
+const severityChar = "IWEF"
 
 // formatEntryInternal renders a log entry.
 // Log lines are colorized depending on severity.
@@ -103,9 +104,7 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logpb.Entry, stacks []byte) 
 // 	tags             The context tags
 // 	counter          The log entry counter, if enabled and non-zero
 // 	msg              The user-supplied message
-func formatLogEntryInternal(
-	entry logpb.Entry, showCounter bool, cp ttycolor.Profile, stacks []byte,
-) *buffer {
+func formatLogEntryInternal(entry logpb.Entry, showCounter bool, cp ttycolor.Profile) *buffer {
 	buf := getBuffer()
 	if entry.Line < 0 {
 		entry.Line = 0 // not a real line number, but acceptable to someDigits
@@ -217,13 +216,6 @@ func formatLogEntryInternal(
 	// Ensure there is a final newline.
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
-	}
-
-	// If there are stack traces, print them.
-	// Note that stacks are assumed to always contain
-	// a final newline already.
-	if len(stacks) > 0 {
-		buf.Write(stacks)
 	}
 
 	return buf
