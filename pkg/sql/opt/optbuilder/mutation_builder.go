@@ -374,7 +374,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 			includeMutations:       true,
 			includeSystem:          true,
 			includeVirtualInverted: false,
-			includeVirtualComputed: false,
+			includeVirtualComputed: true,
 		}),
 		indexFlags,
 		noRowLocking,
