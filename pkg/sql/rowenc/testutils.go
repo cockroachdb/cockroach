@@ -1086,7 +1086,7 @@ func RandCreateTables(
 		if i > 0 && rng.Intn(2) == 0 {
 			interleave = tables[rng.Intn(i)].(*tree.CreateTable)
 		}
-		t := RandCreateTableWithInterleave(rng, prefix, i+1, interleave)
+		t := RandCreateTableWithInterleave(rng, prefix, i+1, interleave, nil)
 		tables[i] = t
 	}
 
@@ -1099,13 +1099,25 @@ func RandCreateTables(
 
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTable {
-	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil)
+	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil, nil)
+}
+
+// RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
+// using the passed function to generate column index numbers for column names.
+func RandCreateTableWithColumnIndexNumberGenerator(
+	rng *rand.Rand, prefix string, tableIdx int, generateColumnIndexNumber func() int64,
+) *tree.CreateTable {
+	return RandCreateTableWithInterleave(rng, prefix, tableIdx, nil, generateColumnIndexNumber)
 }
 
 // RandCreateTableWithInterleave creates a random CreateTable definition,
 // interleaved into the given other CreateTable definition.
 func RandCreateTableWithInterleave(
-	rng *rand.Rand, prefix string, tableIdx int, interleaveInto *tree.CreateTable,
+	rng *rand.Rand,
+	prefix string,
+	tableIdx int,
+	interleaveInto *tree.CreateTable,
+	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
@@ -1148,7 +1160,11 @@ func RandCreateTableWithInterleave(
 			// Loop until we generate an indexable column type.
 			var extraCol *tree.ColumnTableDef
 			for {
-				extraCol = randColumnTableDef(rng, tableIdx, i+prefixLength)
+				colIdx := i + prefixLength
+				if generateColumnIndexNumber != nil {
+					colIdx = int(generateColumnIndexNumber())
+				}
+				extraCol = randColumnTableDef(rng, tableIdx, colIdx)
 				extraColType := tree.MustBeStaticallyKnownType(extraCol.Type)
 				if colinfo.ColumnTypeIsIndexable(extraColType) {
 					break
@@ -1185,7 +1201,11 @@ func RandCreateTableWithInterleave(
 	} else {
 		// Make new defs from scratch.
 		for i := 0; i < nColumns; i++ {
-			columnDef := randColumnTableDef(rng, tableIdx, i)
+			colIdx := i
+			if generateColumnIndexNumber != nil {
+				colIdx = int(generateColumnIndexNumber())
+			}
+			columnDef := randColumnTableDef(rng, tableIdx, colIdx)
 			columnDefs = append(columnDefs, columnDef)
 			defs = append(defs, columnDef)
 		}
