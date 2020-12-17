@@ -212,7 +212,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
-		KeyCols:      withScanCols,
+		KeyCols:      withScanCols[:len(h.uniqueOrdinals)],
 		OpName:       h.mb.opName,
 	})
 }
