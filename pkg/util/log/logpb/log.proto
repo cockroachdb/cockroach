@@ -176,7 +176,11 @@ enum Channel {
   SQL_INTERNAL_PERF = 11;
 }
 
-// Entry represents a cockroach structured log entry.
+// Entry represents a cockroach log entry in the following two cases:
+// - when reading a log file using the crdb-v1 format, entries
+//   are parsed into this struct.
+// - when injecting an interceptor into the logging package, the
+//   interceptor is fed entries using this structure.
 message Entry {
   // Severity is the importance of the log entry. See the
   // documentation for the Severity enum for more details.

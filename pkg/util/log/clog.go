@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -248,36 +247,35 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
-func (l *loggerT) outputLogEntry(entry logpb.Entry) {
+func (l *loggerT) outputLogEntry(entry logEntry) {
 	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
-		f(entry)
+		f(entry.convertToLegacy())
 		return
 	}
 
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.
 	setActive()
-	var stacks []byte
 	var fatalTrigger chan struct{}
 	extraSync := false
 
-	if entry.Severity == severity.FATAL {
+	if entry.sev == severity.FATAL {
 		extraSync = true
 		logging.signalFatalCh()
 
 		switch traceback {
 		case tracebackSingle:
-			stacks = getStacks(false)
+			entry.stacks = getStacks(false)
 		case tracebackAll:
-			stacks = getStacks(true)
+			entry.stacks = getStacks(true)
 		}
 
 		for _, s := range l.sinkInfos {
-			stacks = s.sink.attachHints(stacks)
+			entry.stacks = s.sink.attachHints(entry.stacks)
 		}
 
 		// Explain to the (human) user that we would like to hear from them.
-		stacks = append(stacks, []byte(fatalErrorPostamble)...)
+		entry.stacks = append(entry.stacks, []byte(fatalErrorPostamble)...)
 
 		// We don't want to hang forever writing our final log message. If
 		// things are broken (for example, if the disk fills up and there
@@ -296,7 +294,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		logging.mu.Lock()
 		if logging.mu.exitOverride.f != nil {
 			if logging.mu.exitOverride.hideStack {
-				stacks = []byte("stack trace omitted via SetExitFunc()\n")
+				entry.stacks = []byte("stack trace omitted via SetExitFunc()\n")
 			}
 			exitFunc = logging.mu.exitOverride.f
 		}
@@ -337,17 +335,21 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 		// Stopper's Stop() call (e.g. the pgwire async processing
 		// goroutine). These asynchronous log calls are concurrent with
 		// the stderrSinkInfo update in (*TestLogScope).Close().
-		if entry.Severity < s.threshold.Get() || !s.sink.active() {
+		if entry.sev < s.threshold.Get() || !s.sink.active() {
 			continue
 		}
-		editedEntry := maybeRedactEntry(entry, s.editor)
+		editedEntry := entry
 
 		// Add a counter. This is important for e.g. the SQL audit logs.
 		// Note: whether the counter is displayed or not depends on
 		// the formatter.
-		editedEntry.Counter = atomic.AddUint64(&s.msgCount, 1)
+		editedEntry.counter = atomic.AddUint64(&s.msgCount, 1)
 
-		bufs.b[i] = s.formatter.formatEntry(editedEntry, stacks)
+		// Process the redation spec.
+		editedEntry.payload = maybeRedactEntry(editedEntry.payload, s.editor)
+
+		// Format the entry for this sink.
+		bufs.b[i] = s.formatter.formatEntry(editedEntry)
 		someSinkActive = true
 	}
 
@@ -398,7 +400,7 @@ func (l *loggerT) outputLogEntry(entry logpb.Entry) {
 	}
 
 	// Flush and exit on fatal logging.
-	if entry.Severity == severity.FATAL {
+	if entry.sev == severity.FATAL {
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
 		// below when s == severity.FATAL, this is not so, because the

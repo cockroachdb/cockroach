@@ -156,9 +156,8 @@ func TestEntryDecoder(t *testing.T) {
 			Tags:      tags,
 			Message:   msg,
 		}
-		var f formatCrdbV1
-		buf := f.formatEntry(entry, nil /* stacks */)
-		defer putBuffer(buf)
+		var buf bytes.Buffer
+		_ = FormatLegacyEntry(entry, &buf)
 		return buf.String()
 	}
 
@@ -635,36 +634,39 @@ func TestRollover(t *testing.T) {
 // right now clog writes straight to os.StdErr.
 func TestFatalStacktraceStderr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ScopeWithoutShowLogs(t).Close(t)
-
-	SetExitFunc(false /* hideStack */, func(exit.Code) {})
-
-	defer capture()()
 
 	for _, level := range []int{tracebackNone, tracebackSingle, tracebackAll} {
-		traceback = level
-		Fatalf(context.Background(), "cinap")
-		cont := contents()
-		if !strings.Contains(cont, " cinap") {
-			t.Fatalf("panic output does not contain cinap:\n%s", cont)
-		}
-		if !strings.Contains(cont, "clog_test") {
-			t.Fatalf("stack trace does not contain file name: %s", cont)
-		}
-		switch traceback {
-		case tracebackNone:
-			if strings.Count(cont, "goroutine ") > 0 {
-				t.Fatalf("unexpected stack trace:\n%s", cont)
+		t.Run(fmt.Sprintf("%d", level), func(t *testing.T) {
+			defer ScopeWithoutShowLogs(t).Close(t)
+
+			SetExitFunc(false /* hideStack */, func(exit.Code) {})
+
+			defer capture()()
+
+			traceback = level
+			Fatalf(context.Background(), "cinap")
+			cont := contents()
+			if !strings.Contains(cont, " cinap") {
+				t.Fatalf("panic output does not contain cinap:\n%s", cont)
 			}
-		case tracebackSingle:
-			if strings.Count(cont, "goroutine ") != 1 {
-				t.Fatalf("stack trace contains too many goroutines: %s", cont)
+			if !strings.Contains(cont, "clog_test") {
+				t.Fatalf("stack trace does not contain file name: %s", cont)
 			}
-		case tracebackAll:
-			if strings.Count(cont, "goroutine ") < 2 {
-				t.Fatalf("stack trace contains less than two goroutines: %s", cont)
+			switch traceback {
+			case tracebackNone:
+				if strings.Count(cont, "goroutine ") > 0 {
+					t.Fatalf("unexpected stack trace:\n%s", cont)
+				}
+			case tracebackSingle:
+				if strings.Count(cont, "goroutine ") != 1 {
+					t.Fatalf("stack trace contains too many goroutines: %s", cont)
+				}
+			case tracebackAll:
+				if strings.Count(cont, "goroutine ") < 2 {
+					t.Fatalf("stack trace contains less than two goroutines: %s", cont)
+				}
 			}
-		}
+		})
 	}
 }
 
@@ -773,10 +775,9 @@ func BenchmarkHeader(b *testing.B) {
 		File:      "file.go",
 		Line:      100,
 	}
-	var f formatCrdbV1
 	for i := 0; i < b.N; i++ {
-		buf := f.formatEntry(entry, nil /* stacks */)
-		putBuffer(buf)
+		var w bytes.Buffer
+		_ = FormatLegacyEntry(entry, &w)
 	}
 }
 
