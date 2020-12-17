@@ -117,7 +117,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := executor.New(txn, descriptors)
+			ex := executor.New(txn, descriptors, ti.lm.Codec(), nil, nil)
 			orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
@@ -295,7 +295,7 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
@@ -311,7 +311,7 @@ func TestSchemaChanger(t *testing.T) {
 			stages := sc.Stages()
 			require.NoError(t, err)
 			for _, s := range stages {
-				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+				require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 				after = s.NextTargets
 			}
 			return nil
@@ -382,7 +382,7 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
@@ -398,7 +398,7 @@ func TestSchemaChanger(t *testing.T) {
 			require.NoError(t, err)
 			stages := sc.Stages()
 			for _, s := range stages {
-				require.NoError(t, executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops))
+				require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 				//after = s.NextTargets
 			}
 			return nil

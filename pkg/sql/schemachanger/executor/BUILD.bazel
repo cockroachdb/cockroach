@@ -6,13 +6,18 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/schemachanger/ops",
         "//pkg/sql/schemachanger/targets",
+        "//pkg/sql/sem/tree",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -51,6 +56,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/retry",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -42,8 +42,7 @@ message AddColumn {
 message DropColumn {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  // TODO (lucy): Replace this with the column descriptor.
-  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  cockroach.sql.sqlbase.ColumnDescriptor column = 2 [(gogoproto.nullable) = false];
 }
 
 message AddIndex {

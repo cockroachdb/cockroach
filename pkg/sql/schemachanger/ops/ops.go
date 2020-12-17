@@ -147,3 +147,9 @@ type CheckConstraintStateChange struct {
 
 	NextState targets.State
 }
+
+type AddColumnFamily struct {
+	descriptorMutationOp
+	TableID descpb.ID
+	Family  descpb.ColumnFamilyDescriptor
+}

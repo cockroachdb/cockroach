@@ -16,8 +16,14 @@ func generateTargetStateDepEdges(g *SchemaChange, t targets.Target, s targets.St
 		generateAddPrimaryIndexDepEdges(g, t, s)
 	case *targets.DropPrimaryIndex:
 		generateDropPrimaryIndexDepEdges(g, t, s)
+	case *targets.AddColumnFamily:
+		generateAddColumnFamilyDepEdges(g, t, s)
 	}
 	return nil
+}
+
+func generateAddColumnFamilyDepEdges(g *SchemaChange, t *targets.AddColumnFamily, s targets.State) {
+	// No-op for now, since we can always add column families immediately.
 }
 
 func generateAddColumnDepEdges(g *SchemaChange, t *targets.AddColumn, s targets.State) {
@@ -55,7 +61,7 @@ func generateDropIndexDepEdges(g *SchemaChange, t *targets.DropIndex, s targets.
 					g.addDepEdge(t, s, ot, targets.State_PUBLIC)
 				}
 			case *targets.DropColumn:
-				if t.TableID != ot.TableID || !columnsContainsID(t.ColumnIDs, ot.ColumnID) {
+				if t.TableID != ot.TableID || !columnsContainsID(t.ColumnIDs, ot.Column.ID) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
@@ -77,7 +83,7 @@ func generateDropPrimaryIndexDepEdges(
 				}
 			case *targets.DropColumn:
 				// TODO (lucy): Does StoreColumnIDs matter here?
-				if t.TableID != ot.TableID || !columnsContainsID(t.Index.ColumnIDs, ot.ColumnID) {
+				if t.TableID != ot.TableID || !columnsContainsID(t.Index.ColumnIDs, ot.Column.ID) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
@@ -124,13 +130,13 @@ func generateDropColumnDepEdges(g *SchemaChange, t *targets.DropColumn, s target
 		for _, ot := range g.targets {
 			switch ot := ot.(type) {
 			case *targets.DropIndex:
-				if t.TableID != ot.TableID || !columnsContainsID(ot.ColumnIDs, t.ColumnID) {
+				if t.TableID != ot.TableID || !columnsContainsID(ot.ColumnIDs, t.Column.ID) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)
 			case *targets.DropPrimaryIndex:
 				// TODO (lucy): Does StoreColumnIDs matter here?
-				if t.TableID != ot.TableID || !columnsContainsID(ot.Index.ColumnIDs, t.ColumnID) {
+				if t.TableID != ot.TableID || !columnsContainsID(ot.Index.ColumnIDs, t.Column.ID) {
 					continue
 				}
 				g.addDepEdge(t, s, ot, targets.State_DELETE_AND_WRITE_ONLY)

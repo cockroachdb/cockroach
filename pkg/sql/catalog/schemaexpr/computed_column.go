@@ -56,9 +56,9 @@ func MakeComputedColumnValidator(
 // It additionally updates the target computed column with the serialized
 // typed expression.
 // TODO(mgartner): Add unit tests for Validate.
-func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
+func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, error) {
 	if d.HasDefaultExpr() {
-		return pgerror.New(
+		return "", pgerror.New(
 			pgcode.InvalidTableDefinition,
 			"computed columns cannot have default values",
 		)
@@ -76,7 +76,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
@@ -103,13 +103,13 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		}
 		return nil
 	}); err != nil {
-		return err
+		return "", err
 	}
 
 	// Resolve the type of the computed column expression.
 	defType, err := tree.ResolveType(v.ctx, d.Type, v.semaCtx.GetTypeResolver())
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Check that the type of the expression is of type defType and that there
@@ -126,19 +126,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		tree.VolatilityImmutable,
 		v.tableName,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Get the column that this definition points to and assign the serialized
-	// expression.
-	targetCol, _, err := v.desc.FindColumnByName(d.Name)
-	if err != nil {
-		return err
-	}
-	targetCol.ComputeExpr = &expr
-
-	return nil
+	return expr, err
 }
 
 // ValidateNoDependents verifies that the input column is not dependent on a

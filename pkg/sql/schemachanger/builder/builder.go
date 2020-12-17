@@ -144,16 +144,45 @@ func (b *Builder) alterTableAddColumn(
 		return err
 	}
 
+	columnFamilyID := descpb.FamilyID(0)
+	if d.HasColumnFamily() {
+		if columnFamilyID, err = b.findOrAddColumnFamily(
+			table, string(d.Family.Name), d.Family.Create, d.Family.IfNotExists,
+		); err != nil {
+			return err
+		}
+	}
+
+	if d.IsComputed() {
+		if d.IsVirtual() {
+			return unimplemented.NewWithIssue(57608, "virtual computed columns")
+		}
+		// TODO (lucy): This is not probably not going to work when the referenced
+		// columns were added in the same transaction, since we'll expect the
+		// referenced columns to all be on the table descriptor. We may just want
+		// to reimplement this.
+		computedColValidator := schemaexpr.MakeComputedColumnValidator(
+			ctx,
+			table,
+			b.semaCtx,
+			tn,
+		)
+		serializedExpr, err := computedColValidator.Validate(d)
+		if err != nil {
+			return err
+		}
+		col.ComputeExpr = &serializedExpr
+	}
+
 	b.addTargetState(
 		&targets.AddColumn{
-			TableID: table.GetID(),
-			Column:  *col,
+			TableID:      table.GetID(),
+			Column:       *col,
+			ColumnFamily: columnFamilyID,
 		},
 		targets.State_ABSENT,
 	)
-
-	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForColumnChange(table, colID, col.Name)
-
+	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
 	if idx != nil {
 		idxID := b.nextIndexID(table)
 		idx.ID = idxID
@@ -165,30 +194,6 @@ func (b *Builder) alterTableAddColumn(
 			},
 			targets.State_ABSENT,
 		)
-	}
-
-	if d.HasColumnFamily() {
-		// TODO (lucy): Also assign the column ID on the column descriptor?
-		if err := b.maybeAddColumnFamily(
-			table, string(d.Family.Name), d.Family.Create, d.Family.IfNotExists,
-		); err != nil {
-			return err
-		}
-	}
-
-	if d.IsComputed() {
-		if d.IsVirtual() {
-			return unimplemented.NewWithIssue(57608, "virtual computed columns")
-		}
-		computedColValidator := schemaexpr.MakeComputedColumnValidator(
-			ctx,
-			table,
-			b.semaCtx,
-			tn,
-		)
-		if err := computedColValidator.Validate(d); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -222,70 +227,79 @@ func (b *Builder) validateColumnName(
 	return nil
 }
 
-func (b *Builder) maybeAddColumnFamily(
+func (b *Builder) findOrAddColumnFamily(
 	table *tabledesc.Immutable, family string, create bool, ifNotExists bool,
-) error {
-	idx := -1
+) (descpb.FamilyID, error) {
 	if len(family) > 0 {
 		for i := range table.Families {
 			if table.Families[i].Name == family {
-				idx = i
-				break
+				if create && !ifNotExists {
+					return 0, errors.Errorf("family %q already exists", family)
+				}
+				return table.Families[i].ID, nil
 			}
 		}
 	}
-
-	if idx == -1 {
-		if !create {
-			return errors.Errorf("unknown family %q", family)
-		}
-		b.addTargetState(&targets.AddColumnFamily{
-			TableID: table.GetID(),
-			Family: descpb.ColumnFamilyDescriptor{
-				Name:            family,
-				ID:              b.nextFamilyID(table),
-				ColumnNames:     []string{},
-				ColumnIDs:       []descpb.ColumnID{},
-				DefaultColumnID: 0,
-			},
-		}, targets.State_ABSENT)
-		return nil
+	if !create {
+		return 0, errors.Errorf("unknown family %q", family)
 	}
-	if create && !ifNotExists {
-		return errors.Errorf("family %q already exists", family)
-	}
-	return nil
+	familyID := b.nextFamilyID(table)
+	b.addTargetState(&targets.AddColumnFamily{
+		TableID: table.GetID(),
+		Family: descpb.ColumnFamilyDescriptor{
+			Name:            family,
+			ID:              familyID,
+			ColumnNames:     []string{},
+			ColumnIDs:       []descpb.ColumnID{},
+			DefaultColumnID: 0,
+		},
+	}, targets.State_ABSENT)
+	return familyID, nil
 }
 
 func (b *Builder) alterTableDropColumn(
 	ctx context.Context, table *tabledesc.Immutable, t *tree.AlterTableDropColumn,
 ) error {
-	panic("unimplemented")
+	if b.evalCtx.SessionData.SafeUpdates {
+		return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
+			"remove all data in that column")
+	}
 
-	// colToDrop, dropped, err := table.FindColumnByName(t.Column)
-	// if err != nil {
-	// 	if t.IfExists {
-	// 		// Noop.
-	// 		return nil
-	// 	}
-	// 	return err
-	// }
-	// // TODO: this check should be coming from the targets, not the descriptor.
-	// if dropped {
-	// 	return err
-	// }
-	//
-	// // TODO: validation, cascades, etc.
-	//
-	// Assume we've validated that the column isn't part of the PK.
-	// b.addOrUpdatePrimaryIndexTargetsForColumnChange(table)
-	// b.addTargetState(
-	// 	&targets.DropColumn{
-	// 		TableID:  table.GetID(),
-	// 		ColumnID: colToDrop.ID,
-	// 	},
-	// 	targets.State_PUBLIC,
-	// )
+	colToDrop, _, err := table.FindColumnByName(t.Column)
+	if err != nil {
+		if t.IfExists {
+			// Noop.
+			return nil
+		}
+		return err
+	}
+	// Check whether the column is being dropped.
+	for _, ts := range b.targetStates {
+		if _, ok := ts.Target.(*targets.DropColumn); ok {
+			return nil
+		}
+	}
+
+	// TODO:
+	// remove sequence dependencies
+	// drop sequences owned by column (if not referenced by other columns)
+	// drop view (if cascade specified)
+	// check that no computed columns reference this column
+	// check that column is not in the PK
+	// drop secondary indexes
+	// drop all indexes that index/store the column or use it as a partial index predicate
+	// drop check constraints
+	// remove comments
+	// drop foreign keys
+
+	b.addTargetState(
+		&targets.DropColumn{
+			TableID: table.GetID(),
+			Column:  *colToDrop,
+		},
+		targets.State_PUBLIC,
+	)
+	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.ID)
 	return nil
 }
 
@@ -327,7 +341,7 @@ func (b *Builder) maybeAddSequenceDependencies(
 	return nil
 }
 
-func (b *Builder) addOrUpdatePrimaryIndexTargetsForColumnChange(
+func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	table *tabledesc.Immutable, colID descpb.ColumnID, colName string,
 ) (idxID descpb.IndexID) {
 	// Check whether a target to add a PK already exists. If so, update its
@@ -359,8 +373,8 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForColumnChange(
 	var storeColNames []string
 	for _, col := range table.Columns {
 		containsCol := false
-		for _, colID := range newIdx.ColumnIDs {
-			if colID == col.ID {
+		for _, id := range newIdx.ColumnIDs {
+			if id == col.ID {
 				containsCol = true
 				break
 			}
@@ -391,6 +405,89 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForColumnChange(
 			ReplacedBy:       idxID,
 			StoreColumnIDs:   storeColIDs,
 			StoreColumnNames: storeColNames,
+		},
+		targets.State_PUBLIC,
+	)
+
+	return idxID
+}
+
+// TODO (lucy): refactor this to share with the add column case.
+func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
+	table *tabledesc.Immutable, colID descpb.ColumnID,
+) (idxID descpb.IndexID) {
+	// Check whether a target to add a PK already exists. If so, update its
+	// storing columns.
+	for i := range b.targetStates {
+		if t, ok := b.targetStates[i].Target.(*targets.AddPrimaryIndex); ok &&
+			t.TableID == table.GetID() {
+			for j := range t.StoreColumnIDs {
+				if t.StoreColumnIDs[j] == colID {
+					t.StoreColumnIDs = append(t.StoreColumnIDs[:j], t.StoreColumnIDs[j+1:]...)
+					t.StoreColumnNames = append(t.StoreColumnNames[:j], t.StoreColumnNames[j+1:]...)
+					return t.Index.ID
+				}
+				panic("index not found")
+			}
+		}
+	}
+
+	// Create a new primary index, identical to the existing one except for its
+	// ID and name.
+	idxID = b.nextIndexID(table)
+	newIdx := protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)
+	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
+		"new_primary_key",
+		func(name string) bool {
+			// TODO (lucy): Also check the new indexes specified in the targets.
+			_, _, err := table.FindIndexByName(name)
+			return err == nil
+		},
+	)
+	newIdx.ID = idxID
+
+	var addStoreColIDs []descpb.ColumnID
+	var addStoreColNames []string
+	var dropStoreColIDs []descpb.ColumnID
+	var dropStoreColNames []string
+	for _, col := range table.Columns {
+		containsCol := false
+		for _, id := range newIdx.ColumnIDs {
+			if id == col.ID {
+				containsCol = true
+				break
+			}
+		}
+		if !containsCol {
+			if colID != col.ID {
+				addStoreColIDs = append(addStoreColIDs, col.ID)
+				addStoreColNames = append(addStoreColNames, col.Name)
+			}
+			dropStoreColIDs = append(dropStoreColIDs, col.ID)
+			dropStoreColNames = append(dropStoreColNames, col.Name)
+		}
+	}
+
+	b.addTargetState(
+		&targets.AddPrimaryIndex{
+			TableID:          table.GetID(),
+			Index:            *newIdx,
+			PrimaryIndex:     table.GetPrimaryIndexID(),
+			ReplacementFor:   table.GetPrimaryIndexID(),
+			StoreColumnIDs:   addStoreColIDs,
+			StoreColumnNames: addStoreColNames,
+		},
+		targets.State_ABSENT,
+	)
+
+	// Drop the existing primary index.
+	b.addTargetState(
+		&targets.DropPrimaryIndex{
+			TableID:          table.GetID(),
+			Index:            *(protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)),
+			ReplacedBy:       idxID,
+			StoreColumnIDs:   dropStoreColIDs,
+			StoreColumnNames: dropStoreColNames,
 		},
 		targets.State_PUBLIC,
 	)

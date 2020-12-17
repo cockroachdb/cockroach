@@ -94,6 +94,8 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 			err = ex.executeColumnDescriptorStateChange(ctx, op)
 		case ops.IndexDescriptorStateChange:
 			err = ex.executeIndexDescriptorStateChange(ctx, op)
+		case ops.AddColumnFamily:
+			err = ex.executeAddColumnFamily(ctx, op)
 		default:
 			err = errors.AssertionFailedf("descriptor mutation op not implemented for %T", op)
 		}
@@ -483,6 +485,18 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 		default:
 			return errors.AssertionFailedf("unknown transition for index to %s", op.NextState)
 		}
+	}
+	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeAddColumnFamily(ctx context.Context, op ops.AddColumnFamily) error {
+	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
+	if err != nil {
+		return err
+	}
+	table.AddFamily(op.Family)
+	if op.Family.ID >= table.NextFamilyID {
+		table.NextFamilyID = op.Family.ID + 1
 	}
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }

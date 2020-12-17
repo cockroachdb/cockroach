@@ -28,9 +28,31 @@ func generateOpEdges(g *SchemaChange, t targets.Target, s targets.State, flags C
 		return generateAddPrimaryIndexOpEdges(g, t, s, flags)
 	case *targets.DropColumn:
 		return generateDropColumnOpEdges(g, t, s, flags)
+	case *targets.AddColumnFamily:
+		return generateAddColumnFamilyOpEdges(g, t, s, flags)
 	default:
 		return errors.AssertionFailedf("generateOpEdges not implemented for %T", t)
 	}
+}
+
+func generateAddColumnFamilyOpEdges(
+	g *SchemaChange, t *targets.AddColumnFamily, s targets.State, flags CompileFlags,
+) error {
+	if s == targets.State_PUBLIC {
+		return nil
+	}
+	if !flags.CreatedDescriptorIDs.contains(t.TableID) &&
+		flags.ExecutionPhase == PostStatementPhase {
+		return nil
+	}
+	g.addOpEdge(t, s,
+		targets.State_PUBLIC,
+		ops.AddColumnFamily{
+			TableID: t.TableID,
+			Family:  t.Family,
+		},
+	)
+	return nil
 }
 
 func generateDropColumnOpEdges(
@@ -43,7 +65,7 @@ func generateDropColumnOpEdges(
 				targets.State_DELETE_AND_WRITE_ONLY,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
-					ColumnID:  t.ColumnID,
+					ColumnID:  t.Column.ID,
 					State:     s,
 					NextState: targets.State_DELETE_AND_WRITE_ONLY,
 				})
@@ -57,7 +79,7 @@ func generateDropColumnOpEdges(
 				targets.State_DELETE_ONLY,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
-					ColumnID:  t.ColumnID,
+					ColumnID:  t.Column.ID,
 					State:     s,
 					NextState: targets.State_DELETE_ONLY,
 				})
@@ -66,7 +88,7 @@ func generateDropColumnOpEdges(
 				targets.State_ABSENT,
 				ops.ColumnDescriptorStateChange{
 					TableID:   t.TableID,
-					ColumnID:  t.ColumnID,
+					ColumnID:  t.Column.ID,
 					State:     s,
 					NextState: targets.State_ABSENT,
 				})
