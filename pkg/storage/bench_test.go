@@ -102,6 +102,7 @@ func BenchmarkExportToSst(b *testing.B) {
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
 	exportAllRevisions := []bool{false, true}
+	useTBI := []bool{false, true}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
@@ -117,7 +118,12 @@ func BenchmarkExportToSst(b *testing.B) {
 						b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
 							for _, exportAllRevisionsVal := range exportAllRevisions {
 								b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-									runExportToSst(b, engineImpl.create, numKey, numRevision, exportAllRevisionsVal)
+									for _, useTBIVal := range useTBI {
+										b.Run(fmt.Sprintf("useTBI=%t", useTBIVal), func(b *testing.B) {
+											runExportToSst(b, engineImpl.create, numKey, numRevision,
+												exportAllRevisionsVal, useTBIVal)
+										})
+									}
 								})
 							}
 						})
@@ -1034,7 +1040,12 @@ func runBatchApplyBatchRepr(
 }
 
 func runExportToSst(
-	b *testing.B, emk engineMaker, numKeys int, numRevisions int, exportAllRevisions bool,
+	b *testing.B,
+	emk engineMaker,
+	numKeys int,
+	numRevisions int,
+	exportAllRevisions bool,
+	useTBI bool,
 ) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -1067,7 +1078,7 @@ func runExportToSst(
 		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
 		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
 		_, _, _, err := engine.ExportMVCCToSst(roachpb.KeyMin, roachpb.KeyMax, startTS, endTS,
-			exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, false /* useTBI */)
+			exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, useTBI)
 		if err != nil {
 			b.Fatal(err)
 		}
