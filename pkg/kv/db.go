@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -385,6 +386,47 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue []byte) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// CtxForCPutInline is a gate to make sure the caller is aware that CPutInline
+// is only available with clusterversion.CPutInline, and must check this before
+// using the method.
+func CtxForCPutInline(ctx context.Context) context.Context {
+	// TODO(erikgrinaker): This code and all of its uses can be removed when the
+	// version below is removed:
+	_ = clusterversion.CPutInline
+	return context.WithValue(ctx, canUseCPutInline{}, canUseCPutInline{})
+}
+
+type canUseCPutInline struct{}
+
+// CPutInline conditionally sets the value for a key if the existing value is
+// equal to expValue, but does not maintain multi-version values. To
+// conditionally set a value only if the key doesn't currently exist, pass an
+// empty expValue. The most recent value is always overwritten. Inline values
+// cannot be mutated transactionally and should be used with caution.
+//
+// Returns an error if the existing value is not equal to expValue.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc). A nil value
+// means delete the key.
+//
+// An empty expValue means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+//
+// Callers should check the version gate clusterversion.CPutInline to make sure
+// this is supported, and must wrap the context using CtxForCPutInline(ctx) to
+// enable the call.
+func (db *DB) CPutInline(ctx context.Context, key, value interface{}, expValue []byte) error {
+	if ctx.Value(canUseCPutInline{}) == nil {
+		return errors.New("CPutInline is new in 21.1, you must check the CPutInline cluster version " +
+			"and use CtxForCPutInline to enable it")
+	}
+	b := &Batch{}
+	b.cPutInline(key, value, expValue)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

@@ -204,6 +204,8 @@ const (
 	UniqueWithoutIndexConstraints
 	// VirtualComputedColumns is when virtual computed columns are supported.
 	VirtualComputedColumns
+	// CPutInline is conditional put support for inline values.
+	CPutInline
 
 	// Step (1): Add new versions here.
 )
@@ -333,6 +335,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     VirtualComputedColumns,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     CPutInline,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 10},
 	},
 
 	// Step (2): Add new versions here.

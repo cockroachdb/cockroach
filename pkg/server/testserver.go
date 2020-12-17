@@ -838,7 +838,7 @@ func (ts *TestServer) DrainClients(ctx context.Context) error {
 
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
-	return ts.node.writeNodeStatus(context.TODO(), time.Hour)
+	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)
 }
 
 // AdminURL implements TestServerInterface.

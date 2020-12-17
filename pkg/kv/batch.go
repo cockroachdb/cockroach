@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -421,17 +422,44 @@ func (b *Batch) PutInline(key, value interface{}) {
 // expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
 // value without the checksum (as the checksum includes the key too).
 func (b *Batch) CPut(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, false)
+	b.cputInternal(key, value, expValue, false, false)
 }
 
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
 func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, true)
+	b.cputInternal(key, value, expValue, true, false)
 }
 
-func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotExist bool) {
+// cPutInline conditionally sets the value for a key if the existing value is
+// equal to expValue, but does not maintain multi-version values. To
+// conditionally set a value only if the key doesn't currently exist, pass an
+// empty expValue. The most recent value is always overwritten. Inline values
+// cannot be mutated transactionally and should be used with caution.
+//
+// A new result will be appended to the batch which will contain a single row
+// and Result.Err will indicate success or failure.
+//
+// key can be either a byte slice or a string. value can be any key type, a
+// protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// A nil value can be used to delete the respective key, since there is no
+// DelInline(). This is different from CPut().
+//
+// Callers should check the version gate clusterversion.CPutInline to make sure
+// this is supported. The method is unexported to prevent external callers using
+// this without checking the version, since the CtxForCPutInline guard can't be
+// used with Batch.
+func (b *Batch) cPutInline(key, value interface{}, expValue []byte) {
+	// TODO(erikgrinaker): export once clusterversion.CPutInline is removed.
+	_ = clusterversion.CPutInline
+	b.cputInternal(key, value, expValue, false, true)
+}
+
+func (b *Batch) cputInternal(
+	key, value interface{}, expValue []byte, allowNotExist bool, inline bool,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -442,7 +470,11 @@ func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotEx
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+	if inline {
+		b.appendReqs(roachpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
+	} else {
+		b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
+	}
 	b.initResult(1, 1, notRaw, nil)
 }
 

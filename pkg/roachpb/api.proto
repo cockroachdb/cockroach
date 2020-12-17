@@ -201,6 +201,13 @@ message ConditionalPutRequest {
   // does not exist. This is useful when a given value is expected but it is
   // possible it has not yet been written.
   bool allow_if_does_not_exist = 5;
+  // Specify as true to put the value without a corresponding
+  // timestamp. This option should be used with care as it precludes
+  // the use of this value with transactions.
+  //
+  // Callers should check the version gate clusterversion.CPutInline to make
+  // sure this is supported.
+  bool inline = 7;
 }
 
 // A ConditionalPutResponse is the return value from the

@@ -1064,6 +1064,37 @@ func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool
 	}
 }
 
+// NewConditionalPutInline returns a Request initialized to put an inline value
+// at key if the existing value at key equals expValue.
+//
+// The callee takes ownership of value's underlying bytes and it will mutate
+// them. The caller retains ownership of expVal; NewConditionalPut will copy it
+// into the request.
+//
+// Callers should check the version gate clusterversion.CPutInline to make
+// sure this is supported.
+func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExist bool) Request {
+	value.InitChecksum(key)
+	// Compatibility with 20.1 servers.
+	var expValueVal *Value
+	if expValue != nil {
+		expValueVal = &Value{}
+		expValueVal.SetTagAndData(expValue)
+		// The expected value does not need a checksum, so we don't initialize it.
+	}
+
+	return &ConditionalPutRequest{
+		RequestHeader: RequestHeader{
+			Key: key,
+		},
+		Value:               value,
+		DeprecatedExpValue:  expValueVal,
+		ExpBytes:            expValue,
+		AllowIfDoesNotExist: allowNotExist,
+		Inline:              true,
+	}
+}
+
 // NewInitPut returns a Request initialized to put the value at key, as long as
 // the key doesn't exist, returning a ConditionFailedError if the key exists and
 // the existing value is different from value. If failOnTombstones is set to

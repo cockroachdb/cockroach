@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -486,21 +487,42 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	return nodeStat
 }
 
-// WriteNodeStatus writes the supplied summary to the given client.
+// WriteNodeStatus writes the supplied summary to the given client. If mustExist
+// is true, the key must already exist and must not change while being updated,
+// otherwise an error is returned -- if false, the status is always written.
 func (mr *MetricsRecorder) WriteNodeStatus(
-	ctx context.Context, db *kv.DB, nodeStatus statuspb.NodeStatus,
+	ctx context.Context, db *kv.DB, nodeStatus statuspb.NodeStatus, mustExist bool,
 ) error {
 	mr.writeSummaryMu.Lock()
 	defer mr.writeSummaryMu.Unlock()
 	key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
-	// We use PutInline to store only a single version of the node status.
+	// We use an inline value to store only a single version of the node status.
 	// There's not much point in keeping the historical versions as we keep
 	// all of the constituent data as timeseries. Further, due to the size
 	// of the build info in the node status, writing one of these every 10s
 	// will generate more versions than will easily fit into a range over
 	// the course of a day.
-	if err := db.PutInline(ctx, key, &nodeStatus); err != nil {
-		return err
+	if mustExist && mr.settings.Version.IsActive(ctx, clusterversion.CPutInline) {
+		entry, err := db.Get(ctx, key)
+		if err != nil {
+			return err
+		}
+		if entry.Value == nil {
+			return errors.New("status entry not found, node may have been decommissioned")
+		}
+		err = db.CPutInline(kv.CtxForCPutInline(ctx), key, &nodeStatus, entry.Value.TagAndDataBytes())
+		if detail := (*roachpb.ConditionFailedError)(nil); errors.As(err, &detail) {
+			if detail.ActualValue == nil {
+				return errors.New("status entry not found, node may have been decommissioned")
+			}
+			return errors.New("status entry unexpectedly changed during update")
+		} else if err != nil {
+			return err
+		}
+	} else {
+		if err := db.PutInline(ctx, key, &nodeStatus); err != nil {
+			return err
+		}
 	}
 	if log.V(2) {
 		statusJSON, err := json.Marshal(&nodeStatus)
