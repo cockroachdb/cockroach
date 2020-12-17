@@ -111,32 +111,6 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	return colCfg
 }
 
-func constructExplainDistSQLOrVecNode(
-	options *tree.ExplainOptions, stmtType tree.StatementType, p *planComponents, planner *planner,
-) (exec.Node, error) {
-	if options.Flags[tree.ExplainFlagEnv] {
-		return nil, errors.New("ENV only supported with (OPT) option")
-	}
-
-	switch options.Mode {
-	case tree.ExplainDistSQL:
-		return &explainDistSQLNode{
-			options:  options,
-			plan:     *p,
-			stmtType: stmtType,
-		}, nil
-
-	case tree.ExplainVec:
-		return &explainVecNode{
-			options: options,
-			plan:    *p,
-		}, nil
-
-	default:
-		panic(errors.AssertionFailedf("unsupported explain mode %v", options.Mode))
-	}
-}
-
 // getResultColumnsForSimpleProject populates result columns for a simple
 // projection. It supports two configurations:
 // 1. colNames and resultTypes are non-nil. resultTypes indicates the updated

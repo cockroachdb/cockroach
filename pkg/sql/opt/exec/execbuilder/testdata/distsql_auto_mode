@@ -13,112 +13,105 @@ SET distsql=auto
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
-# Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
-query BT colnames
-EXPLAIN (DISTSQL) SELECT 1
+# Verify the JSON variant.
+query T
+EXPLAIN (DISTSQL, JSON) SELECT 1
 ----
-automatic  url
-false      https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FLxDAUhO_-ijAnhYDtNTfRHgplXe0eBOkhJI-lEPtqXipCyX-XTQ5ee5xvZt7wdsh3gEH3cR6e-pO6f-nHy_g2PKixG7rni2qhsbCnk_0igflEi0ljjexIhOMN7SXQ-1-YRmNe1i3d8KThOBLMjjSnQDAI7GxQPzZsJKp5bKDhKdk5lHzW4C39tyXZK8G0WR9feCdZeRE6dLnJkwb5K9UvhLfo6BzZlZkqX0uvAE-SqttW0S_VylO--wsAAP__NiFqpA==
-
-# Check the JSON column is still there, albeit hidden.
-query T colnames
-SELECT json FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
-----
-json
+{"sql":"EXPLAIN (DISTSQL, JSON) SELECT 1","nodeNames":["1"],"processors":[{"nodeIdx":0,"inputs":[],"core":{"title":"local values 0/0","details":[]},"outputs":[],"stage":1},{"nodeIdx":0,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}],"edges":[{"sourceProc":0,"sourceOutput":0,"destProc":1,"destInput":0}]}
 
 # Full table scan - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Partial scan - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k=1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k=1] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local
 
 # Partial scan - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local
 
 # Partial scan with filter - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 AND v=1] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local
 
 # Sort - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Aggregation - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k]
+query T
+SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Hard limit in scan - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Soft limit in scan - don't distribute.
 # TODO(yuzefovich): soft limits are currently ignored in scans.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Limit after sort - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Limit after aggregation - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
+query T
+SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 statement ok
 CREATE TABLE kw (k INT PRIMARY KEY, w INT)
 
 # Join - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 # Join with span - distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv NATURAL JOIN kw WHERE k=1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=1] WHERE info LIKE 'distribution%'
 ----
-true
+distribution: full
 
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b))
 
 # Index join - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM abc WHERE b=1] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local
 
 # Index join with filter on result - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM abc WHERE b=1 AND c%2=0] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local
 
 # Index join with filter on index scan - don't distribute.
-query B
-SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM abc WHERE b=1 AND a%2=0] WHERE info LIKE 'distribution%'
 ----
-false
+distribution: local

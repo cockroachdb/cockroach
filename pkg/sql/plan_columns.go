@@ -97,8 +97,6 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	// Nodes with a fixed schema.
 	case *scrubNode:
 		return n.getColumns(mut, colinfo.ScrubColumns)
-	case *explainDistSQLNode:
-		return n.getColumns(mut, colinfo.ExplainDistSQLColumns)
 	case *explainPlanNode:
 		return n.getColumns(mut, colinfo.ExplainPlanColumns)
 	case *explainVecNode:
@@ -160,10 +158,9 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	return noColumns
 }
 
-// optColumnsSlot is a helper struct for nodes with a static signature
-// (e.g. explainDistSQLNode). It allows instances to reuse a common
-// (shared) ResultColumns slice as long as no read/write access is
-// requested to the slice via planMutableColumns.
+// optColumnsSlot is a helper struct for nodes with a static signature.
+// It allows instances to reuse a common (shared) ResultColumns slice as long as
+// no read/write access is requested to the slice via planMutableColumns.
 type optColumnsSlot struct {
 	columns colinfo.ResultColumns
 }

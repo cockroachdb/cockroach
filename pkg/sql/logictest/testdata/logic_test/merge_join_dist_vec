@@ -43,9 +43,27 @@ start_key  end_key  replicas  lease_holder
 NULL       /2       {3}       3
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2]
+EXPLAIN (DISTSQL) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9FvmzAQxt_3V1i3l2ZzBXbYi6VKTBvdqFLogGqTKh7ccEuQKGa2kRZF-d8noFIGS7NU07Y3bN_vu_u-E1sw3yoQkAaL4F1GWl2RyyS-JnfBl5vF2zAiZ-_DNEs_LWbkseTVUFCRRXCZkas4jIgmt2kYfSBnckY-fwySgEhyQXgOFGpVYCQf0IC4AwYUOOQUGq2WaIzS3fW2LwqL7yBcCmXdtLa7zikslUYQW7ClrRAEZPK-wgRlgdrptAq0sqx6ae03unyQegMU0kbWRhCHnzvceQn5joJq7aPsXu1-Q9bSrMc6PoN8l1MwVq4QBN_RJ8bb67S10gVqLEZKeUf-ruSAx2vUK7xSZY3amY9nyzYNiiH2-DYLkj58oFDhV3vms9ezC12u1sMnUIhbK4jPqM-p701S2Duc_4HDA-NH6lw1jjeN4mBrb9Sanb57d5xL9Xd2z54c71_snv_X3R8YLkHTqNrgSat1O3tYrHCIy6hWL_FGq2XfZjjGPdcnW6Cxw6s3HMK6f-p_v9NhdhxmU9j9GeYjmE1hfhR-M4LdKTx_hudfOh-H2XHYe5bnfPfiRwAAAP__WUL0nA==
+distribution: full
+vectorized: true
+·
+• merge join (left outer)
+│ equality: (a) = (a)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: l@primary
+│     spans: [/2 - /2]
+│
+└── • scan
+      missing stats
+      table: r@primary
+      spans: [/2 - /2]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEk9GPk0AQxt_9KzbjS6t7gd3iyyaXYJRTLj04gYsmhoe9MrYkHIu7S2LT9H83gEkFe7UXo76xu_P7Zr5vwg7M1woEBJ9ul6_DiMzehmmWfljOSRosgzcZeUGukviGVGQZXGXkOg4josldGkbvyEzOycf3QRIQSS4JBwq1KjCSD2hAfAYGFDjkFBqtVmiM0t31ri8Ki28gXApl3bS2u84prJRGEDuwpa0QBGTyvsIEZYHa6bQKtLKsemntN7p8kHoLFNJG1kYQh1843HkO-Z6Cau0P2YPa_ZZspNmMdXwG-T6nYKxcIwi-p4-Md9Bpa6UL1FiMlPKO_F3JEY83qNd4rcoatbMYz5ZtGxRD6vFdFiR99kChwi925rOX80tdrjfDJ1CIWyuIz6jPqe9NUjg4XPyBwyPjR-pCNY43jeJoa2_Ump2_e3ecS_V3ds8eHe9f7J7_190fGS5B06ja4FmrdTt7WKxxiMuoVq_wVqtV32Y4xj3XJ1ugscOrNxzCun_qf7_zYXYaZlPY_RnmI5hNYX4SfjWC3Sm8eILnXzqfhtlp2HuS53z_7HsAAAD___ZW7z0=
 
 # Test that we can handle merge joins with equality columns of integers with
 # different widths.

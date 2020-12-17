@@ -151,14 +151,6 @@ var ExplainPlanColumns = ResultColumns{
 	{Name: "info", Typ: types.String},
 }
 
-// ExplainDistSQLColumns are the result columns of an
-// EXPLAIN (DISTSQL) statement.
-var ExplainDistSQLColumns = ResultColumns{
-	{Name: "automatic", Typ: types.Bool},
-	{Name: "url", Typ: types.String},
-	{Name: "json", Typ: types.String, Hidden: true},
-}
-
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},

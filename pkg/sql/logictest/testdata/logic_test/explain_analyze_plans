@@ -185,9 +185,16 @@ EXPLAIN ANALYZE (DISTSQL) EXPLAIN SELECT 1
 
 # This query verifies support for zeroNode in DistSQL.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE]
+EXPLAIN (DISTSQL) SELECT sum(k) FROM kv WHERE FALSE
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9LwzAUxd_9FOE-dRBY42OenFqxsH-u8w-MPIT2WseyZuYmIpR-d2kj6ISJPt5zzzm_5LZArwYkFNk0u1qz4Ay7WS1mbJM9LaeTfM6S67xYF3fTEfu0UNgnu1F07d7Y4222ytizNoQKODS2wrneI4HcgADF4eBsiUTW9VI7GPLqHWTKYdscgu9lxaG0DkG24LfeIEh40CYgjVPgUKHXWzM0puySJSkrX0KzoxGojoMN_quFvK4RZNrxv5Mmde2w1t66sTimFfez5EKcxoj_YFZIB9sQHiFOf0BxwKrGeDSywZW4dLYcMHFcDLlBqJB83Io45E1c9Q_8Hha_hs9_hFV39hEAAP__TsavHw==
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • norows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkE1LxDAQhu_-ijCnLgS28ZiTq1YsdD9s1w-QHkI71tJuUzOJCKX_XZoeVoUVPc47eebJzAD01oKE6GmXrOINC67jbJ_dJQuWRUl0tWfkDkGzYDfpds2ad_Z4G6URe1EtIXDodIkbdUAC-QwCcg690QUSaTNFg38Qlx8gQw511zs7xTmHQhsEOYCtbYsg4UG1DmkZAocSrapbPzFklywIWfHquoYWkI8ctLPHKWRVhSDDkf_dtKoqg5Wy2izFd1t2vw4uxGmN-I8mRep15490VJxeIOeAZYXz0Ug7U-DO6MJr5nLrOR-USHbuirmIu7k1ffArLH6Fz3_A-Xj2GQAA__8VEanA
 
 # This query verifies stat collection for the tableReader and windower.
 query T
