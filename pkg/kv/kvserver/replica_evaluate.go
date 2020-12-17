@@ -175,7 +175,18 @@ func evaluateBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(baReqs) >= optimizePutThreshold && !readOnly {
-		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
+		rw := readWriter
+		var distinctBatch storage.ReadWriter
+		if baHeader.DistinctSpans {
+			if b, ok := readWriter.(storage.Batch); ok {
+				rw = b.Distinct()
+				distinctBatch = rw
+			}
+		}
+		baReqs = optimizePuts(rw, baReqs, baHeader.DistinctSpans)
+		if distinctBatch != nil {
+			distinctBatch.Close()
+		}
 	}
 
 	// Create a clone of the transaction to store the new txn state produced on
@@ -199,8 +210,22 @@ func evaluateBatch(
 			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
-				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
+				rw := readWriter
+				var distinctBatch storage.ReadWriter
+				if baHeader.DistinctSpans {
+					if b, ok := readWriter.(storage.Batch); ok {
+						rw = b.Distinct()
+						distinctBatch = rw
+					}
+				}
+				if pErr := checkIfTxnAborted(ctx, rec, rw, *baHeader.Txn); pErr != nil {
+					if distinctBatch != nil {
+						distinctBatch.Close()
+					}
 					return nil, result.Result{}, pErr
+				}
+				if distinctBatch != nil {
+					distinctBatch.Close()
 				}
 			}
 		}
@@ -498,7 +523,16 @@ func evaluateCommand(
 			Args:    args,
 			Stats:   ms,
 		}
-
+		if h.DistinctSpans {
+			if b, ok := readWriter.(storage.Batch); ok {
+				// Use the distinct batch for both blind and normal ops so that we don't
+				// accidentally flush mutations to make them visible to the distinct
+				// batch.
+				readWriter = b.Distinct()
+				cArgs.PreDistinctBatch = b
+				defer readWriter.Close()
+			}
+		}
 		if cmd.EvalRW != nil {
 			pd, err = cmd.EvalRW(ctx, readWriter, cArgs, reply)
 		} else {

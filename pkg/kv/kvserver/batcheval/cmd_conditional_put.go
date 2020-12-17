@@ -31,16 +31,6 @@ func ConditionalPut(
 	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
 	h := cArgs.Header
 
-	if h.DistinctSpans {
-		if b, ok := readWriter.(storage.Batch); ok {
-			// Use the distinct batch for both blind and normal ops so that we don't
-			// accidentally flush mutations to make them visible to the distinct
-			// batch.
-			readWriter = b.Distinct()
-			defer readWriter.Close()
-		}
-	}
-
 	var expVal []byte
 	if len(args.ExpBytes) != 0 {
 		expVal = args.ExpBytes

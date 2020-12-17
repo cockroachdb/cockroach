@@ -181,6 +181,9 @@ func (tc *txnCommitter) SendLocked(
 		// negatives when the in-flight writes overlap with existing lock
 		// spans, but never false positives.
 		et.LockSpans, ba.Header.DistinctSpans = mergeIntoSpans(et.LockSpans, et.InFlightWrites)
+		if ba.IsCommitTrigger() {
+			ba.Header.DistinctSpans = false
+		}
 		// Disable parallel commits.
 		et.InFlightWrites = nil
 	}

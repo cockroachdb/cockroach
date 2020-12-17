@@ -187,6 +187,16 @@ func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
 	return false
 }
 
+// IsCommitTrigger .
+// see: https://github.com/cockroachdb/cockroach/blob/adbe5ffe294e4a663a2e4a04793460674483b63c/pkg/kv/kvserver/replica_command.go#L209-L232
+func (ba *BatchRequest) IsCommitTrigger() bool {
+	req, ok := ba.GetArg(EndTxn)
+	if !ok {
+		return false
+	}
+	return req.(*EndTxnRequest).InternalCommitTrigger != nil
+}
+
 // IsSingleEndTxnRequest returns true iff the batch contains a single request,
 // and that request is an EndTxnRequest.
 func (ba *BatchRequest) IsSingleEndTxnRequest() bool {

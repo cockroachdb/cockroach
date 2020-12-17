@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -144,6 +145,8 @@ func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if !p.isDistinct {
 		if !p.batch.Indexed() {
+			// TODO: remove
+			debug.PrintStack()
 			panic("write-only batch")
 		}
 		if p.distinctOpen {
@@ -191,6 +194,8 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 
 	if !p.batch.Indexed() && !p.isDistinct {
+		// TODO: remove
+		debug.PrintStack()
 		panic("write-only batch")
 	}
 	if p.distinctOpen {
@@ -235,6 +240,8 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	}
 
 	if !p.batch.Indexed() && !p.isDistinct {
+		// TODO: remove
+		debug.PrintStack()
 		panic("write-only batch")
 	}
 	if p.distinctOpen {
