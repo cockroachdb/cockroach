@@ -164,10 +164,10 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	}
 
 	batchMemEstimate := colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize())
-	// Set the memory limit in such a manner that at least 3 batches of distinct
+	// Set the memory limit in such a manner that at least 2 batches of distinct
 	// tuples are emitted by the in-memory unordered distinct before the
 	// spilling occurs.
-	nBatchesOutputByInMemoryOp := 3 + rng.Intn(3)
+	nBatchesOutputByInMemoryOp := 2 + rng.Intn(2)
 	memoryLimitBytes := int64(nBatchesOutputByInMemoryOp * batchMemEstimate)
 	if memoryLimitBytes < mon.DefaultPoolAllocationSize {
 		memoryLimitBytes = mon.DefaultPoolAllocationSize
@@ -178,7 +178,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	// Calculate the total number of distinct batches at least twice as large
 	// as for the in-memory operator in order to make sure that the external
 	// distinct has enough work to do.
-	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(3))
+	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(2))
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
@@ -194,10 +194,10 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// verifier.
 		unorderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			// A sorter should never exceed ExternalSorterMinPartitions, even
-			// during repartitioning. A panic will happen if a sorter requests
-			// more than this number of file descriptors.
-			sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+			// Since we're giving very low memory limit to the operator, in
+			// order to make the test runs faster, we'll use an unlimited number
+			// of file descriptors.
+			sem := colexecbase.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(

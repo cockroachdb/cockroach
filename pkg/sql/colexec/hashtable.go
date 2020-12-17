@@ -489,6 +489,22 @@ func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch)
 	}
 }
 
+// maybeRepairAfterDistinctBuild checks whether the hash table built via
+// distinctBuild is in an inconsistent state and repairs it if so.
+func (ht *hashTable) maybeRepairAfterDistinctBuild(ctx context.Context) {
+	// buildScratch.next has an extra 0th element not used by the tuples
+	// reserved for the end of the chain.
+	if len(ht.buildScratch.next) < ht.vals.Length()+1 {
+		// The hash table in such a state that some distinct tuples were
+		// appended to ht.vals, but 'next' and 'first' slices were not updated
+		// accordingly.
+		numConsistentTuples := len(ht.buildScratch.next) - 1
+		lastBatchNumDistinctTuples := ht.vals.Length() - numConsistentTuples
+		ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:lastBatchNumDistinctTuples]...)
+		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, uint64(numConsistentTuples)+1, uint64(lastBatchNumDistinctTuples))
+	}
+}
+
 // checkCols performs a column by column checkCol on the key columns.
 func (ht *hashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) {
 	switch ht.probeMode {

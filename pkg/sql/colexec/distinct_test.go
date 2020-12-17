@@ -191,7 +191,7 @@ func TestDistinct(t *testing.T) {
 		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 				return NewUnorderedDistinct(
-					testAllocator, input[0], tc.distinctCols, tc.typs, defaultMemoryLimit,
+					testAllocator, input[0], tc.distinctCols, tc.typs,
 				), nil
 			})
 		if tc.isOrderedOnDistinctCols {
@@ -204,7 +204,7 @@ func TestDistinct(t *testing.T) {
 				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return newPartiallyOrderedDistinct(
-							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs, defaultMemoryLimit,
+							testAllocator, input[0], tc.distinctCols, orderedCols, tc.typs,
 						)
 					})
 			}
@@ -241,7 +241,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 		// verifier.
 		unorderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs, defaultMemoryLimit), nil
+			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs), nil
 		},
 	)
 }
@@ -343,10 +343,10 @@ func BenchmarkDistinct(b *testing.B) {
 
 	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewUnorderedDistinct(allocator, input, distinctCols, typs, math.MaxInt64), nil
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs), nil
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs, math.MaxInt64)
+			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return NewOrderedDistinct(input, distinctCols, typs)

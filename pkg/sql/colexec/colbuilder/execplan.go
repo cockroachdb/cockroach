@@ -851,17 +851,16 @@ func NewColOperator(
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
 				// a disk-backed one here.
 				distinctMemMonitorName := fmt.Sprintf("distinct-%d", spec.ProcessorID)
-				distinctMemAccount := result.createBufferingUnlimitedMemAccount(
+				distinctMemAccount := result.createMemAccountForSpillStrategy(
 					ctx, flowCtx, distinctMemMonitorName,
 				)
 				// TODO(yuzefovich): we have an implementation of partially
 				// ordered distinct, and we should plan it when we have
 				// non-empty ordered columns and we think that the probability
 				// of distinct tuples in the input is about 0.01 or less.
-				unlimitedAllocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
+				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
 				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
-					unlimitedAllocator, inputs[0], core.Distinct.DistinctColumns,
-					result.ColumnTypes, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+					allocator, inputs[0], core.Distinct.DistinctColumns, result.ColumnTypes,
 				)
 				diskAccount := result.createDiskAccount(ctx, flowCtx, distinctMemMonitorName)
 				result.Op = colexec.NewOneInputDiskSpiller(

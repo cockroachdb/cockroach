@@ -31,7 +31,6 @@ func newPartiallyOrderedDistinct(
 	distinctCols []uint32,
 	orderedCols []uint32,
 	typs []*types.T,
-	memoryLimit int64,
 ) (colexecbase.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
@@ -60,7 +59,7 @@ func newPartiallyOrderedDistinct(
 			distinctUnorderedCols = append(distinctUnorderedCols, distinctCol)
 		}
 	}
-	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs, memoryLimit)
+	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
 		distinct: distinct.(ResettableOperator),

@@ -11,8 +11,6 @@
 package colexec
 
 import (
-	"math"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -41,12 +39,10 @@ func NewExternalDistinct(
 	inMemMainOpConstructor := func(partitionedInputs []*partitionerToOperator) ResettableOperator {
 		// Note that the hash-based partitioner will make sure that partitions
 		// to process using the in-memory unordered distinct fit under the
-		// limit, so we use an unlimited allocator with an unbounded memory
-		// limit.
+		// limit, so we use an unlimited allocator.
 		// TODO(yuzefovich): it might be worth increasing the number of buckets.
-		memoryLimit := int64(math.MaxInt64)
 		return NewUnorderedDistinct(
-			unlimitedAllocator, partitionedInputs[0], distinctCols, inputTypes, memoryLimit,
+			unlimitedAllocator, partitionedInputs[0], distinctCols, inputTypes,
 		)
 	}
 	diskBackedFallbackOpConstructor := func(
