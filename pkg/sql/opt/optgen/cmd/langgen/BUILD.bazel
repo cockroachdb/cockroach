@@ -1,5 +1,31 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
+# The Optgen language compiler uses itself to generate its AST expressions.
+# This is a form of compiler bootstrapping[1], and needs some manual overrides
+# to fit into how Bazel wants things to be. We define a second go_library
+# target[2], that sources pre-generated og.go files that are already checked
+# into the source tree. These files are used to compile langgen, which is then
+# used to generate newer revisions of those same generated files. All
+# dependants of [3] will need to depend on the og.go files generated in the
+# Bazel sandbox, which is achieved by [4]. Conversely, to instruct
+# gazelle/Bazel to resolve langgen's import of [3] appropriately, we add the
+# resolve directive below.
+#
+# TODO(irfansharif): We'll eventually want to be able to implant the sandbox
+# generated files back into the source tree. This will be necessary for IDEs,
+# but also for a sane workflow for the engineers working on langgen. If they
+# were only using Bazel today, langgen dependent builds would misbehave as we
+# wouldn't be updating the checked-in og.go files used to build langgen itself
+# (assuming any diffs there would result in different code/compilation
+# behavior). See https://github.com/cockroachdb/cockroach/issues/58018.
+#
+# [1]: https://en.wikipedia.org/wiki/Bootstrapping_(compilers)
+# [2]: //pkg/sql/opt/optgen/lang:bootstrap
+# [3]: github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang
+# [4]: See the "gazelle:resolve" directive in the top-level BUILD.bazel file
+#
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang //pkg/sql/opt/optgen/lang:bootstrap
+
 go_library(
     name = "langgen_lib",
     srcs = [
@@ -10,7 +36,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/cmd/langgen",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/sql/opt/optgen/lang",
+        "//pkg/sql/opt/optgen/lang:bootstrap",  # keep
         "//vendor/github.com/cockroachdb/errors",
     ],
 )

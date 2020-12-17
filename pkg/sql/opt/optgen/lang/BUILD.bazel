@@ -7,8 +7,32 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
-        "expr.og.go",  # keep
-        "operator.og.go",  # keep
+        "operator_string.go",
+        "parser.go",
+        "scanner.go",
+        "token_string.go",
+        ":gen-expr",  # keep
+        ":gen-operator",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
+)
+
+# Langgen is a bootstrapping compiler. We need to partition the dependencies
+# here to avoid cyclical structures. See the BUILD.bazel file for langgen for
+# more details.
+#
+# keep
+go_library(
+    name = "bootstrap",
+    srcs = [
+        "compiler.go",
+        "data_type.go",
+        "doc.go",
+        "expr.go",
+        "expr.og.go",
+        "operator.og.go",
         "operator_string.go",
         "parser.go",
         "scanner.go",
@@ -32,4 +56,25 @@ go_test(
         "//vendor/github.com/cockroachdb/datadriven",
         "//vendor/github.com/cockroachdb/errors",
     ],
+)
+
+# Define the generator for the expression definitions and functions.
+genrule(
+    name = "gen-expr",
+    srcs = ["lang.opt"],
+    outs = ["expr-gen.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ exprs $(location lang.opt)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+)
+
+genrule(
+    name = "gen-operator",
+    srcs = ["lang.opt"],
+    outs = ["operator-gen.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(location lang.opt)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
 )
