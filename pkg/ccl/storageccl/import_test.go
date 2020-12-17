@@ -297,10 +297,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	} {
 		t.Run(fmt.Sprintf("%d-%v", i, testCase), func(t *testing.T) {
 			newID := descpb.ID(100 + i)
-			kr := prefixRewriter{{
+			kr := prefixRewriter{rewrites: []prefixRewrite{{
 				OldPrefix: srcPrefix,
 				NewPrefix: makeKeyRewriterPrefixIgnoringInterleaved(newID, indexID),
-			}}
+			}}}
 			rekeys := []roachpb.ImportRequest_TableRekey{
 				{
 					OldID: oldID,

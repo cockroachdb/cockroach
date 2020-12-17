@@ -27,7 +27,7 @@ import (
 func TestPrefixRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	kr := prefixRewriter{
+	kr := prefixRewriter{rewrites: []prefixRewrite{
 		{
 			OldPrefix: []byte{1, 2, 3},
 			NewPrefix: []byte{4, 5, 6},
@@ -36,8 +36,7 @@ func TestPrefixRewriter(t *testing.T) {
 			OldPrefix: []byte{7, 8, 9},
 			NewPrefix: []byte{10},
 		},
-	}
-
+	}}
 	t.Run("match", func(t *testing.T) {
 		key := []byte{1, 2, 3, 4}
 		newKey, ok := kr.rewriteKey(key)
@@ -159,7 +158,7 @@ func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
 }
 
 func BenchmarkPrefixRewriter(b *testing.B) {
-	kr := prefixRewriter{
+	kr := prefixRewriter{rewrites: []prefixRewrite{
 		{
 			OldPrefix: []byte{1, 2, 3},
 			NewPrefix: []byte{4, 5, 6},
@@ -168,7 +167,7 @@ func BenchmarkPrefixRewriter(b *testing.B) {
 			OldPrefix: []byte{7, 8, 9},
 			NewPrefix: []byte{10},
 		},
-	}
+	}}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
