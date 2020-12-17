@@ -224,7 +224,13 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     this.props.refreshStatementDiagnosticsRequests();
   }
 
-  prevPage = () => this.props.history.goBack();
+  backToStatementsPage = () => {
+    const { history, location } = this.props;
+    history.push({
+      ...location,
+      pathname: "/statements",
+    });
+  }
 
   onTabChange = (tabId: string) => {
     const { history } = this.props;
@@ -247,7 +253,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
         <div className={cx("section", "page--header")}>
           <Button
-            onClick={this.prevPage}
+            onClick={this.backToStatementsPage}
             type="unstyled-link"
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
