@@ -22,73 +22,90 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// TestResetQuorum tests the ResetQuorum method to restore quorum for a
-// range whose replicas are all lost. It starts a cluster with two nodes,
-// n1 and n2, with a range isolated to n2. Then, it stops n2 and checks
-// that the range is unavailable. Finally, it uses ResetQuorum to make the
-// range accessible again and checks that the range is available again.
+// TestResetQuorum tests the ResetQuorum method in various scenarios.
+
+// It does this by setting up a test cluster for each scenario below.
+// It starts a cluster with four nodes, n1, n2, n3, and n4 with a
+// range replicated to all nodes but n1. Then, it removes replicas
+// necessary to set up the scenario being tested and checks that the
+// range is unavailable, if applicable. Then, it calls ResetQuorum
+// and checks that the range is available again or that it returns
+// an error, depending on the expected behavior.
 //
-// TODO(thesamhuang): Add additional testing to cover two cases:
-// 1. if there's an existing replica and we send the recovery snapshot to
-// that replica, we still get the quorum reset and end up with an empty
-// range.
-// 2. if there's an existing replica and we send the recovery snapshot to
-// another node that doesn't have that replica, we also still get the
-// reset, and replicaGC removes the original survivor when triggered.
+// This test covers the following cases:
+// 1. Reset quorum for a range that has lost quorum with no replicas
+// 		remaining.
+// 2. Reset quorum for a range that has lost quorum on a node with a
+//		replica.
+// 3. Reset quorum for a range that has lost quorum on a node without
+//		a replica (with other replicas remaining).
+// 4. Reset quorum for a range that has not lost quorum (error
+//		expected).
+// 5. Reset quorum for a range that is a meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	livenessDuration := 3000 * time.Millisecond
 
-	clusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
-					LivenessDuration: livenessDuration, // set duration so n2 liveness expires shortly after stopping
-					RenewalDuration:  1500 * time.Millisecond,
+	// This function sets up a test cluster with 4 nodes with a scratch
+	// range on n2, n3, and n4 only.
+	setup := func(
+		t *testing.T,
+	) (tc *testcluster.TestCluster, k roachpb.Key, id roachpb.RangeID) {
+		clusterArgs := base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+						LivenessDuration: livenessDuration, // set duration so n2 liveness expires shortly after stopping
+						RenewalDuration:  1500 * time.Millisecond,
+					},
 				},
 			},
-		},
+		}
+		tc = testcluster.StartTestCluster(t, 4, clusterArgs)
+
+		n1, n2, n3, n4 := 0, 1, 2, 3
+
+		// Set up a scratch range isolated to n2, n3, and n4.
+		k = tc.ScratchRange(t)
+		_, err := tc.AddVoters(k, tc.Target(n2))
+		require.NoError(t, err)
+		_, err = tc.AddVoters(k, tc.Target(n3))
+		require.NoError(t, err)
+		desc, err := tc.AddVoters(k, tc.Target(n4))
+		require.NoError(t, err)
+		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(n2)))
+		desc, err = tc.RemoveVoters(k, tc.Target(n1))
+		require.NoError(t, err)
+		require.Len(t, desc.Replicas().All(), 3)
+
+		srv := tc.Server(n1)
+
+		require.NoError(t, srv.DB().Put(ctx, k, "bar"))
+
+		metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
+		// Read the meta2 which ResetQuorum updates while the range
+		// is still available. This avoids an intent from the previous
+		// replication change to linger; such an intent would be anchored
+		// on the scratch range, which is unavailable when quorum is lost.
+		_, err = srv.DB().Get(ctx, metaKey)
+		require.NoError(t, err)
+
+		return tc, k, desc.RangeID
 	}
-	tc := testcluster.StartTestCluster(t, 2, clusterArgs)
-	defer tc.Stopper().Stop(ctx)
 
-	n1, n2 := 0, 1
-
-	// Set up a scratch range isolated to n2.
-	k := tc.ScratchRange(t)
-	desc, err := tc.AddVoters(k, tc.Target(n2))
-	require.NoError(t, err)
-	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(n2)))
-	desc, err = tc.RemoveVoters(k, tc.Target(n1))
-	require.NoError(t, err)
-	require.Len(t, desc.Replicas().All(), 1)
-
-	srv := tc.Server(n1)
-
-	require.NoError(t, srv.DB().Put(ctx, k, "bar"))
-
-	metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
-	// Read the meta2 which ResetQuorum will be updating while n2
-	// is still available. This avoids an intent from the previous
-	// replication change to linger; such an intent would be anchored
-	// on the scratch range, which is unavailable when n2 goes down.
-	_, err = srv.DB().Get(ctx, metaKey)
-	require.NoError(t, err)
-	tc.StopServer(n2)
-	// Wait for n2 liveness to expire.
-	time.Sleep(livenessDuration)
-
-	// Sanity check that requests to the ScratchRange fail.
-	func() {
+	// This function verifies a range is unavailable by checking
+	// hat requests to a key in the range fail.
+	checkUnavailable := func(srv serverutils.TestServerInterface, k roachpb.Key) {
 		cCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		err := srv.DB().Put(cCtx, k, "baz")
@@ -99,58 +116,188 @@ func TestResetQuorum(t *testing.T) {
 		// We're probably checking in the RPC layer whether we've
 		// retried with an up-to-date desc and fail fast if so.
 		require.Error(t, err)
-	}()
-
-	// Get the store on the designated survivor n1.
-	var store *kvserver.Store
-	require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-		store = inner
-		return nil
-	}))
-	if store == nil {
-		t.Fatal("no store found on n1")
 	}
 
-	// Call ResetQuorum to reset quorum on the unhealthy range.
-	t.Logf("resetting quorum on node id: %v, store id: %v", store.NodeID(), store.StoreID())
-	_, err = srv.Node().(*server.Node).ResetQuorum(
-		ctx,
-		&roachpb.ResetQuorumRequest{
-			RangeID: int32(desc.RangeID),
-		},
-	)
-	require.NoError(t, err)
-
-	t.Logf("resetting quorum complete")
-
-	require.NoError(t, srv.DB().Put(ctx, k, "baz"))
-
-	// Get range descriptor from meta2 and verify it was updated correctly.
-	var updatedDesc roachpb.RangeDescriptor
-	require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    roachpb.KeyMin,
-			EndKey: roachpb.KeyMax,
-		})
-		if err != nil {
-			return err
-		}
-
-		for i := range kvs {
-			if err := kvs[i].Value.GetProto(&updatedDesc); err != nil {
+	// This function verifies quorum for rangeID was successfully
+	// reset by getting the range descriptor from meta2 and
+	// verifying that the given node ID is the only replica.
+	verifyResult := func(
+		t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID, nodeID roachpb.NodeID,
+	) {
+		var updatedDesc roachpb.RangeDescriptor
+		require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+				Key:    roachpb.KeyMin,
+				EndKey: roachpb.KeyMax,
+			})
+			if err != nil {
 				return err
 			}
-			if updatedDesc.RangeID == desc.RangeID {
-				return nil
+
+			for i := range kvs {
+				if err := kvs[i].Value.GetProto(&updatedDesc); err != nil {
+					return err
+				}
+				if updatedDesc.RangeID == rangeID {
+					return nil
+				}
 			}
+			return errors.Errorf("range id %v not found after resetting quorum", rangeID)
+		}))
+		if len(updatedDesc.Replicas().All()) != 1 {
+			t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().All()))
 		}
-		return errors.Errorf("range id %v not found after resetting quorum", desc.RangeID)
-	}))
-	if len(updatedDesc.Replicas().All()) != 1 {
-		t.Fatalf("found %v replicas found after resetting quorum, expected 1", len(updatedDesc.Replicas().All()))
+		if updatedDesc.Replicas().All()[0].NodeID != nodeID {
+			t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().All()[0].NodeID, nodeID)
+		}
 	}
-	if updatedDesc.Replicas().All()[0].NodeID != srv.NodeID() {
-		t.Fatalf("replica found after resetting quorum is on node id %v, expected node id %v", updatedDesc.Replicas().All()[0].NodeID, srv.NodeID())
-	}
+
+	t.Run("reset quorum for a range that has lost quorum with no replicas remaining", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n1, n2, n3, n4 := 0, 1, 2, 3
+		srv := tc.Server(n1)
+		tc.StopServer(n2)
+		tc.StopServer(n3)
+		tc.StopServer(n4)
+		// Wait for n2, n3, and n4 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n1.
+		var store *kvserver.Store
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
+			store = inner
+			return nil
+		}))
+		if store == nil {
+			t.Fatal("no store found on n1")
+		}
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		t.Logf("resetting quorum on node id: %v, store id: %v", store.NodeID(), store.StoreID())
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(id),
+			},
+		)
+		require.NoError(t, err)
+
+		t.Logf("resetting quorum complete")
+
+		require.NoError(t, srv.DB().Put(ctx, k, "baz"))
+
+		verifyResult(t, store, id, srv.NodeID())
+	})
+
+	t.Run("reset quorum for a range that has lost quorum on a node with a replica", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n2, n3, n4 := 1, 2, 3
+		srv := tc.Server(n4)
+		tc.StopServer(n2)
+		tc.StopServer(n3)
+		// Wait for n2, n3, and n4 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n4.
+		var store *kvserver.Store
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
+			store = inner
+			return nil
+		}))
+		if store == nil {
+			t.Fatal("no store found on n4")
+		}
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		t.Logf("resetting quorum on node id: %v, store id: %v", store.NodeID(), store.StoreID())
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(id),
+			},
+		)
+		require.NoError(t, err)
+
+		t.Logf("resetting quorum complete")
+
+		require.NoError(t, srv.DB().Put(ctx, k, "baz"))
+
+		verifyResult(t, store, id, srv.NodeID())
+	})
+
+	t.Run("reset quorum for a range that has lost quorum on a node without a replica (with other replicas remaining)", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n1, n2, n3 := 0, 1, 2
+		srv := tc.Server(n1)
+		tc.StopServer(n2)
+		tc.StopServer(n3)
+		// Wait for n2 and n3 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n1.
+		var store *kvserver.Store
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
+			store = inner
+			return nil
+		}))
+		if store == nil {
+			t.Fatal("no store found on n1")
+		}
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		t.Logf("resetting quorum on node id: %v, store id: %v", store.NodeID(), store.StoreID())
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(id),
+			},
+		)
+		require.NoError(t, err)
+
+		t.Logf("resetting quorum complete")
+
+		require.NoError(t, srv.DB().Put(ctx, k, "baz"))
+
+		verifyResult(t, store, id, srv.NodeID())
+	})
+
+	t.Run("reset quorum for a range that has not lost quorum", func(t *testing.T) {
+		tc, _, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		srv := tc.Server(0)
+
+		// Call ResetQuorum to attempt to reset quorum on a healthy range.
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(id),
+			},
+		)
+		require.Error(t, err)
+	})
+
+	t.Run("reset quorum for a range that is a meta range", func(t *testing.T) {
+		tc, _, _ := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		srv := tc.Server(0)
+
+		// Call ResetQuorum to attempt to reset quorum on a meta range.
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(keys.MetaRangesID),
+			},
+		)
+		require.Error(t, err)
+	})
 
 }
