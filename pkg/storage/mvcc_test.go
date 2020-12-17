@@ -2120,7 +2120,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts0", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts0, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts0, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts0, ts0Content)
 				assertKVs(t, e, ts1, ts0Content)
@@ -2130,7 +2130,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts1 ", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts1, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts1, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts1, ts1Content)
 				assertKVs(t, e, ts2, ts1Content)
@@ -2140,7 +2140,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts2", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts2, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts2, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts2Content)
 				assertKVs(t, e, ts5, ts2Content)
@@ -2149,7 +2149,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts3", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts3, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts3, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts3, ts3Content)
 				assertKVs(t, e, ts5, ts3Content)
@@ -2158,7 +2158,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts4 (nothing) ", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts4, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts4, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts4, ts4Content)
 				assertKVs(t, e, ts5, ts4Content)
@@ -2167,7 +2167,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts5 (nothing)", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts5, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts5, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts4, ts4Content)
 				assertKVs(t, e, ts5, ts4Content)
@@ -2176,7 +2176,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear up to k5 to ts0", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, testKey1, testKey5, ts0, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, testKey1, testKey5, ts0, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, []roachpb.KeyValue{{Key: testKey5, Value: v2}})
 				assertKVs(t, e, ts5, []roachpb.KeyValue{{Key: testKey5, Value: v4}})
@@ -2185,7 +2185,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts0 in empty span (nothing)", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts2Content)
 				assertKVs(t, e, ts5, ts4Content)
@@ -2194,7 +2194,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear > ts0 in empty span [k3,k5) (nothing)", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey5, ts0, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts2Content)
 				assertKVs(t, e, ts5, ts4Content)
@@ -2203,7 +2203,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear k3 and up in ts0 > x >= ts1 (nothing)", func(t *testing.T) {
 				e := setupKVs(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, keyMax, ts0, ts1, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, keyMax, ts0, ts1, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts2Content)
 				assertKVs(t, e, ts5, ts4Content)
@@ -2219,21 +2219,21 @@ func TestMVCCClearTimeRange(t *testing.T) {
 			t.Run("clear everything hitting intent fails", func(t *testing.T) {
 				e := setupKVsWithIntent(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts0, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts0, ts5, 10, IterOptions{})
 				require.EqualError(t, err, "conflicting intents on \"/db3\"")
 			})
 
 			t.Run("clear exactly hitting intent fails", func(t *testing.T) {
 				e := setupKVsWithIntent(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey4, ts2, ts3, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, testKey3, testKey4, ts2, ts3, 10, IterOptions{})
 				require.EqualError(t, err, "conflicting intents on \"/db3\"")
 			})
 
 			t.Run("clear everything above intent", func(t *testing.T) {
 				e := setupKVsWithIntent(t)
 				defer e.Close()
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts3, ts5, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts3, ts5, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts2Content)
 
@@ -2258,7 +2258,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 				e := setupKVsWithIntent(t)
 				defer e.Close()
 				assertKVs(t, e, ts2, ts2Content)
-				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts1, ts2, 10)
+				_, err := MVCCClearTimeRange(ctx, e, nil, localMax, keyMax, ts1, ts2, 10, IterOptions{})
 				require.NoError(t, err)
 				assertKVs(t, e, ts2, ts1Content)
 			})
@@ -2370,7 +2370,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 					// Revert to the revert time.
 					startKey := localMax
 					for {
-						resume, err := MVCCClearTimeRange(ctx, e, &ms, startKey, keyMax, revertTo, now, 100)
+						resume, err := MVCCClearTimeRange(ctx, e, &ms, startKey, keyMax, revertTo, now, 100, IterOptions{})
 						require.NoError(t, err)
 						if resume == nil {
 							break

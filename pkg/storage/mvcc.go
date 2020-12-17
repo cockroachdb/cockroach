@@ -2050,6 +2050,7 @@ func MVCCClearTimeRange(
 	key, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	maxBatchSize int64,
+	io IterOptions,
 ) (*roachpb.Span, error) {
 	var batchSize int64
 	var resume *roachpb.Span
@@ -2128,28 +2129,46 @@ func MVCCClearTimeRange(
 	//
 	// Intents must be seen so that an error can be returned. We never delete an
 	// intent here.
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: key, UpperBound: endKey})
-	defer it.Close()
+	iterOptions := io
+	iterOptions.LowerBound = key
+	iterOptions.UpperBound = endKey
+	var iter MVCCIterator
+	var timeBoundIter MVCCIterator
+	if !iterOptions.MinTimestampHint.IsEmpty() && !iterOptions.MaxTimestampHint.IsEmpty() {
+		timeBoundIter = rw.NewMVCCIterator(MVCCKeyIterKind, iterOptions)
+	}
+	iter = rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: key,
+		UpperBound: endKey})
+	defer iter.Close()
+
+	// Use a TBI to find the start key if TBI optimization is enabled.
+	if timeBoundIter != nil {
+		timeBoundIter.SeekGE(MVCCKey{Key: key})
+		ok, err := timeBoundIter.Valid()
+		if err != nil {
+			return nil, err
+		} else if !ok {
+			return nil, nil
+		}
+		iter.SeekGE(timeBoundIter.Key())
+	} else {
+		iter.SeekGE(MVCCKey{Key: key})
+	}
 
 	var clearedMetaKey MVCCKey
 	var clearedMeta enginepb.MVCCMetadata
 	var restoredMeta enginepb.MVCCMetadata
-	for it.SeekGE(MVCCKey{Key: key}); ; it.Next() {
-		ok, err := it.Valid()
-		if err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-
-		k := it.UnsafeKey()
+	var err error
+	var ok bool
+	for ok, err = iter.Valid(); ok && err == nil; ok, err = iter.Valid() {
+		k := iter.UnsafeKey()
 
 		if ms != nil && len(clearedMetaKey.Key) > 0 {
 			metaKeySize := int64(clearedMetaKey.EncodedSize())
 			if bytes.Equal(clearedMetaKey.Key, k.Key) {
 				// Since the key matches, our previous clear "restored" this revision of
 				// the this key, so update the stats with this as the "restored" key.
-				valueSize := int64(len(it.Value()))
+				valueSize := int64(len(iter.Value()))
 				restoredMeta.KeyBytes = MVCCVersionTimestampSize
 				restoredMeta.Deleted = valueSize == 0
 				restoredMeta.ValBytes = valueSize
@@ -2165,17 +2184,13 @@ func MVCCClearTimeRange(
 			clearedMetaKey.Key = clearedMetaKey.Key[:0]
 		}
 
-		if c := k.Key.Compare(endKey); c >= 0 {
-			break
-		}
-
 		// We need to check for and fail on any intents in our time-range, as we do
 		// not want to clear any running transactions. We don't _expect_ to hit this
 		// since the RevertRange is only intended for non-live key spans, but there
 		// could be an intent leftover.
 		var meta enginepb.MVCCMetadata
 		if !k.IsValue() {
-			if err := it.ValueProto(&meta); err != nil {
+			if err := iter.ValueProto(&meta); err != nil {
 				return nil, err
 			}
 			ts := meta.Timestamp.ToTimestamp()
@@ -2197,7 +2212,7 @@ func MVCCClearTimeRange(
 			if ms != nil {
 				clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
 				clearedMeta.KeyBytes = MVCCVersionTimestampSize
-				clearedMeta.ValBytes = int64(len(it.UnsafeValue()))
+				clearedMeta.ValBytes = int64(len(iter.UnsafeValue()))
 				clearedMeta.Deleted = clearedMeta.ValBytes == 0
 				clearedMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 			}
@@ -2206,7 +2221,32 @@ func MVCCClearTimeRange(
 			if err := flushClearedKeys(k); err != nil {
 				return nil, err
 			}
+			// At this point we have cleared our current "run" of keys. We have also
+			// updated our stats in case the current key that does not match, was
+			// uncovered as a result of a key being cleared, and is a previous
+			// revision of that cleared key.
+			// So, if the TBI optimization is turned on, we can potentially skip over
+			// a large swath of keys which do not lie in (startTime, endTime].
+			if timeBoundIter != nil {
+				timeBoundIter.SeekGE(k)
+				ok, err := timeBoundIter.Valid()
+				if err != nil {
+					return nil, err
+				} else if !ok {
+					break
+				}
+				// The validity of where the iter lands will be checked as part of the
+				// for loop condition.
+				iter.SeekGE(timeBoundIter.Key())
+				continue
+			}
 		}
+		// Move the iter to the next key/value in the iteration if we have reached
+		// this point.
+		iter.Next()
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if ms != nil && len(clearedMetaKey.Key) > 0 {

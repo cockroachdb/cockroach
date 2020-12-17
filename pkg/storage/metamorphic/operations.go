@@ -292,7 +292,7 @@ type mvccClearTimeRangeOp struct {
 
 func (m mvccClearTimeRangeOp) run(ctx context.Context) string {
 	writer := m.m.getReadWriter(m.writer)
-	span, err := storage.MVCCClearTimeRange(ctx, writer, nil, m.key, m.endKey, m.startTime, m.endTime, math.MaxInt64)
+	span, err := storage.MVCCClearTimeRange(ctx, writer, nil, m.key, m.endKey, m.startTime, m.endTime, math.MaxInt64, storage.IterOptions{})
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}

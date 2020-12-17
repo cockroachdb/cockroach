@@ -85,10 +85,18 @@ func RevertRange(
 		return result.Result{}, nil
 	}
 
+	var io storage.IterOptions
+	if args.EnableTimeBoundIteratorOptimization {
+		// To be inclusive.
+		io.MinTimestampHint = args.TargetTime.Next()
+		// TODO(adityamaru): Confirm if this is correct.
+		io.MaxTimestampHint = cArgs.Header.Timestamp
+	}
+
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys)
+		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys, io)
 	if err != nil {
 		return result.Result{}, err
 	}
