@@ -56,11 +56,21 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 		expectedVec := expected.ColVec(colIdx)
 		actualVec := actual.ColVec(colIdx)
 		require.Equal(t, expectedVec.Type(), actualVec.Type())
-		require.Equal(
-			t,
-			expectedVec.Nulls().Slice(0, expected.Length()),
-			actualVec.Nulls().Slice(0, actual.Length()),
-		)
+		// Check whether the nulls bitmaps are the same. Note that we don't
+		// track precisely the fact whether nulls are present or not in
+		// 'maybeHasNulls' field, so we override it manually to be 'true' for
+		// both nulls vectors if it is 'true' for at least one of them. This is
+		// acceptable since we still check the bitmaps precisely.
+		expectedNulls := expectedVec.Nulls()
+		actualNulls := actualVec.Nulls()
+		oldExpMaybeHasNulls, oldActMaybeHasNulls := expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls
+		defer func() {
+			expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls = oldExpMaybeHasNulls, oldActMaybeHasNulls
+		}()
+		expectedNulls.maybeHasNulls = expectedNulls.maybeHasNulls || actualNulls.maybeHasNulls
+		actualNulls.maybeHasNulls = expectedNulls.maybeHasNulls || actualNulls.maybeHasNulls
+		require.Equal(t, expectedNulls.Slice(0, expected.Length()), actualNulls.Slice(0, actual.Length()))
+
 		canonicalTypeFamily := expectedVec.CanonicalTypeFamily()
 		if canonicalTypeFamily == types.BytesFamily {
 			// Cannot use require.Equal for this type.
@@ -95,7 +105,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					t.Fatalf("Interval mismatch at index %d:\nexpected:\n%sactual:\n%s", i, expectedInterval[i], resultInterval[i])
 				}
 			}
-		} else if expectedVec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			// Cannot use require.Equal for this type.
 			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
 			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())
