@@ -29,15 +29,12 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	b.popWithFrame(stmtScope)
 	outScope = inScope.push()
 
-	var cols colinfo.ResultColumns
 	switch explain.Mode {
 	case tree.ExplainPlan:
 		telemetry.Inc(sqltelemetry.ExplainPlanUseCounter)
-		cols = colinfo.ExplainPlanColumns
 
 	case tree.ExplainDistSQL:
 		telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
-		cols = colinfo.ExplainDistSQLColumns
 
 	case tree.ExplainOpt:
 		if explain.Flags[tree.ExplainFlagVerbose] {
@@ -45,16 +42,14 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		} else {
 			telemetry.Inc(sqltelemetry.ExplainOptUseCounter)
 		}
-		cols = colinfo.ExplainPlanColumns
 
 	case tree.ExplainVec:
 		telemetry.Inc(sqltelemetry.ExplainVecUseCounter)
-		cols = colinfo.ExplainPlanColumns
 
 	default:
 		panic(errors.Errorf("EXPLAIN mode %s not supported", explain.Mode))
 	}
-	b.synthesizeResultColumns(outScope, cols)
+	b.synthesizeResultColumns(outScope, colinfo.ExplainPlanColumns)
 
 	input := stmtScope.expr.(memo.RelExpr)
 	private := memo.ExplainPrivate{

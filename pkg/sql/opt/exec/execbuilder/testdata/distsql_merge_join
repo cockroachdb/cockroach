@@ -239,9 +239,26 @@ vectorized: true
           spans: /3/#/55/1-/5/#/55/2
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVN1q20wQvf-eYpnc2F_WrFY_LggMCo3bKjhyaru0kOpCkaa2QNGquxI0BL97kddgyTiK3bj0TrMzZ-bMmYOeQf3MwIX5eDJ-vyCVzMiH2fSW3I-_3U2u_ID0rv35Yv550ifbkv91QRFJzEtObqZ-QOJVmiWcfJn7wUfSK9KE98nXT-PZWAfke2UYFo6I1SdXwXXzMR4Rpx8ChVwkGESPqMC9Bw4UTKBgQUihkCJGpYSsU8-bQj_5Ba5BIc2LqtTPZVpmCC5UuZAJSkyAQoJllGZ1PlyHFGIhEdxdaSAGomDDvUIKoiq3bUMKqoyWCK69po3RvDH6QONF9JDhDKMEJTNa7WErm1fI9DGST0BhXkS5cgmzBsxmF8xxGGe2DW0iu94PT2QVqVW7q8dhs-GWLP9Tsma7rT7rIa5bouejbL5Iedfn0GHB45f14KOqDmx_i3KJNyLNUTK7jcnwR9nz-GV_JNPlSn8ChWlVusTj1DOpZ1PPgZcsY7VWMo-_Aj_WMg3xB8xhF2c0zQl0rSNNs8-2Dswzmsb8J6Zx_qZpjO4rzFAVIld41B_MqDfBZIlaHyUqGeOdFPFmjA6nG9zmIUFV6uw7Hfi5TtUEm2C-D-ZNsNUC89PAw26wecJk8zTwsBtsdQpmdNO23yJYN_gVwZy3CNYNfkWw4UmChev_fgcAAP__kmG_Pw==
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: [/3 - /5]
+│
+└── • scan
+      missing stats
+      table: child1@primary
+      spans: [/3 - /5]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVE1r20AQvfdXLJOL3axZrT5cEBgUGrdVcOTUdmmh9UGRprZA0aq7K2gI_u9FlsGScRSrcelNszNv5s2bh55A_UrBhfG3u8mVH5DetT9fzD9P-mQ-nozfL8hb8mE2vSV5KDHTnNxM_YBE6ySNOfky94OPpJcnMe-Tr5_Gs3EVkB-FYVg4IlafXAXX9cdoRJw-UMhEjEH4gArc78CBggkULFhSyKWIUCkhy9TTttCPf4NrUEiyvNDVs050iuBCkQkZo8QYKMSowyQt88vNkkIkJIK7Lw3EQORseFBIQRR613ZJQelwheDaG1obzWujjzRehPcpzjCMUTKj0R52qnm5TB5C-QgU5nmYKZcwa8BsdsEch3Fm29Aksu99_0jWoVo3u3octhvuyPK_JWs221ZXPcZ1R_R8lM1nKe_7HDssePyyHHxS1ZHtb1Gu8EYkGUpmNzEp_tQ9j1_2RzJZratPoDAttEs8Tj2Tejb1HHjOMlZjJfP0K_BTLVMTf8AcdnFG03Sga51omkO2ZWCe0TTmfzGN8y9NY7RfYYYqF5nCk_5gRrkJxius9FGikBHeSRFtx1ThdIvbPsSodJV9VwV-VqVKgnUwPwTzOthqgHk38LAdbHaYbHYDD9vBVqtgRjtt-zWCtYNfEMx5jWDt4BcEG3YSbLl58ycAAP__nje54A==
 
 # Swap parent1 and child1 tables.
 query T
@@ -277,9 +294,26 @@ vectorized: true
           parallel
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5]
+EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 AND pid1 <= 5
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVE1r20AQvfdXLNOL3ayRVh8uCAwKjdsqOHJqu7SQ6qBIU1ugaNXdFTQE__dir8GScRSrcelNszNv5s2bh55A_srBg_l4Mv6wIJXIycfZ9Ibcjb_fTi6DkPSugvli_mXSJ7uSd7ogWWV5ysj1NAhJGQssFCNf50H4ifTKLGV98u3zeDbWAflRmaaNI2L3yWV4VX9MRsTtR0Ch4CmG8QNK8O6AAQULKNgQUSgFT1BKLjapp21hkP4Gz6SQFWWl9LPKVI7gQVVwkaLAFCikqOIs3-SjdUQh4QLB25eGfMBLY3hQSIFXatc2oiBVvETwnDWtjWa10UcaL-L7HGcYpygMs9EetGx-KbKHWDwChXkZF9Ijhm28NVzXYAPD2X0ZjgNNOvsJ949kFctVs7fPYLvnjjL7W8pWs-3uusc4n4-s9SzZfZ9jhwWfXWwGn1R1ZO8bFEu85lmBwnCamBx_qp7PLvojkS1X-hMoTCvlEZ9R36K-TX0XnrOM3VjJOl1_dqJlatoPDFcH1hkt04GyfaplDjmf0TTWfzGN-y9NY7ZfYIay5IXEk_5g5mYTTJeo9ZG8EgneCp5sx-hwusVtH1KUSmff6yAodGpDsA5mh2BWB9sNMOsGHraDrQ6TrW7gYTvYbhXMbKftvEawdvALgrmvEawd_IJgw06CRes3fwIAAP__OOu_PQ==
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: child1@primary
+│     spans: [/3 - /5]
+│
+└── • scan
+      missing stats
+      table: parent1@primary
+      spans: [/3 - /5]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEVE1r20AQvfdXLNOL3ayRVh8uCAwKjdsqOHJqu7TQ-qBop7ZA0aq7K2gI_u_FXoMl4yh245KbZmfezJs3Dz2C-p1DAMPvt6PLKCadq2g6m34Zdcl0OBp-mJF35ONkfEPSZZZzRq7HUUzKRGKhGfk6jeJPpFNmnHXJt8_DydAE5Gdl2y4OiNsll_FV_TEdEL8LFArBMU7uUUHwAxhQcICCC3MKpRQpKiXkOvW4KYz4HwhsCllRVto860znCAFUhZAcJXKgwFEnWb7Oz1dzCqmQCMGuNBY9UVr9vUIKotLbtnMKSicLhMBb0dpoVht9oPEsuctxgglHadmN9mBUC0uZ3SfyAShMy6RQAbFc663l-xbrWd72y_I8aNLZTbh7IMtELZu9QwabPbeU2b9Sdpptt8c9xPl8ZJ0nye76HDoshOxiPfioqgN736Bc4LXICpSW18Tk-Et3QnbRHchssTSfQGFc6YCEjIYODV0a-vCUZdzGSs7x-rMjLVPTvmf5JnDOaJkTKLvHWmaf8xlN47yKafz_aRq7_QITVKUoFB71B7PXmyBfoNFHiUqmeCtFuhljwvEGt3ngqLTJvjdBVJjUmmAdzPbBrA52G2B2GrjfDnZOmOycBu63g91Wwex22t5LBGsHPyOY_xLB2sHPCNY_SbD56s3fAAAA__9Ewbne
 
 # Select over two ranges for parent/child with split at grandchild key.
 # Also, rows with pid1 <= 30 should have 4 rows whereas pid1 > 30 should
@@ -314,9 +348,26 @@ vectorized: true
       spans: /29/#/55/1-/31/#/55/2
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON parent1.pid1 = child1.pid1 WHERE parent1.pid1 >= 29 AND parent1.pid1 <= 31 ORDER BY parent1.pid1
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8UtFum0AQfO9XnDYvcXPpcYdxGiRLpA1VHTmQYkttlfJAYGsjEY4eIDWy_O8VxpWLZRNct3ljb3d2doZZQP4jARMm9th-PyWlSsgHz70l9_aXu_HVyCGn16PJdPJp3CPrkdf1QBYoTAtObtyRQ8J5nEScuM7v5zdZHHEyXDfq6vNH27PJaWPiW6lpOg6JuOyRK-d6VzccEp33iOtd2x5597XB4AOFVEboBI-Yg3kPHCgY4FPIlAwxz6WqnheroVH0E0yNQpxmZVE9-xRCqRDMBRRxkSCYMA0eEvQwiFCxaleERRAnq9VrXitT8WOgnoDCJAvS3CRM19gJMwaMswttXbxlnOnaOdM5OwF_SUGWxZp1Q_bwROZBPm_SWBz8pU8hL4IZgsmX9O-u15tr6x9x-PHMMJg4SoHYq2CzR6oIFUbbe84q4k5TO8y4RTXDGxmnqJjRxCT4vTi1-FlvqOLZvP4ECm5ZmMTi1BLU0qnVp5axpXyjSj9O1Y57HXkuMzZoTO9j7zfYefdUaF0zLS7P90fjHyb6gNtFx0SLyzq2_H8pEHsVvFyi-y-Y6B2neJhnMs2xU1q1SgxGM6wtymWpQrxTMlzR1KW7wq3cjDAv6u6gLkZp3aoO7A4W7WB-ALM4DCzawWIbrP0J1tvP1lvBFw2wtg3uH-N2O_gZt41j3G4HP-P24CC3_eWrXwEAAP__iRfeKg==
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: [/29 - /31]
+│
+└── • scan
+      missing stats
+      table: child1@primary
+      spans: [/29 - /31]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8UlFvm0wQfP9-xWnzEn8597jDODWSJdKaqo4cSLGltmp5ILC1kQhHDyw1svzfK4wrF8smuG7zxu3u7OwMs4L8ewIm2J_uJzdjh1yOxtPZ9MOkQ6b2xH47I_-Td557R7JAYVpwcuuOHRIu4iTixHV-lV9lccTJcNuoXh_f255NLmsTX5eapuOQiEGH3DijQ91wSHTeIa43sj3y5nONASikMkIneMQczC9QFgzwKWRKhpjnUpXl1WZoHP0AU6MQp9myKMs-hVAqBHMFRVwkCCbMgocEPQwiVKzcFWERxMlm9ZbWylT8GKgnoDDNgjQ3CdM1dsGMPuPsWts-XjPOdK3LdM4uwF9TkMtiy7oje3giiyBf1GksDv7ap5AXwRzB5Gv6Z9fr9bXVfzj9eGYYTJylQBxVsNsjVYQKo_09VyVxq6kDZtyhmuOtjFNUzKhjEvxWXFr8qjNU8XxRfQIFd1mYxOLUEtTSqdWjlrGnfKdKP0_VgXsd2ZUZ69emj7H3auy8fSq0tpkWg-7xaPzFRJ9wu2iZaDGoYsv_lQJxVMHLJbr3gok-cIqHeSbTHFulVSvFYDTHyqJcLlWI90qGG5rq6W5wGzcjzIuq268e47RqlQe2B4tmMD-BWZwGFs1gsQ_WfgfrzWfrjeDrGljbB_fOcbsZ_IzbxjluN4Ofcbt_ktv--r-fAQAA__8HOtjL
 
 # Parent-child where pid1 <= 15 have one joined row and pid1 > 15 have no
 # joined rows (since child2 only has 15 rows up to pid1 = 15).
@@ -359,9 +410,26 @@ vectorized: true
           spans: /12/#/56/1-
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12 ORDER BY pid1
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1vuzYUxu_3Kayzm3Z_R2Dz0gSpEtuabanapEs6bVOXCxq8BCkFZoi0qsp3n4B0WV7wgVnhLg78sB-f38XzAdlfa_BgNnwYfv9MNnJNfphOHsnL8Lenh29HY3J1N5o9z35-uCa7V76pXkgDKeKckfvJaEwWq2gdcvLLbDT-kVylUciuya8_DadDUvwmf2xM0xK3hHEymd4Np-S738sHc6AQJ6EYB28iA-8FGFDgQMECCjZQcGBOIZXJQmRZIotXPkpgFP4NnkkhitNNXvw9p7BIpADvA_IoXwvw4Dl4XYupCEIhDRMohCIPonW5ze7sfiqjt0C-A4VZGsSZRwzGewbjxteG4xjMcDgJ4pBwkuQrITOYbykkm3y3536r13eyCrLV4SY-g_l2TiHLg6UAj23p_zv74PCz1VWfOTo3P4_tmj2DlyHcYsV3i77BDF4lYlUirUC8NtD-O4kMhRTh8Xe-FBs3euvM3TwKuRT3SRQLabCjwa7Fn_mVz75c38pouap-AoXJJveIz6jPqW9T36G-exR9H8vSi3XmwOOkl6QGcw5er9vePtieNdeENVd8r3fPYPanJ469WxSeMPtS5reI5DQ0n3263kkcXhunQ-_Zhb3nzafEG4tXN5uewdxL6dYiiNtUt25y8NocHXrGL-yZ1Xw8VmPP3J7B-v_OqL9blDPqX8qzFkFumnrWTQ5em6NDz6wLe2Y3H4_d2LO62fQOutiljGsRqd_UuK4T8dpEHbpnd9ghz5xlKrI0iTPRqB6aRRoRLkV1R1mykQvxJJNFuU21nJRcWU1CkeXVU14tRnH1qDhgc9jVgQc6MNM6N3PUNGtxZbwd7OrAAx2YaZ376MpOaH5Mm_-lLfV9W0qYHd6ZeUzbOoKrYURwNYwIroYxwREaEdzREVwNI4KrYURwNYwJjtCI4K6O4Dc6iqphRFE1jCiqhjFFERpRtK-jqBpGFFXDiKJqGFMUoRFFBzqKMq2egNCIpAiNWIrQmKYYjnUFvbKg1xb06oJmX9ArDEyrMbCTytDKVjWN2aqmMVvVNGorgmO2tilLpzNr05ba0pitrfpSaxyz9aQ8KG2db7_6JwAA__9-zsYU
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: [/12 - ]
+│
+└── • scan
+      missing stats
+      table: child2@primary
+      spans: [/12 - ]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1vm0gUhu_3V4zO3iSbsWCGj9hIkdjduK2jxE7tVG3V-oKYqY3kAAUsNYr83yvAqesP5kBH5s5jeJh55zwX7wuk35fgQP_T_e2_gyE5ux5MHibvb8_JpH_b__-B_EPejEd3JPYSEWaM3IwGQzJbBEufkw-TwfAtOYsDn52Tj-_64z7Jf5OvK103xBVhnIzG1_0x-e9z8QAohJEvht6TSMH5AvkfHCgYQMEEChZMKcRJNBNpGiX5Ky8FMPB_gKNTCMJ4leV_TynMokSA8wJZkC0FOPDgPS7FWHi-SDQdKPgi84Jlsc3m6G6cBE9e8gwUJrEXpg7RGO9ojGt_a5alMc3ixAt9wkmULUSSwnRNIVplmz23Wz0-k4WXLnY3cRlM11MKaebNBThsTf_s7L3dz5Y3feToXH89tq13NF6EsPMV3yy6GtN4mYiViZQC8cpA2-9EiS8S4e9_5yLfuNZbR-7mTiRzcRMFoUg0tjfYpfiWnbns4vwqCeaL8idQGK0yh7iMupy6JnUt6tp70bexDLVYRw48jDpRrDFr5_Wq7c2d7Vl9TVh9xbd6dzRmvnpimZtF7gkzT2V-g0hWTfPZq-utxOGVcVr0np3Ye15_Sry2eFWz6WjMPpVuDYLYdXVrJwevzNGiZ_zEnhn1x2PU9szuaKz7a0bdzaKYUfdUnjUIclnXs3Zy8MocLXpmnNgzs_54zNqeVc2ms9PFTmVcg0jdusa1nYhXJmrRPbPFDnnkLGORxlGYilr1UM_TCH8uyjtKo1UyE_dJNCu2KZejgiuqiS_SrHzKy8UgLB_lB6wP2ypwTwVmSudmlpxmDa6MN4NtFbinAjOlc-9d2QHN92n9d9qQ37chhdnunen7tKkiuBxGBJfDiOByGBMcoRHBLRXB5TAiuBxGBJfDmOAIjQhuqwh-qaKoHEYUlcOIonIYUxShEUW7KorKYURROYwoKocxRREaUbSnoihT6gkIjUiK0IilCI1piuFYV1ArC2ptQa0uKPYFtcLAlBoDO6gMjWyV05itchqzVU6jtiI4ZmuTsnQ4syZtqSmN2dqoLzXGMVsPyoPU1un6r58BAAD__0mvwLU=
 
 # These rows are all on the same node 1 (gateway).
 query T
@@ -399,9 +467,26 @@ vectorized: true
           spans: /1/#/56/1-/1/#/56/2 /11/#/56/1-/11/#/56/2 /21/#/56/1-/21/#/56/2 /31/#/56/1-/31/#/56/2
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1, 11, 21, 31) ORDER BY pid1
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJycktFv0zAQxt_5K063lxaMUrtsD5GQAixApq4ZSRGgKQ8mPtpImR1sRwJV_d9RnEqjUweUt_P5-86_7-Qtuu8txlimi_TNCnrbwtsiv4bb9PPN4lW2hMllVq7KD4sp7CVPR0EnLWnP4SrPllBvmlYJ-Fhmy3cw6RrFp_DpfVqkMNQwjOEMOGcgOIM5n0JeXKYFvP4SBBUy1EbRUt6Rw_gWOVYMO2tqcs7YobUNgkz9wHjGsNFd74d2xbA2ljDeom98SxjjSn5tqSCpyEYzZKjIy6YNY_fMSWebO2l_IsOyk9rFEPHnEY_OQGoFczB-Q9ZhtWNoen__kvNyTRjzHfs_Gn5IMy7tGEx0Fp1f7JmGSvwbmHgU7J6n18YqsqQOWKrB-TfJkXTXZNd0ZRpNNhKH6Vr65icJfzZ9aZv1ZiyRYd77GBLOEsGSFyw5Z8nFo3nmpyy6INcZ7ehhrqOTZ0MYUmsal-NMb2u6saYOz4zHPPhCQ5Hz460YD5kOV-En_G7mJ5jFQ7P4o3l-YJ7tqt2TXwEAAP__rsIvEw==
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
+│
+└── • scan
+      missing stats
+      table: child2@primary
+      spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQx9_5FKfbSwtGqV22h0hIARYgU9eMpAgQyoOJjzZSZgfbkUBVvzuKM2lk6oDt7Xx3_7vf_-Q9uh8txph-vlq9ytYwO8_KTflhNYcyXaVvNvAU3hb5JXTSkvYcLvJsDfWuaZWAj2W2fgezrlF8Dp_ep0UKQwzDGM6AcwaCM1jyOeTFeVrA6y-hARlqo2gtr8lh_BU5Vgw7a2pyztghtQ8NmfqJ8YJho7veD-mKYW0sYbxH3_iWMMaN_NZSQVKRjRbIUJGXTRvG3iAnnW2upf2FDMtOahdDxJ9HPDoBqRUswfgdWYfVgaHp_e0m5-WWMOYH9jgaPqUZb3YMJjqJTs9umIZI_B-YuBfslqfXxiqypCYs1aD8V8sRd5dkt3RhGk02ElN3LX33s4Q_m7-0zXY3hsgw730MCWeJYMkLlpyy5OxeP8uHHLog1xnt6K6vo5MXgxlSWxqP40xva7qypg5rxmcedCGhyPmxKsZHpkMp_IQ_xfwBYnFXLP4qXk7Ei0N1ePI7AAD__9aLKbQ=
 
 # Parent-grandchild.
 # We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.
@@ -448,15 +533,34 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
     pid1 >= 11 AND pid1 <= 13
     OR pid1 >= 19 AND pid1 <= 21
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl1-PozYUxd_7KSz3Jek6AtuEIUgjsepm26xmk20yVStt88AGN0HKAjVE6mo0370iJBkCxBeHzs7LvPHHP2zfc46veMDpP1vs4sX4bvzzPdrJLXo_n31En8d_frp7O5mi3rvJ4n7x210fHYb8VAxIfCmijKIPs8kUraUfBatNuA0Y-n0xmf6CekkY0D7649fxfIx6vd7-Hv21M00ubhGlffR2-g6Vnq5uEeX9PprNUXXwqGkwo_3G0bzx05wfRyf-cSwy-0tMcBQHYup_FSl2P2OKCWaYYI4JtjDBQ7wkOJHxSqRpLPMhD3tgEvyLXZPgMEp2Wf54SfAqlgK7DzgLs63ALr73v2zFXPiBkIaJCQ5E5ofb_TSH4nmJDL_68hsmeJH4UeqigcGMH42hbVDDYsW1Y1CDIT8KEEdxthEyxctHguNd9jR1mvlrgV36SNov7324zYQU0hier6147u5F88qSua47md47h_J6Zd2Orw6ClLHRRYydvtjA8cvTcV7hPHZS9PimUqKnXX_5hjZ-ujnfskfx8vGpjEynjGWVaUXmUiz-H6n19sEv7uPpO7EMhBRB9Ttv8olbjWooyUch1-JDHEZ5SSru2oq_s55H3_RvZbjeFJeY4Nkuc5FHiceIZxFvSDybeDcXjW612Nkualp144Kn8SBODGZWRjbPPTybm2q4o-UZcMEXA8PKr4f5c-ua8wBY6uk8sF_PA9V5oKM41TgPusre5WygL3M22M9_NrD2arG2-SwJMjDsk2p2cZ2rZl-TT2Cpp3zevOZTlU8NxSnTyWdH2bvkk71MPm-eP5-8vVq8bT6btRkYzjWpBBZ4SqXzmkpVKjV0plwnlVeJ3SWL_GWy6Dx_Fq32Gllts-gMDGoeJRqah5tcI2peE0dgjac4jl7jqIqjhtTU0onjtXp3SaT1Mokcfd8_24blzEWaxFEqWv23mvmGRLAWRZnSeCdX4pOMV_tpitvZnts_CESaFW9pcTOJilf5AsswrcK0DPMzmOrBTheYsk603YVmpppmGjVjerDTBa7UTJe2u9CVmtVorjSppS64pYQZYPGhkrbVsN0lH2oYyIcahvIB0EA-1DSUj5su-VDDQD7UMJQPgAbyoaahfDhd8jFSdwATaAG1BqLVA9Q01ATUNNgFABxqA2oc8jnVaZ41xQEacDpAQ1aHcMDrAA6ZndZ6iY7bqbqXUAuwe62baNldTUN2V9Og3QEcsrsaB-1ea6RadlfTkN3VNGh3AIfsrsZBu9faqZbda43l3O4OYPdaZ9Gyu5qG7K6mQbsDOGR3NQ7avdZVteyupiG7q2nQ7gAO2V2NQ3Zn6h_Sqt2Xjz_8FwAA___OjNsw
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ left cols are key
+│
+├── • filter
+│   │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+│   │
+│   └── • scan
+│         missing stats
+│         table: parent1@primary
+│         spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: grandchild2@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl1-PozYUxd_7KSz3Jek6AhvCEKSRWHWzbVazyTaZqpXaPLDBTZCyQIFIHY3mu1eESYYAuReHTuclb_zxD9v3nOMrHmn695Y6dPz7l7v3kynpfZgs7he_3PXJYnw3_vGe_EA-zmefSewlMsw4-TSbTMk68UJ_tQm2viC_LibTn0gvDnzeJ7_9PJ6PSa_X29-TP3e6bshbwnmfvJ9-IKWnq1vCjX6fzOakOnjUNFjwfuNoo_HThnEYHXuHsUTvU0bDyJdT75tMqfMH5ZRRQRk1KKMmZXRIl4zGSbSSaRol-ZDHPTDx_6GOzmgQxrssf7xkdBUlkjqPNAuyraQOvfe-buVcer5MNJ0y6svMC7b7aZ5r58ZJ8M1LHiiji9gLU4cMNKF9rw0tjWumKK5tjWuCeKFPDBJlG5mkdPnEaLTLXqZOM28tqcOfWPvlfQy2mUxkog1P11Y8d_aauWXFHMeZTO_t5-q6ZdkOr571KGOjs5g4frGBM85PZxgVzhVHQQ9vKiV62fXXB7Lx0s3pll1Ol08vZRQqZSyrzCsyl1Lx30ittg_j7D5evhMlvkykX_3Ou3ziVqMaSvJZJmv5KQrCvCQVd23lX1nP5e_6t0mw3hSXlNHZLnOIy5krmGsyd8hci7k3Z41uttjZLmxadeOCp9EgijWhV0Y2zz08mZsruKPlGXDGFwPNzK-H-XPzkvMAWerxPLCu5wF0HqgozhXOg66ydzkb-NucDdbrnw2ivVqibT5Lggw066iaVVznqlmX5BNZ6jGfN9d8QvlUUJwLlXx2lL1LPsXb5PPm9fNptFfLaJvPZm0Gmn1JKpEFHlNpX1MJpVJBZ26opPIisbtk0XibLNqvn0WzvUZm2yzaA43rB4mG-vNNrhHXL4kjssZjHEfXOEJxVJCamypxvFTvLok03yaRo__3z7ZhOXOZxlGYylb_rXq-IemvZVGmNNolK_kliVb7aYrb2Z7bP_BlmhVveXEzCYtX-QLLMK_CvAwbJzBXg-0uMBedaKsLLXSYFgo1E2qw3QWu1EyVtrrQlZrVaAM0qQkX3ARhgVh8CNIWDFtd8gHDSD5gGMsHQiP5gGksHzdd8gHDSD5gGMsHQiP5gGksH3aXfIzgDqAjLaDWQJR6AExjTQCm0S6A4FgbgHHM51yledYUR2jE6QiNWR3DEa8jOGZ2XuslKm7ncC_hJmL3WjdRsjtMY3aHadTuCI7ZHcZRu9caqZLdYRqzO0yjdkdwzO4wjtq91k6V7F5rLKd2txG71zqLkt1hGrM7TKN2R3DM7jCO2r3WVZXsDtOY3WEatTuCY3aHcczuAv4hrdp9-fTdvwEAAP__PbbV0Q==
 
 query T
 EXPLAIN (VERBOSE)
@@ -501,15 +605,34 @@ vectorized: true
               spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
     pid1 >= 11 AND pid1 <= 13
     OR pid1 >= 19 AND pid1 <= 21
     OR pid1 >= 31 AND pid1 <= 33
     OR pa1 > 0
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl9-PozYQx9_7V1juS9JzBLaBJUgrcerl2pz2kmuyVStd88AFN0HKATVE6mm1_3tFSDYJAQ9emtuXfeOHP3hm_P3OiAec_bPBHp6P7kY_36Ot3KD3s-lH9Hn056e7t-MJ6r0bz-_nv9310X7JT-WClQzicLmONiFDH6bjCUoDKeKcot_n48kvqJdGIe2jP34dzUao1-vt7tFfW9Pk4hZR2kdvJ-_QydPlLaK830fTGaouHtYtZrRfu5rXfprzw-o0OKxFZn-BCY6TUEyCryLD3mdMMcEME8wxwRYm2MYLglOZLEWWJbJY8rADxuG_2DMJjuJ0mxePFwQvEymw94DzKN8I7OH74MtGzEQQCmmYmOBQ5EG02W1zUjw_ldHXQH7DBM_TIM48NDCY8aNhOwY1LFZeuwY1GAriEHGU5GshM7x4JDjZ5vvtj7t--YbWQbY-38-nePG4IDjLg5XAHn0kz0vDPv_s_sj_nxSO4TGd8N5Hm1xIIQ1aqXH5wtuJzz-Vnud548m9u5eJf6q_w6u9sE6xYSPGnr5Yw_Hm7TivcD57UubhTadj5o11PH4nkaGQIqx-502xcatVNUfyUciV-JBEcXEqFclsxN95z6dv-rcyWq3LS0zwdJt7yKfEZ8TnxLeIbxP_plEhVovMtnFd1LUBT5JBkhrMrKys39s-25u2Nw_V6AEN_hkYVnFtF8-ta_UDjZSclv2gazpNvQEI9dgb6GtvUPUG-jK9wbl-b2Dtxcx0_Hki3IHhPKnbKa8LdTvX8qdGSjdt_dkxnSZ_AqEe_cle_anyJ3sZf95c35-8vZi5jj_rNTww3Gu5UiMRt60rn5VEkxeBAI9e5K9eVHmRv4wX3et70WovYUvHi-7AoOZByra5vym0TM1r2VEjl2FbOz43jyZHAjEeHWm9OlLlSOtlHDn8vn-2NeHMRJYmcSZa_beaRUIiXImyTFmylUvxSSbL3Tbl7XTH7f4HQpHl5Vte3ozj8lURYHvY7QJT1ol2utDMVNO0Sptn9BlsVmGmUXCmB7td4ErBdWmnC10p-AXNlQW31KdlqU-Lqo_L7uIPNQz4Qw1D_gBowB9qGvKHo6z4jbrgN138oYYBf6hhyB8ADfhDTUP-cLv4Y9hF4WoYULgahhQO0IDC1TQ4AS4GyFnFKdBU6MUE0RE5QAMqB2hI5hAO6BzAIaHTizmio3R6MUd0pA7QgNYBGhI7hANqB3BQ7uoZSm1A7jpD9PLMdaaoLg3KXWuO6uKg3NWTFJK7zijVpSG5aw1TbRySu9Y4vcTV85QOAbnrTNTLM9cZqbo0KHetoaqLQ3Jn6qlalfvi8Yf_AgAA__9rwtp2
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: grandchild2@primary
+│     spans: FULL SCAN
+│
+└── • filter
+    │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+    │
+    └── • scan
+          missing stats
+          table: parent1@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl9-P2kYQx9_7V6ymL9AssnfXgLEUyVFDWqILpHBVK7U8OHgLlojt2kZqdLr_vTKGA4y94z2X3su9-cd-vDOz3--M_ADp31twYPz757t3kynpvJ8s7he_3HXJYnw3_vGe_EA-zGefyDrxQn-1CbY-Jx9nkymJvUSGGSO_LibTn0gnDnzWJb_9PJ6PSafT2d-TP3emKeRbwliXvJu-J2dPV28JE90umc1JefGoajFn3crVovLTQhxXx95xLTG7QCGMfDn1vsoUnD-AAQUOFARQsIBCH5YU4iRayTSNknzJwx6Y-P-AY1IIwniX5Y-XFFZRIsF5gCzIthIcuPe-bOVcer5MDBMo-DLzgu1-m7PauXESfPWSb0BhEXth6pCewY3vjf7AYIbFi2vbYAYnXugTQaJsI5MUlo8Uol122P6065dvZOOlm8v9XAbLxyWFNPPWEhz2SJ-XRv_ys4cT_29SOIXHdcL7EGwzmcjEYKUaFy-cvfbcc-U5jjOZ3tsHlbjn8ju-OujqHBvVYvzpixWcqN9OiBLn8idhHt-0OmZRW8fTd6LEl4n0y995k2_caFXFkXySyVp-jIIwP5WSZLbyr6zjsjfdt0mw3hSXQGG2yxziMupy6grqWtTtU3dYqxCrQWa7sCrqyoCnUS-KDW6WVlbv3b_YmzU3D9PoATX-6RlWft3Pn1u36gcaKQ0a9oO26dT1BiTUU29gr71B1RvYy_SGwe17A28uZq7jzzPh9ozBk7oHxXWu7sGt_KmR0rCpP1umU-dPJNSTP_mrP1X-5C_jz-Ht_Smai1no-LNawz3DvpUrNRKxm7ryWUnUeREJ8ORF8epFlRfFy3jRvr0XreYStnS8aPcMZh6l3DcPN7mWmXkrO2rkMmpqx-fmUedIJMaTI61XR6ocab2MI0f_759tRThzmcZRmMpG_61mnpD017IoUxrtkpX8nESr_TbF7WzP7f8HfJlmxVtR3EzC4lUeYHPYbgMz3ooetKG5qaZZmTYv6AvYLMNco-BcD7bbwKWC69KDNnSp4Fe0UBbcUp-WpT4tpj6ufht_qGHEH2oY8wdCI_5Q05g_BsqKD9UFH7bxhxpG_KGGMX8gNOIPNY35w27jj1EbhathROFqGFM4QiMKV9PoBLgaIBcVZ0hTYVcTREfkCI2oHKExmWM4onMEx4TOruaIjtLZ1RzRkTpCI1pHaEzsGI6oHcFRuatnKOsjctcZotdnrjNFdWlU7lpzVBdH5a6epJjcdUapLo3JXWuYauOY3LXG6TWunqdshMhdZ6Jen7nOSNWlUblrDVVdHJM7V0_VstyXj9_9GwAA___wWdUX
 
 query T
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
@@ -542,7 +665,7 @@ vectorized: true
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
 # creates a giant parent span which requires reading from all rows.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT * FROM child2 JOIN grandchild2 ON
     child2.pid1=grandchild2.pid1
     AND child2.cid2=grandchild2.cid2
@@ -551,9 +674,28 @@ SELECT url FROM [EXPLAIN (DISTSQL)
     child2.pid1 >= 5 AND child2.pid1 <= 7
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl12P4jYXx--fT2Gd54Z0TBM7L4RII2XVZVVWs7BlRmqlLRdZ4kIkltAkSF2N5rtXITDkBXziyY7oxdwltn_xOcf_v4_yCOnfa_DgfnQ3-uWB7JI1-TCbfiJfRn98vns3npDe-_H9w_1vdxo5LPmpWLBYReuQk4_T8YQsk2ATHgamE9LrFc8_b6OQkdvy9H5II-8m78lx0SIKeW1RPqQ1VpnNVaZGfv91NBuRXnXPP3eGYYpbYlc_cppb3JKBppHp7BTsPo4jyPiZII8ks7Qju6xQ1vBALSvrbaZpc6CwiUMxCb6JFLwvwIACBwomULCAgg1zCtskXog0jZN8yeMeGIf_gGdQiDbbXZYPzyks4kSA9whZlK0FePAQfF2LmQhCkegGUAhFFkTr_TZF_P42ib4FyXegcL8NNqlH-jrX_6_bjs50ixfPrs50ToJNSEwSZyuRpDB_ohDvssPOpw2_fierIF1Vt_IZ9Tn1TZg_zSmkWbAU4LEn-rI87OrHSwf_Y5I5hchVQvwQrTORiERntUIXE16uRL8kQM_zxpMH96ALvyS_48xBSX5ZfDWqLL1n7MhZJfnVOKskwWfuBxyqebFip6_FSSgSEda_dkN9fkN98yYPQ2n1mcP4JJKl-BhHm_w8aoJZi7-yXukL2m0SLVfVIaAw3WUeOSZJfYv6NvUd6g-o71J_eFE0VosS7Dbn0jqbySTux1udG7WV5_e2K3uz9p5i7e6GC27q61b-bOfj1uveEwo5OQr3RNfELt0ZSLinO4O93RnNil3xznCueGfw9hrnLX1bknFfd5617hTPudad1_WtQk4DFd92TOySb5FwT77lb75tVuyKvh1c0bdme42bLX17XtF93X1dtypk4qq49UXpXPIoEuTJo-abR5sVu6JH3St61GqvbKulR92-zoyjsG3j8JIrmxmva1OFZIYqNn1pRpecisR5cqr15tRmxa7o1OF_5M_5TJwzkW7jTSpa_RcbeaYiXIqinmm8SxbicxIv9tsUr9M9t_8BCUWaFbNm8TLeFFN5gO1htwvMeCfa6UJzQ06zOm1U6Aps1GGuUHCuBrtd4FrBVWmnC10reIM2pQW35KdlyU-LyY_L7uIPOYz4Qw5j_kBoxB9yGvOHI634QF7wQRd_yGHEH3IY8wdCI_6Q05g_3C7-GHZRuBxGFC6HMYUjNKJwOY12gEYDqVScIZcKa3QQFZEjNKJyhMZkjuGIzhEcEzpr9BEVpbNGH1GROkIjWkdoTOwYjqgdwVG5y3sosxG5qzTR5pmrdFFVGpW7Uh9VxVG5yzspJneVVqpKY3JXaqbKOCZ3pXbaxOX9lA0Ruat01OaZq7RUVRqVu1JTVcUxuXN5V63Lff70v38DAAD__4igEZA=
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1, cid2, cid3) = (pid1, cid2, cid3)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: child2@primary
+│     spans: FULL SCAN
+│
+└── • filter
+    │ filter: (((pid1 >= 5) AND (pid1 <= 7)) OR ((cid2 >= 12) AND (cid2 <= 14))) OR ((gcid2 >= 49) AND (gcid2 <= 51))
+    │
+    └── • scan
+          missing stats
+          table: grandchild2@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl12P4jYUhu_7K6zTG9IxTex8ECKNlFWXVVnNwpYZqZVaLrLEhUgsoUmQuhrNf69CYMgH-MSTHdGLuUtsP_E5x-_rozxC-s8aPBj98fnu3XhCeu_H9w_3v91p5H50N_rlgfxEPsymn8hiFa1DTj5OxxOyTIJNeBiYTkivVzz_vI1CRm7L0_shjbybvCfHRYso5LVF-ZDWWGU2V5ka-f3X0WxEetU9_9oZhiluiV39yGlucUsGmkams1Ow-ziOIONngjySzNKO7LJCWcMDtayst5mmAYVNHIpJ8FWk4P0JDChwoGACBQso2DCnsE3ihUjTOMmXPO6BcfgveAaFaLPdZfnwnMIiTgR4j5BF2VqABw_Bl7WYiSAUiW4AhVBkQbTeb1OE72-T6GuQfAMK99tgk3qkr3P9R912dKZbvHh2daZzEmxCYpI4W4kkhfkThXiXHXY-bfjlG1kF6aq6lc-oz6lvwvxpTiHNgqUAjz3Rl-VhVz9eOvfvk8wpRK4S4odonYlEJDqrFbqY8HIh-iX9eZ43njy4B1n4JfUdZw5C8svaq1Fl5T1jR84qqa_GWSUFPnPf4VDNixU7fS1OQpGIsP61G-rzG-qbN3kYSqvPHMYnkSzFxzja5OdRE8xa_J31Sl_QbpNouaoOAYXpLvPIMUnqW9S3qe9Qf0B9l_rDi6KxWpRgtzmX1tlMJnE_3urcqK08v7dd2Zu19xRrdzdccFNft_JnOx-3XveeUMjJUbgnuiZ26c5Awj3dGeztzmhW7Ip3hnPFO4O31zhv6duSjPu686x1p3jOte68rm8Vchqo-LZjYpd8i4R78i1_822zYlf07eCKvjXba9xs6dvziu7r7uu6VSETV8WtL0rnkkeRIE8eNd882qzYFT3qXtGjVntlWy096vZ1ZhyFbRuHl1zZzHhdmyokM1Sx6UszuuRUJM6TU603pzYrdkWnDv8nf85n4pyJdBtvUtHqv9jIMxXhUhT1TONdshCfk3ix36Z4ne65_Q9IKNKsmDWLl_GmmMoDbA-7XWDGO9FOF5obcprVaaNCV2CjDnOFgnM12O0C1wquSjtd6FrBG7QpLbglPy1LflpMflx2F3_IYcQfchjzB0Ij_pDTmD8cacUH8oIPuvhDDiP-kMOYPxAa8YecxvzhdvHHsIvC5TCicDmMKRyhEYXLabQDNBpIpeIMuVRYo4OoiByhEZUjNCZzDEd0juCY0Fmjj6gonTX6iIrUERrROkJjYsdwRO0Ijspd3kOZjchdpYk2z1yli6rSqNyV-qgqjspd3kkxuau0UlUak7tSM1XGMbkrtdMmLu-nbIjIXaWjNs9cpaWq0qjclZqqKo7Jncu7al3u86cf_gsAAP__Ue8MMQ==
 
 query T
 EXPLAIN
@@ -588,12 +730,30 @@ vectorized: true
 
 # Aggregation over parent and child keys.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) WHERE
     pid1 >= 10 AND pid1 <= 39
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl1Fvo0YQgN_7K1bTF1uHD3YBGyNFctRzW58S5xrn1EpXP3BmayM54C4g9RTlv1eAlWBwdtgA8psX-HZndr_xwBPE_-7BhdX8Zv7LA0nFnvx6f3dLvs3_-nJzvViSwafF6mH1x82QHB-J08fBwRM8TOjHQ-DToZZf2uyCvU8_brIrxRTHh8jnu8WSFLfJ19Vi-RsZ5Bz58_f5_bwYkL9TwzD5FaHGkFwvP5Wvbq6IOR2uQYMw8vnSe-QxuN-AggYMNDBBAws0sGGtwUFEGx7HkcgeecqBhf8fuIYGQXhIk-zyWoNNJDi4T5AEyZ6DCw_e9z2_557PhZ7N6_PEC_b5MscsZgcRPHriB2iwOnhh7BKdGvrPuj3WqW4bx4GjU50aI52ybGRntxjxQp8wEiU7LmLQ4C5NXDKjsH7WIEqTY1CvsXz_QXZevDuNIn9-rUGceFsOLn3W3pfc-HTa4lQ6z02bsVbpsTfTe50nEj4X3K_O8yFbuNFTZ3bqlost_xwFYaZBxYM9_ycZzOiH4ZUItrviZzljs5LxazamymFdb7eCb70kEjqtHNbq6-1gRrNF819s-OaKVoP9S8Nze3N2W0oxMeO9MdknMdHmyrLG9VgSc6RT68Vg6zjIDbb6r0eF5CZN67FVbt3WI71MPbJ-6hE5rHI9TrqpR9ZcD7Ox-28ZMdLpuH_jFVJymhr_joy69ZxdxnOzH8-RIyp77nTjudlcCqux5-ORTp0XM5zjIDfD6d9zhZSmTT1_R0bdem5exnOrH8-RIyp7Pu3Gc6u5FEbzb4vR2-_guRVmn54rpGQrfVHYOlVPrFvdrcvobvSjO3JSZd3t7j8nzqx4z-NDFMa88llxfmYj2zbub3lxGHGUig3_IqJNvkwxvMu5_EXN53FS3KXTYrQIi3tZhM1p1gaetIEpbUXbcpqq7BlTo1kbeNIGruyZKm3LaValjTJtnsBGFTalsCU_LUsKMypf2m5VH3IaqQ85jNQHEjdSHwiN1Me4VX3IaaQ-5DBSH0jcSH0gNFIfE6mljlxSp019TFsZLqcRw-UwYjgSN2I4QmMdQKlt1v9KVfqmKo01AaXOqYwjmtNaFzlRlTK56FTeRhDTaa2PKKmO4IjrCI3IjoWO2I7hmO61HqqmuxzHdJfTmO5I6JjuCI7pXmukp7qPEd1rPUVJ91pPUdNdjmO6y2lMdyR0THcEx3Sv9VM13eU4prucxnRHQsd0R3BM91pXPX3XNuS6s1pvkeq-fv7p_wAAAP__5IILNw==
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • merge join
+    │ equality: (pid1) = (pid1)
+    │ left cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: parent1@primary
+    │     spans: [/10 - /39]
+    │
+    └── • scan
+          missing stats
+          table: child1@primary
+          spans: [/10 - /39]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl-GPokYUwL_3r5i8ftEcHswAiiSbuOnZ1suue1330iatHziZKokLdsCkl83-7xfA7CLoPEYgfnOA38x7M7_ngxeI_9uCC9O_vtzdzuak92m2eFr8cdcni-nd9JcnEu-feztP8DChH3eBT_tadmm1CbY-_bhKr5BfHx_uyeEh8vlhNif5bfJ1MZv_RnoZR_78ffo4zQfkn71hmPyGUKNPbuefildXN8Qc90GDMPL53HvmMbh_AwUNGGhgggYWaGDDUoOdiFY8jiORPvKSATP_f3ANDYJwt0_Sy0sNVpHg4L5AEiRbDi48ed-2_JF7Phd6Oq_PEy_YZssckpjsRPDsie-gwWLnhbFLdGroP-v2UKe6bRwGjk51agx0ytKRnd5ixAt9wkiUbLiIQYOHfeKSCYXlqwbRPjkE9R7Lt-9k48Wb4yiy55caxIm35uDSV-2y5IbH0-aH0npu2oQ1So-dTe99nkj4XHC_PM-HdOFaT53YqXsu1vxzFISpBiUPtvzfpDehH_o3Ilhv8p_FjM1Sxu_ZmCqHdbteC772kkjotHRYi6_3vQlNF81-sf7ZFa0a-7cPT-3NyW0pxMSMS2Oyj2Ki9ZVlteuxIOZAp9abwdZhkBlsdV-PCsmN6tZjo9zarUd6nXpk3dQjcljFehy1U4-svh5mbffPGTHQ6bB74xVScuoaf0FG7XrOruO52Y3nyBEVPXfa8dysL4VV2_PhQKfOmxnOYZCZ4XTvuUJK47qeX5BRu56b1_Hc6sZz5IiKno_b8dyqL4VR_9ticP4dPLPC7NJzhZRspS8KW6fqibWru3Ud3Y1udEdOqqi73f7nxIkVH3m8i8KYlz4rTs9spNvG_TXPDyOO9mLFv4holS2TDx8yLntR83mc5HfpOB_NwvxeGmF9mjWBR01gShvRtpymKnvG1GjWBB41gUt7pkrbcpqVaaNIm0ewUYZNKWzJT8uSwozKl7Yb1YecRupDDiP1gcSN1AdCI_UxbFQfchqpDzmM1AcSN1IfCI3Ux0hqqSOX1GlSH-NGhstpxHA5jBiOxI0YjtBYB1Bqm9W_UpW-qUpjTUCpcyrjiOa00kWOVKVMLjqVtxHEdFrpI0qqIzjiOkIjsmOhI7ZjOKZ7pYeq6S7HMd3lNKY7EjqmO4Jjulca6bHuQ0T3Sk9R0r3SU9R0l-OY7nIa0x0JHdMdwTHdK_1UTXc5jukupzHdkdAx3REc073SVY_ftQ257qzSW6S6L19_-hEAAP__vncF2A==
 
 ###############
 # Outer joins #
@@ -701,9 +861,28 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)]
+EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMllFr4kwUhu-_XzGcK_06kszE2BpYSOnaxWK1qxYWiiypmdWATbKTCFuK_32J6dKt1TmTHRXvajLPzHvmPKTnBbKfC_Bg1Ol1rsZkKRfkeji4JQ-db3e9y26f1D53R-PR116dvC75v1yQLHMhv6eMXN_3euRm0O2_Ppoycj_q9r-QWhqFrD4BCnESin7wJDLwHoABBQ4UHKDQBAouTCikMpmKLEtkseRlDXTDX-DZFKI4XebF4wmFaSIFeC-QR_lCgAfj4HEhhiIIhbSKfUORB9FifcyffH4qo6dAPgOFURrEmUcsu2G5JIhDwkiSz4WEyYoW61_Pedv-8ZnMg2z-fmOfwWQ1oZDlwUyAx1b03_K2tuWdHjwv35n3bZ9EhkKKcHOfs-JgrVVbSr8VciZukiguWrXRq_FzKrxSpMH9uDNc6wQUFuJHXvPZWf2TjGbz8k-gMBRxKKRHrgaXvc7oqlPzGfWdOiU-p8RvUuK7lPitjWt6uwJH4wqW8bbytlbWTxpJajF3Y-X2s5vvzmb6unBtvd2GxewD-V0h8Lm23_sNzHcGPqLg_IQE5_o9c7QlY3bDYof6ilZIfKFt2Z4T852Jj6iZc0KaOfpNa-pr5jYsfqiPWYXEbX3N9puY70x8RM2aJ6RZU79ptq5mDetQilVI6-oqts-0fGfaI-pln5BeyAA_FFmaxJnQmvXsonIRzkR5n1mylFNxJ5Pp-pjy52DNreeUUGR5-Za55a9uXL4rEurT3ARumcBtE5ghuVmVK-PVaG4Ct0zgtgnMkNx8k7b_ph31fTtKmL2v2t6km0aCq2lEFDWMCK6GEcGRopHcrpHgahoRRQ0jgqthRHCkaCR3y0TwcyNF1TTSajWMKKqGEUWRopHcF0aKqmmk1WoYUVQNI4oiRSO52yaKMrM5AcGxf7hGkwJCI5pihWPRDYcFs2nBbFwwmxfMBgZmNDGwDyNDNVvVONZyNY3ZqqYxW5HCseiVhqWPTasyLVWlMVurzEtVadTWD8OD0tbJ6r_fAQAA__8cdcZP
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • merge join (full outer)
+    │ equality: (pid1) = (pid1)
+    │ left cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: outer_p1@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: outer_c1@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlvFr2kAUx3_fX3G8n3Q9Se5ibA0MUjo7LFY7tTAYMlJz04BNskuEleL_PmI6ulq9d9mp-FtN7nP3ffc-pO8Zsl8L8KDz7a532e2T2ufuaDz62quTUafXuRqTj-R6OLglyTIX8kfKyPV9r0duBt3-y6MpI_ejbv8LqaVRyOpAIU5C0Q8eRQbed2BAgQMFByg0gYILEwqpTKYiyxJZLHleA93wN3g2hShOl3nxeEJhmkgB3jPkUb4Q4ME4eFiIoQhCIa1i31DkQbRYH_M3np_K6DGQT0BhlAZx5hHLblguCeKQMJLkcyFhsqLF-pdzXrd_eCLzIJu_3dhnMFlNKGR5MBPgsRX9v7ytbXmnB8_Ld-Z93SeRoZAi3NznrDhYa9WW0m-FnImbJIqLVm30avyUCq_0aHA_7gzXNgGFhfiZ13x2Vv8ko9m8_BMoDEUcCumRq8FlrzO66tR8Rn2nTonPKfGblPguJX5r45per8DRuIJlvK28rZX1k0aSWszdWLn97Oabs5m-Llxbb7dhMftAflcIfK7t934D852Bjyg4PyHBuX7PHG3JmN2w2KG-ohUSX2hbtufEfGfiI2rmnJBmjn7TmvqauQ2LH-pjViFxW1-z_SbmOxMfUbPmCWnW1G-aratZwzqUYhXSurqK7TMt35n2iHrZJ6QXMsAPRZYmcSa0Zj27qFyEM1HeZ5Ys5VTcyWS6Pqb8OVhz6zklFFlevmVu-asbl--KhPo0N4FbJnDbBGZIblblyng1mpvALRO4bQIzJDffpO1_aUd9344SZm-rtjfpppHgahoRRQ0jgqthRHCkaCS3ayS4mkZEUcOI4GoYERwpGsndMhH83EhRNY20Wg0jiqphRFGkaCT3hZGiahpptRpGFFXDiKJI0UjutomizGxOQHDsH67RpIDQiKZY4Vh0w2HBbFowGxfM5gWzgYEZTQzs3chQzVY1jrVcTWO2qmnMVqRwLHqlYel906pMS1VpzNYq81JVGrX13fCgtHWy-vAnAAD__6IKwPA=
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
@@ -743,9 +922,28 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)]
+EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl1Fv2joUx9_vp7DOE9waJXYILZGulKqXXlFR6AUqTarQlBIPkGiSOUFaVfHdp0C3Fgo-9jyGeJlEyM_--5yf2ekL5F_nEMCg1WldDclCzsl1v3dLHlqf7jqX7S6p_NseDAf_d6rk9ZW_1y-ki0LIz5MxI9f3nQ656bW7r8_GjNwP2t3_SCWbxYyS8Y9_eXUEFJI0Ft3oSeQQPAADChwoeEChDhR8GFHIZDoWeZ7K8pWXFdCOv0HgUpgl2aIoH48ojFMpIHiBYlbMBQQwjB7noi-iWEinXDcWRTSbr7b5GTbM5Owpks9AYZBFSR4Qx605PomSmDCSFlMhYbSkJfC60dv6j89kGuXTzZVDRkNOQw9GyxGFvIgmAgK2pL8Wu7Er9p9KzfemflstlbGQIt5e7YyG_IyG3lkZw-jtHQW5FXIibtJZUvZxq5HD50wEa-N698NWf-UdUJiLL0Xl3crVf-RsMt18BBT6IomFDMhV77LTGly1KmUhGlX67gGn4fnGA4-GF1VKwjoloU9J2Nwq9VsBPY0CLpJdRdlZh25aSzOH-Vtv7t67vrE301eO698Uv-Yw96BXxSD3ufZVOURsvjf2Ee8KP9m7wvX77un7ytyaww77224Q_EJb2IPk5ntzH9FY72SN9fQbXzcw1q85_LA_sQbBm_rGHiI335v7iMbWT9bYun7jXW1ja85hbTUI7eva-vsz872Zj2iqe7KmIn8w9UWepUkutOZit6yTiCdi3Y08XcixuJPpeLXN-mNvxa3GuFjkxfpb5q8_tZP1d2VCfZrbwA0buGkDMyQ3MykZN6O5DdywgZs2MENy823afU976np7SphtntrdputWgqtpRBQ1jAiuhhHBkUMjuX0rwdU0IooaRgRXw4jgyKGR3A0bwc-tFFXTSKvVMKKoGkYURQ6N5L6wUlRNI61Ww4iiahhRFDk0krtpoyizmxMQHPsP12pSQGhEU-zgWHTLYcFuWrAbF-zmBbuBgVlNDOzDyGBmqxrHWq6mMVvVNGYrcnAsutGw9LFpJtOSKY3ZajIvmdKorR-GB6Wto-Vf3wMAAP__mJcbjw==
+distribution: full
+vectorized: true
+·
+• render
+│
+└── • merge join (full outer)
+    │ equality: (pid1, cid1, cid2) = (pid1, cid1, cid2)
+    │ right cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: outer_gc1@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: outer_c1@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUl1Fv2joUx9_vp7DOE9waJXYILZGulKqXTlQUOqDSpAlNKfEAiSaZE6RVFd99CnRroeBjz2OIl0mE_Oy_z_mZnT5D_m0OAbQ-3XUu211S-b89GA4-dqpk0Oq0robkX3Ld792SdFEI-WUyZuT6vtMhN7129-XZmJH7Qbv7gVSyWcwoGf_8l1eBQpLGohs9ihyCz8CAAgcKHlCoAwUfRhQymY5FnqeyfOV5BbTj7xC4FGZJtijKxyMK41QKCJ6hmBVzAQEMo4e56IsoFtIp141FEc3mq21-ZQ0zOXuM5BNQGGRRkgfEcWuOT6IkJoykxVRIGC1pCbxs9Lr-wxOZRvl0c-WQ0ZDT0IPRckQhL6KJgIAt6e_FbuyK_bdS872pX1dLZSykiLdXO6MhP6Ohd1bGMHp7R0FuhZyIm3SWlH3cauTwKRPBWrje_bDVX2kHFObia1F5s3L1PzmbTDcfAYW-SGIhA3LVu-y0BletSlmIRpW-ecBpeL7xwKPhRZWSsE5J6FMSNrdK_VpAT6OAi2RXUXbWoZvW0sxh_tabu_eub-zN9JXj-jfFrznMPehVMch9rn1VDhGb7419xLvCT_aucP2-e_q-MrfmsMP-thsEv9AW9iC5-d7cRzTWO1ljPf3G1w2M9WsOP-xPrEHwpr6xh8jN9-Y-orH1kzW2rt94V9vYmnNYWw1C-7q2_vnMfG_mI5rqnqypyB9MfZFnaZILrbnYLesk4olYdyNPF3Is7mQ6Xm2z_thbcasxLhZ5sf6W-etP7WT9XZlQn-Y2cMMGbtrADMnNTErGzWhuAzds4KYNzJDcfJt239Keut6eEmabp3a36bqV4GoaEUUNI4KrYURw5NBIbt9KcDWNiKKGEcHVMCI4cmgkd8NG8HMrRdU00mo1jCiqhhFFkUMjuS-sFFXTSKvVMKKoGkYURQ6N5G7aKMrs5gQEx_7DtZoUEBrRFDs4Ft1yWLCbFuzGBbt5wW5gYFYTA3s3MpjZqsaxlqtpzFY1jdmKHByLbjQsvW-aybRkSmO2msxLpjRq67vhQWnraPnPjwAAAP__-rwWMA==
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
@@ -780,9 +978,26 @@ vectorized: true
           parallel
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40]
+EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFv2jAQx9_3KazbS1mNYidAS6RKqVa6UVHogGqTumhKyQ0i0SRzEmlVxXefIJ1aULDNTNu9kdg_3__MT7kHyH7NwYVRp9f5OCaFmJPz4eCS3HS-XfVOu31ycNYdjUdfejXyuOVDuSEpchQ_Jpz0OudjcjHo9h9fpZxcj7r9T-QgjUJeI18_d4ad8oF8Lxhz8ISwGjntnz1_OSENVvOBQpyE2A_uMAP3BjhQsIGCAxQa4FNIRTLBLEvEcvlhtbkb_gaXUYjitMiXr30Kk0QguA-QR_kcwYVxcDvHIQYhCosBhRDzIJqvSvztw0tFdBeIe6AwSoM4c4nFrPdWi1m8bjVJEIeEkySfoQB_QZfYY7mnKrf3ZBZks_XzPQ7-wqeQ5cEUweUL-m-xG1Wx08rY-8xrb837dE4iQhQYbp5zuCystaui9UsUU7xIohiFdbzOjO9TdEvtBtfjznAlH1CY48_8wOOHtRMRTWflT6AwKHKXeJx6NvUc6jWo19q4kaduHY1ui7iqk8om-kk9SS1ub-ysrt1Yq831zeDaQjfrFmcvpPIOgZvaKu83sL018Ou53H4jl239v8fW9omzusVf6tu4Q-KWtlB7TmxvTfx6RnH2Rko5-n-Qo69Us27ZL_WN2iHxkb5S-01sb038ikrx_2DiVmQcYpYmcYZa85Qtu8RwiuXdZUkhJnglksmqTPk4WHGrWRBilperdvnQjculZUB9uGUCt01grsjNd2ja3g1umcBtE5grctubNHtOO_Ibc6QwX6fZJt0wkUwOKySTwwrJ5LBKsqaJZHJYIZkcVkgmh1WStUwkOzLRRA4rNJHDCk3ksEqTYxNN5LBCEzms0EQOqzRpm2jCjWaWglaIoqAVpiho5dgym1tmg8tscpmNLr7b7PIX7_4EAAD__yaJcIw=
+distribution: full
+vectorized: true
+·
+• merge join (left outer)
+│ equality: (pid1) = (pid1)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: outer_c1@primary
+│     spans: [/0 - /39]
+│
+└── • scan
+      missing stats
+      table: outer_p1@primary
+      spans: [/0 - /39]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFv2joUx9_vp7DOfSm3RrEToCVSpVS36b1UFDqg2qQNTSk5g0g0zpwgrar47hOkUwsKtplpuzcS--fzP-annEfIv8_Bh_DTTfe80yNHF53haPihWyPDsBv-OyL_kMtB_5qIRYHy64STbng5Ilf9Tu_pVcbJ7bDT-48cZUnMa-Tj_-EgLB_IlwVjHp4RViPnvYuXLyekwWpAIRUx9qJ7zMH_DBwouEDBAwoNGFPIpJhgngu5Wn5cb-7EP8BnFJI0WxSr12MKEyER_EcokmKO4MMoupvjAKMYpcOAQoxFlMzXJX61EWQyuY_kA1AYZlGa-8Rhzt9Oizm87jRJlMaEE1HMUMJ4SVfYU7nnKncPZBbls83zAw7j5ZhCXkRTBJ8v6e_FblTFzipjHzKvuzPv8zlCxigx3j7neFXYaFdF69cop3glkhSlc7rJjB4y9Evr-rejcLB2DyjM8VtxFPDj2plMprPyJ1DoLwqfBJwGLg08GjRo0Nq6keduPYNuF2lVJ5VN9ERdZA53t3ZW125s1ObmZnBjoZt1h7NXUnmPwE1jlQ8b2N0Z-O1cbr-Ty6753-Ma-8RZ3eGv9W3cI3HLWKgDJ3Z3Jn47ozh7J6U88z_IM1eqWXfc1_pG7ZH4xFypwyZ2dyZ-Q6X4HzBxKzIOMM9EmqPRPGWrLjGeYnl3uVjICd5IMVmXKR_7a249C2LMi3LVLR86abm0CmgOt2zgtg3MNbn5Hk27-8EtG7htA3NNbnebZi9pT31jnhLmmzTbphs2kqlhjWRqWCOZGtZJ1rSRTA1rJFPDGsnUsE6ylo1kJzaaqGGNJmpYo4ka1mlyaqOJGtZoooY1mqhhnSZtG0241czS0BpRNLTGFA2tHVt2c8tucNlNLrvRxfebXePlXz8DAAD__wLcay0=
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
@@ -817,59 +1032,200 @@ vectorized: true
           parallel
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]
+EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMldFO2zAUhu_3FNbZDR2uEjttoZGQgkaAoNKyNmiTWDSFxmsjlThzEmkI9d2nNmjQKrWTGZXdNbG_nv84n3yeIPu1ABsm7sD97KNCLND5eHSN7txvN4NTb4gOzryJP_kyaKHnLZ_KDbzImfiREjT2Li59dDXyhs_vZlOCbife8AIdpHFEWujrpTt2ywf0vTBNi50g0kKnw7PXL6cniJqtADAkPGLD8IFlYN8BAQwUMFiAoQMBhlTwKcsyLlbLT-vNXvQbbBNDnKRFvnodYJhywcB-gjzOFwxs8MP7BRuzMGLCMAFDxPIwXqxL_I3tpCJ-CMUjYJikYZLZyCDGR6NnGqRtdFGYRIggns-ZgGCJV9xzvZcy949oHmbzzQIOgWAZYMjycMbAJkv8b7k7VbnTythvmZfuzPvyP1xETLBo-38OV4Vr7apo_ZqJGbviccKEcbzJ-I8ps9HAPffR6NZ3x2v_AMOC_cwPHHLYOhHxbF7-BAyjIreRQ7BzhB2KHQs7Hex0tw7lpWGrRsNFUtVMZR9D3uapQejWzuranY3apL4cpL7U3bZBzDdUuEHKbm2F9UPSnSH3523__byl9b8KbXAhmm2DbEfQkadBzF79-08_Jd2Zcn_2EPP99LHqfxergT7dtkHf8u5pEPOovj76KenOlHvUh_wfU7Mi5phlKU8yVmsmmqtGWTRj5fFlvBBTdiP4dF2mfBytufU1H7EsL1dp-eAl5dIqYH24pwP3dWCiyE0aNE2bwT0duK8DE0Vuuk2br2lLfmKWFCabtLlNd3Qkk8MKyeSwQjI5rJKsqyOZHFZIJocVkslhlWQ9HcmOdDSRwwpN5LBCEzms0uRYRxM5rNBEDis0kcMqTfo6mhCtmaWgFaIoaIUpClo5tvTmlt7g0ptceqOLNJtdwfLDnwAAAP__9zxeRA==
+distribution: full
+vectorized: true
+·
+• merge join (left outer)
+│ equality: (pid1) = (pid1)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: outer_gc1@primary
+│     spans: [/1 - /20]
+│
+└── • scan
+      missing stats
+      table: outer_p1@primary
+      spans: [/1 - /20]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFv2jwUhu-_X2Gd76asRokdoCVSpVQrbVNR6CDVJm1oSskZRKJx5gRpVcV_nyDVWlCwk7lqd0diP5z3OI98HiH7uQAXel9u-qf-gByc-eNg_KnfIONev_cxIB_I-Wh4TcQyR_k9ZWTkX1wG5GroD57ezaaM3I79wQU5SOOINcjny96oVzyQb0vbdvCEsAY5HZy9fDk9IdxuAIVERDgI7zED9yswoMCBggMUWjChkEoxxSwTcr38uNnsR7_AtSnESbrM168nFKZCIriPkMf5AsGFILxb4AjDCKVlA4UI8zBebEr8Se2lMr4P5QNQGKdhkrnEYtb_Vse2WNNqkzCJCCMin6OEyYquuad6z2XuHsg8zObbBTwGk9WEQpaHMwSXrejf5W6V5U5LY79mXr437_P_CBmhxGj3fw7XhSvtKmn9GuUMr0ScoLSOt5ngIUWX9HvnARneBr3RRj-gsMAf-YHHDhsnMp7Ni59AYbjMXeIx6h1Rj1PPoV6Leu2dQ3lu2KnQ8DIpa6a0j4FoitRifGdnee3WVm1WXQ5WXep202L2KypcI2W7ssLmIfnekG_nbff9vOXVvwqvcSHaTYvtRjCRp0bMTvX7zzwl35vy7exh9vvp41T_Lk4NfdpNi7_m3VMj5lF1fcxT8r0p31Af9m9MzZKYI8xSkWRYaSba60YxmmFxfJlYyineSDHdlCkehxtuc81HmOXFKi8e_KRYWgesDndM4K4JzDS5WY2meT24YwJ3TWCmyc13afsl7ahPzFHCbJu2d-mWiWRqWCOZGtZIpoZ1krVNJFPDGsnUsEYyNayTrGMi2ZGJJmpYo4ka1miihnWaHJtoooY1mqhhjSZqWKdJ10QTZjSzNLRGFA2tMUVDa8eW2dwyG1xmk8tsdLF6s2uy-u93AAAA___waljl
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)]
+EXPLAIN (DISTSQL) SELECT * FROM child1 JOIN child2 USING(pid1)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zAUhu_3K8TZTbsqyJI_mhgGHls3UtqkazoYlFy4sZYYUjuTHVgp-e_Dcbe2-dCRJ-LdybYeH706z8V5hOLnHEIYnV2cfbwhSzUnn6-Hl-T27PvVxYf-gBx96o9uRl8vjsnTlnf1hsksnSecnA_7g3otyLdRf_CFHC3ShB-PgUKWJ3IQ38sCwlvgQEEABRcoeEDBhzGFhconsihyVW15XAP95BeEDoU0WyzL6vWYwiRXEsJHKNNyLiGEm_huLq9lnEjFHKCQyDJO5-sy9bGihUrvY_UAFEaLOCtC0mGCvWV-wDjzRL3uMs4EibOEuCQvZ1IVMF5RyJflU-XngncPZBYXs9elIg7j1ZhCUcZTCSFf0X9L4O9IIP5HArE3wfN_cpVIJZPN_5xUhY127biMS6mm8jxPM6kY3-jnXP4ojyJ-cvxepdNZvQQKw2UZkojTSNDIpZFPo4BGpxvpn5O5BsmW2a5T7zzwIO_kC8b9jZ27a3uvanNzL7iZ2Xu06DCvWvvVe-9QljdIE5hZ3m4asTdNi8bzwxsvzPskDK170Y8OC_42LajXVdOCQ1nXIM2poXWtphF707RonTi8da55n1xD63a3psO6h3KtQYauoWstZBB7M7RomHt4wzzz7niGhnU7jDt_OuQ7Tw9Vi7hzKMkaxOgZStZODLE3Roueee1OjDuOcy2LRZ4V0mgedKpAMpnK-pqKfKkm8krlk3WZ-nG45tYTSSKLsv4q6od-Vn-qDmgOBzZwzwbmVufmvp7mDa5MNIMDG7hnA3Orc29c2RYtNmnnJe3q79vVwvz1nTmbtGcjuB5GBNfDiOB6GBMcoRHBfRvB9TAiuB5GBNfDmOAIjQge2Ah-aqOoHkYU1cOIonoYUxShEUW7NorqYURRPYwoqocxRREaUbRnoyi3mhMQGpEUoRFLERrTFMOxWcFuWLCbFuzGBct5wW5g4FYTA98aGRrZqqcxW_U0ZqueRm1FcMzWJsPSds-aTEtNaczWRvNSYxyzdWt40No6Xr35HQAA__-ki7aF
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid1)
+│
+├── • scan
+│     missing stats
+│     table: child1@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: child2@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zoYx-_PpxDPuWlPFWTJL00MB3w460ZKm3RNB4ORCzfWEkNqZ7IDKyXffTju1jYveuQJe3dy4p-lv57fxf8Jim9LCOHi883Vf8MROXk3nNxNPl6dksnF1cX_d-Qf8v52fE1mi3SZcHI5Ho7qtSCfJsPRB3KyShN-ChSyPJGj-EEWEH4BDhQEUHCBggcUfJhSWKl8JosiV9UrT1tgmHyH0KGQZqt1Wf08pTDLlYTwCcq0XEoI4S6-X8pbGSdSMQcoJLKM0-V2m_pU0UqlD7F6BAqTVZwVIekxwf5mfsA480S97jPOBImzhLgkLxdSFTDdUMjX5fPOLxveP5JFXCzebhVxmG6mFIoynksI-Yb-XgL_QALxJxKIowlevpOrRCqZ7H7nrNrY6K0Dl3Et1Vxe5mkmFeM781zKr-VJxM9O_1XpfFEvgcJ4XYYk4jQSNHJp5NMooNH5TvqXZK5BsnV26NQHDzzKe_mKcX_nzcN7e2_25uZecDOzj2jRY1619qvfvbYsb5AmMLO82zTiaJoOjeftGy_M5yQMrXs1jx4Lfg0tqNfV0IK2rGuQ5tzQuk7TiKNpOrROtG-daz4n19C6w6PpsX5brjXI0Dd0rYMM4miGDg1z2zfMM5-OZ2hYv8e483NCvvP8UI2IO21J1iDGwFCybmKIozE69MzrtjEeOM6tLFZ5VkijPuhUgWQyl_U1FflazeSNymfbberH8ZbbNpJEFmX9r6gfhln9V3VAcziwgQc2MLc6N_f1NG9wZaIZHNjAAxuYW51758r2aLFLO69pV3_frhbmb-_M2aU9G8H1MCK4HkYE18OY4AiNCO7bCK6HEcH1MCK4HsYER2hE8MBG8HMbRfUwoqgeRhTVw5iiCI0o2rdRVA8jiuphRFE9jCmK0IiiAxtFuVVPQGhEUoRGLEVoTFMMx7qCXVmwawt2dcGyL9gVBm7VGPheZWhkq57GbNXTmK16GrUVwTFbm5Sl_Zk1aUtNaczWRn2pMY7ZulcetLZON3_9CAAA__-z6rEm
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN parent2 ON pid1=pid2
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFr2z4Uxd__n0Lc_0u7KsiSHdc1FDy2DlLapGv6MCh-cOO7xJBanuzASsl3H46zpQmJ5CCcp0i2fr4651xy36H8NYcQxjd3N1-eyELNybfH0T15vvnxcPd5MCRnXwfjp_H3u3OyPvKpOVAkCvOKk9vRYLjeCDIakiJLObmuf0QMFHKZ4jB5xRLCZ-BAQQAFFyh4QKEPMYVCyQmWpVT1kfcVMEh_Q-hQyPJiUdWPYwoTqRDCd6iyao4QwlPyMsdHTFJUzAEKKVZJNl-VWV8tKlT2mqg3oDAukrwMSY8J9j_r-4wzTzTrgHEmSJKnxCWymqEqIV5SkItqXXpT8eWNzJJytl0r4hAvYwpllUwRQr6kByRsviNVigrT3e9c1IU3pxb5vnOrWrtW3KOa4q3MclTM3_7sHH9WZxG_OL9W2XTWLIHCaFGFJOI0EjRyaeTtaN7ocVvoOeKmQ9mTBeN85-T-2t5Wbd6-HXjLdjjQDT3m1et-_dzrqjX46VvjssvWEO3jEW3j-RBDj_n_svKbdZ2V31U84vTxBF3G47aPx20bz_5EeizoKhT39KFcdRmK1z4Ur20oQY9x528wfWe9qZPhTle5HKGjv0-H2DOpra4nDl7vRG3DnVON4T0XecSykHmJrYasU0vBdIqNO6VcqAk-KDlZlWm2oxW3mlkpllXzdr0Z5M2r-oLtYc8G9m3gwAbmBtF8l3Y-0kIPCy3Mt2lnl3ZtwtLDhrD0sCEsPWwIy6DZINqzCatvY7ceNtithw1262GD3QbNBtG-jd2XNnbrYYPdethgtx422G3QbBAd2Nh9ZWO3HjbYrYcNduthg90GzaZ__mOGpTiS9qxo34oOrGhuEn7cxIyX__0JAAD__-2HEUg=
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1) = (pid2)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: parent2@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFr2zAUhd_3K8TdS7sqyJId1zUUPLYOUtqka_owGHlw47vEkFqe7MBKyX8fjrOlCY7kIJynSLY-X51zLrlvUPxeQAg3Px7uPg-G5OzrYPw0_n53TsY3dzdfnsgn8u1xdE_yWGFWcnI7Ggw3G0FGQ5KnCSfX1Y8ACplMcBi_YAHhT-BAoXroAgUPKPRhQiFXcopFIVV15G0NDJI_EDoU0ixfltXjCYWpVAjhG5RpuUAI4Sl-XuAjxgkq5gCFBMs4XazLbG4W5Sp9idUrUBjncVaEpMcE-8j6PuPME_U6YJwJEmcJcYks56gKmKwoyGW5Kb2t-PxK5nEx360VcZisJhSKMp4hhHxFD0jYfkeqBBUm-9-5qApvTy2zpnPrWvtW3KOa4a1MM1TM3_3sAn-VZxG_OL9W6WxeL4HCaFmGJOI0EjRyaeTtad7qcVvoOeKmQ9mTOeN872RzbW-nNm_fDrxlOxzohh7zqnW_eu511Rr89K1x2WVriPbxiLbxvIuhx_z_Wfn1usrK7yoecfp4gi7jcdvH47aNpzmRHgu6CsU9fShXXYbitQ_FaxtK0GPc-RdM39lsqmS401UuR-joN-kQDZPa6nri4PVO1DbcOdUYbrjIIxa5zApsNWSdSgomM6zdKeRSTfFByem6TL0drbn1zEqwKOu3m80gq19VF2wPezawbwMHNjA3iOb7tPOeFnpYaGG-Szv7tGsTlh42hKWHDWHpYUNYBs0G0Z5NWH0bu_WwwW49bLBbDxvsNmg2iPZt7L60sVsPG-zWwwa79bDBboNmg-jAxu4rG7v1sMFuPWywWw8b7DZoNv3zHzMsxZG0Z0X7VnRgRXOT8OMm5mT14W8AAAD__7prC-k=
 
 # Join on non-interleaved column uses hash joiner.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1]
+EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN child1 ON pa1 = ca1
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1r2zAUhu_3K8TZTTsUZMkfTQwFj61jKV3SNb0YFF-4sdYEUtuTHVgp-e_DcbY2H9WRJ5w7O9Fj6dV5Lt5nKH8tIITJxdXFp1uyVAvy5Wb8jdxd_Li--jgckZPPw8nt5PvVKdks-dAsKBIls4qTy_FwRKaz-SLlZDwiRcLJOZkmPAYKWZ7KUfIoSwjvgAMFARRcoOABBR9iCoXKp7Isc1UveV4Dw_Q3hA6FeVYsq_rnmMI0VxLCZ6jm1UJCCLfJ_ULeyCSVijlAIZVVMl-st9mcKyrU_DFRT0BhUiRZGZIeE-w98wPGmSea5z7jTJAkS4lL8momVQnxikK-rDZbv-x4_0RmSTnb3isSEK9iCmWVPEgI-Yr-XwR_-7PNbR4ngbuVQLyZ4OU7yyxXqVQy3fpSXJPYkgPX8DUpZ5f5PJOK8Z1JLuTP6iQSp-dq_jCrTiL3FCiMl1VIIk4jQSOXRh6N_J3EL2lcizQHjjrKe3nBuL-b--De3tbe3NwFbqjzGy70mFc_-_XvXldqt4gTmKnddRqd5vzImvNONRfmsxGmqr0aQo8F_yYVNM_1pIKuVGsR58xQtY7T6FQTR1ZNdKqaaz4b11S1w_PosX5XgrUI0TcUrJMMOq3cI2vldqqVZz4Rz1Srfo9x5-9YfGfzUs-FO12Z1SLHwNCsrmLo5PKOLJd3tBZ44CA3sizyrJRGHc-po8j0QTZXU-ZLNZXXKp-ut2lex2tuXTJSWVbNv6J5GWbNX_UBzeHABh7YwNzq3NzX07zFlYl2cGADD2xgbnXunSvbo8Uu7bymXf19u1qYb9-Zs0t7NoLrYURwPYwIrocxwREaEdy3EVwPI4LrYURwPYwJjtCI4IGN4Gc2iuphRFE9jCiqhzFFERpRtG-jqB5GFNXDiKJ6GFMUoRFFBzaKcquegNCIpAiNWIrQmKYYjnUFu7Jg1xbs6oJlX7ArDNyqMfC9ytDKVj2N2aqnMVv1NGorgmO2tilL-zNr05ba0pitrfpSaxyzda88aG2NV-_-BAAA___aKbKo
+distribution: full
+vectorized: true
+·
+• hash join
+│ equality: (pa1) = (ca1)
+│
+├── • scan
+│     missing stats
+│     table: parent1@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: child1@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ll1r2zwYhs_fXyGe96QdCrLkjyaGgsfWsZQu6ZoeDIYP3FhrDKntyQ6slPz34bhbm4_qkSecM39dlm4918H9BNXPJYRw8e366v14Qk4-jme3s69Xp2R2cXXx4Za8I59upl9ImSiZ15xcTscTMl9ky5ST6YSUCSfnZJ5woJAXqZwkD7KC8Ds0DwRQcIGCBxR8iCmUqpjLqipU88nTBhinvyB0KGR5uaqbxzGFeaEkhE9QZ_VSQgi3yd1S3sgklYo5QCGVdZItN8s8bysqVfaQqEegMCuTvArJgAn2P_MDxpkn2ush40yQJE-JS4p6IVUF8ZpCsaqfl35Z8e6RLJJqsb1WJCBexxSqOrmXEPI1_bcI_vZv28M8TgJ3K4F4M8HLf1Z5oVKpZLr1p7ghsU8OHMPnpFpcFlkuFeM7k1zKH_VJJE7PVXa_qE8i9xQoTFd1SCJOI0Ejl0YejfydxC9pXIs0B7Y6KQZFybi_m_vg2t7W2tzcBW6o8xsuDJjXXPvNc68vtTvECczU7juNTnN-ZM15r5oL89kIU9VeDWHAgr-TCtrrZlJBX6p1iHNmqFrPaXSqiSOrJnpVzTWfjWuq2uF5DNiwL8E6hBgaCtZLBp1W7pG1cnvVyjOfiGeq1XDAuPNnLL7zfNPMhTt9mdUhx8jQrL5i6OTyjiyXd7QWeGAjN7Iqi7ySRh3PaaLI9F62R1MVKzWX16qYb5Zpb6cbblMyUlnV7VvR3ozz9lWzQXM4sIFHNjC32jf39TTvcGSiGxzYwCMbmFvte-fI9mixSzuvaVd_3q4W5ttn5uzSno3gehgRXA8jguthTHCERgT3bQTXw4jgehgRXA9jgiM0InhgI_iZjaJ6GFFUDyOK6mFMUYRGFB3aKKqHEUX1MKKoHsYURWhE0ZGNotyqJyA0IilCI5YiNKYphmNdwa4s2LUFu7pg2RfsCgO3agx8rzJ0slVPY7bqacxWPY3aiuCYrV3K0v7MurSlrjRma6e-1BnHbN0rD1pb4_V_vwMAAP__C7ytSQ==
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)]
+EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid2)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zwUx--fTyHOc9OuCrbklyaGgcfWjZQ26ZoOBiUXbqwlhtTOZAdWSr77cJwtzZuONRHnzi_6Wfqf8zOcV8h_TiGAwdXN1ccHMpdT8vm-f0ser77f3Xzo9sjZp-7gYfD15pyslryrFowmyTTm5Lrf7ZGxjNJ49eDboNv7Qs5mScwoGSUxPx8ChTSLRS96FjkEj8CAAgcKDlBwgYIHQwozmY1EnmeyXPK6BLrxLwhsCkk6mxfl4yGFUSYFBK9QJMVUQAAP0dNU3IsoFtKygUIsiiiZLrepDhTOZPIcyRegMJhFaR6QlsWt_y3Pt5jl8uq6bTGLkyiNiUOyYiJkDsMFhWxerHZeb_j0QiZRPtncKmQ05DBcDCnkRTQWELAF_bcQ3uaX35T2REn4wSTrT2UyFlLE25-6oCG_KPevvXJPcW6FHIvrLEmFtNhWi6fiR3G2os_fy2Q8Wd8Chf68CMgyEQ0dGro0vKRhm4adrZqswzo1ws7TfSH2nr2XtbKZxbytlfv3djf2ZvWVYfW8PyBLy3LLa6987h7xH9AI5Gv8A42n4gdTneB_YI3-D7x-C3lNJ990qWX5f1vpV9dlK_0jOqkR6FLHyaZT8YOpTuAkb9RJp34LnZpO7m9Yy2of0USNGG0dE5vJwg9mOYF_TqP-ufUb59b0r92ymP2nb569uikbx-wjKqiRpKOjYGNx-ME4J7DQPdmkuudk9yKfZWkuas2hdplNxGNRVS7P5nIk7mQ2Wm5T3faX3HL8iUVeVG95ddNNq1flAevDvgncMYGZ0bmZp6aZRsm4HuybwB0TmBmde6tkOzTfpu23tKOut6OE2WbN7G3aNRFcDSOCq2FEcDWMCY7QiOCeieBqGBFcDSOCq2FMcIRGBPdNBL80UVQNI4qqYURRNYwpitCIom0TRdUwoqgaRhRVw5iiCI0o2jFRlBnNCQiNSIrQiKUIjWmK4disYDYsmE0LZuOC4bxgNjAwo4mB7YwMWraqacxWNY3ZqqZRWxEcs1VnWNrtmc60pEtjtmrNS9o4ZuvO8KC0dbj473cAAAD__40N3Z8=
+distribution: full
+vectorized: true
+·
+• merge join
+│ equality: (pid1, cid2) = (pid1, cid2)
+│
+├── • scan
+│     missing stats
+│     table: child2@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: grandchild2@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElltr2zAUx9_3KcTZS7sq2JIvTQwDj60bKW3SNR0MRh7cWEsMqZ3JDqyUfPfhOFuam441EefNt5-l_zk_wXmB_NcUArj6fnfzodsjZ5-6g4fB15tzMri6ufr4QN6Rz_f9WzKaJNOYk-t-t0fGMkrj1YNvg27vCzmbJTGjZJTE_BwopFksetGTyCH4AQwocKDgAAUXKHgwpDCT2UjkeSbLT16WQDf-DYFNIUln86J8PKQwyqSA4AWKpJgKCOAhepyKexHFQlo2UIhFESXT5TLVfsKZTJ4i-QwUBrMozQPSsrj11vJ8i1kur67bFrM4idKYOCQrJkLmMFxQyObFauX1go_PZBLlk82lQkZDDsPFkEJeRGMBAVvQ_wvhbf75VWVPlIQfTLL-VSZjIUW8_asLGvKLcv3aX-4pzq2QY3GdJamQFttq8VT8LM5W9Pl7mYwn61ug0J8XAVkmoqFDQ5eGlzRs07CzVZN1WKdG2Hm6L8TevfeyVjazmLf15f613Y21WX1lWD3vD8jSstzy2iufu0c8AxqBfI0z0HgqfjDVCc4Da_Q88Pot5DWdfNWlluX_a6VfXZet9I_opEagSx0nm07FD6Y6gZO8USed-i10ajq5v2Etq31EEzVitHVMbCYLP5jlBP45jfrn1m-cW9O_dsti9t--efbqpmwcs4-ooEaSjo6CjcXhB-OcwEL3ZJPqnp3di3yWpbmoNYfaZTYRj0VVuTyby5G4k9louUx1219yy_EnFnlRveXVTTetXpUbrA_7JnDHBGZG-2aemmYaJeN6sG8Cd0xgZrTvrZLt0Hybtl_TjrrejhJmmzWzt2nXRHA1jAiuhhHB1TAmOEIjgnsmgqthRHA1jAiuhjHBERoR3DcR_NJEUTWMKKqGEUXVMKYoQiOKtk0UVcOIomoYUVQNY4oiNKJox0RRZjQnIDQiKUIjliI0pimGY7OC2bBgNi2YjQuG84LZwMCMJga2MzJo2aqmMVvVNGarmkZtRXDMVp1habdnOtOSLo3ZqjUvaeOYrTvDg9LW4eLNnwAAAP__O8TYQA==
 
 # Subset join on interleaved columns uses hash joiner.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)]
+EXPLAIN (DISTSQL) SELECT * FROM child2 JOIN grandchild2 USING(pid1, cid3)
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zAUhu_3K8TZTTsUbMkfTQwDj63bUrqkazoYFF-4sZYYUjuTHVgp-e_Dcbo2XzrWRNw7y9Zj6T3nuTiPUPyeQQCj88vzjzdkIWfk8_XwG7k9_3l1-aE_ICef-qOb0ffLU7Le8q7eMJ6ms4STi2F_QCYyzpL1ix-j_uALOZmnCaNknCbOaQQUsjwRg_heFBDcAgMKHCg4QMEFCh5EFOYyH4uiyGW15XEF9JM_ENgU0my-KKvXEYVxLgUEj1Cm5UxAADfx3UxcizgR0rKBQiLKOJ2tjqkvFM5leh_LB6AwmsdZEZCOxa23ludbzHJ5_dy1mMVJnCXEIXk5FbKAaEkhX5Trk58PvHsg07iYbh4VMho6EC0jCkUZTwQEbEn_L4S3-ecXpX2lJPxgkudfLbJcJkKKZONnUUViW_aU42tcTC_yNBPSYls9nYlf5cnqjqfvZTqZPi2AwnBRBmS1oiGnoUtDn4ZdGva2CvCczDFItufag7yTzy3mbddg79nuxtmsuR-smeQHzOhYbvXsVe_dIwqvEcjXEL71VPxgqjbkZ63Jz5v3izcU8EVLOpb_r29-_Vz1zT-igBqBznQEbDsVP5iqDQF5awI6zfvlNBRwf3c6VveI2mnE6Opo104WfjBLG7I5rcnmNu-S21C2bsdi9lOTPHu9qLrE7CP6ppGkp-Nba3H4wThtKOe-ynS551LXopjnWSEazY52FUskE1GXqcgXciyuZD5eHVMvhytuNbIkoijrr7xe9LP6U3XB5rBvAvdMYGZ0b-apaaZRMq4H-yZwzwRmRvfeKtkOzbdp-yXtqOvtKGG2WTN7m3ZNBFfDiOBqGBFcDWOCIzQiuGciuBpGBFfDiOBqGBMcoRHBfRPBz0wUVcOIomoYUVQNY4oiNKJo10RRNYwoqoYRRdUwpihCI4r2TBRlRnMCQiOSIjRiKUJjmmI4NiuYDQtm04LZuGA4L5gNDMxoYmA7I4OWrWoas1VNY7aqadRWBMds1RmWdnumMy3p0pitWvOSNo7ZujM8KG2Nlm_-BgAA__9mJ9B7
+distribution: full
+vectorized: true
+·
+• hash join
+│ equality: (pid1, cid3) = (pid1, cid3)
+│
+├── • scan
+│     missing stats
+│     table: child2@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: grandchild2@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll1r2zwYhs_fXyGe96QdCrLkjyaGgcfWbSld0jUdDEYO3FhLDKmdyQ6slPz34bhdmy891kTcM8vJZenWcx3cD1D8mkMI59-vLt_1B-TkQ390M_p6eUpG55fn72_IG_LxeviFTGbpPBHkYtgfkKmKs-TxxbdRf_CJnCzShFMySRP3FChkeSIH8Z0sIPwBHCgIoOACBQ8o-DCmsFD5RBZFrqq_PKyBfvIbQodCmi2WZfV6TGGSKwnhA5RpOZcQwk18O5fXMk6kYg5QSGQZp_P1NvV5ooVK72J1DxRGizgrQtJhgv3P_IBx5on6ucs4EyTOEuKSvJxJVcB4RSFflo87P294e09mcTHb3CriNHJhvBpTKMp4KiHkK_pvIfzNL7-42VdKIg4mef7UMstVIpVMNj42rkjsL3uu43NczC7yNJOK8a2ZzuXP8mR9xtO3Kp3OnhZAYbgsQ7Je0UjQyKNRQKMujXpbF_CczLVItufYg7yTLxj3t-9g797ext68uR-8meQHzOgwr3r2q_feEYU3CBQYCN96KnEwVRvy89bkF83nJRoK-GIkHRb8nVtQP1dzC44ooEGgMxMB204lDqZqQ0DRmoBu83m5DQXcP50O6x5RO4MYXRPt2skiDmZpQza3Ndm85lPyGsrW7TDuPA3Jdx4X1ZS4c0TfDJL0THxrLY44GKcN5bxXaZd7DnUti0WeFbJRd3SqWDKZyvqainypJvJK5ZP1NvVyuObWlSWRRVn_KupFP6t_qg7YHA5s4J4NzK3OzX09zQ2uTJjBgQ3cs4G51bm3rmyHFtu085J29fftamG-eWfONu3ZCK6HEcH1MCK4HsYER2hEcN9GcD2MCK6HEcH1MCY4QiOCBzaCn9koqocRRfUwoqgexhRFaETRro2iehhRVA8jiuphTFGERhTt2SjKrXoCQiOSIjRiKUJjmmI41hXsyoJdW7CrC5Z9wa4wcKvGwHcqg5GtehqzVU9jtupp1FYEx2w1KUu7MzNpS6Y0ZqtRXzLGMVt3yoPW1vHqvz8BAAD__xM8yxw=
 
 # Multi-table staggered join uses merge joiner on the bottom join
 # and a lookup join on the higher join.
 query T
-SELECT url FROM[EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT * FROM grandchild1
   JOIN child1 USING (pid1, cid1)
   JOIN parent1 USING (pid1)
 ORDER BY pid1
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl12P2kYUhu_7K6Znb7LNoPGMP_iQKrltthURgRQ2UquICwdPwS2x3bGRGq32v1cG2rUxnuOpC9zFGT_MnDnvsweeIPtzCyNYPEwefngkO7UlP85n78jHh1_eT74bT8mrN-PF4-LnyT05vvLN4YW1CuJwtYm2ISdvZ-MpOf77w2I8_Ym8SqOQU7KKQn5_WE4DJeO8sn5PZvM3D3Py_a-keFwChTgJ5TT4LDMYfQQOFARQsIGCAxRcWFJIVbKSWZao4pWnPTAO_4KRRSGK011e_PeSwipREkZPkEf5VsIIHoNPWzmXQSgVs4BCKPMg2u63KVXipyr6HKgvQGGRBnE2Ij0m2B1zPcaZI5hgX08_TCbMHTDOBAnikNgkyTdSZbB8ppDs8uMRXnb-9IVsgmxT3dPn1BewfF5SyPJgLWHEn-l_q8atfnLbQu4uUYRoLOLloxIVSiXD0496TX3xuti_9Ztn7uWdVGv5NoliqRg_afNW_pa_OtL336povXl5BAqzXT4i-4qob1Pfob5LfY_6_ZM7eSnWNulYcahjw_hJx45mlFo2SZI_din5PYliksTFsc4esE_9YePpnA6tOH-506SXpExUr7Vpe7eyPW8fZ24gp8bNHnOKNbdYcy4oqkFlXjtRGzy9XEGisaAbSMuvKi3SvbK03vWlFe2zJUysKQWpx7x_0-Yxr6yQd0FrDCrrt7RGU9TdJQoSjQXdwBpxVWuQ7pWt6V_fGrt9tmwTa5pF6bHBBV0xqGfQ0pXzevzfZYjGMm5giH1VQ5CelQ0ZXN8Qp32iHBNDBj3GrX-i5VrFQ0kTbl1QEoOShi0lOVPN3UUqEY2V3MAT56qeIG0rezK87Y-mM6ebyyxN4ky2-j1kFTcvw7U89DVLdmol36tktd_m8Djbc_tvpaHM8sOqODyM48NSccD2cL8LzHkn2u1ED_U0N7gzYQb3u8And2ZKu53ooZ4Wp7RVpu0KbJ3CthZ29N1ytLDg-q3dLn7oYcQPPYz5gdCIHwiN-OF18UMPI37oYcwPhEb8QGjEj742pQN9SAdd_Bh2SbgeRhKuh7GEIzSScITGJoDJ2Kz_JTWZm6Y0OgSMJqcxjsSc16ZIJapc6IPO9WMESTqvzRGTqCM0knWExsKO4UjaMRyLe22GGsVdT2Nx19No3BEcizuCY3GvDdJq3D0k7rWZYhT32kwxiruexuKup9G4IzgWdwTH4l6bp0Zx19NY3PU0GncEx-KO4Fjca1O1-l3b0sdd1GaLNu7L56_-DgAA__-EQFI5
+distribution: full
+vectorized: true
+·
+• lookup join
+│ table: parent1@primary
+│ equality: (pid1) = (pid1)
+│ equality cols are key
+│
+└── • merge join
+    │ equality: (pid1, cid1) = (pid1, cid1)
+    │ right cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: grandchild1@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: child1@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl12P4jYXx--fT-HnzM1M18ix88KLVCltd1qxYmELs1KriosscSEtG6dJkLoazXevArSTEOITNwXuJpgf9vH5_-bAM2R_bGEEjz99mHwznpL7t-PF0-LHyQNZPE4ev3siX5Hv57P3ZJ0GcbjaRNuQk3ez8ZQc__64GE9_IPdJFHJKVlHIHw7LSZDKOK-sP5DZ_O3jnHz7MykegUKsQjkNPssMRr9A8YIACjZQcICCC0sKSapWMstUWrzleQ-Mwz9hZFGI4mSXFy8vKaxUKmH0DHmUbyWM4Cn4tJVzGYQyZRZQCGUeRNv9NqVC_CSNPgfpF6CwSII4G5EeE-yOuR7jzBFMsP9PP04mzB0wzgQJ4pDYROUbmWawfKGgdvnxCK87f_pCNkG2qe7pc-oLWL4sKWR5sJYw4i_031XjVj-5bSF3lyhCNBbx-lEqDWUqw9OPekN98abYv_U7z9zLe5mu5TsVxTJl_KTNW_lrfn-kH75Oo_Xm9REozHb5iOwror5NfYf6LvU96vdP7uS1WNukY8Whjg3jJx07ilFq2USp33cJ-U1FMVFxcayzB-xTf9h4OqdDK85f7lT1VMJE9Vqbtncr2_P2ceYGcmrc7DGnWHOLNeeCohpU5rUTtcHTyxUkGgu6gbT8qtIi3StL611fWtE-W8LEmlKQesz7J20e88oKeRe0xqCyfktrNEXdXaIg0VjQDawRV7UG6V7Zmv71rbHbZ8s2saZZlB4bXNAVg3oGLV05r8d_XYZoLOMGhthXNQTpWdmQwfUNcdonyjExZNBj3Po7Wq5VPJQ04dYFJTEoadhSkjPV3F2kEtFYyQ08ca7qCdK2sifD2_5oOnO6ucwSFWey1e8hq7h5Ga7loa-Z2qUr-SFVq_02h8fZntt_Kw1llh9WxeFhHB-WigO2h_tdYM470W4neqinucGdCTO43wU-uTNT2u1ED_W0OKWtMm1XYOsUtrWwo--Wo4UF12_tdvFDDyN-6GHMD4RG_EBoxA-vix96GPFDD2N-IDTiB0IjfvS1KR3oQzro4sewS8L1MJJwPYwlHKGRhCM0NgFMxmb9P6nJ3DSl0SFgNDmNcSTmvDZFKlHlQh90rh8jSNJ5bY6YRB2hkawjNBZ2DEfSjuFY3Gsz1CjuehqLu55G447gWNwRHIt7bZBW4-4hca_NFKO412aKUdz1NBZ3PY3GHcGxuCM4FvfaPDWKu57G4q6n0bgjOBZ3BMfiXpuq1e_alj7uojZbtHFfvvzvrwAAAP__cpJM2g==
 
 # Multi-table join with parent1 and child1 at the bottom uses merge
 # joiner but induces a hash joiner on the higher join.
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
   SELECT * FROM parent1
   JOIN child1 USING (pid1)
   JOIN grandchild1 USING (pid1, cid1)
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl11vo0YUhu_7K6anN0l3LJjhwx9SJao2rbzyOts4K1Va-YI1U5vWy9ABS11F-e8V4G4w2HOYEtt3JvAwc-a8T479BNnfW5jA4m5299Mj2akt-eXh_h35ePf7-9mP0zm5-Xm6eFz8Nrsl-0e-rx5IQyWSnJG399M5WW3ibcTIh8V0_iu5SeOI3VY31ipMovZdSlbFM0ugkMhIzMPPIoPJR2BAgQMFByi4QMGDJYVUyZXIMqmKR55KYBr9AxObQpyku7z485LCSioBkyfI43wrYAKP4aeteBBhJJRlA4VI5GG8LZepNhSkKv4cqi9AYZGGSTYhA4tb31mebzHL5dXnkcUsTsIkIg6R-UaoDJbPFOQu36_8suCnL2QTZpvDpQJGAw7L5yWFLA_XAibsmf6_IrzDN9eOFq_k2_mH2ewc1fCT1by8SqpIKBE1X_WGBvxNsX7nJ48c0Duh1uKtjBOhLNZo81b8kd_s6dsfVLzevFwChftdPiFlRTRwaODSwKOBT4Nh40xeinVMWldsat851mjd3p1a22ZS_rVLyZ8yTohMim193eCo3OC43KN2d26HVuySY0d89GTnciBTi9uNJ4-v7R2szbqHmnUz84SYA8stPnvF390zWmpQkG9gqUbS81XGT1Z2BWPZRY1F2lg31r-8sbx7yHhHa2oZGlj-17D51eciaP4ZrTEoaGhijaaqmkKvWxk_WdkVrOEXtQZpY92a4eWtcbqHzOlozXFRBtbojK4YlDEyceW0Hq9dDz9ZzxUMcS5qCNK8uiGjyxvido-W29GQ0cBi9n_J8uz9RRErZp9REoNKxiaSHCmnZsorl8RPlnQFT9yLeoL0r-7J-Lq_mI7s7kFkqUwy0en3kF2cvIjWouprJndqJd4ruSqXqS7vS678VhqJLK_u8upimlS3ig12h4d9YMZ60V4veqynmcGZcTN42AdunJkp7fWix3qaN2m7TjsHsN2EHS3s6rvlamHO9Et7ffzQw4gfehjzA6ERPxAa8cPv44ceRvzQw5gfCI34gdCIH0NtSkf6kI76-DHuk3A9jCRcD2MJR2gk4QiNTQCTsdn-T2oyN01pdAgYTU5jHIk5a02Rg6gyrg86048RJOmsNUdMoo7QSNYRGgs7hiNpx3As7q0ZahR3PY3FXU-jcUdwLO4IjsW9NUgP4-4jcW_NFKO4t2aKUdz1NBZ3PY3GHcGxuCM4FvfWPDWKu57G4q6n0bgjOBZ3BMfi3pqqh9-1bX3ceWu2aOO-fP7m3wAAAP__QBdOhA==
+distribution: full
+vectorized: true
+·
+• lookup join
+│ table: parent1@primary
+│ equality: (pid1) = (pid1)
+│ equality cols are key
+│
+└── • merge join
+    │ equality: (pid1, cid1) = (pid1, cid1)
+    │ left cols are key
+    │
+    ├── • scan
+    │     missing stats
+    │     table: child1@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: grandchild1@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEl11vo0YUhu_7K6anN0l3LJjhwx9SJao2rbzyOts4K1WqfMGaqU3rZeiApa6i_PcKcDcY7DnMEtt3JvAwc-a8T479BNk_W5jA3e_vZz9O5-Tm5-nicfHb7JYs7mZ3Pz2S78kvD_fvSBoqkeSMvL2fzslqE28jRj4spvNfyU0aR-y2urFWYRK171KyKp4BComMxDz8JDKY_AEMKHCg4AAFFyh4sKSQKrkSWSZV8chTCUyjf2FiU4iTdJcXf15SWEklYPIEeZxvBUzgMfy4FQ8ijISybKAQiTyMt-Uy1X6CVMWfQvUZKCzSMMkmZGBx6zvL8y1mubz6PLKYxUmYRMQhMt8IlcHymYLc5fuVXxb8-JlswmxzuFTAaMBh-bykkOXhWsCEPdOvK8I7fHPtZPFKvp1_mM3OUQ0_Wc3Lq6SKhBJR81VvaMDfFOt3fvLIAb0Tai3eyjgRymKNNm_Fn_nNnr79QcXrzcslULjf5RNSVkQDhwYuDTwa-DQYNs7kpVjHpHXFpvadY43W7dWptW0m5d-7lPwl44TIpNjWlw2Oyg2Oyz1qd-d2aMUuOXbER092LgcytbjdePL42t7B2qx7qFk3M0-IObDc4rNX_N09o6UGBfkGlmokPV9l_GRlVzCWXdRYpI11Y_3LG8u7h4x3tKaWoYHlfwmbX30uguaf0RqDgoYm1miqqin0upXxk5VdwRp-UWuQNtatGV7eGqd7yJyO1hwXZWCNzuiKQRkjE1dO6_Ha9fCT9VzBEOeihiDNqxsyurwhbvdouR0NGQ0sZv-fLM_eXxSxYvYZJTGoZGwiyZFyaqa8ckn8ZElX8MS9qCdI_-qejK_7i-nI7h5ElsokE51-D9nFyYtoLaq-ZnKnVuK9kqtymeryvuTKb6WRyPLqLq8upkl1q9hgd3jYB2asF-31osd6mhmcGTeDh33gxpmZ0l4veqyneZO267RzANtN2NHCrr5brhbmTL-018cPPYz4oYcxPxAa8QOhET_8Pn7oYcQPPYz5gdCIHwiN-DHUpnSkD-mojx_jPgnXw0jC9TCWcIRGEo7Q2AQwGZvt_6Qmc9OURoeA0eQ0xpGYs9YUOYgq4_qgM_0YQZLOWnPEJOoIjWQdobGwYziSdgzH4t6aoUZx19NY3PU0GncEx-KO4FjcW4P0MO4-EvfWTDGKe2umGMVdT2Nx19No3BEcizuCY3FvzVOjuOtpLO56Go07gmNxR3As7q2pevhd29bHnbdmizbuy-dv_gsAAP__iIdJJQ==
 
 statement ok
 DROP TABLE grandchild2, grandchild1, child1, child2, parent1, parent2

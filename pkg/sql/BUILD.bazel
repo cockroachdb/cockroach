@@ -90,7 +90,6 @@ go_library(
         "execute.go",
         "executor_statement_metrics.go",
         "explain_bundle.go",
-        "explain_distsql.go",
         "explain_plan.go",
         "explain_vec.go",
         "export.go",

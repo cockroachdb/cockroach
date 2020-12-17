@@ -306,7 +306,9 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.Expl
 	ob := explain.NewOutputBuilder(explain.Flags{
 		HideValues: true,
 	})
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+	ob.AddDistribution(ih.distribution.String())
+	ob.AddVectorized(ih.vectorized)
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
 	}
@@ -324,7 +326,9 @@ func (ih *instrumentationHelper) planStringForBundle(phaseTimes *phaseTimes) str
 	})
 	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
 	ob.AddExecutionTime(phaseTimes.getRunLatency())
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+	ob.AddDistribution(ih.distribution.String())
+	ob.AddVectorized(ih.vectorized)
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		return fmt.Sprintf("error emitting plan: %v", err)
 	}
 	return ob.BuildString()
@@ -340,7 +344,9 @@ func (ih *instrumentationHelper) planRowsForExplainAnalyze(phaseTimes *phaseTime
 	ob := explain.NewOutputBuilder(ih.explainFlags)
 	ob.AddPlanningTime(phaseTimes.getPlanningLatency())
 	ob.AddExecutionTime(phaseTimes.getRunLatency())
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan, ih.distribution, ih.vectorized); err != nil {
+	ob.AddDistribution(ih.distribution.String())
+	ob.AddVectorized(ih.vectorized)
+	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		return []string{fmt.Sprintf("error emitting plan: %v", err)}
 	}
 	return ob.BuildStringRows()

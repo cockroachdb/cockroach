@@ -1882,14 +1882,18 @@ func (ef *execFactory) ConstructExplain(
 	if err != nil {
 		return nil, err
 	}
-	if options.Mode != tree.ExplainPlan {
+	if options.Mode == tree.ExplainVec {
 		wrappedPlan := plan.(*explain.Plan).WrappedPlan.(*planComponents)
-		return constructExplainDistSQLOrVecNode(options, stmtType, wrappedPlan, ef.planner)
+		return &explainVecNode{
+			options: options,
+			plan:    *wrappedPlan,
+		}, nil
 	}
 	flags := explain.MakeFlags(options)
 	n := &explainPlanNode{
-		flags: flags,
-		plan:  plan.(*explain.Plan),
+		options: options,
+		flags:   flags,
+		plan:    plan.(*explain.Plan),
 	}
 	return n, nil
 }

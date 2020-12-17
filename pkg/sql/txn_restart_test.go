@@ -1392,12 +1392,12 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	// Let's make sure that DISTSQL will actually be used.
-	row := txn.QueryRow(`SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT count(1) FROM t]`)
-	var automatic bool
+	row := txn.QueryRow(`SELECT info FROM [EXPLAIN SELECT count(1) FROM t] WHERE info LIKE 'distribution%'`)
+	var automatic string
 	if err := row.Scan(&automatic); err != nil {
 		t.Fatal(err)
 	}
-	if !automatic {
+	if automatic != "distribution: full" {
 		t.Fatal("DISTSQL not used for test's query")
 	}
 

@@ -213,12 +213,29 @@ vectorized: true
               spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL)
+EXPLAIN (DISTSQL)
 SELECT *
 FROM (SELECT * FROM data WHERE c = 1) AS l
-NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r]
+NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzEld9r2z4Uxd-_f8XlPrVfZGz5R5sKBg5bylIyp0syNuj84MWi8-ZanmzDRsn_Pmx3aVwSyUtC9ijlnpxz_TmgRyx-pMhwPpqMXi-gkilcz6bv4G706XYyHAdw9mY8X8zfT87haeT_duCse4yjMoKPb0ezESzhFdBzGM4hhWC4-DAbTuBmWv-VQvK5siyHg9XoZIgEMxHzIHrgBbI7pEjQRoIOEnSRoIchwVyKJS8KIeuRx0Ywjn8iswgmWV6V9XVIcCkkR_aIZVKmHBkuoi8pn_Eo5tK0kGDMyyhJG5s6kp_L5CGSv5DgPI-ygoFhUoiyGCiI8iuXGK4Iiqp8dijK6J4joyvSP8V1kpZccml63QjtPQPfqT8jY2wcLAY7Le2_sbwRSfa0N1UvPhHie5XDN5FkIDIGPiW-TXyH-PXHnwbgX66J_YlIcFqV3dFdqZ2dqZ_DVpmQMZc87gQNV1v2CoQhcpN6Lya3e7sdb9q_KrRPVUxqmPYeZdHkWJfl4nhl0VhulkW9-knLYvcHZvcCZhumswcwTY41sMvjAdNYbgJTr35SYE5_YE4vYI5hunsA0-RYAxscD5jGchOYevWTAnP7A3N7AXMN09sDmCbHGtjV8YBpLDeBqVf_Z-_nltQzXuQiK3iv19Gq31ce3_P2MS5EJZf8VoplY9Mep42uuYh5Uba_0vYwztqf6oCbYqoU22qxrRQ7HTF9KXbUsS_U1q5S7anFnlKscb44ZOlLpXigdh4oxVdq8dUhsammY7qSqVtGNTWjB_WMaormaszVTaOaqlF1115mD1f__Q4AAP__Rs1urw==
+distribution: full
+vectorized: true
+·
+• lookup join
+│ table: data@primary
+│ equality: (a, b, c, d) = (a,b,c,d)
+│ equality cols are key
+│ pred: c > 0
+│
+└── • filter
+    │ filter: c = 1
+    │
+    └── • scan
+          estimated row count: 100,000
+          table: data@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV-P0kwYxe_fT_Hkudp9M007_bMLk5iUKBvZYFkBo4lyUelkrXY7ddomGsJ3N22VpQRmKhC8nOmcnvPM7ySzwvx7ggyHHx7Gg1EAV69Gs_ns7fgaZsPx8OUc_oe76eQNXLWXUViE8P71cDqEJbwAeg2DGSQQDObvpoMx3E-qXykkn0rLcjhYtU4iwVREPAifeI7sI1IkaCNBBwm6SNDDBcFMiiXPcyGrI6taMIp-ILMIxmlWFtX2guBSSI5shUVcJBwZzsPPCZ_yMOLStJBgxIswTmqbKpGfyfgplD-R4CwL05yBYVII0wgoiOILl7hYExRl8eyQF-EjR0bXpHuKuzgpuOTS9NoRmn0GvlPdImNsFMx7By3tv7G8F3H6e26qHnwsxLcyg68iTkGkDHxKfJv4DvGry58E4N9ugP2JSHBSFu2jh1I7B1M_hy1TISMuedQKuljvmSsQhshM6u2c3O_ttrxp96rQLlUxqWHaR5RFk2NTlpvzlUVjuV0W9egXLYvdHZjdCZhtmM4RwDQ5NsBuzwdMY7kNTD36RYE53YE5nYA5hukeAUyTYwOsdz5gGsttYOrRLwrM7Q7M7QTMNUzvCGCaHBtg_fMB01huA1OP_s_ezz2ppzzPRJrzTq-jVb2vPHrkzWOci1Iu-YMUy9qmWU5qXb0R8bxovtJmMUqbT1XAbTFVim212FaKnZaY7ooddewbtbWrVHtqsacUa5xvThn6VinuqZ17SnFfLe6fEptqOqYrmbplVFMzelLPqKZorsZc3TSqqRpVd203-2L9368AAAD__3AfaVA=
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -336,9 +353,33 @@ start_key  end_key  replicas  lease_holder
 NULL       NULL     {5}       5
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
+EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3Kbx7SiS34CRQKVIlo8JUJhY6QNqkioeEXCFrsDPbkTYhvvuUhK4ENaH0zee739__O9s70L9T8GE-mozuFiRXKfkym34jj6OfD5PBOCDWcDxfzL9PbHIoKeJxcLcgYW42UulrEW6xgiIpnzUZzEnEaBU4ZeTQl2Ly4340GxHLiti1SUyK5JZETrW0ySAYEutFtuCL7KHQPqQjdq03mD6RzyVZru0lUBAyxiDcogb_ERhQ6MGSQqbkCrWWqtjelUXj-A_4XQqJyHJTbC8prKRC8HdQHgU-BPJKZp0-UIjRhElalu0pyNy8QtqEawT_Zk-PhFm78CKMUpxhGKPqdGvyUA6MZyrZhuovUJhnodA-uQIK09z4hDPKXWhywT7qgtVdHMZ_xofT6MNp9PF6fC6kilFhfDrf8yVvNHMf6s1XmQhUHafeS4pPxuLMvlXJemMs7ti1Hih3KfcaO3EvmWhh4DBQ941rdY7mOZHyOc_IL5kIIoVPuFe4Cgh3ijfNb_57bL5s7xJrw0SbRKxMx6sb46xRv_ch_d679fs1_TN_cYY6k0Ljuz5jt3ghGK-xenFa5mqFD0quymOqcFpy5UaM2lTZmyoYiypVGDyGWSvs1mB2CjsXwM4p7LbCXrttrxXutcO9VrjfDvdb4e4JvNx_-hcAAP__NdMdAw==
+distribution: full
+vectorized: true
+·
+• distinct
+│ distinct on: name
+│
+└── • lookup join
+    │ table: books2@primary
+    │ equality: (book) = (title)
+    │ pred: shelf != shelf
+    │
+    └── • hash join
+        │ equality: (title) = (book)
+        │
+        ├── • scan
+        │     estimated row count: 100
+        │     table: books@primary
+        │     spans: FULL SCAN
+        │
+        └── • scan
+              estimated row count: 100
+              table: authors@primary
+              spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyck9Fv2j4Qx99_f4V_95RIbsFJAClSJaPCVCYWOkDapImHhFwha7Az25E2If73KQldCWpC6ZvPd5-vv3e296B_peDD-PvjdDgJiDWaLJaLr1ObLMbT8f2SFPEkuF-SMDdbqfStCHdIPs1nX0gk5bMmwwWJGK0Cp4wc-lJMvj2M52NiWRG7NYlJkdyRyKmWNhkGI2K9yBZ8kT0W2sd0xG71FtMn8n9JlmsbKAgZYxDuUIP_AxhQ6MGKQqbkGrWWqtjel0WT-Df4XQqJyHJTbK8orKVC8PdQngQ-BPJGZp0-UIjRhElalh0oyNy8QtqEGwR_cKAnwqxdeBlGKc4xjFF1ujV5KOfFM5XsQvUHKCyyUGif3ACFWW58whnlLjS5YB91weoujtO_4MNp9OE0-ng9PhdSxagwPp_v5ZI3mnkI9fazTASqjlPvJcUnY3Fm36lkszUWd-xaD5S7lHuNnbjXTLQwcByo-8a1OifznEr5nGfkp0wEkcIn3CtcBYQ7xZPmg38emy_bu8baKNEmEWvT8erGOGvU731Iv_du_X5N_8JfnKPOpND4rs_YLV4IxhusXpyWuVrjo5Lr8pgqnJVcuRGjNlV2UAUTUaUKg6cwa4XdGszOYecK2DmH3VbYa7fttcK9drjXCvfb4X4r3D2DV4f__gYAAP__TEsXpA==
 
 query T
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
@@ -394,9 +435,24 @@ vectorized: true
       spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
+EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd9r1EAQx9_9K4Z5Upm2l5wVWShENGLKmdTcgULJQ3o71LXpTtzdgHLc_y5J7vBOuGjfMj8-33yS2aD_0aDCZbpI362gcw18KItPcJt-vVm8zXJ4_j5brpafFy9gt_JyXKi78E2chyzP0xKuiyyHO5EHH0OxfzpnbYIRC1cQwZePaZnuB8GEhuFqH3LetysktKI5rx_Zo7rFCAkvsSJsnazZe3F9ezMsZfonqhmhsW0X-nZFuBbHqDY4hKPCXM6kvYiRUHOoTTOsbQmlC38gH-p7RjXf0kFwNB28qu8aLrnW7C5mR_G4-6Ckdeaxdr-QcNnW1is4Q8KSrWanIFJKZfnqDUESESQxnrKKnmJ1LcbupKJjqfGnHzgtRB66Fr6LsSBWQTKnpGeKLihIYurrV5RcUvL6pFt85PaPU5TsW7Ge_-sWs21FyPqex3N76dyab5ysh9eMZTFwQ0OzD-N0PhaZHUe94CEcTcLxNBxPwrO_4Gr77HcAAAD__0XeE20=
+distribution: full
+vectorized: true
+·
+• lookup join
+│ table: books2@primary
+│ equality: (book, lookup_join_const_col_@7) = (title,edition)
+│ equality cols are key
+│
+└── • render
+    │
+    └── • scan
+          estimated row count: 100
+          table: authors@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkd-L00AQx9_9K4Z5Upm7a1JPZOFgRSPmqMmZFhSkD3vd4VyvtxN3N6CU_u-S5Iqt0KpvmR-fbz7JbDB-X6PC4vPN7HVZwdO35Xwx_zh7BvNiVrxZwHN419QfwHTpq4QIZVUVDVzXZQW3Ivcxh3r3dM7WJSceriCDT--LptgNkktrhqtdyHnfRkIvlivzwBHVF8yQ8BKXhG2QFccooW9vhqXS_kA1IXS-7VLfXhKuJDCqDQ7ZqLCSM2kvciS0nIxbD2tbQunSbygmc8eoplvaC85OBy_M7ZobNpbDxeQgHh-_R7fBPZjwEwnnrfFRwRkSNuwtBwWZUqqsFq8IdEagczxmlf2P1bU4_yiVHUqN_3zPaSZy37XwTZwH8Qr0lHTP1F1SoHPq6xekL0m_POqWH7j95RQNx1Z85H-6xWS7JGR7x-O5o3RhxTdBVsNrxrIeuKFhOaZxOh2L0o-jXnAfzk7C-Wk4PwlP_oCX2ye_AgAA__98nw4O
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -546,9 +602,22 @@ vectorized: true
           spans: FULL SCAN
 
 query T
-SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
+EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9r2zwUxu_fT3E48ELClDqynTQVFNKtKaRkdud4sFF8ocai8-ZanizDSsl3H5YLdcpiG3yTu-jPk-c5vyN8XrD4nSLD7Wqz-hRCqVK4CfzPcL_6dre5Wnswul5vw-2XzRher2h6xglo--yhvlk88TSFqy1oCpvVTQi3_tqDlKtHYXZt8D0YVSq4rGR8DFfeNYxG5i_-h_kYLmE6Bj-4XgXw8bsxiJBgJmPh8SdRILtHigRtJOggQRcJzjAimCu5E0UhVXXlxQjW8R9kU4JJlpe62o4I7qQSyF5QJzoVyDDkD6kIBI-FsqZIMBaaJ6mxMcUsc5U8cfWMBLc5zwoGE4sCz2KgIPUPoZCgX2oGS4rRnqAs9ZtZofmjQEb3pH-gW5lkr3lmh3nC51ywGqv_NVwFBi4SNHgbOTdS_ipz-CmTDGRmkhGsuC-dCjFjbO2FC0P69fdbDWTpHC3DPlrGW3qpYqFEfBh8ST9gtP9HrZ6cyNyih9yP2TsH9rR_W2mvtlp0YtmDGtsRqdHY-Sk31u5P1u5H1p5YziCyHZEaZM9PmazTn6zTj6wzsdxBZDsiNcguTpms25-s24-sO7Fmg8h2RGqQvThlsh3TKhBFLrNC9PqCT6sZIOJHUc-MQpZqJ-6U3BmbeukbndmIRaHrU1ov1ll9VAVsimmr2D4Q0_diu925w9ppVbvtYndI7lmreN7uPB_ifN4qXrQ7L4Y4X7T3atrxTNof2XvvaP_f3wAAAP__d9J4OQ==
+distribution: full
+vectorized: true
+·
+• lookup join (left outer)
+│ table: large@primary
+│ equality: (a) = (a)
+│ pred: (b % 6) = 0
+│
+└── • scan
+      estimated row count: 100
+      table: small@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlVFr2zAUhd_3Ky4XBglT6sh20lRQSLe64JLZnePBxsiDGovOm2t5sgIrJf99WC7UKYtt8EveLMnH59zvCt9nLP9kyND7dre68gMYXfvreP1lNYa1t_I-xaDpGSeg7bN7uInCz1A-8iyDqzVoCivvJobb0A8g4-pBmF0bwgBGlQouKxkfw1VwDaOR-cR7mI_hEqZjCKNrL4KP340BEsxlIgL-KEpkP5AiQRsJOkjQRYIz3BAslNyKspSqeuXZCPzkL7IpwTQvdrra3hDcSiWQPaNOdSaQYczvMxEJnghlTZFgIjRPM2NjalkWKn3k6gkJrguelwwmFgWeJ0BB6p9CIcFwpxksKW72BOVOv5qVmj8IZHRP-ge6lWn-kmd2mCd-KgSrqYZfYy8ybJGgodvIuZLy966AXzLNQeYmGcEK-9KpCDPG_CBeGNAvz681kKVztAz7aBmv6aVKhBLJYfAl_YCb_X9qDeREFhY95H7M3jmwp_3bSnu11aITyx7U2I5IjcbOT7mxdn-ydj-y9sRyBpHtiNQge37KZJ3-ZJ1-ZJ2J5Q4i2xGpQXZxymTd_mTdfmTdiTUbRLYjUoPsxSmT7ZhWkSgLmZei1x98Ws0AkTyIemaUcqe24k7JrbGpl6HRmY1ElLo-pfXCz-ujKmBTTFvF9oGYvhXb7c4d1k6r2m0Xu0Nyz1rF83bn-RDn81bxot15McT5or1X045r0n7J3npv9u_-BQAA__8-W3La
 
 # Left join against covering secondary index
 query T
@@ -1037,18 +1106,44 @@ vectorized: true
       spans: FULL SCAN
 
 query T
-SELECT url FROM [ EXPLAIN (DISTSQL)
+ EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlF9vmzAUxd_3Ka7uU6uZEgPpH6RJ2VaqUaVJRyKtU8WDG6yOjWBmG2lVlO8-AZlKqhYs8ZA9Yp-j8-Nc625Q_c7Qx0UwDT4voZQZXEXzG7gP7m6nH8MZHF2Gi-Xi6_QYdhJG4KHRqDXLMvj2JYgCCO4qGRz9EzWKhGm2E9TiEwYf6sMTdgzz6DKI4NN3YDESzEXCZ2zNFfr3SJGggwRdJOghwTHGBAspVlwpISvJpjaEyR_0RwTTvCh1dRwTXAnJ0d-gTnXG0ccle8h4xFnCpT1CggnXLM3qmJppUsh0zeQTElwULFc-WDYFlidAQegfXCLBeal9mFAycTDeEhSlfs5Tmj1y9OmWmDNdizTfIY33kZZPBfdhGlwtYRHchHA9D2eVgmnWAp0K8ass4KdIcxB5hWYG6bwJ-cwmZMIlT_axJvQ9xttX_mQmLFHYdL_Yt-LdvXhqPjdqNDebWrYzdHI9VK3JnR5uco55dY5ZdY5lu0Or66FqVXd2uOpc8-pcs-pcy_aGVtdD1aru_HDVeebVeWbVeZY9HlpdD1Wruov_Y9W-AhlxVYhccaMtOqr2ME8eebO3lSjlit9Ksapjms957asPEq50c0ubjzBvrirAtpl2mp09M31pdrqTe6LdTrfXbfaGcI87zafdyadDks86zefdyedDki-6ZzXqeSbdj-xldrx99zcAAP__MnFS0w==
+distribution: full
+vectorized: true
+·
+• lookup join (semi)
+│ table: data@primary
+│ equality: (a) = (a)
+│
+└── • scan
+      estimated row count: 100
+      table: small@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlFFvmzwUhu-_X3F0rlp9psRA0hRpUraValRp0pFI6zTlwg1Wx0Ywsx1pVZT_PgGdSqrWWOIiu8ScV-_Dc5B3qH7lGGJ0dzt9H8_g5DJeLBefp6ewiKbRxyUwAvdwlcxvQG1YnsOXT1ESQXRXjcHJ36FmImWaPQ3Uw2cM3tWHZ-wU5slllMCHr8CQYCFSPmMbrjD8hhQJekjQR4IBEhziimApxZorJWQ1sqsDcfobwwHBrCi3ujpeEVwLyTHcoc50zjHEJbvPecJZyqU7QIIp1yzL65oaaVLKbMPkIxJclKxQITguBVakQEHo71wiwflWhzChZOLhak9QbPVzn9LsgWNI98Se6VpkxRPS8BBp-VjyEKbR1RIW0U0M1_N4Vk0wzVqgUyF-bkv4IbICRFGh2UF6b0I-swmZcsnTQ6wJ_R9X-1e-ZCYcUbr0UOxb9f5BPbXfG7Xam0sd1-u7uQ6q1uZGx9ucZ6_Os1PnOa7fV10HVUvd-fHU-fbqfDt1vuMGfdV1ULXUjY-nLrBXF9ipCxx32FddB1VL3cW_cdW-AplwVYpCcatbdFDdwzx94M29rcRWrvmtFOu6pnmc17n6IOVKN29p8xAXzasKsB2mxrB3EKYvw565uaPaN6YDczjowz00hkfm5lGf5nNjeGxuHvdpvjDvatDxm5h_spfdq_1_fwIAAP__leZNdA==
 
 query T
-SELECT url FROM [ EXPLAIN (DISTSQL)
+ EXPLAIN (DISTSQL)
   SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
-]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMllFvmz4Uxd__n-LqPiWKU2IgbYr0l9KtVKNKSZdEWqcuD06wOjaKmQFpVZXvPgFpSqrVZkKR8piLD-dwf0eKnzH9FaGDc3fiflxALiO4mk1v4N69u51ceD50Lr35Yv550oXtEUZgVZ1JH1kUwZdP7syFTodBD1Zd-JYPBtYazEEXLvxLcO8KOXRexJUyYBl7EZZvOWHwfzk9YZWus52voFfN19tXc6DDbhems0t3Bh--AlsiwVgE3GePPEXnHikSNJGghQRtJDjEJcFEijVPUyGLI8-lwAt-ozMgGMZJnhXjJcG1kBydZ8zCLOLo4IKtIj7jLODSGCDBgGcsjEqbMt84keEjk09IcJ6wOHWgb1BgcQAURPadSyQ4zTMHxpSMTVxuCIo8e_VLM_bA0aEb0jzTVRhlXHJpDPcDVXMHOmMKPRibNRaO43j-YvSuv_kv_tcijLcroW92snhKuAMT92oBc_fGg-up5xcnWMZqm5oI8TNP4IcIYxBxsZtiSz50xmYRfFgj_RK80Ratd7_iNbyQAZc82I89pj1cbv7yqb7oi8Sg-4t-z97es6fNi0UbFcugfcNsWy1Nql21Tg9ULY1_vVr0eKtlNmdrNmNr9g2rLVtNqh3bswOx1fjX2ZrHy9ZqztZqxtbqG3ZbtppUO7ajA7HV-NfZWsfL1m7O1m7G1u4bw7ZsNal2bM8PxFbjX2drHy9bzaVlxtNExClv9E8-KO4CPHjg1d0hFblc81sp1qVN9XNa6spBwNOsekqrH15cPSoC1sVUKTbVYlMptvbE9K3YUsc-VVvbSvVQLR4qxRrn0zYffaYUj9TOI6X4XC0-bxObajqmK5m6ZVRTM9qqZ1RTNFtjrm4a1VSNqrv2Nvty89-fAAAA___XIrJ-
+distribution: full
+vectorized: true
+·
+• lookup join (semi)
+│ table: data@primary
+│ equality: (a) = (a)
+│ pred: (b + c) > 15
+│
+└── • filter
+    │ filter: (a + b) < 20
+    │
+    └── • scan
+          estimated row count: 100
+          table: small@primary
+          spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9vmzAUxd_3Ka7uE1GcEvOnTZEm0a1Uo0pJl0Rapy0PTrA6NooZEGlVle8-AW1KqsVmQpHymAuHc3x_R4qfMP8do4Pe3e34wg9Au_Rn89nncQ9m3tj7OAdGYAlX08kN5A8sjuHLJ2_qgaYx6MOyB9_Xw6G5AmPYg4vgEry7Ug7ai7hWhqxgL8LqKycM3lfTE1brtOf5Evr1fPX8aQ7U7vVgMr30pvDhKzAkmIiQB-yB5-h8Q4oEDSRoIkELCdq4IJhmYsXzXGTlK0-VwA__oDMkGCXpuijHC4IrkXF0nrCIipijg3O2jPmUs5Bn-hAJhrxgUVzZVPHcNIseWPaIBGcpS3IHBjoFloRAQRQ_eIYEJ-vCAZcS18DFhqBYF69-ecHuOTp0Q9pnuorigmc80-3dQPXcAc2l0AfXaKBwHMcP5qO9_sb_-F-LKHleCX2zk_ljyh0Ye1dzmHk3PlxP_KB8gxWssamxEL_WKfwUUQIiKXdTbikAzTXK4HYD9EvwVls0957iNbzIQp7xcDe2S_u42PzjqIEYiFSnu4veZ2_t2NP2xaKtiqXTgW50rZYi1bZapweqlsK_WS16vNUy2rM12rE1BrrZla0i1Zbt2YHYKvybbI3jZWu2Z2u2Y2sOdKsrW0WqLdvRgdgq_JtszeNla7Vna7Vjaw10uytbRaot2_MDsVX4N9lax8tWcWmZ8jwVSc5b_ZMPy7sAD-95fXfIxTpb8dtMrCqb-uek0lWDkOdF_ZTWP_ykflQGbIqpVGzIxYZUbO6I6VuxKY99Kre2pGpbLralYoXzaZdDn0nFI7nzSCo-l4vPu8Smio6pSiZvGVXUjHbqGVUUzVKYy5tGFVWj8q69zb7YvPsbAAD__4PTrR8=
 
 # Regression test for #35950: Make sure that lookup joins use a batch limit.
 
