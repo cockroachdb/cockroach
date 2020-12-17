@@ -10,17 +10,15 @@ package backupccl
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"io/ioutil"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -29,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -54,19 +53,16 @@ type restoreDataProcessor struct {
 	input   execinfra.RowSource
 	output  execinfra.RowReceiver
 
-	progCh chan *RestoreProgress
+	progCh     chan *RestoreProgress
 	restoreErr error
 
 	alloc rowenc.DatumAlloc
 	kr    *storageccl.KeyRewriter
 
-	beforeNext map[int]time.Time
 	totalNext map[int]time.Duration
 
-	beforeIngest map[int]time.Time
 	totalIngest map[int]time.Duration
 
-	beforeProgSend map[int]time.Time
 	totalProgSend map[int]time.Duration
 }
 
@@ -158,9 +154,9 @@ func (rd *restoreDataProcessor) runRestore() error {
 			// We read rows from the SplitAndScatter processor. We expect each row to
 			// contain 2 columns. The first is used to route the row to this processor,
 			// and the second contains the RestoreSpanEntry that we're interested in.
-			beforeNext := timeutil.Now()
+			// beforeNext := timeutil.Now()
 			row, meta := rd.input.Next()
-			rd.totalNext[workerID] += timeutil.Since(beforeNext)
+			// rd.totalNext[workerID] += timeutil.Since(beforeNext)
 			if meta != nil {
 				if meta.Err != nil {
 					// We got an error.
@@ -197,24 +193,27 @@ func (rd *restoreDataProcessor) runRestore() error {
 				return errors.Wrap(err, "re-writing span key to import")
 			}
 
-			beforeImport := timeutil.Now()
+			// beforeImport := timeutil.Now()
 			log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", newSpanKey)
 			summary, err := rd.processRestoreSpanEntry(entry, entry.Span.Key)
 			if err != nil {
 				return err
 			}
-			rd.totalIngest[workerID] += timeutil.Since(beforeImport)
+			// rd.totalIngest[workerID] += timeutil.Since(beforeImport)
 
 			progDetails := &RestoreProgress{}
 			progDetails.Summary = countRows(summary, rd.spec.PKIDs)
 			progDetails.ProgressIdx = entry.ProgressIdx
-				progDetails.DataSpan = entry.Span
+			progDetails.DataSpan = entry.Span
 
+			//beforeProgSend := timeutil.Now()
 			rd.progCh <- progDetails
+			// rd.totalProgSend[workerID] += timeutil.Since(beforeProgSend)
+
+			log.Infof(ctx, "restore timing: spent %+v on waiting for next row, %+v on processing the import and %+v on waiting for the progCh for worker %d", rd.totalNext[workerID], rd.totalIngest[workerID], rd.totalProgSend[workerID], workerID)
 		}
 	})
 }
-
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry, newSpanKey roachpb.Key,

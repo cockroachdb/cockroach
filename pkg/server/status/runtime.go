@@ -483,7 +483,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		rsr.HostDiskReadBytes.Update(diskCounters.readBytes)
 		rsr.HostDiskReadCount.Update(diskCounters.readCount)
 		rsr.HostDiskReadTime.Update(int64(diskCounters.readTime))
-		rsr.HostDiskWriteBytes.Update(diskCounters.writeBytes)
+		rsr.HostDiskWriteBytes.Update(diskCounters.writeBytes	)
 		rsr.HostDiskWriteCount.Update(diskCounters.writeCount)
 		rsr.HostDiskWriteTime.Update(int64(diskCounters.writeTime))
 		rsr.HostDiskIOTime.Update(int64(diskCounters.ioTime))
