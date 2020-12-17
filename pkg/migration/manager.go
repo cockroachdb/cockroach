@@ -146,7 +146,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// direct successor of the fence).
 			fenceVersion := fenceVersionFor(ctx, clusterVersion)
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &fenceVersion}
-			op := fmt.Sprintf("bump-cv=%s", req.ClusterVersion.PrettyPrint())
+			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 				_, err := client.BumpClusterVersion(ctx, req)
 				return err
@@ -159,7 +159,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// Now sanity check that we'll actually be able to perform the real
 			// cluster version bump, cluster-wide.
 			req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
-			op := fmt.Sprintf("validate-cv=%s", req.ClusterVersion.PrettyPrint())
+			op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 				_, err := client.ValidateTargetClusterVersion(ctx, req)
 				return err
@@ -171,7 +171,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		{
 			// Finally, bump the real version cluster-wide.
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
-			op := fmt.Sprintf("bump-cv=%s", req.ClusterVersion.PrettyPrint())
+			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 			if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 				_, err := client.BumpClusterVersion(ctx, req)
 				return err
