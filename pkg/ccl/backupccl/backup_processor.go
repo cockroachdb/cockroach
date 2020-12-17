@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -237,6 +238,13 @@ func runBackupProcessor(
 					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
+
+				if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+					if backupKnobs.RunAfterExportingSpanEntry != nil {
+						backupKnobs.RunAfterExportingSpanEntry(ctx)
+					}
+				}
+
 				files := make([]BackupManifest_File, 0)
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 				progDetails := BackupManifest_Progress{}
