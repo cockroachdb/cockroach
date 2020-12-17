@@ -670,6 +670,35 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
+		{`mismatched STORING column IDs (1) and names (0)`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{
+						ID:          0,
+						Name:        "fam",
+						ColumnIDs:   []descpb.ColumnID{1, 2},
+						ColumnNames: []string{"c1", "c2"},
+					},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "primary",
+					ColumnIDs:        []descpb.ColumnID{1},
+					ColumnNames:      []string{"c1"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					StoreColumnIDs:   []descpb.ColumnID{2},
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  2,
+			}},
 		{`at least one of LIST or RANGE partitioning must be used`,
 			// Verify that validatePartitioning is hooked up. The rest of these
 			// tests are in TestValidatePartitionion.
@@ -834,6 +863,63 @@ func TestValidateTableDesc(t *testing.T) {
 						ColumnIDs: []descpb.ColumnID{1},
 					},
 				},
+			}},
+		{`primary index column "v" cannot be virtual`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "v", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:          1,
+					Name:        "primary",
+					Unique:      true,
+					ColumnIDs:   []descpb.ColumnID{1, 2},
+					ColumnNames: []string{"bar", "v"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary",
+						ColumnIDs:   []descpb.ColumnID{1},
+						ColumnNames: []string{"bar"},
+					},
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+			}},
+		{`index "sec" cannot store virtual column "v"`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+					{ID: 3, Name: "v", ComputeExpr: &computedExpr, Virtual: true},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"c1", "c2"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "pri", ColumnIDs: []descpb.ColumnID{1},
+					ColumnNames:      []string{"c1"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", ColumnIDs: []descpb.ColumnID{2},
+						ColumnNames:      []string{"c2"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						StoreColumnNames: []string{"v"},
+						StoreColumnIDs:   []descpb.ColumnID{3},
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  3,
 			}},
 	}
 	for i, d := range testData {
