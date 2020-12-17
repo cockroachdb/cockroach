@@ -366,6 +366,71 @@ func TestClientPutInline(t *testing.T) {
 	}
 }
 
+func TestClientCPutInline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	db := createTestClient(t, s)
+	ctx := kv.CtxForCPutInline(context.Background())
+	key := testUser + "/key"
+	value := []byte("value")
+
+	// Should fail on non-existent key with expected value.
+	if err := db.CPutInline(ctx, key, value, []byte("foo")); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+
+	// Setting value when expecting nil should work.
+	if err := db.CPutInline(ctx, key, value, nil); err != nil {
+		t.Fatalf("unable to set value: %s", err)
+	}
+	gr, err := db.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("unable to get value: %s", err)
+	}
+	if !bytes.Equal(value, gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", value, gr.ValueBytes())
+	}
+	if ts := gr.Value.Timestamp; !ts.IsEmpty() {
+		t.Fatalf("expected zero timestamp; got %s", ts)
+	}
+
+	// Updating existing value with nil expected value should fail.
+	if err := db.CPutInline(ctx, key, []byte("new"), nil); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+
+	// Updating value with other expected value should fail.
+	if err := db.CPutInline(ctx, key, []byte("new"), []byte("foo")); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+
+	// Updating when given correct value should work.
+	if err := db.CPutInline(ctx, key, []byte("new"), gr.Value.TagAndDataBytes()); err != nil {
+		t.Fatalf("unable to update value: %s", err)
+	}
+	gr, err = db.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("unable to get value: %s", err)
+	} else if !bytes.Equal([]byte("new"), gr.ValueBytes()) {
+		t.Errorf("expected values equal; %s != %s", []byte("new"), gr.ValueBytes())
+	} else if ts := gr.Value.Timestamp; !ts.IsEmpty() {
+		t.Fatalf("expected zero timestamp; got %s", ts)
+	}
+
+	// Deleting when given nil and correct expected value should work.
+	if err := db.CPutInline(ctx, key, nil, gr.Value.TagAndDataBytes()); err != nil {
+		t.Fatalf("unable to delete value: %s", err)
+	}
+	gr, err = db.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("unable to get value: %s", err)
+	} else if gr.Value != nil {
+		t.Fatalf("expected deleted value; got %s", gr.ValueBytes())
+	}
+}
+
 // TestClientEmptyValues verifies that empty values are preserved
 // for both empty []byte and integer=0. This used to fail when we
 // allowed the protobufs to be gob-encoded using the default go rpc

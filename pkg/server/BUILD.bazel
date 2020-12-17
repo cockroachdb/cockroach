@@ -231,6 +231,7 @@ go_test(
         "authentication_test.go",
         "config_test.go",
         "connectivity_test.go",
+        "decommission_test.go",
         "drain_test.go",
         "graphite_test.go",
         "intent_test.go",

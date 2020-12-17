@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1620,7 +1621,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	})
 
 	// Begin recording status summaries.
-	s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval)
+	if err := s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval); err != nil {
+		return err
+	}
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
@@ -2061,6 +2064,18 @@ func (s *Server) Decommission(
 					event)
 			}); err != nil {
 				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
+			}
+		}
+
+		// Similarly to the log event above, we may not be able to clean up the
+		// status entry if we crash or fail -- the status entry is inline, and
+		// thus cannot be transactional. However, since decommissioning is
+		// idempotent, we can attempt to remove the key regardless of whether
+		// the status changed, such that a stale key can be removed by
+		// decommissioning the node again.
+		if targetStatus.Decommissioned() {
+			if err := s.db.PutInline(ctx, keys.NodeStatusKey(nodeID), nil); err != nil {
+				log.Errorf(ctx, "unable to clean up node status data for node %d: %s", nodeID, err)
 			}
 		}
 	}

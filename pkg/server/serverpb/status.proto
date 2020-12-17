@@ -979,6 +979,11 @@ service Status {
     };
   }
 
+  // Nodes returns status info for all commissioned nodes. Decommissioned nodes
+  // are not included, except in rare cases where the node doing the
+  // decommissioning crashed before completing the operation. In these cases,
+  // the decommission operation can be rerun to clean up the status entry.
+  // 
   // Don't introduce additional usages of this RPC. See #50707 for more details.
   // The underlying response type is something we're looking to get rid of.
   rpc Nodes(NodesRequest) returns (NodesResponse) {
