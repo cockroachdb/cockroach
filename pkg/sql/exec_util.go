@@ -892,6 +892,14 @@ type BackupRestoreTestingKnobs struct {
 	// AllowImplicitAccess allows implicit access to data sources for non-admin
 	// users. This enables using nodelocal for testing BACKUP/RESTORE permissions.
 	AllowImplicitAccess bool
+
+	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context)
+
+	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
+	// span has been exported.
+	RunAfterExportingSpanEntry func(ctx context.Context)
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
