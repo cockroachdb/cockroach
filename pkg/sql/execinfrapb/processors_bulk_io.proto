@@ -61,6 +61,11 @@ message BackfillerSpec {
   // The timestamp to perform index backfill historical scans at.
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
 
+  // IndexesToBackfill is the set of indexes to backfill. This is populated only
+  // starting in 21.1, prior to that the implied index set are those containing
+  // the mutation ID of the first mutation on the table descriptor.
+  repeated uint32 indexes_to_backfill = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+
   reserved 6;
 }
 

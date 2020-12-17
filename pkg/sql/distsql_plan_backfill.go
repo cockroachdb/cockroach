@@ -34,7 +34,10 @@ func initColumnBackfillerSpec(
 }
 
 func initIndexBackfillerSpec(
-	desc descpb.TableDescriptor, readAsOf hlc.Timestamp, chunkSize int64,
+	desc descpb.TableDescriptor,
+	readAsOf hlc.Timestamp,
+	chunkSize int64,
+	indexesToBackfill []descpb.IndexID,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
 		Table:     desc,

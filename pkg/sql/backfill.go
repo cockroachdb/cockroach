@@ -969,7 +969,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			true /* distribute */)
 		chunkSize := sc.getChunkSize(indexBackfillBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize, nil)
 		if err != nil {
 			return err
 		}

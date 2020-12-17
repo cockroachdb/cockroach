@@ -2,13 +2,17 @@ package executor
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -17,14 +21,25 @@ import (
 type Executor struct {
 	txn             *kv.Txn
 	descsCollection *descs.Collection
-
+	codec           keys.SQLCodec
+	indexBackfiller IndexBackfiller
+	jobTracker      JobProgressTracker
 	// ...
 }
 
-func New(txn *kv.Txn, descsCollection *descs.Collection) *Executor {
+func New(
+	txn *kv.Txn,
+	descsCollection *descs.Collection,
+	codec keys.SQLCodec,
+	backfiller IndexBackfiller,
+	tracker JobProgressTracker,
+) *Executor {
 	return &Executor{
 		txn:             txn,
 		descsCollection: descsCollection,
+		codec:           codec,
+		indexBackfiller: backfiller,
+		jobTracker:      tracker,
 	}
 }
 
@@ -225,7 +240,7 @@ func (ex *Executor) executeMakeDroppedIndexAbsent(
 }
 
 func getIndexMutation(
-	table *tabledesc.Mutable, idxID descpb.IndexID,
+	table catalog.TableDescriptor, idxID descpb.IndexID,
 ) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
 	mutations := table.GetMutations()
 	for i := range mutations {
@@ -321,7 +336,21 @@ func (ex *Executor) executeAddCheckConstraint(
 }
 
 func (ex *Executor) executeBackfillOps(ctx context.Context, execute []ops.Op) error {
-	log.Errorf(ctx, "not implemented")
+	// TODO(ajwerner): Run backfills in parallel. Will require some plumbing for
+	// checkpointing at the very least.
+
+	for _, op := range execute {
+		var err error
+		switch op := op.(type) {
+		case ops.IndexBackfill:
+			err = ex.executeIndexBackfillOp(ctx, op)
+		default:
+			panic("unimplemented")
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -456,6 +485,81 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 		}
 	}
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
+}
+
+func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op ops.IndexBackfill) error {
+	// Note that the leasing here is subtle. We'll avoid the cache and ensure that
+	// the descriptor is read from the store. That means it will not be leased.
+	// This relies on changed to the descriptor not messing with this index
+	// backfill.
+	table, err := ex.descsCollection.GetTableVersionByID(ctx, ex.txn, op.TableID, tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:       true,
+			RequireMutable: false,
+			AvoidCached:    true,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	mut, _, err := getIndexMutation(table, op.IndexID)
+	if err != nil {
+		return err
+	}
+
+	// Must be the right index given the above call.
+	idxToBackfill := mut.GetIndex()
+
+	// Split off the index span prior to backfilling.
+	if err := ex.maybeSplitIndexSpans(ctx, table.IndexSpan(ex.codec, idxToBackfill.ID)); err != nil {
+		return err
+	}
+	return ex.indexBackfiller.BackfillIndex(ctx, ex.jobTracker, table, table.GetPrimaryIndexID(), idxToBackfill.ID)
+}
+
+type IndexBackfiller interface {
+	BackfillIndex(
+		ctx context.Context,
+		_ JobProgressTracker,
+		_ catalog.TableDescriptor,
+		source descpb.IndexID,
+		destinations ...descpb.IndexID,
+	) error
+}
+
+type JobProgressTracker interface {
+
+	// This interface is implicitly implying that there is only one stage of
+	// index backfills for a given table in a schema change. It implies that
+	// because it assumes that it's safe and reasonable to just store one set of
+	// resume spans per table on the job.
+	//
+	// Potentially something close to interface could still work if there were
+	// multiple stages of backfills for a table if we tracked which stage this
+	// were somehow. Maybe we could do something like increment a stage counter
+	// per table after finishing the backfills.
+	//
+	// It definitely is possible that there are multiple index backfills on a
+	// table in the context of a single schema change that changes the set of
+	// columns (primary index) and adds secondary indexes.
+	//
+	// Really this complexity arises in the computation of the fraction completed.
+	// We'll want to know whether there are more index backfills to come.
+	//
+	// One idea is to index secondarily on the source index.
+
+	GetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) ([]roachpb.Span, error)
+	SetResumeSpans(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span) error
+}
+
+func (ex *Executor) maybeSplitIndexSpans(ctx context.Context, span roachpb.Span) error {
+	// Only perform splits on the system tenant.
+	if !ex.codec.ForSystemTenant() {
+		return nil
+	}
+	const backfillSplitExpiration = time.Hour
+	expirationTime := ex.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
+	return ex.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
 func getOpsType(execute []ops.Op) (ops.Type, error) {

@@ -28,6 +28,8 @@ message TargetProto {
   AddCheckConstraint add_check_constraint = 9;
   AddCheckConstraintUnvalidated add_check_constraint_unvalidated = 10;
   DropCheckConstraint drop_check_constraint = 11;
+  AddPrimaryIndex add_primary_index = 12;
+  DropPrimaryIndex drop_primary_index = 13;
 }
 
 message AddColumn {

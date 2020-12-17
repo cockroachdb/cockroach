@@ -5,9 +5,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
@@ -33,9 +36,38 @@ type newSchemaChangeResumer struct {
 	targets []*targets.TargetProto
 }
 
+type badJobTracker struct {
+	txn         *kv.Txn
+	descriptors *descs.Collection
+	codec       keys.SQLCodec
+}
+
+func (b badJobTracker) GetResumeSpans(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
+) ([]roachpb.Span, error) {
+	table, err := b.descriptors.GetTableVersionByID(ctx, b.txn, tableID, tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []roachpb.Span{table.IndexSpan(b.codec, indexID)}, nil
+}
+
+func (b badJobTracker) SetResumeSpans(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, total, done []roachpb.Span,
+) error {
+	panic("implement me")
+}
+
+var _ executor.JobProgressTracker = (*badJobTracker)(nil)
+
 func (n *newSchemaChangeResumer) Resume(
 	ctx context.Context, execCtxI interface{}, resultsCh chan<- tree.Datums,
-) error {
+) (err error) {
 	execCtx := execCtxI.(sql.JobExecContext)
 	if err := n.job.WithTxn(nil).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		return nil
@@ -64,7 +96,12 @@ func (n *newSchemaChangeResumer) Resume(
 	for _, s := range sc.Stages() {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			if err := executor.New(txn, descriptors).ExecuteOps(ctx, s.Ops); err != nil {
+			jt := badJobTracker{
+				txn:         txn,
+				descriptors: descriptors,
+				codec:       execCtx.ExecCfg().Codec,
+			}
+			if err := executor.New(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
 				return err
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
@@ -118,4 +155,7 @@ func makeTargetStates(
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	panic("unimplemented")
+}
+
+type ProgressTracker struct {
 }

@@ -2526,7 +2526,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	for i := range scs.targetStates {
 		var tp targets.TargetProto
 		if !tp.SetValue(scs.targetStates[i].Target) {
-			panic("hi")
+			panic(errors.Errorf("%T", scs.targetStates[i].Target))
 		}
 		targetSlice[i] = &tp
 		states[i] = scs.targetStates[i].State
@@ -2580,7 +2580,11 @@ func (ex *connExecutor) runNewSchemaChanger(
 func (ex *connExecutor) withNewSchemaChangeExecutorDuringTxn(
 	ctx context.Context, f func(context.Context, *executor.Executor) error,
 ) error {
-	return f(ctx, executor.New(ex.planner.txn, &ex.extraTxnState.descCollection))
+	// TODO(ajwerner): Provide a transaction-scoped index backfiller.
+	return f(ctx, executor.New(
+		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
+		nil /* backfiller */, nil, /* jobTracker */
+	))
 }
 
 // StatementCounters groups metrics for counting different types of

@@ -224,6 +224,7 @@ type TableDescriptor interface {
 	IsInterleaved() bool
 	MaterializedView() bool
 
+	GetMutations() []descpb.DescriptorMutation
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
 	GetReplacementOf() descpb.TableDescriptor_Replacement
