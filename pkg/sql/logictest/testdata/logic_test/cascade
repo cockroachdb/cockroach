@@ -331,7 +331,7 @@ SELECT * FROM b;
 1  2  3  4  5  1006  7  8  9  10
 
 # Also ensure that normal errors are still correctly wrapped even if cascading.
-statement error pq: duplicate key value \(id\)=\(1\) violates unique constraint "primary"
+statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(id\)=\(1\) already exists\.
 UPDATE a SET id = 1 WHERE id = 1006;
 
 # 7. ON DELETE SET NULL
@@ -3293,7 +3293,7 @@ statement oK
 INSERT INTO a VALUES ('original'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
 
-statement error pq: duplicate key value \(a_id\)=\('default'\) violates unique constraint "b_a_id_key"
+statement error pq: duplicate key value violates unique constraint "b_a_id_key"\nDETAIL: Key \(a_id\)=\('default'\) already exists\.
 DELETE FROM a WHERE id = 'original';
 
 # Clean up after the test.
@@ -3676,7 +3676,7 @@ statement oK
 INSERT INTO a VALUES ('original'), ('default');
 INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
 
-statement error pq: duplicate key value \(a_id\)=\('default'\) violates unique constraint "b_a_id_key"
+statement error pq: duplicate key value violates unique constraint "b_a_id_key"\nDETAIL: Key \(a_id\)=\('default'\) already exists\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.

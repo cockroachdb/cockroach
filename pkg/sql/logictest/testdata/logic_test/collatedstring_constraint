@@ -8,7 +8,7 @@ CREATE TABLE p (
 statement ok
 INSERT INTO p VALUES ('a' COLLATE en_u_ks_level1)
 
-statement error duplicate key value \(a\)=\('a' COLLATE en_u_ks_level1\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\('a' COLLATE en_u_ks_level1\) already exists\.
 INSERT INTO p VALUES ('A' COLLATE en_u_ks_level1)
 
 statement ok

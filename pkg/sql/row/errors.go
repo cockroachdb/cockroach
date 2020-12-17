@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -95,12 +96,14 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value: decoding err=%s", err)
 	}
 
-	return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-		"duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(names, ","),
-		strings.Join(values, ","),
-		index.Name,
-	), index.Name)
+	return errors.WithDetail(
+		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
+			"duplicate key value violates unique constraint %q", index.Name,
+		), index.Name),
+		fmt.Sprintf(
+			"Key (%s)=(%s) already exists.", strings.Join(names, ","), strings.Join(values, ","),
+		),
+	)
 }
 
 // NewLockNotAvailableError creates an error that represents an inability to

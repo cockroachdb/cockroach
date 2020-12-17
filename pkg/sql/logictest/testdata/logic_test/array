@@ -1362,7 +1362,7 @@ INSERT INTO t VALUES
 
 # Test that the unique index rejects bad inserts.
 # Disabled until #50659 is resolved.
-#statement error pq: duplicate key value \(x\)=\(ARRAY\[1,NULL,10\]\) violates unique constraint "primary"
+#statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(x\)=\(ARRAY\[1,NULL,10\]\) already exists\.
 #INSERT INTO t VALUES (ARRAY[1, NULL, 10])
 
 query T

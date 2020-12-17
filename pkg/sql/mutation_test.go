@@ -54,7 +54,7 @@ INSERT INTO d.a(a) VALUES (1);
 	for i, step := range []func() (*gosql.Rows, error){step1, step2} {
 		rows, err := step()
 		if err != nil {
-			if !testutils.IsError(err, `duplicate key value \(a\)=\(1\)`) {
+			if !testutils.IsError(err, `duplicate key value`) {
 				t.Errorf("%d: %v", i, err)
 			}
 		} else {
@@ -68,7 +68,7 @@ INSERT INTO d.a(a) VALUES (1);
 				err := rows.Scan(&val)
 
 				if err != nil {
-					if !testutils.IsError(err, `duplicate key value \(a\)=\(1\)`) {
+					if !testutils.IsError(err, `duplicate key value`) {
 						t.Errorf("%d: %v", i, err)
 					}
 				} else {
@@ -80,7 +80,7 @@ INSERT INTO d.a(a) VALUES (1);
 					for rows.Next() {
 						err := rows.Scan(&val)
 						if err != nil {
-							if !testutils.IsError(err, `duplicate key value \(a\)=\(1\)`) {
+							if !testutils.IsError(err, `duplicate key value`) {
 								t.Errorf("%d: %v", i, err)
 							}
 						}

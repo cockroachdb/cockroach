@@ -81,7 +81,7 @@ output row: ['a' 'b']
 output row: ['c' 'd']
 output row: ['e' 'f']
 
-statement error pgcode 23505 duplicate key value \(v\)=\('f'\) violates unique constraint "a"
+statement error pgcode 23505 duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('f'\) already exists\.
 INSERT INTO kv VALUES ('h', 'f')
 
 statement ok
@@ -208,7 +208,7 @@ output row: ['c' 'd']
 output row: ['e' 'f']
 output row: ['f' 'g']
 
-statement error duplicate key value \(v\)=\('g'\) violates unique constraint "a"
+statement error duplicate key value violates unique constraint "a"\nDETAIL: Key \(v\)=\('g'\) already exists\.
 INSERT INTO kv VALUES ('h', 'g')
 
 statement ok
