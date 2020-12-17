@@ -107,8 +107,9 @@ type mjBuilderCrossProductState struct {
 type mjBufferedGroup struct {
 	*spillingQueue
 	// firstTuple stores a single tuple that was first in the buffered group.
-	firstTuple []coldata.Vec
-	numTuples  int
+	firstTuple   []coldata.Vec
+	numTuples    int
+	scratchBatch coldata.Batch
 }
 
 func (bg *mjBufferedGroup) reset(ctx context.Context) {
@@ -546,6 +547,9 @@ func (o *mergeJoinBase) Init() {
 	o.proberState.lBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.left.sourceTypes, 1, /* capacity */
 	).ColVecs()
+	o.proberState.lBufferedGroup.scratchBatch = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
+		o.left.sourceTypes, coldata.BatchSize(),
+	)
 	o.proberState.rBufferedGroup.spillingQueue = newRewindableSpillingQueue(
 		o.unlimitedAllocator, o.right.sourceTypes, o.memoryLimit,
 		o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
@@ -553,6 +557,9 @@ func (o *mergeJoinBase) Init() {
 	o.proberState.rBufferedGroup.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.right.sourceTypes, 1, /* capacity */
 	).ColVecs()
+	o.proberState.rBufferedGroup.scratchBatch = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
+		o.right.sourceTypes, coldata.BatchSize(),
+	)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -572,6 +579,8 @@ func (o *mergeJoinBase) resetBuilderCrossProductState() {
 // same group as the ones in the buffered group that corresponds to the input
 // source. This needs to happen when a group starts at the end of an input
 // batch and can continue into the following batches.
+// A zero-length batch needs to be appended when no more batches will be
+// appended to the buffered group.
 func (o *mergeJoinBase) appendToBufferedGroup(
 	ctx context.Context,
 	input *mergeJoinInput,
@@ -580,9 +589,6 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	groupStartIdx int,
 	groupLength int,
 ) {
-	if groupLength == 0 {
-		return
-	}
 	var (
 		bufferedGroup *mjBufferedGroup
 		sourceTypes   []*types.T
@@ -594,9 +600,14 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		sourceTypes = o.right.sourceTypes
 		bufferedGroup = &o.proberState.rBufferedGroup
 	}
-	// TODO(yuzefovich): reuse the same scratch batches when spillingQueue
-	// actually copies the enqueued batch when those are kept in memory.
-	scratchBatch := o.unlimitedAllocator.NewMemBatchWithFixedCapacity(sourceTypes, groupLength)
+	if batch.Length() == 0 || groupLength == 0 {
+		// We have finished appending to this buffered group, so we need to
+		// enqueue a zero-length batch per the contract of the spilling queue.
+		if err := bufferedGroup.enqueue(ctx, coldata.ZeroBatch); err != nil {
+			colexecerror.InternalError(err)
+		}
+		return
+	}
 	if bufferedGroup.numTuples == 0 {
 		o.unlimitedAllocator.PerformOperation(bufferedGroup.firstTuple, func() {
 			for colIdx := range sourceTypes {
@@ -616,9 +627,10 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	}
 	bufferedGroup.numTuples += groupLength
 
-	o.unlimitedAllocator.PerformOperation(scratchBatch.ColVecs(), func() {
+	bufferedGroup.scratchBatch.ResetInternalBatch()
+	o.unlimitedAllocator.PerformOperation(bufferedGroup.scratchBatch.ColVecs(), func() {
 		for colIdx := range input.sourceTypes {
-			scratchBatch.ColVec(colIdx).Copy(
+			bufferedGroup.scratchBatch.ColVec(colIdx).Copy(
 				coldata.CopySliceArgs{
 					SliceArgs: coldata.SliceArgs{
 						Src:         batch.ColVec(colIdx),
@@ -630,10 +642,9 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 				},
 			)
 		}
+		bufferedGroup.scratchBatch.SetLength(groupLength)
 	})
-	scratchBatch.SetSelection(false)
-	scratchBatch.SetLength(groupLength)
-	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
+	if err := bufferedGroup.enqueue(ctx, bufferedGroup.scratchBatch); err != nil {
 		colexecerror.InternalError(err)
 	}
 }
@@ -681,6 +692,15 @@ func (o *mergeJoinBase) sourceFinished() bool {
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 
+// finishBufferedGroup appends a zero-length batch to the buffered group which
+// is required by the contract of the spilling queue.
+func (o *mergeJoinBase) finishBufferedGroup(ctx context.Context, input *mergeJoinInput) {
+	o.appendToBufferedGroup(
+		ctx, input, coldata.ZeroBatch, nil, /* sel */
+		0 /* groupStartIdx */, 0, /* groupLength */
+	)
+}
+
 // completeBufferedGroup extends the buffered group corresponding to input.
 // First, we check that the first row in batch is still part of the same group.
 // If this is the case, we use the Distinct operator to find the first
@@ -696,6 +716,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 ) (_ coldata.Batch, idx int, batchLength int) {
 	batchLength = batch.Length()
 	if o.isBufferedGroupFinished(input, batch, rowIdx) {
+		o.finishBufferedGroup(ctx, input)
 		return batch, rowIdx, batchLength
 	}
 
@@ -752,6 +773,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 			if batchLength == 0 {
 				// The input has been exhausted, so the buffered group is now complete.
 				isBufferedGroupComplete = true
+				o.finishBufferedGroup(ctx, input)
 			}
 		}
 	}
