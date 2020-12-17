@@ -13061,3 +13061,36 @@ func TestRangeInfoReturned(t *testing.T) {
 		})
 	}
 }
+
+func TestFoo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(ctx)
+
+	anchorK := roachpb.Key("\xff")
+
+	intentK := anchorK.Next()
+	t.Logf("%q", intentK)
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (foo error) {
+		defer func() {
+			t.Log(foo)
+		}()
+		txn.DisablePipelining() // nb: needed so that txn commits and doesn't go through staging
+		if err := txn.Put(ctx, anchorK, "bar"); err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		b.Put(intentK, "zoo")
+		return txn.CommitInBatch(ctx, b)
+	}))
+
+	time.Sleep(time.Second)
+	tup, err := db.Get(ctx, intentK)
+	require.NoError(t, err)
+	require.NotNil(t, tup.Value)
+}
