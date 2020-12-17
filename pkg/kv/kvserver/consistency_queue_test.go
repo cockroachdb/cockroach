@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -442,7 +443,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		iter := cpEng.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: []byte("\xff")})
 		defer iter.Close()
 
-		ms, err := storage.ComputeStatsForRange(iter, roachpb.KeyMin, roachpb.KeyMax, 0 /* nowNanos */)
+		// The range is specified using only global keys, since the implementation
+		// may use an intentInterleavingIter.
+		ms, err := storage.ComputeStatsForRange(iter, keys.LocalMax, roachpb.KeyMax, 0 /* nowNanos */)
 		assert.NoError(t, err)
 
 		assert.NotZero(t, ms.KeyBytes)
