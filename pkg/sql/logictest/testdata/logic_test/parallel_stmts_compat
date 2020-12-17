@@ -21,7 +21,7 @@ CREATE TABLE fk(
 statement ok
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
-statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(1\) already exists\.
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
 statement ok
@@ -33,7 +33,7 @@ UPSERT INTO kv VALUES (2, 500) RETURNING NOTHING
 statement ok
 UPDATE kv SET v = k WHERE k = 3 RETURNING NOTHING
 
-statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(1\) already exists\.
 UPDATE kv SET k = 1 WHERE k = 2 RETURNING NOTHING
 
 statement ok
@@ -84,7 +84,7 @@ BEGIN
 statement ok
 INSERT INTO kv VALUES (4, 5) RETURNING NOTHING
 
-statement error duplicate key value \(k\)=\(2\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(2\) already exists\.
 INSERT INTO kv VALUES (2, 3) RETURNING NOTHING
 
 statement error current transaction is aborted, commands ignored until end of transaction block
@@ -190,7 +190,7 @@ BEGIN
 statement ok
 UPDATE kv SET k = 9 WHERE k = 1 RETURNING NOTHING
 
-statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(3\) already exists\.
 UPDATE kv SET k = 3 WHERE k = 2 RETURNING NOTHING
 
 statement error current transaction is aborted, commands ignored until end of transaction block
@@ -316,7 +316,7 @@ SELECT k, v FROM kv ORDER BY k
 statement ok
 BEGIN
 
-statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(1\) already exists\.
 INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 
 statement error current transaction is aborted, commands ignored until end of transaction block
@@ -361,7 +361,7 @@ BEGIN
 statement ok
 EXECUTE x(1, 2)
 
-statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(1\) already exists\.
 EXECUTE x(1, 2)
 
 statement ok

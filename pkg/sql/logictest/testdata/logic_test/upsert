@@ -120,7 +120,7 @@ INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
 statement count 1
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = kv.v + 20
 
-statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(3\) already exists\.
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
 statement count 1
@@ -1030,7 +1030,7 @@ statement error pq: UPSERT or INSERT...ON CONFLICT command cannot affect row a s
 INSERT INTO tdup VALUES (1, 2, 1), (1, 3, 1) ON CONFLICT (x) DO UPDATE SET z=1
 
 # Verify that duplicate insert into secondary fails with regular conflict error.
-statement error pq: duplicate key value \(y\)=\(2\) violates unique constraint "tdup_y_key"
+statement error pq: duplicate key value violates unique constraint "tdup_y_key"\nDETAIL: Key \(y\)=\(2\) already exists\.
 INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (x) DO UPDATE SET z=1
 
 statement ok
@@ -1073,7 +1073,7 @@ SELECT * FROM tdup@tdup_y_z_key
 3  2     NULL
 
 # Verify that duplicate secondary key fails with regular conflict error.
-statement error pq: duplicate key value \(y,z\)=\(1,2\) violates unique constraint "tdup_y_z_key"
+statement error pq: duplicate key value violates unique constraint "tdup_y_z_key"\nDETAIL: Key \(y,z\)=\(1,2\) already exists\.
 INSERT INTO tdup VALUES (6, 1, 1), (7, 1, 2) ON CONFLICT (y, z) DO UPDATE SET z=2
 
 # With constant grouping columns (no error).
