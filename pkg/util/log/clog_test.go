@@ -156,9 +156,8 @@ func TestEntryDecoder(t *testing.T) {
 			Tags:      tags,
 			Message:   msg,
 		}
-		var f formatCrdbV1
-		buf := f.formatEntry(entry, nil /* stacks */)
-		defer putBuffer(buf)
+		var buf bytes.Buffer
+		_ = FormatLegacyEntry(entry, &buf)
 		return buf.String()
 	}
 
@@ -773,10 +772,9 @@ func BenchmarkHeader(b *testing.B) {
 		File:      "file.go",
 		Line:      100,
 	}
-	var f formatCrdbV1
 	for i := 0; i < b.N; i++ {
-		buf := f.formatEntry(entry, nil /* stacks */)
-		putBuffer(buf)
+		var w bytes.Buffer
+		_ = FormatLegacyEntry(entry, &w)
 	}
 }
 

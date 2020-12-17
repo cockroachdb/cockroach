@@ -191,7 +191,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 		// Force a log entry. This does two things: it forces the creation
 		// of a file and it also introduces a timestamp marker.
-		entry := MakeEntry(secLoggersCtx, severity.INFO, channel.DEV, 0, false,
+		entry := makeUnstructuredEntry(secLoggersCtx, severity.INFO, channel.DEV, 0,
 			"stderr capture started")
 		secLogger.outputLogEntry(entry)
 
