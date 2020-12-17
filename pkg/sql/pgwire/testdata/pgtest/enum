@@ -94,7 +94,25 @@ Query {"String": "SELECT * FROM tb"}
 ----
 
 until crdb_only
-DataRow
+ReadyForQuery
 ----
 {"Type":"RowDescription","Fields":[{"Name":"x","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":100052,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare a query and use the binary format (ParameterFormatCodes = [1])
+send
+Parse {"Name": "s2", "Query": "INSERT INTO tb VALUES ($1)"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [[104, 105]]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
