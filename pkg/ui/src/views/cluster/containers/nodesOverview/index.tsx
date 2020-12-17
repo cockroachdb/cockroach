@@ -352,8 +352,8 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "logs",
       title: "",
       render: (_text, record) => record.nodeId && (
-        <div className="cell--show-on-hover nodes-table__link">
-          <Link to={`/node/${record.nodeId}/logs`}>Logs</Link>
+        <div className="cell--show-on-hover ">
+          <Link className="nodes-table__link" to={`/node/${record.nodeId}/logs`}>Logs</Link>
         </div>),
       width: "5%",
     },

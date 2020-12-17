@@ -10,7 +10,7 @@
 
 @require '~src/components/core/index.styl'
 
-$text-width = 352px
+
 
 .crl-email-subscription
   border-radius 5px
@@ -20,10 +20,8 @@ $text-width = 352px
   align-items center
   justify-content flex-end
   height 90px
-  background-color $colors--white
-  background-image url("../../../assets/dashboard/email_signup_background.svg")
-  background-repeat no-repeat
-  background-position-x $text-width
+  background-image url("../../../assets/dashboard/email_signup_bg.png")
+  background-repeat round
 
   &__text
     font-size $font-size--large
@@ -34,24 +32,19 @@ $text-width = 352px
     flex-grow 1
     height inherit
     border-radius inherit
-    & > div
-      max-width $text-width
-      background $colors--primary-green-3
-      padding-left $spacing-large
-      height inherit
-      border-bottom-left-radius: inherit;
-      border-top-left-radius: inherit;
-      display flex
-      align-items center
+    padding-left $spacing-large
+    display flex
+    align-items center
 
 
   &__controls
     flex-grow 0
     margin-left $spacing-medium
+    padding-top $spacing-small
 
   &__close-button
-    flex-grow 0
-    color $colors--neutral-7
+    flex-grow 0 
+    color $colors--white
     align-self flex-start
     margin $spacing-smaller $spacing-small $spacing-small $spacing-medium
     cursor pointer

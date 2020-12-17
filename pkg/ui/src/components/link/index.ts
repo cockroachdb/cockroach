@@ -8,9 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-@require '~src/components/core/index.styl'
-
-.crl-anchor
-  color $colors--link
-  &:hover
-    color $colors--info-4
+export * from "./link";
