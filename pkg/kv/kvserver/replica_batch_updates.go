@@ -90,9 +90,6 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 			}
 			// See below for why we set Header.DistinctSpans here.
 			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
-			if ba.IsCommitTrigger() {
-				ba.Header.DistinctSpans = false
-			}
 			return ba, nil
 		}
 	}
@@ -165,9 +162,6 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 		// when the in-flight writes overlap with existing lock spans, but never
 		// false positives.
 		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
-		if ba.IsCommitTrigger() {
-			ba.Header.DistinctSpans = false
-		}
 	}
 	return ba, nil
 }

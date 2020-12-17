@@ -81,6 +81,32 @@ func (r *Replica) sendWithRangeID(
 		return nil, roachpb.NewError(err)
 	}
 
+	if ba.Header.DistinctSpans {
+		var spans []roachpb.Span
+		for _, req := range ba.Requests {
+			switch t := req.GetInner().(type) {
+			case *roachpb.PutRequest:
+				spans = append(spans, t.Header().Span())
+			case *roachpb.ConditionalPutRequest:
+				spans = append(spans, t.Header().Span())
+			case *roachpb.DeleteRequest:
+				spans = append(spans, t.Header().Span())
+			case *roachpb.DeleteRangeRequest:
+				spans = append(spans, t.Header().Span())
+			case *roachpb.EndTxnRequest:
+				spans = append(spans, t.LockSpans...)
+				if t.InternalCommitTrigger != nil {
+					ba.Header.DistinctSpans = false
+				}
+			default:
+				ba.Header.DistinctSpans = false
+			}
+		}
+		if ba.Header.DistinctSpans {
+			_, ba.Header.DistinctSpans = roachpb.MergeSpans(spans)
+		}
+	}
+
 	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
 		if pErr := filter(ctx, *ba); pErr != nil {
 			return nil, pErr
