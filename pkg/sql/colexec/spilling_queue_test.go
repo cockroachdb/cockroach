@@ -56,16 +56,32 @@ func TestSpillingQueue(t *testing.T) {
 				prefix = "Rewindable/"
 			}
 			numBatches := 1 + rng.Intn(16)
-			log.Infof(context.Background(), "%sMemoryLimit=%s/DiskQueueCacheMode=%d/AlwaysCompress=%t/NumBatches=%d",
-				prefix, humanizeutil.IBytes(memoryLimit), diskQueueCacheMode, alwaysCompress, numBatches)
+			// Add a limit on the number of batches added to the in-memory
+			// buffer of the spilling queue. We will set it to half of the total
+			// number of batches which allows us to exercise the case when the
+			// spilling to disk queue occurs after some batched were added to
+			// the in-memory buffer.
+			setInMemEnqueuesLimit := rng.Float64() < 0.5
+			log.Infof(context.Background(), "%sMemoryLimit=%s/DiskQueueCacheMode=%d/AlwaysCompress=%t/NumBatches=%d/InMemEnqueuesLimited=%t",
+				prefix, humanizeutil.IBytes(memoryLimit), diskQueueCacheMode, alwaysCompress, numBatches, setInMemEnqueuesLimit)
+			// Since the spilling queue coalesces tuples to fill-in the batches
+			// up to their capacity, we cannot use the batches we get when
+			// dequeueing directly. Instead, we are tracking all of the input
+			// tuples and will be comparing against a window into them.
+			var tuples *appendOnlyBufferedBatch
 			// Create random input.
-			batches := make([]coldata.Batch, 0, numBatches)
 			op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
-				NumBatches: cap(batches),
+				NumBatches: numBatches,
 				BatchSize:  1 + rng.Intn(coldata.BatchSize()),
 				Nulls:      true,
 				BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
-					batches = append(batches, coldatatestutils.CopyBatch(b, typs, testColumnFactory))
+					if b.Length() == 0 {
+						return
+					}
+					if tuples == nil {
+						tuples = newAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
+					}
+					tuples.append(b, 0 /* startIdx */, b.Length())
 				},
 			})
 			typs := op.Typs()
@@ -88,11 +104,32 @@ func TestSpillingQueue(t *testing.T) {
 				)
 			}
 
+			if setInMemEnqueuesLimit {
+				q.testingKnobs.maxNumBatchesEnqueuedInMemory = numBatches / 2
+			}
+
 			// Run verification.
 			var (
-				b   coldata.Batch
-				err error
+				b                        coldata.Batch
+				err                      error
+				numAlreadyDequeuedTuples int
 			)
+
+			windowedBatch := coldata.NewMemBatchNoCols(typs, coldata.BatchSize())
+			getNextWindowIntoTuples := func(windowLen int) coldata.Batch {
+				// makeWindowIntoBatch creates a window into tuples in the range
+				// [numAlreadyDequeuedTuples; tuples.length), but we want the
+				// range [numAlreadyDequeuedTuples; numAlreadyDequeuedTuples +
+				// windowLen), so we'll temporarily set the length of tuples to
+				// the desired value and restore it below.
+				numTuples := tuples.Length()
+				tuples.SetLength(numAlreadyDequeuedTuples + windowLen)
+				makeWindowIntoBatch(windowedBatch, tuples, numAlreadyDequeuedTuples, typs)
+				tuples.SetLength(numTuples)
+				numAlreadyDequeuedTuples += windowLen
+				return windowedBatch
+			}
+
 			ctx := context.Background()
 			for {
 				b = op.Next(ctx)
@@ -106,36 +143,29 @@ func TestSpillingQueue(t *testing.T) {
 					} else if b.Length() == 0 {
 						t.Fatal("queue incorrectly considered empty")
 					}
-					coldata.AssertEquivalentBatches(t, batches[0], b)
-					batches = batches[1:]
+					coldata.AssertEquivalentBatches(t, getNextWindowIntoTuples(b.Length()), b)
 				}
 			}
+			numDequeuedTuplesBeforeReading := numAlreadyDequeuedTuples
 			numReadIterations := 1
 			if rewindable {
 				numReadIterations = 2
 			}
 			for i := 0; i < numReadIterations; i++ {
-				batchIdx := 0
-				for batches[batchIdx].Length() > 0 {
+				for {
 					if b, err = q.dequeue(ctx); err != nil {
 						t.Fatal(err)
 					} else if b == nil {
 						t.Fatal("unexpectedly dequeued nil batch")
 					} else if b.Length() == 0 {
-						t.Fatal("queue incorrectly considered empty")
+						break
 					}
-					coldata.AssertEquivalentBatches(t, batches[batchIdx], b)
-					batchIdx++
-				}
-
-				if b, err := q.dequeue(ctx); err != nil {
-					t.Fatal(err)
-				} else if b.Length() != 0 {
-					t.Fatal("queue should be empty")
+					coldata.AssertEquivalentBatches(t, getNextWindowIntoTuples(b.Length()), b)
 				}
 
 				if rewindable {
 					require.NoError(t, q.rewind())
+					numAlreadyDequeuedTuples = numDequeuedTuplesBeforeReading
 				}
 			}
 
