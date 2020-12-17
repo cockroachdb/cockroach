@@ -384,3 +384,61 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
+
+// NextWithoutAdvance returns the next key/value that would be encountered in a
+// non-incremental iteration by moving the underlying non-TBI iterator forward.
+// This method throws an error if it encounters an intent in the time range
+// (startTime, endTime] or sees an inline value.
+func (i *MVCCIncrementalIterator) NextWithoutAdvance() {
+	for {
+		i.iter.Next()
+		if ok, err := i.iter.Valid(); !ok {
+			i.err = err
+			i.valid = false
+			return
+		}
+
+		unsafeMetaKey := i.iter.UnsafeKey()
+		if unsafeMetaKey.IsValue() {
+			// They key is an MVCC value and note an intent.
+			// Intents are handled next.
+			i.meta.Reset()
+			i.meta.Timestamp = unsafeMetaKey.Timestamp.ToLegacyTimestamp()
+		} else {
+			// The key is a metakey (an intent), this is used later to see if the
+			// timestamp of this intent is within the incremental iterator's time
+			// bounds.
+			if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
+				i.valid = false
+				return
+			}
+		}
+
+		if i.meta.IsInline() {
+			// Inline values are only used in non-user data. They're not needed
+			// for backup, so they're not handled by this method. If one shows
+			// up, throw an error so it's obvious something is wrong.
+			i.valid = false
+			i.err = errors.Errorf("inline values are unsupported by MVCCIncrementalIterator: %s",
+				unsafeMetaKey.Key)
+			return
+		}
+
+		metaTimestamp := i.meta.Timestamp.ToTimestamp()
+		if i.meta.Txn != nil {
+			if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
+				i.err = &roachpb.WriteIntentError{
+					Intents: []roachpb.Intent{
+						roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
+					},
+				}
+				i.valid = false
+				return
+			}
+			continue
+		}
+
+		// We have a valid KV.
+		return
+	}
+}
