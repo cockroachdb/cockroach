@@ -33,7 +33,7 @@ const (
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
 // associated Raft state (which must be written separately via
-// synthesizeRaftState before instantiating a Replica). The main task is to
+// SynthesizeRaftState before instantiating a Replica). The main task is to
 // persist a ReplicaState which does not start from zero but presupposes a few
 // entries already having applied. The supplied MVCCStats are used for the Stats
 // field after adjusting for persisting the state itself, and the updated stats
@@ -82,26 +82,23 @@ func WriteInitialReplicaState(
 	return newMS, nil
 }
 
-// WriteInitialState calls WriteInitialReplicaState followed by
-// SynthesizeRaftState. It is typically called during bootstrap. The supplied
-// MVCCStats are used for the Stats field after adjusting for persisting the
-// state itself, and the updated stats are returned.
-func WriteInitialState(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms enginepb.MVCCStats,
-	desc roachpb.RangeDescriptor,
-	lease roachpb.Lease,
-	gcThreshold hlc.Timestamp,
-	truncStateType TruncatedStateType,
-) (enginepb.MVCCStats, error) {
-	newMS, err := WriteInitialReplicaState(
-		ctx, readWriter, ms, desc, lease, gcThreshold, truncStateType)
-	if err != nil {
-		return enginepb.MVCCStats{}, err
+// WriteInitialRangeState writes the initial range state. It's called during
+// bootstrap.
+func WriteInitialRangeState(
+	ctx context.Context, readWriter storage.ReadWriter, desc roachpb.RangeDescriptor,
+) error {
+	initialLease := roachpb.Lease{}
+	initialGCThreshold := hlc.Timestamp{}
+	initialTruncStateType := TruncatedStateUnreplicated
+	initialMS := enginepb.MVCCStats{}
+
+	if _, err := WriteInitialReplicaState(
+		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialTruncStateType,
+	); err != nil {
+		return err
 	}
 	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
-		return enginepb.MVCCStats{}, err
+		return err
 	}
-	return newMS, nil
+	return nil
 }

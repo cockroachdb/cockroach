@@ -619,7 +619,7 @@ func (rsl StateLoader) SetHardState(
 
 // SynthesizeRaftState creates a Raft state which synthesizes both a HardState
 // and a lastIndex from pre-seeded data in the engine (typically created via
-// writeInitialReplicaState and, on a split, perhaps the activity of an
+// WriteInitialReplicaState and, on a split, perhaps the activity of an
 // uninitialized Raft group)
 func (rsl StateLoader) SynthesizeRaftState(
 	ctx context.Context, readWriter storage.ReadWriter,
