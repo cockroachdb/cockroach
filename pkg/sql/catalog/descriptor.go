@@ -123,7 +123,9 @@ type TableDescriptor interface {
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 	PartialIndexOrds() util.FastIntSet
+	WritableIndexes() []descpb.IndexDescriptor
 	DeletableIndexes() []descpb.IndexDescriptor
+	DeleteOnlyIndexes() []descpb.IndexDescriptor
 
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
@@ -142,6 +144,10 @@ type TableDescriptor interface {
 	ColumnsWithMutations(includeMutations bool) []descpb.ColumnDescriptor
 	ColumnIdxMapWithMutations(includeMutations bool) TableColMap
 	DeletableColumns() []descpb.ColumnDescriptor
+	MutationColumns() []descpb.ColumnDescriptor
+	ContainsUserDefinedTypes() bool
+	GetColumnOrdinalsWithUserDefinedTypes() []int
+	UserDefinedTypeColsHaveSameVersion(otherDesc TableDescriptor) bool
 
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	NumFamilies() int

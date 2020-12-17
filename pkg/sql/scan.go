@@ -262,7 +262,7 @@ func initColsForScan(
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns))
+	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns()))
 	for _, wc := range colCfg.wantedColumns {
 		var c *descpb.ColumnDescriptor
 		var err error
