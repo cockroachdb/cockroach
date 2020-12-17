@@ -212,8 +212,11 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
-		KeyCols:      withScanCols,
-		OpName:       h.mb.opName,
+		// uniqueOrdinals is always a prefix of uniqueAndPrimaryKeyOrdinals, which
+		// maps 1-to-1 to the columns in withScanCols. The remaining columns are
+		// primary key columns and should not be included in the KeyCols.
+		KeyCols: withScanCols[:len(h.uniqueOrdinals)],
+		OpName:  h.mb.opName,
 	})
 }
 
