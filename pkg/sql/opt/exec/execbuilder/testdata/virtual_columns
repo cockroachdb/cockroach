@@ -12,6 +12,16 @@ CREATE TABLE t (
   FAMILY (b)
 )
 
+statement ok
+CREATE TABLE t_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL,
+  INDEX (v),
+  FAMILY (a),
+  FAMILY (b)
+)
+
 query TT
 SHOW CREATE TABLE t
 ----
@@ -23,6 +33,21 @@ t  CREATE TABLE public.t (
    FAMILY fam_0_a (a),
    FAMILY fam_1_b (b)
 )
+
+query TT
+SHOW CREATE TABLE t_idx
+----
+t_idx  CREATE TABLE public.t_idx (
+       a INT8 NOT NULL,
+       b INT8 NULL,
+       v INT8 NULL AS (a + b) VIRTUAL,
+       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+       INDEX t_idx_v_idx (v ASC),
+       FAMILY fam_0_a (a),
+       FAMILY fam_1_b (b)
+)
+
+subtest Select
 
 # Verify that the primary index doesn't contain the virtual column.
 query T
@@ -64,16 +89,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t@primary
       spans: FULL SCAN
-
-statement ok
-CREATE TABLE t_idx (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  INDEX (v),
-  FAMILY (a),
-  FAMILY (b)
-)
 
 query T
 EXPLAIN (VERBOSE) SELECT a FROM t_idx WHERE a+b=1
@@ -123,6 +138,8 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: t_idx@t_idx_v_idx
           spans: /1-/2
+
+subtest Insert
 
 # TODO(radu): we shouldn't need to synthesize v here.
 query T
@@ -176,3 +193,184 @@ vectorized: true
   row 0, expr 0: 1
   row 0, expr 1: 1
   row 0, expr 2: 2
+
+subtest Delete
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1
+----
+distribution: local
+vectorized: true
+·
+• delete range
+  columns: ()
+  estimated row count: 0 (missing stats)
+  from: t
+  spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE a > 1 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 333 (missing stats)
+│
+└── • delete
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ from: t
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, v)
+        │ estimated row count: 333 (missing stats)
+        │ render 0: a + b
+        │ render 1: a
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 333 (missing stats)
+              table: t@primary
+              spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t
+│ auto commit
+│
+└── • project
+    │ columns: (a)
+    │ estimated row count: 333 (missing stats)
+    │
+    └── • filter
+        │ columns: (a, b)
+        │ estimated row count: 333 (missing stats)
+        │ filter: (a + b) = 1
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ render 0: a + b
+    │ render 1: a
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 333 (missing stats)
+          table: t_idx@primary
+          spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v)
+│ estimated row count: 333 (missing stats)
+│
+└── • delete
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ from: t_idx
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, v)
+        │ estimated row count: 333 (missing stats)
+        │ render 0: a + b
+        │ render 1: a
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 333 (missing stats)
+              table: t_idx@primary
+              spans: /2-
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ render 0: a + b
+    │ render 1: a
+    │
+    └── • index join
+        │ columns: (a, b)
+        │ estimated row count: 333 (missing stats)
+        │ table: t_idx@primary
+        │ key columns: a
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 10 (missing stats)
+              table: t_idx@t_idx_v_idx
+              spans: /1-/2
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: t_idx
+│ auto commit
+│
+└── • render
+    │ columns: (a, v)
+    │ estimated row count: 333 (missing stats)
+    │ render 0: a + b
+    │ render 1: a
+    │
+    └── • index join
+        │ columns: (a, b)
+        │ estimated row count: 333 (missing stats)
+        │ table: t_idx@primary
+        │ key columns: a
+        │
+        └── • scan
+              columns: (a)
+              estimated row count: 10 (missing stats)
+              table: t_idx@t_idx_v_idx
+              spans: /1-/2
