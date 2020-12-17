@@ -12,6 +12,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -25,4 +26,14 @@ func FormatWithContextTags(ctx context.Context, format string, args ...interface
 	formatTags(ctx, true /* brackets */, &buf)
 	formatArgs(&buf, format, args...)
 	return buf.String()
+}
+
+func formatArgs(buf *strings.Builder, format string, args ...interface{}) {
+	if len(args) == 0 {
+		buf.WriteString(format)
+	} else if len(format) == 0 {
+		fmt.Fprint(buf, args...)
+	} else {
+		fmt.Fprintf(buf, format, args...)
+	}
 }

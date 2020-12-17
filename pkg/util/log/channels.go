@@ -49,11 +49,11 @@ func logfDepth(
 	}
 
 	logger := logging.getLogger(ch)
-	entry := MakeEntry(
+	entry := makeUnstructuredEntry(
 		ctx, sev, ch,
 		depth+1, true /* redactable */, format, args...)
 	if sp, el, ok := getSpanOrEventLog(ctx); ok {
-		eventInternal(sp, el, (sev >= severity.ERROR), entry)
+		eventInternal(sp, el, (sev >= severity.ERROR), entry.convertToLegacy())
 	}
 	logger.outputLogEntry(entry)
 }

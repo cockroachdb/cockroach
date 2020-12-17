@@ -119,9 +119,9 @@ func TestRedactTags(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		var buf strings.Builder
-		renderTagsAsRedactable(tc.ctx, &buf)
-		assert.Equal(t, tc.expected, buf.String())
+		tags := logtags.FromContext(tc.ctx)
+		actual := renderTagsAsRedactable(tags)
+		assert.Equal(t, tc.expected, string(actual))
 	}
 }
 

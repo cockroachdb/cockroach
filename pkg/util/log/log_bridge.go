@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/redact"
 )
 
 // NewStdLogger creates a *stdLog.Logger that forwards messages to the
@@ -75,33 +76,33 @@ func (lb logBridge) Write(b []byte) (n int, err error) {
 		return len(b), nil
 	}
 
-	entry := MakeEntry(context.Background(),
+	entry := makeUnstructuredEntry(context.Background(),
 		Severity(lb),
 		// Note: because the caller is using the stdLog interface, we don't
 		// really know what is being logged. Therefore we must use the
 		// DEV channel because we can't assume anything about the sensitivity
 		// of the information.
 		channel.DEV,
-		0, /* depth */
-		// Note: because the caller is using the stdLog interface, they are
-		// bypassing all the log marker logic. This means that the entire
-		// log message should be assumed to contain confidential
-		// information—it is thus not redactable.
-		false /* redactable */, "")
+		0,    /* depth */
+		true, /* redactable */
+		"")
 
 	// Split "d.go:23: message" into "d.go", "23", and "message".
 	if parts := bytes.SplitN(b, []byte{':'}, 3); len(parts) != 3 || len(parts[0]) < 1 || len(parts[2]) < 1 {
-		entry.Message = fmt.Sprintf("bad log format: %s", b)
+		entry.payload = makeRedactablePayload(redact.Sprintf("bad log format: %s", b))
 	} else {
 		// We use a "(gostd)" prefix so that these log lines correctly point
 		// to the go standard library instead of our own source directory.
-		entry.File = "(gostd) " + string(parts[0])
-		entry.Message = string(parts[2][1 : len(parts[2])-1]) // skip leading space and trailing newline
-		entry.Line, err = strconv.ParseInt(string(parts[1]), 10, 64)
+		entry.file = "(gostd) " + string(parts[0])
+		lineno, err := strconv.ParseInt(string(parts[1]), 10, 64)
 		if err != nil {
-			entry.Message = fmt.Sprintf("bad line number: %s", b)
-			entry.Line = 1
+			entry.payload = makeRedactablePayload(redact.Sprintf("bad line number: %s", b))
+			lineno = 1
+		} else {
+			payload := parts[2][1 : len(parts[2])-1] // skip leading space and trailing newline
+			entry.payload = makeRedactablePayload(redact.Sprintf("%s", payload))
 		}
+		entry.line = int(lineno)
 	}
 	debugLog.outputLogEntry(entry)
 	return len(b), nil
