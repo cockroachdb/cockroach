@@ -972,7 +972,9 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// is initiated asynchronously from the GC queue.
 	testutils.SucceedsSoon(t, func() error {
 		meta := &enginepb.MVCCMetadata{}
-		return tc.store.Engine().MVCCIterate(roachpb.KeyMin, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+		// The range is specified using only global keys, since the implementation
+		// may use an intentInterleavingIter.
+		return tc.store.Engine().MVCCIterate(keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
 			if !kv.Key.IsValue() {
 				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
 					return err

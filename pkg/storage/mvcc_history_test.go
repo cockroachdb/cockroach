@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -88,8 +89,7 @@ func TestMVCCHistories(t *testing.T) {
 		t.Run(engineImpl.name, func(t *testing.T) {
 
 			// Everything reads/writes under the same prefix.
-			key := roachpb.Key("")
-			span := roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+			span := roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}
 
 			datadriven.Walk(t, "testdata/mvcc_histories", func(t *testing.T, path string) {
 				if strings.Contains(path, "_disallow_separated") && !DisallowSeparatedIntents {
@@ -578,7 +578,7 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	return e.engine.ClearRawRange(key, endKey)
+	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
 }
 
 func cmdCPut(e *evalCtx) error {
