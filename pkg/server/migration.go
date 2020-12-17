@@ -40,9 +40,9 @@ var _ serverpb.MigrationServer = &migrationServer{}
 func (m *migrationServer) ValidateTargetClusterVersion(
 	ctx context.Context, req *serverpb.ValidateTargetClusterVersionRequest,
 ) (*serverpb.ValidateTargetClusterVersionResponse, error) {
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "validate-cv")
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "validate-cluster-version")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "validate-cv", nil)
+	ctx = logtags.AddTag(ctx, "validate-cluster-version", nil)
 
 	targetCV := req.ClusterVersion
 	versionSetting := m.server.ClusterSettings().Version
@@ -86,9 +86,9 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 func (m *migrationServer) BumpClusterVersion(
 	ctx context.Context, req *serverpb.BumpClusterVersionRequest,
 ) (*serverpb.BumpClusterVersionResponse, error) {
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "bump-cv")
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "bump-cluster-version")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "bump-cv", nil)
+	ctx = logtags.AddTag(ctx, "bump-cluster-version", nil)
 
 	m.Lock()
 	defer m.Unlock()
