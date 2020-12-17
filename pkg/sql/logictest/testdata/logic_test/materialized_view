@@ -107,7 +107,7 @@ CREATE MATERIALIZED VIEW v_dup AS SELECT x FROM dup;
 CREATE UNIQUE INDEX i ON v_dup (x);
 INSERT INTO dup VALUES (1), (1);
 
-statement error pq: duplicate key value \(x\)=\(1\) violates unique constraint "i"
+statement error pq: duplicate key value violates unique constraint "i"\nDETAIL: Key \(x\)=\(1\) already exists\.
 REFRESH MATERIALIZED VIEW v_dup
 
 # We shouldn't be able to mix materialized and non materialized views in DDLs.

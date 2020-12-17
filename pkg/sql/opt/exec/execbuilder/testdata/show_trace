@@ -95,7 +95,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 flow                                  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x89
 kv.DistSender: sending partial batch  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
-exec stmt                             execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
+exec stmt                             execution failed after 0 rows: duplicate key value violates unique constraint "primary"\nDETAIL: Key (k)=(1) already exists\.
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -108,7 +108,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 flow                                  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
 kv.DistSender: sending partial batch  r28: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
-exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+exec stmt                             execution failed after 0 rows: duplicate key value violates unique constraint "woo"\nDETAIL: Key (v)=(2) already exists\.
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off

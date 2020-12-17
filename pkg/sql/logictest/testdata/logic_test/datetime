@@ -30,7 +30,7 @@ SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
 2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  02:45:02.234
 
 # insert duplicate value with different time zone offset
-statement error duplicate key value \(a\)=\('2015-08-30 03:34:45\.34567'\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\('2015-08-30 03:34:45\.34567'\) already exists\.
 INSERT INTO t VALUES
   ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
