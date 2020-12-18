@@ -29,11 +29,31 @@ func SpanFromContext(ctx context.Context) *Span {
 	return nil
 }
 
+// optimizedContext is an implementation of context.Context special
+// cased to carry a Span under activeSpanKey{}. By making an explicit
+// type we unlock optimizations that save allocations by allocating
+// the optimizedContext together with the Span it eventually carries.
+type optimizedContext struct {
+	context.Context
+	sp *Span
+}
+
+func (ctx *optimizedContext) Value(k interface{}) interface{} {
+	if k == (interface{}(activeSpanKey{})) {
+		return ctx.sp
+	}
+	return ctx.Context.Value(k)
+}
+
 // maybeWrapCtx returns a Context wrapping the Span, with two exceptions:
 // 1. if ctx==noCtx, it's a noop
 // 2. if ctx contains the noop Span, and sp is also the noop Span, elide
 //    allocating a new Context.
-func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
+//
+// If a non-nil octx is passed in, it forms the returned Context. This can
+// avoid allocations if the caller is able to allocate octx together with
+// the Span, as is commonly possible when StartSpanCtx is used.
+func maybeWrapCtx(ctx context.Context, octx *optimizedContext, sp *Span) (context.Context, *Span) {
 	if ctx == noCtx {
 		return noCtx, sp
 	}
@@ -52,11 +72,16 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 			return ctx, sp
 		}
 	}
+	if octx != nil {
+		octx.Context = ctx
+		octx.sp = sp
+		return octx, sp
+	}
 	return context.WithValue(ctx, activeSpanKey{}, sp), sp
 }
 
 // ContextWithSpan returns a Context wrapping the supplied Span.
 func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
-	ctx, _ = maybeWrapCtx(ctx, sp)
+	ctx, _ = maybeWrapCtx(ctx, nil /* octx */, sp)
 	return ctx
 }
