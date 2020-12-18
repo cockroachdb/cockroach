@@ -173,9 +173,20 @@ func (s *schemaChange) initSeqNum(pool *workload.MultiConnPool) (*int64, error) 
 	seqNum := new(int64)
 
 	const q = `
-SELECT max(regexp_extract(name, '[0-9]+$')::int)
-  FROM ((SELECT table_name FROM [SHOW TABLES]) UNION (SELECT sequence_name FROM [SHOW SEQUENCES])) AS obj(name)
- WHERE name ~ '^(table|view|seq)[0-9]+$';
+SELECT max(regexp_extract(name, '[0-9]+$')::INT8)
+  FROM (
+    SELECT name
+      FROM (
+	           (SELECT table_name FROM [SHOW TABLES]) UNION
+						 (SELECT sequence_name FROM [SHOW SEQUENCES]) UNION
+						 (SELECT name FROM [SHOW ENUMS]) UNION
+	           (SELECT schema_name FROM [SHOW SCHEMAS]) UNION
+						 (SELECT column_name FROM information_schema.columns) UNION
+						 (SELECT index_name FROM information_schema.statistics)
+           ) AS obj (name)
+       )
+ WHERE name ~ '^(table|view|seq|enum|schema)[0-9]+$'
+    OR name ~ '^(col|index)[0-9]+_[0-9]+$';
 `
 	var max gosql.NullInt64
 	if err := pool.Get().QueryRow(q).Scan(&max); err != nil {
