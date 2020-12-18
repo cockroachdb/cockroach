@@ -58,16 +58,16 @@ type AmbientContext struct {
 	// log or an open span (if not nil).
 	eventLog *ctxEventLog
 
+	// The buffer.
+	//
+	// NB: this should not be returned to the caller, to avoid other mutations
+	// leaking in. If we return this to the caller, it should be in immutable
+	// form.
 	tags *logtags.Buffer
 
 	// Cached annotated version of context.{TODO,Background}, to avoid annotating
 	// these contexts repeatedly.
 	backgroundCtx context.Context
-}
-
-// LogTags returns the tags in the ambient context.
-func (ac *AmbientContext) LogTags() *logtags.Buffer {
-	return ac.tags
 }
 
 // AddLogTag adds a tag to the ambient context.

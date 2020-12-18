@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -286,31 +287,30 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	status kvserverpb.LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	const opName = "request range lease"
-	var sp *tracing.Span
-	tr := p.repl.AmbientContext.Tracer
-	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
-		// We use FollowsFrom because the lease request's span can outlive the
-		// parent request. This is possible if parentCtx is canceled after others
-		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
-		// TODO(andrei): we should use Tracer.StartChildSpan() for efficiency,
-		// except that one does not currently support FollowsFrom relationships.
-		sp = tr.StartSpan(
-			opName,
-			tracing.WithParentAndAutoCollection(parentSp),
-			tracing.WithFollowsFrom(),
-			tracing.WithCtxLogTags(parentCtx),
-		)
-	} else {
-		sp = tr.StartSpan(opName, tracing.WithCtxLogTags(parentCtx))
-	}
-
 	// Create a new context *without* a timeout. Instead, we multiplex the
 	// cancellation of all contexts onto this new one, only canceling it if all
 	// coalesced requests timeout/cancel. p.cancelLocked (defined below) is the
 	// cancel function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
-	ctx = tracing.ContextWithSpan(ctx, sp)
+	const opName = "request range lease"
+	tr := p.repl.AmbientContext.Tracer
+	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
+	var sp *tracing.Span
+	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
+		// We use FollowsFrom because the lease request's span can outlive the
+		// parent request. This is possible if parentCtx is canceled after others
+		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
+		ctx, sp = tr.StartSpanCtx(
+			ctx,
+			opName,
+			tracing.WithParentAndAutoCollection(parentSp),
+			tracing.WithFollowsFrom(),
+			tagsOpt,
+		)
+	} else {
+		ctx, sp = tr.StartSpanCtx(ctx, opName, tagsOpt)
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Make sure we clean up the context and request state. This will be called
