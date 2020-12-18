@@ -4876,7 +4876,7 @@ left-join (lookup json_arr1 [as=t1])
       └── t1.a:8 @> ARRAY['foo'] [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
 # Semi-join.
-opt expect=(GenerateInvertedJoins,ConvertSemiToInnerJoin)
+opt expect=(GenerateInvertedJoins)
 SELECT * FROM json_arr2 AS t2
 WHERE EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j
@@ -5337,6 +5337,98 @@ project
       └── filters
            └── t1.j @> t2.j
 
+exec-ddl
+DROP INDEX j_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX j_idx ON json_arr1 (i, j)
+----
+
+# Generate an inverted semi-join on a multi-column inverted index.
+opt expect=(GenerateInvertedJoinsFromSelect)
+SELECT * FROM json_arr2 AS t2
+WHERE EXISTS (
+  SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i IN (3, 4)
+)
+----
+project
+ ├── columns: k:1!null j:2 a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── semi-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.k:1!null t2.j:2 t2.a:3 i:6
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)-->(2,3)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5!null i:6 "inverted_join_const_col_@6":18!null continuation:19
+      │    ├── prefix key columns: [18] = [6]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: (1)-->(2,3), (5)-->(6,19)
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 "inverted_join_const_col_@6":18!null
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    ├── fd: (1)-->(2,3)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2,3)
+      │    │    ├── values
+      │    │    │    ├── columns: "inverted_join_const_col_@6":18!null
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (3,)
+      │    │    │    └── (4,)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+
+# Generate an inverted anti-join on a multi-column inverted index.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT * FROM json_arr2 AS t2
+WHERE NOT EXISTS (
+  SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i IN (3, 4)
+)
+----
+project
+ ├── columns: k:1!null j:2 a:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── anti-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.k:1!null t2.j:2 t2.a:3 i:6
+      ├── key columns: [5] = [5]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)-->(2,3), (5)-->(6,19)
+      ├── left-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 t1.k:5 i:6 "inverted_join_const_col_@6":18!null continuation:19
+      │    ├── prefix key columns: [18] = [6]
+      │    ├── inverted-expr
+      │    │    └── t1.j:7 @> t2.j:2
+      │    ├── fd: (1)-->(2,3), (5)-->(6,19)
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3 "inverted_join_const_col_@6":18!null
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    ├── fd: (1)-->(2,3)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    ├── columns: t2.k:1!null t2.j:2 t2.a:3
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2,3)
+      │    │    ├── values
+      │    │    │    ├── columns: "inverted_join_const_col_@6":18!null
+      │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    ├── (3,)
+      │    │    │    └── (4,)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:7 @> t2.j:2 [outer=(2,7), immutable]
+
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
 # -------------------------------------------------------
@@ -5572,10 +5664,10 @@ SELECT * FROM json_arr1 AS t1 JOIN json_arr2 AS t2
 ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 1000
 ----
 inner-join (cross)
- ├── columns: k:1!null i:2 j:3 a:4 k:14!null j:15 a:16
+ ├── columns: k:1!null i:2 j:3 a:4 k:15!null j:16 a:17
  ├── immutable
- ├── key: (1,14)
- ├── fd: (1)-->(2-4), (14)-->(15,16)
+ ├── key: (1,15)
+ ├── fd: (1)-->(2-4), (15)-->(16,17)
  ├── scan json_arr1 [as=t1]
  │    ├── columns: t1.k:1!null i:2 t1.j:3 t1.a:4
  │    ├── constraint: /1: [/1 - /1000]
@@ -5583,11 +5675,11 @@ inner-join (cross)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  ├── scan json_arr2 [as=t2]
- │    ├── columns: t2.k:14!null t2.j:15 t2.a:16
- │    ├── key: (14)
- │    └── fd: (14)-->(15,16)
+ │    ├── columns: t2.k:15!null t2.j:16 t2.a:17
+ │    ├── key: (15)
+ │    └── fd: (15)-->(16,17)
  └── filters
-      └── t1.j:3 @> t2.j:15 [outer=(3,15), immutable]
+      └── t1.j:3 @> t2.j:16 [outer=(3,16), immutable]
 
 # -----------------------------------------------------
 # ConvertSemiToInnerJoin
