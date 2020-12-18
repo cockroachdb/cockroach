@@ -50,7 +50,7 @@ CREATE TABLE pg_catalog.pg_am (
 	amcostestimate OID,
 	amoptions OID,
 	amhandler OID,
-	amtype CHAR
+	amtype "char"
 )`
 
 // PGCatalogAttrDef describes the schema of the pg_catalog.pg_attrdef table.
@@ -79,12 +79,12 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attcacheoff INT4,
 	atttypmod INT4,
 	attbyval BOOL,
-	attstorage CHAR,
-	attalign CHAR,
+	attstorage "char",
+	attalign "char",
 	attnotnull BOOL,
 	atthasdef BOOL,
-	attidentity CHAR, 
-	attgenerated CHAR,
+	attidentity "char", 
+	attgenerated "char",
 	attisdropped BOOL,
 	attislocal BOOL,
 	attinhcount INT4,
@@ -103,8 +103,8 @@ CREATE TABLE pg_catalog.pg_cast (
 	castsource OID,
 	casttarget OID,
 	castfunc OID,
-	castcontext CHAR,
-	castmethod CHAR
+	castcontext "char",
+	castmethod "char"
 )`
 
 // PGCatalogAuthID describes the schema of the pg_catalog.pg_authid table.
@@ -166,9 +166,9 @@ CREATE TABLE pg_catalog.pg_class (
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
-	relpersistence CHAR,
+	relpersistence "char",
 	relistemp BOOL,
-	relkind CHAR,
+	relkind "char",
 	relnatts INT2,
 	relchecks INT2,
 	relhasoids BOOL,
@@ -274,7 +274,7 @@ CREATE TABLE pg_catalog.pg_default_acl (
 	oid OID,
 	defaclrole OID,
 	defaclnamespace OID,
-	defaclobjtype CHAR,
+	defaclobjtype "char",
 	defaclacl STRING[]
 )`
 
@@ -288,7 +288,7 @@ CREATE TABLE pg_catalog.pg_depend (
   refclassid OID,
   refobjid OID,
   refobjsubid INT4,
-  deptype CHAR
+  deptype "char"
 )`
 
 // PGCatalogDescription describes the schema of the pg_catalog.pg_description
@@ -331,7 +331,7 @@ CREATE TABLE pg_catalog.pg_event_trigger (
 	evtevent NAME,
 	evtowner OID,
 	evtfoid OID,
-	evtenabled CHAR,
+	evtenabled "char",
 	evttags TEXT[]
 )`
 
@@ -578,8 +578,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	proleakproof BOOL,
 	proisstrict BOOL,
 	proretset BOOL,
-	provolatile CHAR,
-	proparallel CHAR,
+	provolatile "char",
+	proparallel "char",
 	pronargs INT2,
 	pronargdefaults INT2,
 	prorettype OID,
@@ -702,7 +702,7 @@ CREATE TABLE pg_catalog.pg_shdepend (
   objsubid INT4,
 	refclassid OID,
 	refobjid OID,
-	deptype CHAR
+	deptype "char"
 )`
 
 // PGCatalogTables describes the schema of the pg_catalog.pg_tables table.
@@ -766,11 +766,11 @@ CREATE TABLE pg_catalog.pg_type (
 	typowner OID,
 	typlen INT2,
 	typbyval BOOL,
-	typtype CHAR,
-	typcategory CHAR,
+	typtype "char",
+	typcategory "char",
 	typispreferred BOOL,
 	typisdefined BOOL,
-	typdelim CHAR,
+	typdelim "char",
 	typrelid OID,
 	typelem OID,
 	typarray OID,
@@ -781,8 +781,8 @@ CREATE TABLE pg_catalog.pg_type (
 	typmodin REGPROC,
 	typmodout REGPROC,
 	typanalyze REGPROC,
-	typalign CHAR,
-	typstorage CHAR,
+	typalign "char",
+	typstorage "char",
 	typnotnull BOOL,
 	typbasetype OID,
 	typtypmod INT4,
@@ -884,7 +884,7 @@ CREATE TABLE pg_catalog.pg_views (
 const PGCatalogAggregate = `
 CREATE TABLE pg_catalog.pg_aggregate (
 	aggfnoid REGPROC,
-	aggkind  CHAR,
+	aggkind  "char",
 	aggnumdirectargs INT2,
 	aggtransfn REGPROC,
 	aggfinalfn REGPROC,
