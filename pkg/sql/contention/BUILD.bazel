@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "contention",
+    srcs = ["registry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/contention",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/cache",
+        "//pkg/util/uuid",
+        "//vendor/github.com/biogo/store/llrb",
+    ],
+)
+
+go_test(
+    name = "contention_test",
+    srcs = ["registry_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":contention"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/encoding",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/datadriven",
+    ],
+)
