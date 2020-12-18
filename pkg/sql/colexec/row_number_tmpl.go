@@ -70,14 +70,20 @@ func (r *rowNumberBase) Init() {
 // for a single tuple at index i as an increment from the previous tuple's row
 // number. If a new partition begins, then the running 'rowNumber' variable is
 // reset.
-func _COMPUTE_ROW_NUMBER() { // */}}
+func _COMPUTE_ROW_NUMBER(_HAS_SEL bool) { // */}}
 	// {{define "computeRowNumber" -}}
 	// {{if $.HasPartition}}
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if partitionCol[i] {
 		r.rowNumber = 0
 	}
 	// {{end}}
 	r.rowNumber++
+	// {{if not $.HasSel}}
+	//gcassert:bce
+	// {{end}}
 	rowNumberCol[i] = r.rowNumber
 	// {{end}}
 	// {{/*
@@ -111,11 +117,15 @@ func (r *_ROW_NUMBER_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	if sel != nil {
 		for _, i := range sel[:n] {
-			_COMPUTE_ROW_NUMBER()
+			_COMPUTE_ROW_NUMBER(true)
 		}
 	} else {
-		for i := range rowNumberCol[:n] {
-			_COMPUTE_ROW_NUMBER()
+		// {{if .HasPartition}}
+		_ = partitionCol[n-1]
+		// {{end}}
+		_ = rowNumberCol[n-1]
+		for i := 0; i < n; i++ {
+			_COMPUTE_ROW_NUMBER(false)
 		}
 	}
 	return batch

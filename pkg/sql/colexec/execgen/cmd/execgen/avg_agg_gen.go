@@ -87,8 +87,8 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	assignAddRe := makeFunctionRegex("_ASSIGN_ADD", 6)
 	s = assignAddRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.AssignAdd", 6))
 
-	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 4)
-	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4}}`)
+	accumulateAvg := makeFunctionRegex("_ACCUMULATE_AVG", 5)
+	s = accumulateAvg.ReplaceAllString(s, `{{template "accumulateAvg" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
 
 	s = replaceManipulationFuncs(s)
 

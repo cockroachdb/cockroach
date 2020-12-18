@@ -126,6 +126,9 @@ func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			} else {
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					// {{if .Sliceable}}
+					//gcassert:bce
+					// {{end}}
 					execgen.SET(col, i, c.constVal)
 				}
 			}

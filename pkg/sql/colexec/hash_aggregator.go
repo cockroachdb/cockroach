@@ -197,7 +197,25 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
 			if n == 0 {
-				op.state = hashAggregatorAggregating
+				// This is the last input batch.
+				if op.bufferingState.tuples.Length() == 0 {
+					// There are currently no buffered tuples to perform the
+					// aggregation on.
+					if len(op.buckets) == 0 {
+						// We don't have any buckets which means that there were
+						// no input tuples whatsoever, so we can transition to
+						// finished state right away.
+						op.state = hashAggregatorDone
+					} else {
+						// There are some buckets, so we proceed to the
+						// outputting state.
+						op.state = hashAggregatorOutputting
+					}
+				} else {
+					// There are some buffered tuples on which we need to run
+					// the aggregation.
+					op.state = hashAggregatorAggregating
+				}
 				continue
 			}
 			toBuffer := n
@@ -336,6 +354,8 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //   We have fully processed the second batch.
 //
 //  We have processed the input fully, so we're ready to emit the output.
+//
+// NOTE: b *must* be non-zero length batch.
 func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	op.setupScratchSlices(b.Length())
 	inputVecs := b.ColVecs()

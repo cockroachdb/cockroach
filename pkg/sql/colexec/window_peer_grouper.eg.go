@@ -165,8 +165,14 @@ func (p *windowPeerGrouperWithPartitionOp) Next(ctx context.Context) coldata.Bat
 		// The new peer group begins either when a new partition begins (in which
 		// case partitionCol[i] is 'true') or when i'th tuple is different from
 		// i-1'th (in which case p.distinctCol[i] is 'true').
-		for i := range peersCol[:n] {
-			peersCol[i] = partitionCol[i] || p.distinctCol[i]
+		_ = peersCol[n-1]
+		_ = partitionCol[n-1]
+		// Capture the slice in order for BCE to occur.
+		distinctCol := p.distinctCol
+		_ = distinctCol[n-1]
+		for i := 0; i < n; i++ {
+			//gcassert:bce
+			peersCol[i] = partitionCol[i] || distinctCol[i]
 		}
 	}
 	return b

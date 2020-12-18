@@ -52,22 +52,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bool()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = bool(*datum.(*tree.DBool))
-							castV := v.(bool)
-							col[i] = castV
+								v = bool(*datum.(*tree.DBool))
+								castV := v.(bool)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -75,63 +79,75 @@ func EncDatumRowsToColVec(
 				switch t.Width() {
 				case 16:
 					col := vec.Int16()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = int16(*datum.(*tree.DInt))
-							castV := v.(int16)
-							col[i] = castV
+								v = int16(*datum.(*tree.DInt))
+								castV := v.(int16)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				case 32:
 					col := vec.Int32()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = int32(*datum.(*tree.DInt))
-							castV := v.(int32)
-							col[i] = castV
+								v = int32(*datum.(*tree.DInt))
+								castV := v.(int32)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				case -1:
 				default:
 					col := vec.Int64()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = int64(*datum.(*tree.DInt))
-							castV := v.(int64)
-							col[i] = castV
+								v = int64(*datum.(*tree.DInt))
+								castV := v.(int64)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -140,22 +156,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Float64()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = float64(*datum.(*tree.DFloat))
-							castV := v.(float64)
-							col[i] = castV
+								v = float64(*datum.(*tree.DFloat))
+								castV := v.(float64)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -164,22 +184,25 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Decimal()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DDecimal).Decimal
-							castV := v.(apd.Decimal)
-							col[i].Set(&castV)
+								v = datum.(*tree.DDecimal).Decimal
+								castV := v.(apd.Decimal)
+								col[i].Set(&castV)
+							}
 						}
 					}
 				}
@@ -188,22 +211,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Int64()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DDate).UnixEpochDaysWithOrig()
-							castV := v.(int64)
-							col[i] = castV
+								v = datum.(*tree.DDate).UnixEpochDaysWithOrig()
+								castV := v.(int64)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -212,22 +239,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Timestamp()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DTimestamp).Time
-							castV := v.(time.Time)
-							col[i] = castV
+								v = datum.(*tree.DTimestamp).Time
+								castV := v.(time.Time)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -236,22 +267,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Interval()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DInterval).Duration
-							castV := v.(duration.Duration)
-							col[i] = castV
+								v = datum.(*tree.DInterval).Duration
+								castV := v.(duration.Duration)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -260,26 +295,29 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
-							// Handle other STRING-related OID types, like oid.T_name.
-							wrapper, ok := datum.(*tree.DOidWrapper)
-							if ok {
-								datum = wrapper.Wrapped
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
+								// Handle other STRING-related OID types, like oid.T_name.
+								wrapper, ok := datum.(*tree.DOidWrapper)
+								if ok {
+									datum = wrapper.Wrapped
+								}
+								v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
+								castV := v.([]byte)
+								col.Set(i, castV)
 							}
-							v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
-							castV := v.([]byte)
-							col.Set(i, castV)
 						}
 					}
 				}
@@ -288,22 +326,25 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))
-							castV := v.([]byte)
-							col.Set(i, castV)
+								v = encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DBytes)))
+								castV := v.([]byte)
+								col.Set(i, castV)
+							}
 						}
 					}
 				}
@@ -312,22 +353,26 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Timestamp()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DTimestampTZ).Time
-							castV := v.(time.Time)
-							col[i] = castV
+								v = datum.(*tree.DTimestampTZ).Time
+								castV := v.(time.Time)
+								//gcassert:bce
+								col[i] = castV
+							}
 						}
 					}
 				}
@@ -336,22 +381,25 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Bytes()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum.(*tree.DUuid).UUID.GetBytesMut()
-							castV := v.([]byte)
-							col.Set(i, castV)
+								v = datum.(*tree.DUuid).UUID.GetBytesMut()
+								castV := v.([]byte)
+								col.Set(i, castV)
+							}
 						}
 					}
 				}
@@ -361,22 +409,25 @@ func EncDatumRowsToColVec(
 				case -1:
 				default:
 					col := vec.Datum()
-					var v interface{}
-					for i := range rows {
-						row := rows[i]
-						if row[columnIdx].Datum == nil {
-							if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
-								return
+					if len(rows) > 0 {
+						_ = col.Get(len(rows) - 1)
+						var v interface{}
+						for i := range rows {
+							row := rows[i]
+							if row[columnIdx].Datum == nil {
+								if err = row[columnIdx].EnsureDecoded(t, alloc); err != nil {
+									return
+								}
 							}
-						}
-						datum := row[columnIdx].Datum
-						if datum == tree.DNull {
-							vec.Nulls().SetNull(i)
-						} else {
+							datum := row[columnIdx].Datum
+							if datum == tree.DNull {
+								vec.Nulls().SetNull(i)
+							} else {
 
-							v = datum
-							castV := v.(tree.Datum)
-							col.Set(i, castV)
+								v = datum
+								castV := v.(tree.Datum)
+								col.Set(i, castV)
+							}
 						}
 					}
 				}
