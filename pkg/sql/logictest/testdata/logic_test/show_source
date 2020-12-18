@@ -269,8 +269,13 @@ query ITT colnames
 SELECT node_id, user_name, query FROM [SHOW QUERIES]
 ----
 node_id  user_name  query
-1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
+1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER STATEMENTS]
 
+query ITT colnames
+SELECT node_id, user_name, query FROM [SHOW STATEMENTS]
+----
+node_id  user_name  query
+1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER STATEMENTS]
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
