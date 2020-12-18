@@ -33,8 +33,8 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
-	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 4)
-	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4}}`)
+	accumulateMinMax := makeFunctionRegex("_ACCUMULATE_MINMAX", 5)
+	s = accumulateMinMax.ReplaceAllString(s, `{{template "accumulateMinMax" buildDict "Global" . "HasNulls" $4 "HasSel" $5}}`)
 
 	s = replaceManipulationFuncs(s)
 

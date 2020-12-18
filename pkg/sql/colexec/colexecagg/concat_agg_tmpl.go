@@ -66,6 +66,8 @@ func (a *concat_AGGKINDAgg) Compute(
 	col, nulls := vec.Bytes(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
@@ -76,11 +78,11 @@ func (a *concat_AGGKINDAgg) Compute(
 			_ = groups[inputLen-1]
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_CONCAT(a, nulls, i, true)
+					_ACCUMULATE_CONCAT(a, nulls, i, true, false)
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_CONCAT(a, nulls, i, false)
+					_ACCUMULATE_CONCAT(a, nulls, i, false, false)
 				}
 			}
 		} else
@@ -89,11 +91,11 @@ func (a *concat_AGGKINDAgg) Compute(
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
-					_ACCUMULATE_CONCAT(a, nulls, i, true)
+					_ACCUMULATE_CONCAT(a, nulls, i, true, true)
 				}
 			} else {
 				for _, i := range sel {
-					_ACCUMULATE_CONCAT(a, nulls, i, false)
+					_ACCUMULATE_CONCAT(a, nulls, i, false, true)
 				}
 			}
 		}
@@ -152,9 +154,14 @@ func (a *concat_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 }
 
 // {{/*
-func _ACCUMULATE_CONCAT(a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-	// {{define "accumulateConcat" }}
+func _ACCUMULATE_CONCAT(
+	a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool, _HAS_SEL bool,
+) { // */}}
+	// {{define "accumulateConcat"}}
 	// {{if eq "_AGGKIND" "Ordered"}}
+	// {{if not .HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
 			// If we encounter a new group, and we haven't found any non-nulls for the
