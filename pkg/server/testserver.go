@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -944,8 +946,7 @@ func authenticatedUserNameNoAdmin() security.SQLUsername {
 
 // GetAdminAuthenticatedHTTPClient implements the TestServerInterface.
 func (ts *TestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
-		authenticatedUserName(), true)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
 	return httpClient, err
 }
 
@@ -957,6 +958,17 @@ func (ts *TestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, err
 	}
 	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
 	return httpClient, err
+}
+
+type v2AuthDecorator struct {
+	http.RoundTripper
+
+	session string
+}
+
+func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
+	r.Header.Add(apiV2AuthHeader, v.session)
+	return v.RoundTripper.RoundTrip(r)
 }
 
 func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
@@ -1001,6 +1013,14 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 			authClient.httpClient, err = ts.rpcContext.GetHTTPClient()
 			if err != nil {
 				return err
+			}
+			rawCookieBytes, err := protoutil.Marshal(rawCookie)
+			if err != nil {
+				return err
+			}
+			authClient.httpClient.Transport = &v2AuthDecorator{
+				RoundTripper: authClient.httpClient.Transport,
+				session:      base64.StdEncoding.EncodeToString(rawCookieBytes),
 			}
 			authClient.httpClient.Jar = cookieJar
 			authClient.cookie = rawCookie
