@@ -161,14 +161,15 @@ func (m *Outbox) flush(ctx context.Context) error {
 		return nil
 	}
 	msg := m.encoder.FormMessage(ctx)
-	if m.statsCollectionEnabled {
-		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
-	}
 
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
 	}
 	sendErr := m.stream.Send(msg)
+	if m.statsCollectionEnabled {
+		m.stats.NetTx.BytesSent.Add(int64(msg.Size()))
+		m.stats.NetTx.MessagesSent.Add(1)
+	}
 	for _, rpm := range msg.Data.Metadata {
 		if metricsMeta, ok := rpm.Value.(*execinfrapb.RemoteProducerMetadata_Metrics_); ok {
 			metricsMeta.Metrics.Release()
