@@ -1021,7 +1021,12 @@ func (n *Node) ResetQuorum(
 	// Get range descriptor and save original value of the descriptor for the input range id.
 	var desc roachpb.RangeDescriptor
 	var expValue roachpb.Value
+	txnTries := 0
 	if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txnTries += 1
+		if txnTries > 1 {
+			log.Infof(ctx, "txn to get range descriptor failed, retrying for attempt number %d", txnTries)
+		}
 		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    roachpb.KeyMin,
 			EndKey: roachpb.KeyMax,
@@ -1041,8 +1046,10 @@ func (n *Node) ResetQuorum(
 		}
 		return errors.Errorf("r%d not found", req.RangeID)
 	}); err != nil {
+		log.Errorf(ctx, "range descriptor for r%d could not be read from meta2: %v", req.RangeID, err)
 		return nil, err
 	}
+	log.Infof(ctx, "successfully read range descriptor for r%d from meta2", req.RangeID)
 
 	// Check that we've actually lost quorum.
 	livenessMap := n.storeCfg.NodeLiveness.GetIsLiveMap()
@@ -1085,10 +1092,12 @@ func (n *Node) ResetQuorum(
 	// Update the meta2 entry. Note that we're intentionally
 	// eschewing updateRangeAddressing since the copy of the
 	// descriptor that resides on the range itself has lost quorum.
+	log.Infof(ctx, "meta2 entry for r%d is being edited", desc.RangeID)
 	metaKey := keys.RangeMetaKey(desc.EndKey).AsRawKey()
 	if err := n.storeCfg.DB.CPut(ctx, metaKey, &desc, expValue.TagAndDataBytes()); err != nil {
 		return nil, err
 	}
+	log.Infof(ctx, "put meta2 entry for r%d succeeded", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
 	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
