@@ -17,7 +17,7 @@ import (
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
 // properties are initialized and ready for use.
-type AvailableRuleProps int
+type AvailableRuleProps int8
 
 const (
 	// PruneCols is set when the Relational.Rule.PruneCols field is populated.
@@ -31,7 +31,7 @@ const (
 	// field is populated.
 	InterestingOrderings
 
-	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
+	// HasHoistableSubquery is set when the Scalar.HasHoistableSubquery
 	// is populated.
 	HasHoistableSubquery
 
@@ -49,26 +49,6 @@ type Shared struct {
 	// Populated is set to true once the properties have been built for the
 	// operator.
 	Populated bool
-
-	// OuterCols is the set of columns that are referenced by variables within
-	// this sub-expression, but are not bound within the scope of the expression.
-	// For example:
-	//
-	//   SELECT *
-	//   FROM a
-	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
-	//
-	// For the EXISTS expression, a.x is an outer column, meaning that it is
-	// defined "outside" the EXISTS expression (hence the name "outer"). The
-	// SELECT expression binds the b.x and b.y references, so they are not part
-	// of the outer column set. The outer SELECT binds the a.x column, and so
-	// its outer column set is empty.
-	//
-	// Note that what constitutes an "outer column" is dependent on an
-	// expression's location in the query. For example, while the b.x and b.y
-	// columns are not outer columns on the EXISTS expression, they *are* outer
-	// columns on the inner WHERE condition.
-	OuterCols opt.ColSet
 
 	// HasSubquery is true if the subtree rooted at this node contains a subquery.
 	// The subquery can be a Subquery, Exists, Any, or ArrayFlatten expression.
@@ -95,6 +75,26 @@ type Shared struct {
 	// HasPlaceholder is true if the subtree rooted at this expression contains
 	// at least one Placeholder operator.
 	HasPlaceholder bool
+
+	// OuterCols is the set of columns that are referenced by variables within
+	// this sub-expression, but are not bound within the scope of the expression.
+	// For example:
+	//
+	//   SELECT *
+	//   FROM a
+	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
+	//
+	// For the EXISTS expression, a.x is an outer column, meaning that it is
+	// defined "outside" the EXISTS expression (hence the name "outer"). The
+	// SELECT expression binds the b.x and b.y references, so they are not part
+	// of the outer column set. The outer SELECT binds the a.x column, and so
+	// its outer column set is empty.
+	//
+	// Note that what constitutes an "outer column" is dependent on an
+	// expression's location in the query. For example, while the b.x and b.y
+	// columns are not outer columns on the EXISTS expression, they *are* outer
+	// columns on the inner WHERE condition.
+	OuterCols opt.ColSet
 
 	// Rule props are lazily calculated and typically only apply to a single
 	// rule. See the comment above Relational.Rule for more details.
@@ -282,13 +282,9 @@ type Scalar struct {
 
 	// Constraints is the set of constraints deduced from a boolean expression.
 	// For the expression to be true, all constraints in the set must be
-	// satisfied.
+	// satisfied. The constraints are not guaranteed to be exactly equivalent to
+	// the expression, see TightConstraints.
 	Constraints *constraint.Set
-
-	// TightConstraints is true if the expression is exactly equivalent to the
-	// constraints. If it is false, the constraints are weaker than the
-	// expression.
-	TightConstraints bool
 
 	// FuncDeps is a set of functional dependencies (FDs) inferred from a
 	// boolean expression. This field is only populated for Filters expressions.
@@ -313,9 +309,14 @@ type Scalar struct {
 	// For more details, see the header comment for FuncDepSet.
 	FuncDeps FuncDepSet
 
-	// Rule encapsulates the set of properties that are maintained to assist
-	// with specific sets of transformation rules. See the Relational.Rule
-	// comment for more details.
+	// TightConstraints is true if the expression is exactly equivalent to the
+	// constraints. If it is false, the constraints are weaker than the
+	// expression.
+	TightConstraints bool
+
+	// Rule encapsulate the set of properties that are maintained to
+	// assist with specific sets of transformation rules. See the
+	// Relational.Rule comment for more details.
 	Rule struct {
 		// Available contains bits that indicate whether lazily-populated Rule
 		// properties have been initialized. For example, if the
