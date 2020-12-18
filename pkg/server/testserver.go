@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -292,7 +294,7 @@ type TestServer struct {
 	*Server
 	// authClient is an http.Client that has been authenticated to access the
 	// Admin UI.
-	authClient [2]struct {
+	authClient [3]struct {
 		httpClient http.Client
 		cookie     *serverpb.SessionCookie
 		once       sync.Once
@@ -945,7 +947,14 @@ func authenticatedUserNameNoAdmin() security.SQLUsername {
 // GetAdminAuthenticatedHTTPClient implements the TestServerInterface.
 func (ts *TestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
 	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
-		authenticatedUserName(), true)
+		authenticatedUserName(), true, false)
+	return httpClient, err
+}
+
+// GetRootAuthenticatedHTTPClient implements the TestServerInterface.
+func (ts *TestServer) GetRootAuthenticatedHTTPClient() (http.Client, error) {
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(
+		security.RootUserName(), true, true)
 	return httpClient, err
 }
 
@@ -955,24 +964,40 @@ func (ts *TestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, err
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
 	}
-	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin)
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authUser, isAdmin, false /* exists */)
 	return httpClient, err
 }
 
+type v2AuthDecorator struct {
+	http.RoundTripper
+
+	session string
+}
+
+func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
+	r.Header.Add(apiV2AuthHeader, v.session)
+	return v.RoundTripper.RoundTrip(r)
+}
+
 func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
-	authUser security.SQLUsername, isAdmin bool,
+	authUser security.SQLUsername, isAdmin bool, isRoot bool,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
 	if isAdmin {
 		authIdx = 1
+	}
+	if isRoot {
+		authIdx = 2
 	}
 	authClient := &ts.authClient[authIdx]
 	authClient.once.Do(func() {
 		// Create an authentication session for an arbitrary admin user.
 		authClient.err = func() error {
 			// The user needs to exist as the admin endpoints will check its role.
-			if err := ts.createAuthUser(authUser, isAdmin); err != nil {
-				return err
+			if !isRoot {
+				if err := ts.createAuthUser(authUser, isAdmin); err != nil {
+					return err
+				}
 			}
 
 			id, secret, err := ts.authentication.newAuthSession(context.TODO(), authUser)
@@ -1001,6 +1026,14 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 			authClient.httpClient, err = ts.rpcContext.GetHTTPClient()
 			if err != nil {
 				return err
+			}
+			rawCookieBytes, err := protoutil.Marshal(rawCookie)
+			if err != nil {
+				return err
+			}
+			authClient.httpClient.Transport = &v2AuthDecorator{
+				RoundTripper: authClient.httpClient.Transport,
+				session:      base64.StdEncoding.EncodeToString(rawCookieBytes),
 			}
 			authClient.httpClient.Jar = cookieJar
 			authClient.cookie = rawCookie
