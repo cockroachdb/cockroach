@@ -150,11 +150,11 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
 		// hash aggregation because the hash aggregator always uses non-nil
@@ -165,11 +165,11 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_MINMAX(a, nulls, i, true)
+					_ACCUMULATE_MINMAX(a, nulls, i, true, false)
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
-					_ACCUMULATE_MINMAX(a, nulls, i, false)
+					_ACCUMULATE_MINMAX(a, nulls, i, false, false)
 				}
 			}
 		} else
@@ -178,11 +178,11 @@ func (a *_AGG_TYPE_AGGKINDAgg) Compute(
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
-					_ACCUMULATE_MINMAX(a, nulls, i, true)
+					_ACCUMULATE_MINMAX(a, nulls, i, true, true)
 				}
 			} else {
 				for _, i := range sel {
-					_ACCUMULATE_MINMAX(a, nulls, i, false)
+					_ACCUMULATE_MINMAX(a, nulls, i, false, true)
 				}
 			}
 		}
@@ -259,10 +259,15 @@ func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 // the ith row if it is smaller/larger than the current result. If this is the
 // first row of a new group, and no non-nulls have been found for the current
 // group, then the output for the current group is set to null.
-func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _ACCUMULATE_MINMAX(
+	a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool, _HAS_SEL bool,
+) { // */}}
 	// {{define "accumulateMinMax"}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
+	// {{if not .HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
 			// If we encounter a new group, and we haven't found any non-nulls for the
@@ -287,22 +292,30 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _H
 	// {{else}}
 	isNull = false
 	// {{end}}
-	// {{with .Global}}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
+			// {{if and (.Sliceable) (not .HasSel)}}
+			//gcassert:bce
+			// {{end}}
 			val := col.Get(i)
+			// {{with .Global}}
 			execgen.COPYVAL(a.curAgg, val)
+			// {{end}}
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
+			// {{if and (.Sliceable) (not .HasSel)}}
+			//gcassert:bce
+			// {{end}}
 			candidate := col.Get(i)
+			// {{with .Global}}
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
 				execgen.COPYVAL(a.curAgg, candidate)
 			}
+			// {{end}}
 		}
 	}
-	// {{end}}
 	// {{end}}
 
 	// {{/*
