@@ -50,10 +50,11 @@ func replaceProjTmplVariables(tmpl string) string {
 	tmpl = assignRe.ReplaceAllString(tmpl, makeTemplateFunctionCall("Right.Assign", 6))
 
 	tmpl = strings.ReplaceAll(tmpl, "_HAS_NULLS", "$hasNulls")
+	tmpl = strings.ReplaceAll(tmpl, "_HAS_SEL", "$hasSel")
 	setProjectionRe := makeFunctionRegex("_SET_PROJECTION", 1)
 	tmpl = setProjectionRe.ReplaceAllString(tmpl, `{{template "setProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
-	setSingleTupleProjectionRe := makeFunctionRegex("_SET_SINGLE_TUPLE_PROJECTION", 1)
-	tmpl = setSingleTupleProjectionRe.ReplaceAllString(tmpl, `{{template "setSingleTupleProjection" buildDict "Global" $ "HasNulls" $1 "Overload" .}}`)
+	setSingleTupleProjectionRe := makeFunctionRegex("_SET_SINGLE_TUPLE_PROJECTION", 2)
+	tmpl = setSingleTupleProjectionRe.ReplaceAllString(tmpl, `{{template "setSingleTupleProjection" buildDict "Global" $ "HasNulls" $1 "HasSel" $2 "Overload" .}}`)
 
 	return tmpl
 }

@@ -269,9 +269,15 @@ func _CAST_TUPLES(_HAS_NULLS, _HAS_SEL bool) { // */}}
 			continue
 		}
 		// {{end}}
+		// {{if not $hasSel}}
+		//gcassert:bce
+		// {{end}}
 		v := inputCol.Get(tupleIdx)
 		var r _R_GO_TYPE
 		_CAST(r, v, inputCol, c.toType)
+		// {{if and (.Right.Sliceable) (not $hasSel)}}
+		//gcassert:bce
+		// {{end}}
 		_R_SET(outputCol, tupleIdx, r)
 		// {{if eq .Right.VecMethod "Datum"}}
 		// Casting to datum-backed vector might produce a null value on

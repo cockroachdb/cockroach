@@ -159,14 +159,14 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
-			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, true)
 		}
 	} else {
 		_ = projCol.Get(n - 1)
 		_ = col1.Get(n - 1)
 		_ = col2.Get(n - 1)
 		for i := 0; i < n; i++ {
-			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, false)
 		}
 	}
 	// _outNulls has been updated from within the _ASSIGN function to include
@@ -185,16 +185,23 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 // */}}
 
 // {{/*
-func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
+func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 	// {{define "setSingleTupleProjection" -}}
 	// {{$hasNulls := $.HasNulls}}
+	// {{$hasSel := $.HasSel}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
 	if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
 		// We only want to perform the projection operation if both values are not
 		// null.
 		// {{end}}
+		// {{if and (.Left.Sliceable) (not _HAS_SEL)}}
+		//gcassert:bce
+		// {{end}}
 		arg1 := col1.Get(i)
+		// {{if and (.Right.Sliceable) (not _HAS_SEL)}}
+		//gcassert:bce
+		// {{end}}
 		arg2 := col2.Get(i)
 		_ASSIGN(projCol[i], arg1, arg2, projCol, col1, col2)
 		// {{if _HAS_NULLS}}

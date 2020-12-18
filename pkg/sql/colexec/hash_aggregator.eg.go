@@ -22,7 +22,12 @@ const _ = "template_populateEqChains"
 func populateEqChains_false(
 	op *hashAggregator, batchLength int, sel []int, headToEqChainsID []int) int {
 	eqChainsCount := 0
-	for i, headID := range op.ht.probeScratch.headID[:batchLength] {
+	// Capture the slices in order for BCE to occur.
+	headIDs := op.ht.probeScratch.headID
+	hashBuffer := op.ht.probeScratch.hashBuffer
+	_ = headIDs[batchLength-1]
+	_ = hashBuffer[batchLength-1]
+	for i := 0; i < batchLength; i++ {
 		// Since we're essentially probing the batch against itself, headID
 		// cannot be 0, so we don't need to check that. What we have here is
 		// the tuple at position i belongs to the same equality chain as the
@@ -32,11 +37,15 @@ func populateEqChains_false(
 		// eqChainsID = i + 1. headToEqChainsID is a mapping from headID to
 		// eqChainsID that we're currently building in which eqChainsID
 		// indicates that the current tuple is the head of its equality chain.
+		//gcassert:bce
+		headID := headIDs[i]
 		if eqChainsID := headToEqChainsID[headID-1]; eqChainsID == 0 {
 			// This tuple is the head of the new equality chain, so we include
 			// it in updated selection vector. We also compact the hash buffer
 			// accordingly.
-			op.ht.probeScratch.hashBuffer[eqChainsCount] = op.ht.probeScratch.hashBuffer[i]
+			//gcassert:bce
+			h := hashBuffer[i]
+			hashBuffer[eqChainsCount] = h
 			sel[eqChainsCount] = i
 			op.scratch.eqChains[eqChainsCount] = append(op.scratch.eqChains[eqChainsCount], i)
 			eqChainsCount++
@@ -51,7 +60,13 @@ func populateEqChains_false(
 func populateEqChains_true(
 	op *hashAggregator, batchLength int, sel []int, headToEqChainsID []int) int {
 	eqChainsCount := 0
-	for i, headID := range op.ht.probeScratch.headID[:batchLength] {
+	// Capture the slices in order for BCE to occur.
+	headIDs := op.ht.probeScratch.headID
+	hashBuffer := op.ht.probeScratch.hashBuffer
+	_ = headIDs[batchLength-1]
+	_ = hashBuffer[batchLength-1]
+	_ = sel[batchLength-1]
+	for i := 0; i < batchLength; i++ {
 		// Since we're essentially probing the batch against itself, headID
 		// cannot be 0, so we don't need to check that. What we have here is
 		// the tuple at position i belongs to the same equality chain as the
@@ -61,17 +76,25 @@ func populateEqChains_true(
 		// eqChainsID = i + 1. headToEqChainsID is a mapping from headID to
 		// eqChainsID that we're currently building in which eqChainsID
 		// indicates that the current tuple is the head of its equality chain.
+		//gcassert:bce
+		headID := headIDs[i]
 		if eqChainsID := headToEqChainsID[headID-1]; eqChainsID == 0 {
 			// This tuple is the head of the new equality chain, so we include
 			// it in updated selection vector. We also compact the hash buffer
 			// accordingly.
-			op.ht.probeScratch.hashBuffer[eqChainsCount] = op.ht.probeScratch.hashBuffer[i]
-			sel[eqChainsCount] = sel[i]
-			op.scratch.eqChains[eqChainsCount] = append(op.scratch.eqChains[eqChainsCount], sel[i])
+			//gcassert:bce
+			h := hashBuffer[i]
+			hashBuffer[eqChainsCount] = h
+			//gcassert:bce
+			s := sel[i]
+			sel[eqChainsCount] = s
+			op.scratch.eqChains[eqChainsCount] = append(op.scratch.eqChains[eqChainsCount], s)
 			eqChainsCount++
 			headToEqChainsID[headID-1] = eqChainsCount
 		} else {
-			op.scratch.eqChains[eqChainsID-1] = append(op.scratch.eqChains[eqChainsID-1], sel[i])
+			//gcassert:bce
+			s := sel[i]
+			op.scratch.eqChains[eqChainsID-1] = append(op.scratch.eqChains[eqChainsID-1], s)
 		}
 	}
 	return eqChainsCount
@@ -89,6 +112,9 @@ func (op *hashAggregator) populateEqChains(
 	b coldata.Batch,
 ) (eqChainsCount int, eqChainsHeadsSel []int) {
 	batchLength := b.Length()
+	if batchLength == 0 {
+		return
+	}
 	headIDToEqChainsID := op.scratch.intSlice[:batchLength]
 	copy(headIDToEqChainsID, zeroIntColumn)
 	sel := b.Selection()

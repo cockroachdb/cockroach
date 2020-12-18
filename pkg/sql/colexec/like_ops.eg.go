@@ -124,6 +124,9 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -309,6 +312,9 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -494,6 +500,9 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -679,6 +688,9 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -864,6 +876,9 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1049,6 +1064,9 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1234,6 +1252,9 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1419,6 +1440,9 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.

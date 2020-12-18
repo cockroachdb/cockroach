@@ -62,16 +62,24 @@ func (d *defaultCmp_KINDProjOp) Next(ctx context.Context) coldata.Batch {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		// {{if .IsRightConst}}
 		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
+		_ = nonConstColumn[n-1]
 		// {{else}}
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
 		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)
+		_ = leftColumn[n-1]
+		_ = rightColumn[n-1]
 		// {{end}}
+		if sel != nil {
+			_ = sel[n-1]
+		}
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
 			// {{if .IsRightConst}}
+			//gcassert:bce
 			res, err := d.adapter.eval(nonConstColumn[i], d.constArg)
 			// {{else}}
+			//gcassert:bce
 			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
 			// {{end}}
 			if err != nil {
