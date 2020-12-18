@@ -318,11 +318,12 @@ func ColVecToDatumAndDeselect(
 						converted[destIdx] = tree.DNull
 						continue
 					}
-					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
-					d.Coeff.Set(&typedCol[srcIdx].Coeff)
+					d.Coeff.Set(&v.Coeff)
 					converted[destIdx] = d
 				}
 			}
@@ -517,11 +518,12 @@ func ColVecToDatumAndDeselect(
 				for idx = 0; idx < length; idx++ {
 					destIdx = idx
 					srcIdx = sel[idx]
-					d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+					v := typedCol.Get(srcIdx)
+					d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 					// Clear the Coeff so that the Set below allocates a new slice for the
 					// Coeff.abs field.
 					d.Coeff = big.Int{}
-					d.Coeff.Set(&typedCol[srcIdx].Coeff)
+					d.Coeff.Set(&v.Coeff)
 					converted[destIdx] = d
 				}
 			}
@@ -732,11 +734,12 @@ func ColVecToDatum(
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						d.Coeff.Set(&v.Coeff)
 						converted[destIdx] = d
 					}
 				}
@@ -962,11 +965,12 @@ func ColVecToDatum(
 							converted[destIdx] = tree.DNull
 							continue
 						}
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						d.Coeff.Set(&v.Coeff)
 						converted[destIdx] = d
 					}
 				}
@@ -1163,11 +1167,12 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = sel[idx]
 						srcIdx = sel[idx]
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						d.Coeff.Set(&v.Coeff)
 						converted[destIdx] = d
 					}
 				}
@@ -1333,11 +1338,12 @@ func ColVecToDatum(
 					for idx = 0; idx < length; idx++ {
 						destIdx = idx
 						srcIdx = idx
-						d := da.NewDDecimal(tree.DDecimal{Decimal: typedCol[srcIdx]})
+						v := typedCol.Get(srcIdx)
+						d := da.NewDDecimal(tree.DDecimal{Decimal: v})
 						// Clear the Coeff so that the Set below allocates a new slice for the
 						// Coeff.abs field.
 						d.Coeff = big.Int{}
-						d.Coeff.Set(&typedCol[srcIdx].Coeff)
+						d.Coeff.Set(&v.Coeff)
 						converted[destIdx] = d
 					}
 				}

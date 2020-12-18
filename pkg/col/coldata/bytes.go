@@ -46,7 +46,12 @@ const BytesInitialAllocationFactor = 64
 // []byte values. It is legal to call Set on the returned Bytes at this point,
 // but Get is undefined until at least one element is Set.
 func NewBytes(n int) *Bytes {
-	return &Bytes{
+	ret := makeBytes(n)
+	return &ret
+}
+
+func makeBytes(n int) Bytes {
+	return Bytes{
 		// Given that the []byte slices are of variable length, we multiply the
 		// number of elements by some constant factor.
 		// TODO(asubiotto): Make this tunable.
@@ -142,6 +147,11 @@ func (b *Bytes) Set(i int, v []byte) {
 // is read-only. Window is a lightweight operation that doesn't involve copying
 // the underlying data.
 func (b *Bytes) Window(start, end int) *Bytes {
+	window := b.newWindow(start, end)
+	return &window
+}
+
+func (b *Bytes) newWindow(start, end int) Bytes {
 	if start < 0 || start > end || end > b.Len() {
 		panic(
 			fmt.Sprintf(
@@ -155,7 +165,7 @@ func (b *Bytes) Window(start, end int) *Bytes {
 	if end == 0 {
 		data = b.data[:0]
 	}
-	return &Bytes{
+	return Bytes{
 		data: data,
 		// We use 'end+1' because of the extra offset to know the length of the
 		// last element of the newly created window.

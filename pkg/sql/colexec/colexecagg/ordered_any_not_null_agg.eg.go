@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -112,10 +113,10 @@ func (a *anyNotNullBoolOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -308,10 +309,10 @@ func (a *anyNotNullBytesOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -449,7 +450,6 @@ func (a *anyNotNullBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -484,7 +484,7 @@ func (a *anyNotNullBytesOrderedAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDecimalOrderedAgg struct {
 	orderedAggregateFuncBase
-	col                         coldata.Decimals
+	col                         *coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -507,10 +507,10 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -520,7 +520,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -548,7 +548,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -579,7 +579,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -607,7 +607,7 @@ func (a *anyNotNullDecimalOrderedAgg) Compute(
 							if !a.foundNonNullForCurrentGroup {
 								a.nulls.SetNull(a.curIdx)
 							} else {
-								a.col[a.curIdx].Set(&a.curAgg)
+								a.col.Set(a.curIdx, a.curAgg)
 							}
 							a.curIdx++
 							a.foundNonNullForCurrentGroup = false
@@ -646,8 +646,10 @@ func (a *anyNotNullDecimalOrderedAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 func (a *anyNotNullDecimalOrderedAgg) Reset() {
@@ -703,10 +705,10 @@ func (a *anyNotNullInt16OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -899,10 +901,10 @@ func (a *anyNotNullInt32OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1095,10 +1097,10 @@ func (a *anyNotNullInt64OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1291,10 +1293,10 @@ func (a *anyNotNullFloat64OrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1487,10 +1489,10 @@ func (a *anyNotNullTimestampOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1683,10 +1685,10 @@ func (a *anyNotNullIntervalOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -1882,10 +1884,10 @@ func (a *anyNotNullDatumOrderedAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					if groups[i] {
@@ -2027,7 +2029,6 @@ func (a *anyNotNullDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

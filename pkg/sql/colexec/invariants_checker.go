@@ -49,6 +49,7 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)
 		if v.CanonicalTypeFamily() == types.BytesFamily {
+			// TODO(yuzefovich): assert this for decimals too.
 			v.Bytes().AssertOffsetsAreNonDecreasing(n)
 		}
 	}

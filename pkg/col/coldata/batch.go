@@ -117,7 +117,8 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	for i, t := range typs {
 		b.b[i] = NewMemColumn(t, capacity, factory)
-		if b.b[i].CanonicalTypeFamily() == types.BytesFamily {
+		canonicalTypeFamily := b.b[i].CanonicalTypeFamily()
+		if canonicalTypeFamily == types.BytesFamily || canonicalTypeFamily == types.DecimalFamily {
 			b.bytesVecIdxs.Add(i)
 		}
 	}
@@ -246,14 +247,19 @@ func (m *MemBatch) SetLength(length int) {
 	m.length = length
 	if length > 0 {
 		for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-			m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(length)
+			if m.b[i].Type().Family() == types.DecimalFamily {
+				m.b[i].Decimal().UpdateOffsetsToBeNonDecreasing(length)
+			} else {
+				m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(length)
+			}
 		}
 	}
 }
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
-	if col.CanonicalTypeFamily() == types.BytesFamily {
+	family := col.CanonicalTypeFamily()
+	if family == types.BytesFamily || family == types.DecimalFamily {
 		m.bytesVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)
@@ -315,7 +321,11 @@ func (m *MemBatch) ResetInternalBatch() {
 		}
 	}
 	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-		m.b[i].Bytes().Reset()
+		if m.b[i].Type().Family() == types.DecimalFamily {
+			m.b[i].Decimal().Reset()
+		} else {
+			m.b[i].Bytes().Reset()
+		}
 	}
 }
 

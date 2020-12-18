@@ -22,12 +22,14 @@ package colexecagg
 import (
 	"unsafe"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -110,7 +112,6 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		// {{if eq "_AGGKIND" "Ordered"}}
 		groups := a.groups
 		// {{/*
@@ -120,6 +121,7 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
 					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
@@ -165,15 +167,16 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
-	// Release the reference to curAgg eagerly.
 	// {{if eq .VecMethod "Bytes"}}
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
+	a.curAgg = nil
+	// {{else if eq .VecMethod "Decimal"}}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
+	// {{else if eq .VecMethod "Datum"}}
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}
-	// {{end}}
 	a.curAgg = nil
 	// {{end}}
 }

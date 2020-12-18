@@ -53,7 +53,7 @@ type OrderedSynchronizer struct {
 	// to the underlying slice for the output vectors and will use them directly.
 	outBoolCols      []coldata.Bools
 	outBytesCols     []*coldata.Bytes
-	outDecimalCols   []coldata.Decimals
+	outDecimalCols   []*coldata.Decimals
 	outInt16Cols     []coldata.Int16s
 	outInt32Cols     []coldata.Int32s
 	outInt64Cols     []coldata.Int64s
@@ -168,7 +168,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 							srcCol := vec.Decimal()
 							outCol := o.outDecimalCols[o.outColsMap[i]]
 							v := srcCol.Get(srcRowIdx)
-							outCol[outputIdx].Set(&v)
+							outCol.Set(outputIdx, v)
 						}
 					case types.IntFamily:
 						switch o.typs[i].Width() {

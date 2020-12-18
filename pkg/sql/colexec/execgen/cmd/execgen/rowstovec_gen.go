@@ -32,7 +32,7 @@ type rowsToVecTmplInfo struct {
 type rowsToVecWidthTmplInfo struct {
 	canonicalTypeFamily types.Family
 	Width               int32
-	VecMethod           string
+	VecMethod           VecMethod
 	GoType              string
 	// ConversionTmpl is a "format string" for the conversion template. It has
 	// the same "signature" as Convert, meaning that it should use %[1]s for

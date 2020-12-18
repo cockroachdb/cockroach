@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,7 +119,6 @@ func (a *anyNotNullBoolHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -235,7 +235,6 @@ func (a *anyNotNullBytesHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -292,7 +291,6 @@ func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
 	a.curAgg = nil
 }
@@ -326,7 +324,7 @@ func (a *anyNotNullBytesHashAggAlloc) newAggFunc() AggregateFunc {
 // first non-null value in the input column.
 type anyNotNullDecimalHashAgg struct {
 	hashAggregateFuncBase
-	col                         coldata.Decimals
+	col                         *coldata.Decimals
 	curAgg                      apd.Decimal
 	foundNonNullForCurrentGroup bool
 }
@@ -355,7 +353,6 @@ func (a *anyNotNullDecimalHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -410,8 +407,10 @@ func (a *anyNotNullDecimalHashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx].Set(&a.curAgg)
+		a.col.Set(outputIdx, a.curAgg)
 	}
+	a.allocator.AdjustMemoryUsage(-int64(encoding.FlatDecimalLen(&a.curAgg)))
+	a.curAgg = apd.Decimal{}
 }
 
 func (a *anyNotNullDecimalHashAgg) Reset() {
@@ -472,7 +471,6 @@ func (a *anyNotNullInt16HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -589,7 +587,6 @@ func (a *anyNotNullInt32HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -706,7 +703,6 @@ func (a *anyNotNullInt64HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -823,7 +819,6 @@ func (a *anyNotNullFloat64HashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -940,7 +935,6 @@ func (a *anyNotNullTimestampHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1057,7 +1051,6 @@ func (a *anyNotNullIntervalHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1177,7 +1170,6 @@ func (a *anyNotNullDatumHashAgg) Compute(
 		// Capture col to force bounds check to work. See
 		// https://github.com/golang/go/issues/39756
 		col := col
-		_ = col.Get(inputLen - 1)
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -1238,7 +1230,6 @@ func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
 	if d, ok := a.curAgg.(*coldataext.Datum); ok {
 		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
 	}

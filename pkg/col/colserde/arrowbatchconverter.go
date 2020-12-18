@@ -103,16 +103,6 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.BoolFamily:
 			c.builders.boolBuilder.AppendValues(vec.Bool()[:n], nil /* valid */)
 			data = c.builders.boolBuilder.NewBooleanArray().Data()
-		case types.DecimalFamily:
-			decimals := vec.Decimal()[:n]
-			for _, d := range decimals {
-				marshaled, err := d.MarshalText()
-				if err != nil {
-					return nil, err
-				}
-				c.builders.binaryBuilder.Append(marshaled)
-			}
-			data = c.builders.binaryBuilder.NewBinaryArray().Data()
 		case types.TimestampTZFamily:
 			timestamps := vec.Timestamp()[:n]
 			for _, ts := range timestamps {
@@ -174,6 +164,15 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		case types.BytesFamily:
 			var int32Offsets []int32
 			values, int32Offsets = vec.Bytes().ToArrowSerializationFormat(n)
+			// Cast int32Offsets to []byte.
+			int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&int32Offsets))
+			offsetsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&offsets))
+			offsetsHeader.Data = int32Header.Data
+			offsetsHeader.Len = int32Header.Len * sizeOfInt32
+			offsetsHeader.Cap = int32Header.Cap * sizeOfInt32
+		case types.DecimalFamily:
+			var int32Offsets []int32
+			values, int32Offsets = vec.Decimal().ToArrowSerializationFormat(n)
 			// Cast int32Offsets to []byte.
 			int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&int32Offsets))
 			offsetsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&offsets))
@@ -278,8 +277,6 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
 			arr = bytesArr
 		case types.DecimalFamily:
-			// TODO(yuzefovich): this serialization is quite inefficient - improve
-			// it.
 			bytesArr := array.NewBinaryData(d)
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
@@ -288,13 +285,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				// corresponds.
 				bytes = make([]byte, 0)
 			}
-			offsets := bytesArr.ValueOffsets()
-			vecArr := vec.Decimal()
-			for i := 0; i < len(offsets)-1; i++ {
-				if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
-					return err
-				}
-			}
+			coldata.BytesFromArrowSerializationFormat(&vec.Decimal().Bytes, bytes, bytesArr.ValueOffsets())
 			arr = bytesArr
 		case types.TimestampTZFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve

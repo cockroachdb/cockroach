@@ -46,7 +46,7 @@ for (( i=0; i<${#shas[@]}; i+=1 )); do
   sha=${shas[i]}
   echo "Switching to $name"
   git checkout -q "$sha"
-  (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${name}" 2> "${dest}/log.txt")
+  (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-short -count 10 -benchmem" > "${dest}/bench.${name}" 2> "${dest}/log.txt")
 done
 benchstat "${dest}/bench.$OLDNAME" "${dest}/bench.$NEWNAME"
 

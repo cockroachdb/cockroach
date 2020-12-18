@@ -72,7 +72,7 @@ type Vec interface {
 	// Bytes returns a flat Bytes representation.
 	Bytes() *Bytes
 	// Decimal returns an apd.Decimal slice.
-	Decimal() Decimals
+	Decimal() *Decimals
 	// Timestamp returns a time.Time slice.
 	Timestamp() Times
 	// Interval returns a duration.Duration slice.
@@ -177,7 +177,9 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	case types.FloatFamily:
 		return make(Float64s, length)
 	case types.DecimalFamily:
-		return make(Decimals, length)
+		return &Decimals{
+			Bytes: makeBytes(length),
+		}
 	case types.TimestampTZFamily:
 		return make(Times, length)
 	case types.IntervalFamily:
@@ -234,8 +236,8 @@ func (m *memColumn) Bytes() *Bytes {
 	return m.col.(*Bytes)
 }
 
-func (m *memColumn) Decimal() Decimals {
-	return m.col.(Decimals)
+func (m *memColumn) Decimal() *Decimals {
+	return m.col.(*Decimals)
 }
 
 func (m *memColumn) Timestamp() Times {
@@ -290,7 +292,7 @@ func (m *memColumn) Length() int {
 	case types.FloatFamily:
 		return len(m.col.(Float64s))
 	case types.DecimalFamily:
-		return len(m.col.(Decimals))
+		return m.Decimal().Len()
 	case types.TimestampTZFamily:
 		return len(m.col.(Times))
 	case types.IntervalFamily:
@@ -322,7 +324,7 @@ func (m *memColumn) SetLength(l int) {
 	case types.FloatFamily:
 		m.col = m.col.(Float64s)[:l]
 	case types.DecimalFamily:
-		m.col = m.col.(Decimals)[:l]
+		m.Decimal().SetLength(l)
 	case types.TimestampTZFamily:
 		m.col = m.col.(Times)[:l]
 	case types.IntervalFamily:
@@ -354,7 +356,7 @@ func (m *memColumn) Capacity() int {
 	case types.FloatFamily:
 		return cap(m.col.(Float64s))
 	case types.DecimalFamily:
-		return cap(m.col.(Decimals))
+		return m.Decimal().Len()
 	case types.TimestampTZFamily:
 		return cap(m.col.(Times))
 	case types.IntervalFamily:

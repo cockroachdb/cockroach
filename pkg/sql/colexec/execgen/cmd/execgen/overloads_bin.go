@@ -270,7 +270,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		var result string
 		if op.overloadBase.BinOp == tree.Concat {
-			caller, idx, err := parseNonIndexableTargetElem(targetElem)
+			vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
 			if err != nil {
 				return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 			}
@@ -281,7 +281,7 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 				r = append(r, %s...)
 				%s
 			}
-			`, leftElem, rightElem, set(types.BytesFamily, caller, idx, "r"))
+			`, leftElem, rightElem, set(types.BytesFamily, vecVariable, idxVariable, "r"))
 		} else {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
@@ -299,13 +299,25 @@ func checkRightIsZero(binOp tree.BinaryOperator) bool {
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		var (
+			resultDecimal string
+			setOperation  string
+		)
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			resultDecimal = targetElem
+		} else {
+			resultDecimal = "_overloadHelper.TmpDec1"
+			setOperation = set(types.DecimalFamily, vecVariable, idxVariable, "*result")
+		}
 		args := map[string]interface{}{
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
-			"Target":           targetElem,
+			"ResultDecimal":    resultDecimal,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"SetOperation":     setOperation,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -315,10 +327,12 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
+				result := &{{.ResultDecimal}}
+				_, err := tree.{{.Ctx}}.{{.Op}}(result, &{{.Left}}, &{{.Right}})
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{.SetOperation}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -446,17 +460,29 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Div:
 			// Note that this is the '/' operator, which has a decimal result.
 			args["Ctx"] = binaryOpDecCtx[binOp]
+			vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+			if err != nil {
+				args["ResultDecimal"] = targetElem
+				args["SetOperation"] = ""
+			} else {
+				// TODO(yuzefovich): confirm that it's ok to reuse the same
+				// decimal for result and left arguments.
+				args["ResultDecimal"] = "_overloadHelper.TmpDec1"
+				args["SetOperation"] = set(types.DecimalFamily, vecVariable, idxVariable, "*result")
+			}
 			t = template.Must(template.New("").Parse(`
 			{
 				if {{.Right}} == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
+				result := &{{.ResultDecimal}}
 				leftTmpDec, rightTmpDec := &_overloadHelper.TmpDec1, &_overloadHelper.TmpDec2
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.Quo(&{{.Target}}, leftTmpDec, rightTmpDec); err != nil {
+				if _, err := tree.{{.Ctx}}.Quo(result, leftTmpDec, rightTmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{.SetOperation}}
 			}
 		`))
 		case tree.Pow:
@@ -513,13 +539,25 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		var (
+			resultDecimal string
+			setOperation  string
+		)
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			resultDecimal = targetElem
+		} else {
+			resultDecimal = "_overloadHelper.TmpDec1"
+			setOperation = set(types.DecimalFamily, vecVariable, idxVariable, "*result")
+		}
 		args := map[string]interface{}{
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
-			"Target":           targetElem,
+			"ResultDecimal":    resultDecimal,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"SetOperation":     setOperation,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -529,11 +567,13 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				tmpDec := &_overloadHelper.TmpDec1
-				tmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, tmpDec); err != nil {
+				result := &{{.ResultDecimal}}
+				right := &_overloadHelper.TmpDec2
+				right.SetInt64(int64({{.Right}}))
+				if _, err := tree.{{.Ctx}}.{{.Op}}(result, &{{.Left}}, right); err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{.SetOperation}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -546,13 +586,25 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		var (
+			resultDecimal string
+			setOperation  string
+		)
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			resultDecimal = targetElem
+		} else {
+			resultDecimal = "_overloadHelper.TmpDec1"
+			setOperation = set(types.DecimalFamily, vecVariable, idxVariable, "*result")
+		}
 		args := map[string]interface{}{
 			"Ctx":              binaryOpDecCtx[binOp],
 			"Op":               binaryOpDecMethod[binOp],
 			"CheckRightIsZero": checkRightIsZero(binOp),
-			"Target":           targetElem,
+			"ResultDecimal":    resultDecimal,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"SetOperation":     setOperation,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -562,12 +614,14 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
-				tmpDec := &_overloadHelper.TmpDec1
-				tmpDec.SetInt64(int64({{.Left}}))
-				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, tmpDec, &{{.Right}})
+				result := &{{.ResultDecimal}}
+				left := &_overloadHelper.TmpDec2
+				left.SetInt64(int64({{.Left}}))
+				_, err := tree.{{.Ctx}}.{{.Op}}(result, left, &{{.Right}})
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
+				{{.SetOperation}}
 			}
 		`))
 		if err := t.Execute(&buf, args); err != nil {
@@ -859,10 +913,13 @@ func (c nonDatumDatumCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
-// Some target element has form "caller[index]", however, types like Bytes and datumVec
-// don't support indexing, we need to translate that into a set operation.This method
-// is used to extract caller and index value from targetElem.
-func parseNonIndexableTargetElem(targetElem string) (caller string, index string, err error) {
+// Some target element has a form "vecVariable[idxVariable]", however, types
+// like Bytes, Decimals and datumVec don't support indexing, we need to
+// translate that into a set operation. This method is used to extract caller
+// and index value from targetElem.
+func parseNonIndexableTargetElem(
+	targetElem string,
+) (vecVariable string, idxVariable string, err error) {
 	if !regexp.MustCompile(`.*\[.*]`).MatchString(targetElem) {
 		err = fmt.Errorf("couldn't translate indexing on target element: %s", targetElem)
 		return
@@ -873,7 +930,7 @@ func parseNonIndexableTargetElem(targetElem string) (caller string, index string
 	if len(tokens) != 2 {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly len(tokens) != 2"))
 	}
-	caller = tokens[0]
-	index = tokens[1]
+	vecVariable = tokens[0]
+	idxVariable = tokens[1]
 	return
 }

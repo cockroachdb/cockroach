@@ -218,7 +218,7 @@ type argWidthOverloadBase struct {
 	Width int32
 	// VecMethod is the name of the method that should be called on coldata.Vec
 	// to get access to the well-typed underlying memory.
-	VecMethod string
+	VecMethod VecMethod
 	// GoType is the physical representation of a single element of the vector.
 	GoType string
 }
@@ -259,7 +259,7 @@ type lastArgWidthOverload struct {
 	*argWidthOverloadBase
 
 	RetType      *types.T
-	RetVecMethod string
+	RetVecMethod VecMethod
 	RetGoType    string
 
 	AssignFunc  assignFunc
@@ -420,7 +420,7 @@ func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
 	case types.BytesFamily:
 		return "*coldata.Bytes"
 	case types.DecimalFamily:
-		return "coldata.Decimals"
+		return "*coldata.Decimals"
 	case types.IntFamily:
 		switch width {
 		case 16:
@@ -471,7 +471,7 @@ func set(canonicalTypeFamily types.Family, target, i, new string) string {
 	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case types.DecimalFamily:
-		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
+		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
 }
@@ -484,9 +484,9 @@ func (b *argWidthOverloadBase) Set(target, i, new string) string {
 // Slice is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
-		// Slice is a noop for Bytes. We also add a few lines to address "unused
-		// variable" compiler errors.
+	case types.BytesFamily, types.DecimalFamily:
+		// Slice is a noop for Bytes-like vectors. We also add a few lines to
+		// address "unused variable" compiler errors.
 		return fmt.Sprintf(`%s
 _ = %s
 _ = %s`, target, start, end)
@@ -502,16 +502,8 @@ func (b *argWidthOverloadBase) CopySlice(
 ) string {
 	var tmpl string
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, types.DecimalFamily, typeconv.DatumVecCanonicalTypeFamily:
 		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
-	case types.DecimalFamily:
-		tmpl = `{
-  __tgt_slice := {{.Tgt}}[{{.TgtIdx}}:]
-  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
-  for __i := range __src_slice {
-    __tgt_slice[__i].Set(&__src_slice[__i])
-  }
-}`
 	default:
 		tmpl = `copy({{.Tgt}}[{{.TgtIdx}}:], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}])`
 	}
@@ -535,29 +527,8 @@ func (b *argWidthOverloadBase) AppendSlice(
 ) string {
 	var tmpl string
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, types.DecimalFamily, typeconv.DatumVecCanonicalTypeFamily:
 		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
-	case types.DecimalFamily:
-		tmpl = `{
-  __desiredCap := {{.TgtIdx}} + {{.SrcEnd}} - {{.SrcStart}}
-  if cap({{.Tgt}}) >= __desiredCap {
-  	{{.Tgt}} = {{.Tgt}}[:__desiredCap]
-  } else {
-    __prevCap := cap({{.Tgt}})
-    __capToAllocate := __desiredCap
-    if __capToAllocate < 2 * __prevCap {
-      __capToAllocate = 2 * __prevCap
-    }
-    __new_slice := make([]apd.Decimal, __desiredCap, __capToAllocate)
-    copy(__new_slice, {{.Tgt}}[:{{.TgtIdx}}])
-    {{.Tgt}} = __new_slice
-  }
-  __src_slice := {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]
-  __dst_slice := {{.Tgt}}[{{.TgtIdx}}:]
-  for __i := range __src_slice {
-    __dst_slice[__i].Set(&__src_slice[__i])
-  }
-}`
 	default:
 		tmpl = `{{.Tgt}} = append({{.Tgt}}[:{{.TgtIdx}}], {{.Src}}[{{.SrcStart}}:{{.SrcEnd}}]...)`
 	}
@@ -578,11 +549,8 @@ func (b *argWidthOverloadBase) AppendSlice(
 // AppendVal is a function that should only be used in templates.
 func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
+	case types.BytesFamily, types.DecimalFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
-	case types.DecimalFamily:
-		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
-%[1]s[len(%[1]s)-1].Set(&%[2]s)`, target, v)
 	}
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
@@ -590,7 +558,7 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 // Window is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
+	case types.BytesFamily, types.DecimalFamily:
 		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
 	}
 	return b.Slice(target, start, end)
@@ -858,7 +826,7 @@ var numericCanonicalTypeFamilies = []types.Family{types.IntFamily, types.FloatFa
 
 // toVecMethod returns the method name from coldata.Vec interface that can be
 // used to get the well-typed underlying memory from a vector.
-func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
+func toVecMethod(canonicalTypeFamily types.Family, width int32) VecMethod {
 	switch canonicalTypeFamily {
 	case types.BoolFamily:
 		return "Bool"

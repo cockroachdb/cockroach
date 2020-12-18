@@ -15,7 +15,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
@@ -52,7 +51,7 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	case types.BytesFamily:
 		return int64(vec.Bytes().Size())
 	case types.DecimalFamily:
-		return int64(sizeOfDecimals(vec.Decimal()))
+		return int64(vec.Decimal().Size())
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return int64(vec.Datum().Size())
 	}
@@ -82,6 +81,8 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 	for _, vec := range b.ColVecs() {
 		if vec.CanonicalTypeFamily() == types.BytesFamily {
 			proportionalBatchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
+			proportionalBatchMemSize += int64(vec.Decimal().ProportionalSize(length))
 		} else {
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
@@ -275,6 +276,10 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
 				presentVec.Bytes().Reset()
+			} else if presentVec.CanonicalTypeFamily() == types.DecimalFamily {
+				// Flat bytes vector needs to be reset before the vector can be
+				// reused.
+				presentVec.Decimal().Reset()
 			}
 			return
 		}
@@ -352,17 +357,7 @@ const (
 	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
 	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
 	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
-	sizeOfDecimal  = unsafe.Sizeof(apd.Decimal{})
 )
-
-func sizeOfDecimals(decimals coldata.Decimals) uintptr {
-	var size uintptr
-	for i := range decimals {
-		size += tree.SizeOfDecimal(&decimals[i])
-	}
-	size += uintptr(cap(decimals)-len(decimals)) * sizeOfDecimal
-	return size
-}
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
 // coldata.BatchSize() length.
@@ -385,7 +380,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += sizeOfBool
-		case types.BytesFamily:
+		case types.BytesFamily, types.DecimalFamily:
 			numBytesVectors++
 		case types.IntFamily:
 			switch t.Width() {
@@ -398,10 +393,6 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			}
 		case types.FloatFamily:
 			acc += sizeOfFloat64
-		case types.DecimalFamily:
-			// Similar to byte arrays, we can't tell how much space is used
-			// to hold the arbitrary precision decimal objects.
-			acc += 50
 		case types.TimestampTZFamily:
 			// time.Time consists of two 64 bit integers and a pointer to
 			// time.Location. We will only account for this 3 bytes without paying

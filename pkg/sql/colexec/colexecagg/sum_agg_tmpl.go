@@ -81,7 +81,7 @@ type sum_SUMKIND_TYPE_AGGKINDAgg struct {
 	// group, instead of on each iteration.
 	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col []_RET_GOTYPE
+	col _RET_GOTYPESLICE
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -137,13 +137,13 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_SUM(a, nulls, i, true)
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_SUM(a, nulls, i, false)
 				}
 			}
@@ -182,7 +182,7 @@ func (a *sum_SUMKIND_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -233,7 +233,7 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
-				a.col[a.curIdx] = a.curAgg
+				a.col.Set(a.curIdx, a.curAgg)
 			}
 			a.curIdx++
 			// {{with .Global}}
@@ -259,7 +259,8 @@ func _ACCUMULATE_SUM(a *sum_SUMKIND_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.curAgg, a.curAgg, col[i], _, _, col)
+		elt := col.Get(i)
+		_ASSIGN_ADD(a.curAgg, a.curAgg, elt, _, _, col)
 		a.foundNonNullForCurrentGroup = true
 	}
 	// {{end}}

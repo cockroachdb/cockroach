@@ -46,7 +46,7 @@ type sumIntInt16HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -77,10 +77,11 @@ func (a *sumIntInt16HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -95,10 +96,11 @@ func (a *sumIntInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -124,7 +126,7 @@ func (a *sumIntInt16HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -160,7 +162,7 @@ type sumIntInt32HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -191,10 +193,11 @@ func (a *sumIntInt32HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -209,10 +212,11 @@ func (a *sumIntInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -238,7 +242,7 @@ func (a *sumIntInt32HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 
@@ -274,7 +278,7 @@ type sumIntInt64HashAgg struct {
 	// group, instead of on each iteration.
 	curAgg int64
 	// col points to the output vector we are updating.
-	col []int64
+	col coldata.Int64s
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -305,10 +309,11 @@ func (a *sumIntInt64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -323,10 +328,11 @@ func (a *sumIntInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						elt := col.Get(i)
 
 						{
-							result := int64(a.curAgg) + int64(col[i])
-							if (result < int64(a.curAgg)) != (int64(col[i]) < 0) {
+							result := int64(a.curAgg) + int64(elt)
+							if (result < int64(a.curAgg)) != (int64(elt) < 0) {
 								colexecerror.ExpectedError(tree.ErrIntOutOfRange)
 							}
 							a.curAgg = result
@@ -352,7 +358,7 @@ func (a *sumIntInt64HashAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		a.col[outputIdx] = a.curAgg
+		a.col.Set(outputIdx, a.curAgg)
 	}
 }
 

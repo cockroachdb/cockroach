@@ -89,7 +89,7 @@ type avg_TYPE_AGGKINDAgg struct {
 	// belonging to the current group.
 	curCount int64
 	// col points to the statically-typed output vector.
-	col []_RET_GOTYPE
+	col _RET_GOTYPESLICE
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
@@ -143,13 +143,13 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
-			col = col[:inputLen]
+			// _ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_AVG(a, nulls, i, true)
 				}
 			} else {
-				for i := range col {
+				for i := 0; i < inputLen; i++ {
 					_ACCUMULATE_AVG(a, nulls, i, false)
 				}
 			}
@@ -188,7 +188,7 @@ func (a *avg_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
-		_ASSIGN_DIV_INT64(a.col[outputIdx], a.curSum, a.curCount, a.col, _, _)
+		_ASSIGN_DIV_INT64(outputIdx, a.curSum, a.curCount, a.col, _, _)
 	}
 }
 
@@ -240,8 +240,9 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
+
 				// {{with .Global}}
-				_ASSIGN_DIV_INT64(a.col[a.curIdx], a.curSum, a.curCount, a.col, _, _)
+				_ASSIGN_DIV_INT64(a.curIdx, a.curSum, a.curCount, a.col, _, _)
 				// {{end}}
 			}
 			a.curIdx++
@@ -269,7 +270,8 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	isNull = false
 	// {{end}}
 	if !isNull {
-		_ASSIGN_ADD(a.curSum, a.curSum, col[i], _, _, col)
+		elt := col.Get(i)
+		_ASSIGN_ADD(a.curSum, a.curSum, elt, _, _, col)
 		a.curCount++
 		a.foundNonNullForCurrentGroup = true
 	}
