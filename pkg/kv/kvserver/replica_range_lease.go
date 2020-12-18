@@ -294,8 +294,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	ctx := p.repl.AnnotateCtx(context.Background())
 	const opName = "request range lease"
 	tr := p.repl.AmbientContext.Tracer
-	tagsOpt :=
-		tracing.WithLogTags(logtags.FromContext(parentCtx))
+	tagsOpt := tracing.WithLogTags(logtags.FromContext(parentCtx))
 	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
 		// We use FollowsFrom because the lease request's span can outlive the

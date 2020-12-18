@@ -1543,11 +1543,12 @@ func (st *SessionTracing) StartTracing(
 
 	connCtx := st.ex.ctxHolder.connCtx
 	opName := "session recording"
+	tr := st.ex.server.cfg.AmbientCtx.Tracer
 	var newConnCtx context.Context
 	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
-		newConnCtx, sp = parentSp.Tracer().StartSpanCtx(
+		newConnCtx, sp = tr.StartSpanCtx(
 			connCtx,
 			opName,
 			tracing.WithParentAndAutoCollection(parentSp),
@@ -1555,7 +1556,7 @@ func (st *SessionTracing) StartTracing(
 		)
 	} else {
 		// Create a root span while recording.
-		newConnCtx, sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpanCtx(
+		newConnCtx, sp = tr.StartSpanCtx(
 			connCtx,
 			opName, tracing.WithForceRealSpan(),
 		)

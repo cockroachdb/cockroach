@@ -72,7 +72,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/limit",
         "//pkg/util/log",
-        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/kr/pretty",

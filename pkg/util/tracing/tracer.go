@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -651,8 +652,30 @@ func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span
 // the newly created Span.
 //
 // The caller is responsible for closing the Span (via Span.Finish).
-func EnsureChildSpan(ctx context.Context, tr *Tracer, name string) (context.Context, *Span) {
-	return tr.StartSpanCtx(ctx, name, WithParentAndAutoCollection(SpanFromContext(ctx)))
+func EnsureChildSpan(
+	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
+) (context.Context, *Span) {
+	slp := optsPool.Get().(*[]SpanOption)
+	*slp = append(*slp, WithParentAndAutoCollection(SpanFromContext(ctx)))
+	*slp = append(*slp, os...)
+	ctx, sp := tr.StartSpanCtx(ctx, name, *slp...)
+	// Clear and zero-length the slice. Note that we have to clear
+	// explicitly or the options will continue to be referenced by
+	// the slice.
+	for i := range *slp {
+		(*slp)[i] = nil
+	}
+	*slp = (*slp)[0:0:cap(*slp)]
+	optsPool.Put(slp)
+	return ctx, sp
+}
+
+var optsPool = sync.Pool{
+	New: func() interface{} {
+		// It is unusual to pass more than 5 SpanOptions.
+		sl := make([]SpanOption, 0, 5)
+		return &sl
+	},
 }
 
 type activeSpanKey struct{}
@@ -676,18 +699,9 @@ func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 // Span in it that is recording verbosely. The caller takes ownership of
 // this Span from the returned context and is in charge of Finish()ing it.
 //
-// TODO(andrei): remove this method once EXPLAIN(TRACE) is gone.
-func StartVerboseTrace(
-	ctx context.Context, tracer *Tracer, opName string,
-) (context.Context, *Span) {
-	var sp *Span
-	if ctxSp := SpanFromContext(ctx); ctxSp != nil {
-		ctx, sp = ctxSp.Tracer().StartSpanCtx(
-			ctx, opName, WithParentAndAutoCollection(sp), WithForceRealSpan(),
-		)
-	} else {
-		ctx, sp = tracer.StartSpanCtx(ctx, opName, WithForceRealSpan())
-	}
+// TODO(tbg): remove this method. It adds very little over EnsureChildSpan.
+func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
+	ctx, sp := EnsureChildSpan(ctx, tr, opName, WithForceRealSpan())
 	sp.SetVerbose(true)
 	return ctx, sp
 }
@@ -703,9 +717,9 @@ func ContextWithRecordingSpan(
 	ctx context.Context, opName string,
 ) (_ context.Context, getRecording func() Recording, cancel func()) {
 	tr := NewTracer()
-	ctx, cancelCtx := context.WithCancel(ctx)
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithForceRealSpan())
 	sp.SetVerbose(true)
+	ctx, cancelCtx := context.WithCancel(ctx)
 
 	cancel = func() {
 		cancelCtx()
