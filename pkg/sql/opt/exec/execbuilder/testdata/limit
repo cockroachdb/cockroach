@@ -345,3 +345,200 @@ vectorized: true
           table: t_47283@primary
           spans: LIMITED SCAN
           limit: 4
+
+# Regression test for #55156: split hash-sharded index scan.
+statement ok
+SET experimental_enable_hash_sharded_indexes = true
+
+statement ok
+CREATE TABLE IF NOT EXISTS user_checklist_items (
+    tenant_id UUID,
+    location_id UUID,
+    checklist_item_id UUID,
+    user_id STRING,
+    configuration_maintenance_id UUID NOT NULL,
+    configuration_maintenance_item_id UUID NOT NULL,
+    date_should_be_completed DATE NOT NULL,
+    is_recurrent_assignation BOOL,
+    location_name STRING NOT NULL,
+    order_item FLOAT NOT NULL,
+    title STRING NOT NULL,
+    create_date TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (tenant_id, location_id, checklist_item_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem ON user_checklist_items (tenant_id, user_id, date_should_be_completed, location_name, title, order_item, checklist_item_id) USING HASH WITH BUCKET_COUNT = 8;
+CREATE INDEX IF NOT EXISTS userchecklistitems_tenantid_locationid_configurationmaintenanceid_configurationmaintenanceitemid_dateshouldbecompleted ON user_checklist_items (tenant_id, location_id, configuration_maintenance_id, configuration_maintenance_item_id, date_should_be_completed) USING HASH WITH BUCKET_COUNT = 8;
+
+statement ok
+ALTER TABLE user_checklist_items INJECT STATISTICS
+'[
+  {
+    "columns": ["tenant_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1,
+    "null_count": 0
+  },
+  {
+    "columns": ["user_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 1,
+    "null_count": 0
+  }
+]'
+
+# Expect a scan over each shard.
+query T
+EXPLAIN (OPT, VERBOSE)
+  SELECT
+    tenant_id, user_id, date_should_be_completed
+  FROM
+    user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+  WHERE
+    tenant_id = 'a2a0dd49-23cf-4cf2-b823-61701c416e60'
+    AND user_id = '01603523-c6f0-4e12-a43f-524c76b0fa8f'
+    AND date_should_be_completed >= '2020-10-01'
+  ORDER BY
+    date_should_be_completed
+  LIMIT
+    5;
+----
+limit
+ ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ ├── internal-ordering: +7 opt(1,4)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5]
+ ├── cost: 90.3775425
+ ├── fd: ()-->(1,4)
+ ├── ordering: +7 opt(1,4) [actual: +7]
+ ├── interesting orderings: (+7)
+ ├── sort
+ │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │    ├── cardinality: [0 - 40]
+ │    ├── stats: [rows=40, distinct(1,4,7)=40, null(1,4,7)=0]
+ │    ├── cost: 90.3175425
+ │    ├── key: (1,4,7)
+ │    ├── ordering: +7 opt(1,4) [actual: +7]
+ │    ├── limit hint: 5.00
+ │    └── union
+ │         ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         ├── right columns: tenant_id:130 user_id:133 date_should_be_completed:136
+ │         ├── cardinality: [0 - 40]
+ │         ├── stats: [rows=40, distinct(1,4,7)=40, null(1,4,7)=0]
+ │         ├── cost: 85.25
+ │         ├── key: (1,4,7)
+ │         ├── union
+ │         │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    ├── right columns: tenant_id:114 user_id:117 date_should_be_completed:120
+ │         │    ├── cardinality: [0 - 35]
+ │         │    ├── stats: [rows=35, distinct(1,4,7)=35, null(1,4,7)=0]
+ │         │    ├── cost: 74.23
+ │         │    ├── key: (1,4,7)
+ │         │    ├── union
+ │         │    │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    ├── right columns: tenant_id:98 user_id:101 date_should_be_completed:104
+ │         │    │    ├── cardinality: [0 - 30]
+ │         │    │    ├── stats: [rows=30, distinct(1,4,7)=30, null(1,4,7)=0]
+ │         │    │    ├── cost: 63.31
+ │         │    │    ├── key: (1,4,7)
+ │         │    │    ├── union
+ │         │    │    │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    ├── right columns: tenant_id:82 user_id:85 date_should_be_completed:88
+ │         │    │    │    ├── cardinality: [0 - 25]
+ │         │    │    │    ├── stats: [rows=25, distinct(1,4,7)=25, null(1,4,7)=0]
+ │         │    │    │    ├── cost: 52.49
+ │         │    │    │    ├── key: (1,4,7)
+ │         │    │    │    ├── union
+ │         │    │    │    │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    │    ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    │    ├── right columns: tenant_id:66 user_id:69 date_should_be_completed:72
+ │         │    │    │    │    ├── cardinality: [0 - 20]
+ │         │    │    │    │    ├── stats: [rows=20, distinct(1,4,7)=20, null(1,4,7)=0]
+ │         │    │    │    │    ├── cost: 41.77
+ │         │    │    │    │    ├── key: (1,4,7)
+ │         │    │    │    │    ├── union
+ │         │    │    │    │    │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    │    │    ├── left columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    │    │    ├── right columns: tenant_id:50 user_id:53 date_should_be_completed:56
+ │         │    │    │    │    │    ├── cardinality: [0 - 15]
+ │         │    │    │    │    │    ├── stats: [rows=15, distinct(1,4,7)=15, null(1,4,7)=0]
+ │         │    │    │    │    │    ├── cost: 31.15
+ │         │    │    │    │    │    ├── key: (1,4,7)
+ │         │    │    │    │    │    ├── union
+ │         │    │    │    │    │    │    ├── columns: tenant_id:1 user_id:4 date_should_be_completed:7
+ │         │    │    │    │    │    │    ├── left columns: tenant_id:18 user_id:21 date_should_be_completed:24
+ │         │    │    │    │    │    │    ├── right columns: tenant_id:34 user_id:37 date_should_be_completed:40
+ │         │    │    │    │    │    │    ├── cardinality: [0 - 10]
+ │         │    │    │    │    │    │    ├── stats: [rows=10, distinct(1,4,7)=10, null(1,4,7)=0]
+ │         │    │    │    │    │    │    ├── cost: 20.63
+ │         │    │    │    │    │    │    ├── key: (1,4,7)
+ │         │    │    │    │    │    │    ├── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │    │    │    ├── columns: tenant_id:18 user_id:21 date_should_be_completed:24
+ │         │    │    │    │    │    │    │    ├── constraint: /30/18/21/24/26/28/27/20/19: [/0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │    │    │    │    │    │    ├── limit: 5
+ │         │    │    │    │    │    │    │    ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │    │    │    ├── stats: [rows=5, distinct(18)=1, null(18)=0, distinct(21)=1, null(21)=0, distinct(24)=5, null(24)=0, distinct(30)=1, null(30)=0, distinct(24,30)=5, null(24,30)=0, distinct(18,21,24)=5, null(18,21,24)=0]
+ │         │    │    │    │    │    │    │    ├── cost: 10.21
+ │         │    │    │    │    │    │    │    └── fd: ()-->(18,21)
+ │         │    │    │    │    │    │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │    │         ├── columns: tenant_id:34 user_id:37 date_should_be_completed:40
+ │         │    │    │    │    │    │         ├── constraint: /46/34/37/40/42/44/43/36/35: [/1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │    │    │    │    │         ├── limit: 5
+ │         │    │    │    │    │    │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │    │         ├── stats: [rows=5, distinct(34)=1, null(34)=0, distinct(37)=1, null(37)=0, distinct(40)=5, null(40)=0, distinct(46)=1, null(46)=0, distinct(40,46)=5, null(40,46)=0, distinct(34,37,40)=5, null(34,37,40)=0]
+ │         │    │    │    │    │    │         ├── cost: 10.21
+ │         │    │    │    │    │    │         └── fd: ()-->(34,37)
+ │         │    │    │    │    │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │         ├── columns: tenant_id:50 user_id:53 date_should_be_completed:56
+ │         │    │    │    │    │         ├── constraint: /62/50/53/56/58/60/59/52/51: [/2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │    │    │    │         ├── limit: 5
+ │         │    │    │    │    │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │    │         ├── stats: [rows=5, distinct(50)=1, null(50)=0, distinct(53)=1, null(53)=0, distinct(56)=5, null(56)=0, distinct(62)=1, null(62)=0, distinct(56,62)=5, null(56,62)=0, distinct(50,53,56)=5, null(50,53,56)=0]
+ │         │    │    │    │    │         ├── cost: 10.21
+ │         │    │    │    │    │         └── fd: ()-->(50,53)
+ │         │    │    │    │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │         ├── columns: tenant_id:66 user_id:69 date_should_be_completed:72
+ │         │    │    │    │         ├── constraint: /78/66/69/72/74/76/75/68/67: [/3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │    │    │         ├── limit: 5
+ │         │    │    │    │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │    │         ├── stats: [rows=5, distinct(66)=1, null(66)=0, distinct(69)=1, null(69)=0, distinct(72)=5, null(72)=0, distinct(78)=1, null(78)=0, distinct(72,78)=5, null(72,78)=0, distinct(66,69,72)=5, null(66,69,72)=0]
+ │         │    │    │    │         ├── cost: 10.21
+ │         │    │    │    │         └── fd: ()-->(66,69)
+ │         │    │    │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │         ├── columns: tenant_id:82 user_id:85 date_should_be_completed:88
+ │         │    │    │         ├── constraint: /94/82/85/88/90/92/91/84/83: [/4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │    │         ├── limit: 5
+ │         │    │    │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │    │         ├── stats: [rows=5, distinct(82)=1, null(82)=0, distinct(85)=1, null(85)=0, distinct(88)=5, null(88)=0, distinct(94)=1, null(94)=0, distinct(88,94)=5, null(88,94)=0, distinct(82,85,88)=5, null(82,85,88)=0]
+ │         │    │    │         ├── cost: 10.21
+ │         │    │    │         └── fd: ()-->(82,85)
+ │         │    │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │         ├── columns: tenant_id:98 user_id:101 date_should_be_completed:104
+ │         │    │         ├── constraint: /110/98/101/104/106/108/107/100/99: [/5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │    │         ├── limit: 5
+ │         │    │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │    │         ├── stats: [rows=5, distinct(98)=1, null(98)=0, distinct(101)=1, null(101)=0, distinct(104)=5, null(104)=0, distinct(110)=1, null(110)=0, distinct(104,110)=5, null(104,110)=0, distinct(98,101,104)=5, null(98,101,104)=0]
+ │         │    │         ├── cost: 10.21
+ │         │    │         └── fd: ()-->(98,101)
+ │         │    └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │         ├── columns: tenant_id:114 user_id:117 date_should_be_completed:120
+ │         │         ├── constraint: /126/114/117/120/122/124/123/116/115: [/6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │         │         ├── limit: 5
+ │         │         ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │         │         ├── stats: [rows=5, distinct(114)=1, null(114)=0, distinct(117)=1, null(117)=0, distinct(120)=5, null(120)=0, distinct(126)=1, null(126)=0, distinct(120,126)=5, null(120,126)=0, distinct(114,117,120)=5, null(114,117,120)=0]
+ │         │         ├── cost: 10.21
+ │         │         └── fd: ()-->(114,117)
+ │         └── scan user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │              ├── columns: tenant_id:130 user_id:133 date_should_be_completed:136
+ │              ├── constraint: /142/130/133/136/138/140/139/132/131: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+ │              ├── limit: 5
+ │              ├── flags: force-index=userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+ │              ├── stats: [rows=5, distinct(130)=1, null(130)=0, distinct(133)=1, null(133)=0, distinct(136)=5, null(136)=0, distinct(142)=1, null(142)=0, distinct(136,142)=5, null(136,142)=0, distinct(130,133,136)=5, null(130,133,136)=0]
+ │              ├── cost: 10.21
+ │              └── fd: ()-->(130,133)
+ └── 5
