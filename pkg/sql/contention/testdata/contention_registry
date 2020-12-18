@@ -1,0 +1,111 @@
+use registry=a
+----
+
+evcheck tableid=1 indexid=1 key=key id=a duration=1
+----
+tableID=1 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=1
+
+# Add another event to the same key contending with a different txn and ensure
+# correct aggregation.
+evcheck tableid=1 indexid=1 key=key id=b duration=3
+----
+tableID=1 indexID=1
+  num contention events: 2
+  cumulative contention time: 4ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=b count=1
+      id=a count=1
+
+# Add txn with an ID that was already encountered.
+evcheck tableid=1 indexid=1 key=key id=a duration=5
+----
+tableID=1 indexID=1
+  num contention events: 3
+  cumulative contention time: 9ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+
+# Add txn on another key.
+evcheck tableid=1 indexid=1 key=keyc id=a duration=11
+----
+tableID=1 indexID=1
+  num contention events: 4
+  cumulative contention time: 20ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+
+# Ensure keys are in sorted order.
+evcheck tableid=1 indexid=1 key=keyb id=a duration=1
+----
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+
+# Add another index on the same table.
+evcheck tableid=1 indexid=2 key=key id=a duration=1
+----
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
+
+
+# Add another table.
+evcheck tableid=2 indexid=1 key=key id=a duration=1
+----
+tableID=2 indexID=1
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/2/1/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=2
+  num contention events: 1
+  cumulative contention time: 1ns
+  keys:
+    /Table/1/2/"key" contending txns:
+      id=a count=1
+tableID=1 indexID=1
+  num contention events: 5
+  cumulative contention time: 21ns
+  keys:
+    /Table/1/1/"key" contending txns:
+      id=a count=2
+      id=b count=1
+    /Table/1/1/"keyb" contending txns:
+      id=a count=1
+    /Table/1/1/"keyc" contending txns:
+      id=a count=1
