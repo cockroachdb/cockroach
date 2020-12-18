@@ -431,6 +431,7 @@ func (ht *hashTable) computeHashAndBuildChains(ctx context.Context, batch coldat
 // it returns number of tuples that needs to be checked for next iteration.
 // The "buckets" are specified by equal values in ht.probeScratch.headID.
 // NOTE: *first* and *next* vectors should be properly populated.
+// NOTE: batch is assumed to be non-zero length.
 func (ht *hashTable) findBuckets(
 	batch coldata.Batch,
 	keyCols []coldata.Vec,
@@ -441,8 +442,13 @@ func (ht *hashTable) findBuckets(
 	sel := batch.Selection()
 
 	ht.probeScratch.setupLimitedSlices(batchLength, ht.buildMode)
+	// Early bounds checks.
+	groupIDs := ht.probeScratch.groupID
+	_ = groupIDs[batchLength-1]
 	for i, hash := range ht.probeScratch.hashBuffer[:batchLength] {
-		ht.probeScratch.groupID[i] = first[hash]
+		f := first[hash]
+		//gcassert:bce
+		groupIDs[i] = f
 	}
 	copy(ht.probeScratch.toCheck, hashTableInitialToCheck[:batchLength])
 
@@ -610,6 +616,7 @@ func (ht *hashTable) findNext(next []uint64, nToCheck uint64) {
 // keyIDs in headID buffer.
 // NOTE: It assumes that probeVecs does not contain any duplicates itself.
 // NOTE: It assumes that probeSel has already been populated and it is not nil.
+// NOTE: It assumes that nToCheck is positive.
 func (ht *hashTable) checkBuildForDistinct(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
@@ -618,7 +625,11 @@ func (ht *hashTable) checkBuildForDistinct(
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if ht.probeScratch.distinct[toCheck] {
 			ht.probeScratch.distinct[toCheck] = false
 			// Calculated using the convention: keyID = keys.indexOf(key) + 1.
@@ -626,7 +637,8 @@ func (ht *hashTable) checkBuildForDistinct(
 		} else if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
@@ -639,6 +651,7 @@ func (ht *hashTable) checkBuildForDistinct(
 // corresponding headID value is left unchanged.
 // NOTE: It assumes that probeVecs does not contain any duplicates itself.
 // NOTE: It assumes that probeSel has already been populated and it is not nil.
+// NOTE: It assumes that nToCheck is positive.
 func (ht *hashTable) checkBuildForAggregation(
 	probeVecs []coldata.Vec, nToCheck uint64, probeSel []int,
 ) uint64 {
@@ -647,7 +660,11 @@ func (ht *hashTable) checkBuildForAggregation(
 	}
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if !ht.probeScratch.distinct[toCheck] {
 			// If the tuple is distinct, it doesn't have a duplicate in the
 			// hash table already, so we skip it.
@@ -655,7 +672,8 @@ func (ht *hashTable) checkBuildForAggregation(
 				// We have a hash collision, so we need to continue probing
 				// against the next tuples in the hash chain.
 				ht.probeScratch.differs[toCheck] = false
-				ht.probeScratch.toCheck[nDiffers] = toCheck
+				//gcassert:bce
+				toCheckSlice[nDiffers] = toCheck
 				nDiffers++
 			} else {
 				// This tuple has a duplicate in the hash table, so we remember

@@ -79,9 +79,6 @@ func (a *sumInt16HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -90,11 +87,12 @@ func (a *sumInt16HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -109,11 +107,12 @@ func (a *sumInt16HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -199,9 +198,6 @@ func (a *sumInt32HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -210,11 +206,12 @@ func (a *sumInt32HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -229,11 +226,12 @@ func (a *sumInt32HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -319,9 +317,6 @@ func (a *sumInt64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -330,11 +325,12 @@ func (a *sumInt64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -349,11 +345,12 @@ func (a *sumInt64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
 							tmpDec := &_overloadHelper.TmpDec1
-							tmpDec.SetInt64(int64(col[i]))
+							tmpDec.SetInt64(int64(v))
 							if _, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, tmpDec); err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -435,9 +432,6 @@ func (a *sumDecimalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -446,10 +440,11 @@ func (a *sumDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -464,10 +459,11 @@ func (a *sumDecimalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &col[i])
+							_, err := tree.ExactCtx.Add(&a.curAgg, &a.curAgg, &v)
 							if err != nil {
 								colexecerror.ExpectedError(err)
 							}
@@ -549,9 +545,6 @@ func (a *sumFloat64HashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -560,10 +553,11 @@ func (a *sumFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							a.curAgg = float64(a.curAgg) + float64(col[i])
+							a.curAgg = float64(a.curAgg) + float64(v)
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -575,10 +569,11 @@ func (a *sumFloat64HashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
+						v := col.Get(i)
 
 						{
 
-							a.curAgg = float64(a.curAgg) + float64(col[i])
+							a.curAgg = float64(a.curAgg) + float64(v)
 						}
 
 						a.foundNonNullForCurrentGroup = true
@@ -657,9 +652,6 @@ func (a *sumIntervalHashAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
 		{
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
@@ -668,7 +660,8 @@ func (a *sumIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = nulls.NullAt(i)
 					if !isNull {
-						a.curAgg = a.curAgg.Add(col[i])
+						v := col.Get(i)
+						a.curAgg = a.curAgg.Add(v)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}
@@ -678,7 +671,8 @@ func (a *sumIntervalHashAgg) Compute(
 					var isNull bool
 					isNull = false
 					if !isNull {
-						a.curAgg = a.curAgg.Add(col[i])
+						v := col.Get(i)
+						a.curAgg = a.curAgg.Add(v)
 						a.foundNonNullForCurrentGroup = true
 					}
 				}

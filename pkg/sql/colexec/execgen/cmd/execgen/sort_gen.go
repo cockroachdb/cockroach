@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -67,16 +66,12 @@ func genSortOps(inputFileContents string, wr io.Writer) error {
 const quickSortTmpl = "pkg/sql/colexec/quicksort_tmpl.go"
 
 func genQuickSortOps(inputFileContents string, wr io.Writer) error {
-	d, err := ioutil.ReadFile(quickSortTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
-	s = strings.ReplaceAll(s, "_DIR", "{{$dir}}")
-	s = strings.ReplaceAll(s, "_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}")
+	r := strings.NewReplacer(
+		"_TYPE", "{{.VecMethod}}",
+		"_DIR", "{{$dir}}",
+		"_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("quicksort").Parse(s)

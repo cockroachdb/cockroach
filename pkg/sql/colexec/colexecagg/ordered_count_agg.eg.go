@@ -44,11 +44,14 @@ func (a *countRowsOrderedAgg) Compute(
 ) {
 	var oldCurAggSize uintptr
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
 			{
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg
@@ -161,11 +164,14 @@ func (a *countOrderedAgg) Compute(
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
 		if sel == nil {
 			_ = groups[inputLen-1]
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg
@@ -184,6 +190,7 @@ func (a *countOrderedAgg) Compute(
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
+					//gcassert:bce
 					if groups[i] {
 						if !a.isFirstGroup {
 							a.col[a.curIdx] = a.curAgg

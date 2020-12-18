@@ -12972,7 +12972,11 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if !ht.probeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update headID
 			// with the current key if it has not been set yet.
@@ -12984,7 +12988,8 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		if ht.probeScratch.differs[toCheck] {
 			// Continue probing in this next chain for the probe key.
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}
@@ -12999,43 +13004,64 @@ func (ht *hashTable) checkProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 // key index will be used. The duplicated keyIDs will be discarded. The
 // hashBuffer will also compact and discard hash values of duplicated keys.
 func (ht *hashTable) updateSel(b coldata.Batch) {
-	distinctCount := 0
+	if b.Length() == 0 {
+		return
+	}
 	if sel := b.Selection(); sel != nil {
 		batchLength := b.Length()
+		// Capture the slices in order for BCE to occur.
+		headIDs := ht.probeScratch.headID
+		hashBuffer := ht.probeScratch.hashBuffer
+		_ = headIDs[batchLength-1]
+		_ = hashBuffer[batchLength-1]
 		// Reuse the buffer allocated for distinct.
 		visited := ht.probeScratch.distinct
 		copy(visited, zeroBoolColumn)
-		for i, headID := range ht.probeScratch.headID[:batchLength] {
+		distinctCount := 0
+		for i := 0; i < batchLength && distinctCount < batchLength; i++ {
+			//gcassert:bce
+			headID := headIDs[i]
 			if headID != 0 {
 				if hasVisited := visited[headID-1]; !hasVisited {
 					sel[distinctCount] = sel[headID-1]
 					visited[headID-1] = true
 					// Compacting and deduplicating hash buffer.
-					ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
+					//gcassert:bce
+					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
 				}
 			}
 		}
+		b.SetLength(distinctCount)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
 		batchLength := b.Length()
+		// Capture the slices in order for BCE to occur.
+		headIDs := ht.probeScratch.headID
+		hashBuffer := ht.probeScratch.hashBuffer
+		_ = headIDs[batchLength-1]
+		_ = hashBuffer[batchLength-1]
 		// Reuse the buffer allocated for distinct.
 		visited := ht.probeScratch.distinct
 		copy(visited, zeroBoolColumn)
-		for i, headID := range ht.probeScratch.headID[:batchLength] {
+		distinctCount := 0
+		for i := 0; i < batchLength && distinctCount < batchLength; i++ {
+			//gcassert:bce
+			headID := headIDs[i]
 			if headID != 0 {
 				if hasVisited := visited[headID-1]; !hasVisited {
 					sel[distinctCount] = int(headID - 1)
 					visited[headID-1] = true
 					// Compacting and deduplicating hash buffer.
-					ht.probeScratch.hashBuffer[distinctCount] = ht.probeScratch.hashBuffer[i]
+					//gcassert:bce
+					hashBuffer[distinctCount] = hashBuffer[i]
 					distinctCount++
 				}
 			}
 		}
+		b.SetLength(distinctCount)
 	}
-	b.SetLength(distinctCount)
 }
 
 // distinctCheck determines if the current key in the groupID bucket matches the
@@ -13047,10 +13073,15 @@ func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
 	ht.checkCols(ht.keys, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
-	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+	toCheckSlice := ht.probeScratch.toCheck
+	_ = toCheckSlice[nToCheck-1]
+	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
+		//gcassert:bce
+		toCheck := toCheckSlice[toCheckPos]
 		if ht.probeScratch.differs[toCheck] {
 			ht.probeScratch.differs[toCheck] = false
-			ht.probeScratch.toCheck[nDiffers] = toCheck
+			//gcassert:bce
+			toCheckSlice[nDiffers] = toCheck
 			nDiffers++
 		}
 	}

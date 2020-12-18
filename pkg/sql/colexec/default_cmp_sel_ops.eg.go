@@ -42,13 +42,17 @@ func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
 		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)
+		_ = leftColumn[n-1]
+		_ = rightColumn[n-1]
 		var idx int
 		hasSel := batch.Selection() != nil
 		batch.SetSelection(true)
 		sel := batch.Selection()
+		_ = sel[n-1]
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether hasSel is true.
+			//gcassert:bce
 			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
 			if err != nil {
 				colexecerror.ExpectedError(err)
@@ -56,6 +60,7 @@ func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
 			if res == tree.DBoolTrue {
 				rowIdx := i
 				if hasSel {
+					//gcassert:bce
 					rowIdx = sel[i]
 				}
 				sel[idx] = rowIdx
@@ -92,13 +97,16 @@ func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
 		}
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
+		_ = leftColumn[n-1]
 		var idx int
 		hasSel := batch.Selection() != nil
 		batch.SetSelection(true)
 		sel := batch.Selection()
+		_ = sel[n-1]
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether hasSel is true.
+			//gcassert:bce
 			res, err := d.adapter.eval(leftColumn[i], d.constArg)
 			if err != nil {
 				colexecerror.ExpectedError(err)
@@ -106,6 +114,7 @@ func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
 			if res == tree.DBoolTrue {
 				rowIdx := i
 				if hasSel {
+					//gcassert:bce
 					rowIdx = sel[i]
 				}
 				sel[idx] = rowIdx

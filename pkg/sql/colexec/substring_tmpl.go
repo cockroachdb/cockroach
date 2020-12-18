@@ -118,6 +118,8 @@ func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) colda
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {

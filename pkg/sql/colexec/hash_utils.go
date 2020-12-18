@@ -58,7 +58,7 @@ func init() {
 //
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
-// NOTE: initValue *must* be non-zero.
+// NOTE: initValue *must* be non-zero and nKeys is assumed to be positive.
 func initHash(buckets []uint64, nKeys int, initValue uint64) {
 	switch initValue {
 	case 1:
@@ -68,7 +68,10 @@ func initHash(buckets []uint64, nKeys int, initValue uint64) {
 		for n := 0; n < nKeys; n += copy(buckets[n:], uint64TwoColumn) {
 		}
 	default:
+		// Early bounds checks.
+		_ = buckets[nKeys-1]
 		for i := 0; i < nKeys; i++ {
+			//gcassert:bce
 			buckets[i] = initValue
 		}
 	}
@@ -76,19 +79,24 @@ func initHash(buckets []uint64, nKeys int, initValue uint64) {
 
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within numBuckets buckets.
+// NOTE: nKeys is assumed to be positive.
 func finalizeHash(buckets []uint64, nKeys int, numBuckets uint64) {
+	// Early bounds checks.
+	_ = buckets[nKeys-1]
 	isPowerOfTwo := numBuckets&(numBuckets-1) == 0
 	if isPowerOfTwo {
 		for i := 0; i < nKeys; i++ {
-			// Since numBuckets is a power of 2, modulo numBuckets could be optimized
-			// into a bitwise operation which improves benchmark performance by 20%.
-			// In effect, the following code is equivalent to (but faster than):
-			// buckets[i] = buckets[i] % numBuckets
-			buckets[i] = buckets[i] & (numBuckets - 1)
+			// Since numBuckets is a power of 2, modulo numBuckets could be
+			// optimized into a bitwise operation which improves benchmark
+			// performance by 20%. In effect, the following code is equivalent
+			// to (but faster than):
+			// buckets[i] %= numBuckets
+			//gcassert:bce
+			buckets[i] &= numBuckets - 1
 		}
 	} else {
 		for i := 0; i < nKeys; i++ {
-			buckets[i] = buckets[i] % numBuckets
+			buckets[i] %= numBuckets
 		}
 	}
 }
@@ -120,6 +128,10 @@ func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDis
 	}
 }
 
+// distribute populates selection vectors to route each of the tuples in b to
+// one of the numOutputs outputs according to the computed on hashCols hash
+// values.
+// NOTE: b is assumed to be non-zero batch.
 func (d *tupleHashDistributor) distribute(
 	ctx context.Context, b coldata.Batch, hashCols []uint32,
 ) [][]int {
@@ -150,14 +162,19 @@ func (d *tupleHashDistributor) distribute(
 
 	// Build a selection vector for each output.
 	selection := b.Selection()
+	// Early bounds checks.
+	buckets := d.buckets
+	_ = buckets[n-1]
 	if selection != nil {
 		for i, selIdx := range selection[:n] {
-			outputIdx := d.buckets[i]
+			//gcassert:bce
+			outputIdx := buckets[i]
 			d.selections[outputIdx] = append(d.selections[outputIdx], selIdx)
 		}
 	} else {
-		for i := range d.buckets[:n] {
-			outputIdx := d.buckets[i]
+		for i := 0; i < n; i++ {
+			//gcassert:bce
+			outputIdx := buckets[i]
 			d.selections[outputIdx] = append(d.selections[outputIdx], i)
 		}
 	}

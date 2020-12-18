@@ -62,6 +62,9 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -92,6 +95,7 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -118,6 +122,7 @@ func (p projBitandInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -163,6 +168,9 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -193,6 +201,7 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -219,6 +228,7 @@ func (p projBitandInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -264,6 +274,9 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -294,6 +307,7 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -320,6 +334,7 @@ func (p projBitandInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -365,6 +380,9 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -395,6 +413,7 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -421,6 +440,7 @@ func (p projBitandInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -466,6 +486,9 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -496,6 +519,7 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -522,6 +546,7 @@ func (p projBitandInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -567,6 +592,9 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -597,6 +625,7 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -623,6 +652,7 @@ func (p projBitandInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -668,6 +698,9 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -698,6 +731,7 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -724,6 +758,7 @@ func (p projBitandInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -769,6 +804,9 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -799,6 +837,7 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -825,6 +864,7 @@ func (p projBitandInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -870,6 +910,9 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -900,6 +943,7 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) & int64(arg)
@@ -926,6 +970,7 @@ func (p projBitandInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) & int64(arg)
@@ -971,6 +1016,9 @@ func (p projBitandDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1100,6 +1148,9 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1130,6 +1181,7 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1156,6 +1208,7 @@ func (p projBitorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1201,6 +1254,9 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1231,6 +1287,7 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1257,6 +1314,7 @@ func (p projBitorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1302,6 +1360,9 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1332,6 +1393,7 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1358,6 +1420,7 @@ func (p projBitorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1403,6 +1466,9 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1433,6 +1499,7 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1459,6 +1526,7 @@ func (p projBitorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1504,6 +1572,9 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1534,6 +1605,7 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1560,6 +1632,7 @@ func (p projBitorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1605,6 +1678,9 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1635,6 +1711,7 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1661,6 +1738,7 @@ func (p projBitorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1706,6 +1784,9 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1736,6 +1817,7 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1762,6 +1844,7 @@ func (p projBitorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1807,6 +1890,9 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1837,6 +1923,7 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1863,6 +1950,7 @@ func (p projBitorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -1908,6 +1996,9 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -1938,6 +2029,7 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) | int64(arg)
@@ -1964,6 +2056,7 @@ func (p projBitorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) | int64(arg)
@@ -2009,6 +2102,9 @@ func (p projBitorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2138,6 +2234,9 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2168,6 +2267,7 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2194,6 +2294,7 @@ func (p projBitxorInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2239,6 +2340,9 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2269,6 +2373,7 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2295,6 +2400,7 @@ func (p projBitxorInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2340,6 +2446,9 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2370,6 +2479,7 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2396,6 +2506,7 @@ func (p projBitxorInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2441,6 +2552,9 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2471,6 +2585,7 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2497,6 +2612,7 @@ func (p projBitxorInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2542,6 +2658,9 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2572,6 +2691,7 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2598,6 +2718,7 @@ func (p projBitxorInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2643,6 +2764,9 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2673,6 +2797,7 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2699,6 +2824,7 @@ func (p projBitxorInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2744,6 +2870,9 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2774,6 +2903,7 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2800,6 +2930,7 @@ func (p projBitxorInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2845,6 +2976,9 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2875,6 +3009,7 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2901,6 +3036,7 @@ func (p projBitxorInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -2946,6 +3082,9 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -2976,6 +3115,7 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -3002,6 +3142,7 @@ func (p projBitxorInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					projCol[i] = int64(p.constArg) ^ int64(arg)
@@ -3047,6 +3188,9 @@ func (p projBitxorDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3176,6 +3320,9 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3213,6 +3360,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3253,6 +3401,7 @@ func (p projPlusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3305,6 +3454,9 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3342,6 +3494,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3382,6 +3535,7 @@ func (p projPlusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3434,6 +3588,9 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3471,6 +3628,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3511,6 +3669,7 @@ func (p projPlusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3563,6 +3722,9 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3599,6 +3761,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3637,6 +3800,7 @@ func (p projPlusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3688,6 +3852,9 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3724,6 +3891,7 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3762,6 +3930,7 @@ func (p projPlusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3813,6 +3982,9 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3849,6 +4021,7 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -3887,6 +4060,7 @@ func (p projPlusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -3938,6 +4112,9 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -3974,6 +4151,7 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4012,6 +4190,7 @@ func (p projPlusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4063,6 +4242,9 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4101,6 +4283,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4143,6 +4326,7 @@ func (p projPlusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4196,6 +4380,9 @@ func (p projPlusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4239,6 +4426,7 @@ func (p projPlusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -4291,6 +4479,7 @@ func (p projPlusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -4349,6 +4538,9 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4385,6 +4577,7 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4423,6 +4616,7 @@ func (p projPlusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4474,6 +4668,9 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4510,6 +4707,7 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4548,6 +4746,7 @@ func (p projPlusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4599,6 +4798,9 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4635,6 +4837,7 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4673,6 +4876,7 @@ func (p projPlusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4724,6 +4928,9 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4762,6 +4969,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -4804,6 +5012,7 @@ func (p projPlusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -4857,6 +5066,9 @@ func (p projPlusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -4900,6 +5112,7 @@ func (p projPlusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -4952,6 +5165,7 @@ func (p projPlusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -5010,6 +5224,9 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5046,6 +5263,7 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -5084,6 +5302,7 @@ func (p projPlusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -5135,6 +5354,9 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5171,6 +5393,7 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -5209,6 +5432,7 @@ func (p projPlusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -5260,6 +5484,9 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5296,6 +5523,7 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -5334,6 +5562,7 @@ func (p projPlusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -5385,6 +5614,9 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5423,6 +5655,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -5465,6 +5698,7 @@ func (p projPlusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -5518,6 +5752,9 @@ func (p projPlusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5561,6 +5798,7 @@ func (p projPlusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -5613,6 +5851,7 @@ func (p projPlusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -5671,6 +5910,9 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5704,6 +5946,7 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -5736,6 +5979,7 @@ func (p projPlusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -5784,6 +6028,9 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5812,6 +6059,7 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = duration.Add(p.constArg, arg)
 					}
@@ -5834,6 +6082,7 @@ func (p projPlusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Batc
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = duration.Add(p.constArg, arg)
 				}
@@ -5877,6 +6126,9 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5905,6 +6157,7 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = duration.Add(arg, p.constArg)
 					}
@@ -5927,6 +6180,7 @@ func (p projPlusIntervalConstTimestampOp) Next(ctx context.Context) coldata.Batc
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = duration.Add(arg, p.constArg)
 				}
@@ -5970,6 +6224,9 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -5998,6 +6255,7 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Add(arg)
 					}
@@ -6020,6 +6278,7 @@ func (p projPlusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Add(arg)
 				}
@@ -6063,6 +6322,9 @@ func (p projPlusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6106,6 +6368,7 @@ func (p projPlusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -6158,6 +6421,7 @@ func (p projPlusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -6216,6 +6480,9 @@ func (p projPlusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6361,6 +6628,9 @@ func (p projPlusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6506,6 +6776,9 @@ func (p projPlusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6651,6 +6924,9 @@ func (p projPlusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6796,6 +7072,9 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6833,6 +7112,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -6873,6 +7153,7 @@ func (p projMinusDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -6925,6 +7206,9 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -6962,6 +7246,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7002,6 +7287,7 @@ func (p projMinusDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7054,6 +7340,9 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7091,6 +7380,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7131,6 +7421,7 @@ func (p projMinusDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7183,6 +7474,9 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7219,6 +7513,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7257,6 +7552,7 @@ func (p projMinusDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7308,6 +7604,9 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7344,6 +7643,7 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7382,6 +7682,7 @@ func (p projMinusInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7433,6 +7734,9 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7469,6 +7773,7 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7507,6 +7812,7 @@ func (p projMinusInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7558,6 +7864,9 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7594,6 +7903,7 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7632,6 +7942,7 @@ func (p projMinusInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7683,6 +7994,9 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7721,6 +8035,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -7763,6 +8078,7 @@ func (p projMinusInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -7816,6 +8132,9 @@ func (p projMinusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -7859,6 +8178,7 @@ func (p projMinusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -7911,6 +8231,7 @@ func (p projMinusInt16ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -7969,6 +8290,9 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8005,6 +8329,7 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8043,6 +8368,7 @@ func (p projMinusInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8094,6 +8420,9 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8130,6 +8459,7 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8168,6 +8498,7 @@ func (p projMinusInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8219,6 +8550,9 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8255,6 +8589,7 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8293,6 +8628,7 @@ func (p projMinusInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8344,6 +8680,9 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8382,6 +8721,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8424,6 +8764,7 @@ func (p projMinusInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8477,6 +8818,9 @@ func (p projMinusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8520,6 +8864,7 @@ func (p projMinusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -8572,6 +8917,7 @@ func (p projMinusInt32ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -8630,6 +8976,9 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8666,6 +9015,7 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8704,6 +9054,7 @@ func (p projMinusInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8755,6 +9106,9 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8791,6 +9145,7 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8829,6 +9184,7 @@ func (p projMinusInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -8880,6 +9236,9 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -8916,6 +9275,7 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -8954,6 +9314,7 @@ func (p projMinusInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -9005,6 +9366,9 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9043,6 +9407,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -9085,6 +9450,7 @@ func (p projMinusInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -9138,6 +9504,9 @@ func (p projMinusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9181,6 +9550,7 @@ func (p projMinusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInt(p.constArg)
@@ -9233,6 +9603,7 @@ func (p projMinusInt64ConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInt(p.constArg)
@@ -9291,6 +9662,9 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9324,6 +9698,7 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -9356,6 +9731,7 @@ func (p projMinusFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -9404,6 +9780,9 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 	col = vec.Timestamp()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9435,6 +9814,7 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						nanos := p.constArg.Sub(arg).Nanoseconds()
@@ -9463,6 +9843,7 @@ func (p projMinusTimestampConstTimestampOp) Next(ctx context.Context) coldata.Ba
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					nanos := p.constArg.Sub(arg).Nanoseconds()
@@ -9509,6 +9890,9 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9537,6 +9921,7 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 					}
@@ -9559,6 +9944,7 @@ func (p projMinusTimestampConstIntervalOp) Next(ctx context.Context) coldata.Bat
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = duration.Add(p.constArg, arg.Mul(-1))
 				}
@@ -9602,6 +9988,9 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9630,6 +10019,7 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Sub(arg)
 					}
@@ -9652,6 +10042,7 @@ func (p projMinusIntervalConstIntervalOp) Next(ctx context.Context) coldata.Batc
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Sub(arg)
 				}
@@ -9695,6 +10086,9 @@ func (p projMinusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9738,6 +10132,7 @@ func (p projMinusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -9790,6 +10185,7 @@ func (p projMinusIntervalConstDatumOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					_convertedNativeElem := tree.DInterval{Duration: p.constArg}
@@ -9848,6 +10244,9 @@ func (p projMinusDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -9977,6 +10376,9 @@ func (p projMinusDatumConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10122,6 +10524,9 @@ func (p projMinusDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10267,6 +10672,9 @@ func (p projMinusDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10412,6 +10820,9 @@ func (p projMinusDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10557,6 +10968,9 @@ func (p projMinusDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10702,6 +11116,9 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10739,6 +11156,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -10779,6 +11197,7 @@ func (p projMultDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -10831,6 +11250,9 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10868,6 +11290,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -10908,6 +11331,7 @@ func (p projMultDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -10960,6 +11384,9 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -10997,6 +11424,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11037,6 +11465,7 @@ func (p projMultDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11089,6 +11518,9 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11125,6 +11557,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11163,6 +11596,7 @@ func (p projMultDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11214,6 +11648,9 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11247,6 +11684,7 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						f, err := p.constArg.Float64()
@@ -11279,6 +11717,7 @@ func (p projMultDecimalConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					f, err := p.constArg.Float64()
@@ -11327,6 +11766,9 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11371,6 +11813,7 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11425,6 +11868,7 @@ func (p projMultInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11484,6 +11928,9 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11528,6 +11975,7 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11582,6 +12030,7 @@ func (p projMultInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11641,6 +12090,9 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11685,6 +12137,7 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11739,6 +12192,7 @@ func (p projMultInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11798,6 +12252,9 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11836,6 +12293,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -11878,6 +12336,7 @@ func (p projMultInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -11931,6 +12390,9 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -11959,6 +12421,7 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -11981,6 +12444,7 @@ func (p projMultInt16ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
@@ -12024,6 +12488,9 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12068,6 +12535,7 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12122,6 +12590,7 @@ func (p projMultInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -12181,6 +12650,9 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12225,6 +12697,7 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12279,6 +12752,7 @@ func (p projMultInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -12338,6 +12812,9 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12382,6 +12859,7 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12436,6 +12914,7 @@ func (p projMultInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -12495,6 +12974,9 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12533,6 +13015,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12575,6 +13058,7 @@ func (p projMultInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -12628,6 +13112,9 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12656,6 +13143,7 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -12678,6 +13166,7 @@ func (p projMultInt32ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
@@ -12721,6 +13210,9 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12765,6 +13257,7 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12819,6 +13312,7 @@ func (p projMultInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -12878,6 +13372,9 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -12922,6 +13419,7 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -12976,6 +13474,7 @@ func (p projMultInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -13035,6 +13534,9 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13079,6 +13581,7 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -13133,6 +13636,7 @@ func (p projMultInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -13192,6 +13696,9 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13230,6 +13737,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -13272,6 +13780,7 @@ func (p projMultInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -13325,6 +13834,9 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13353,6 +13865,7 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
 					}
@@ -13375,6 +13888,7 @@ func (p projMultInt64ConstIntervalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = arg.Mul(int64(p.constArg))
 				}
@@ -13418,6 +13932,9 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13451,6 +13968,7 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -13483,6 +14001,7 @@ func (p projMultFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -13531,6 +14050,9 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Interval()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13559,6 +14081,7 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = arg.MulFloat(float64(p.constArg))
 					}
@@ -13581,6 +14104,7 @@ func (p projMultFloat64ConstIntervalOp) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = arg.MulFloat(float64(p.constArg))
 				}
@@ -13624,6 +14148,9 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13652,6 +14179,7 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -13674,6 +14202,7 @@ func (p projMultIntervalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
@@ -13717,6 +14246,9 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13745,6 +14277,7 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -13767,6 +14300,7 @@ func (p projMultIntervalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
@@ -13810,6 +14344,9 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13838,6 +14375,7 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
 					}
@@ -13860,6 +14398,7 @@ func (p projMultIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.Mul(int64(arg))
 				}
@@ -13903,6 +14442,9 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -13931,6 +14473,7 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 						projCol[i] = p.constArg.MulFloat(float64(arg))
 					}
@@ -13953,6 +14496,7 @@ func (p projMultIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 					projCol[i] = p.constArg.MulFloat(float64(arg))
 				}
@@ -13996,6 +14540,9 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14029,6 +14576,7 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						f, err := arg.Float64()
@@ -14061,6 +14609,7 @@ func (p projMultIntervalConstDecimalOp) Next(ctx context.Context) coldata.Batch 
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					f, err := arg.Float64()
@@ -14109,6 +14658,9 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14150,6 +14702,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14198,6 +14751,7 @@ func (p projDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14254,6 +14808,9 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14295,6 +14852,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14343,6 +14901,7 @@ func (p projDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14399,6 +14958,9 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14440,6 +15002,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14488,6 +15051,7 @@ func (p projDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14544,6 +15108,9 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14584,6 +15151,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14630,6 +15198,7 @@ func (p projDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14685,6 +15254,9 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14725,6 +15297,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14771,6 +15344,7 @@ func (p projDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14826,6 +15400,9 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -14866,6 +15443,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -14912,6 +15490,7 @@ func (p projDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -14967,6 +15546,9 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15007,6 +15589,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15053,6 +15636,7 @@ func (p projDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15108,6 +15692,9 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15150,6 +15737,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15200,6 +15788,7 @@ func (p projDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15257,6 +15846,9 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15297,6 +15889,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15343,6 +15936,7 @@ func (p projDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15398,6 +15992,9 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15438,6 +16035,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15484,6 +16082,7 @@ func (p projDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15539,6 +16138,9 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15579,6 +16181,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15625,6 +16228,7 @@ func (p projDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15680,6 +16284,9 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15722,6 +16329,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15772,6 +16380,7 @@ func (p projDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15829,6 +16438,9 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -15869,6 +16481,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -15915,6 +16528,7 @@ func (p projDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -15970,6 +16584,9 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16010,6 +16627,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16056,6 +16674,7 @@ func (p projDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -16111,6 +16730,9 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16151,6 +16773,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16197,6 +16820,7 @@ func (p projDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -16252,6 +16876,9 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16294,6 +16921,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16344,6 +16972,7 @@ func (p projDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -16401,6 +17030,9 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16438,6 +17070,7 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16478,6 +17111,7 @@ func (p projDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -16530,6 +17164,9 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16562,6 +17199,7 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						if arg == 0 {
@@ -16592,6 +17230,7 @@ func (p projDivIntervalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					if arg == 0 {
@@ -16639,6 +17278,9 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16671,6 +17313,7 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						if arg == 0.0 {
@@ -16701,6 +17344,7 @@ func (p projDivIntervalConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					if arg == 0.0 {
@@ -16748,6 +17392,9 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16789,6 +17436,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16837,6 +17485,7 @@ func (p projFloorDivDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -16893,6 +17542,9 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -16934,6 +17586,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -16982,6 +17635,7 @@ func (p projFloorDivDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17038,6 +17692,9 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17079,6 +17736,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17127,6 +17785,7 @@ func (p projFloorDivDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17183,6 +17842,9 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17223,6 +17885,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17269,6 +17932,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next(ctx context.Context) coldata.Bat
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17324,6 +17988,9 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17359,6 +18026,7 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17395,6 +18063,7 @@ func (p projFloorDivInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17445,6 +18114,9 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17480,6 +18152,7 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17516,6 +18189,7 @@ func (p projFloorDivInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17566,6 +18240,9 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17601,6 +18278,7 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17637,6 +18315,7 @@ func (p projFloorDivInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17687,6 +18366,9 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17729,6 +18411,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17779,6 +18462,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17836,6 +18520,9 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17871,6 +18558,7 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -17907,6 +18595,7 @@ func (p projFloorDivInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -17957,6 +18646,9 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -17992,6 +18684,7 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18028,6 +18721,7 @@ func (p projFloorDivInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18078,6 +18772,9 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18113,6 +18810,7 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18149,6 +18847,7 @@ func (p projFloorDivInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18199,6 +18898,9 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18241,6 +18943,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18291,6 +18994,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18348,6 +19052,9 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18383,6 +19090,7 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18419,6 +19127,7 @@ func (p projFloorDivInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18469,6 +19178,9 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18504,6 +19216,7 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18540,6 +19253,7 @@ func (p projFloorDivInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18590,6 +19304,9 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18625,6 +19342,7 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18661,6 +19379,7 @@ func (p projFloorDivInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18711,6 +19430,9 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18753,6 +19475,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18803,6 +19526,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18860,6 +19584,9 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -18897,6 +19624,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -18937,6 +19665,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Bat
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -18989,6 +19718,9 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19030,6 +19762,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19078,6 +19811,7 @@ func (p projModDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19134,6 +19868,9 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19175,6 +19912,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19223,6 +19961,7 @@ func (p projModDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19279,6 +20018,9 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19320,6 +20062,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19368,6 +20111,7 @@ func (p projModDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19424,6 +20168,9 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19464,6 +20211,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19510,6 +20258,7 @@ func (p projModDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19565,6 +20314,9 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19600,6 +20352,7 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19636,6 +20389,7 @@ func (p projModInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19686,6 +20440,9 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19721,6 +20478,7 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19757,6 +20515,7 @@ func (p projModInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19807,6 +20566,9 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19842,6 +20604,7 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -19878,6 +20641,7 @@ func (p projModInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -19928,6 +20692,9 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -19970,6 +20737,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20020,6 +20788,7 @@ func (p projModInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20077,6 +20846,9 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20112,6 +20884,7 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20148,6 +20921,7 @@ func (p projModInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20198,6 +20972,9 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20233,6 +21010,7 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20269,6 +21047,7 @@ func (p projModInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20319,6 +21098,9 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20354,6 +21136,7 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20390,6 +21173,7 @@ func (p projModInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20440,6 +21224,9 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20482,6 +21269,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20532,6 +21320,7 @@ func (p projModInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20589,6 +21378,9 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20624,6 +21416,7 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20660,6 +21453,7 @@ func (p projModInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20710,6 +21504,9 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20745,6 +21542,7 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20781,6 +21579,7 @@ func (p projModInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20831,6 +21630,9 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20866,6 +21668,7 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -20902,6 +21705,7 @@ func (p projModInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -20952,6 +21756,9 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -20994,6 +21801,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21044,6 +21852,7 @@ func (p projModInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21101,6 +21910,9 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21138,6 +21950,7 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21178,6 +21991,7 @@ func (p projModFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21230,6 +22044,9 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21267,6 +22084,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21307,6 +22125,7 @@ func (p projPowDecimalConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21359,6 +22178,9 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21396,6 +22218,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21436,6 +22259,7 @@ func (p projPowDecimalConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21488,6 +22312,9 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21525,6 +22352,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21565,6 +22393,7 @@ func (p projPowDecimalConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21617,6 +22446,9 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21653,6 +22485,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21691,6 +22524,7 @@ func (p projPowDecimalConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21742,6 +22576,9 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21784,6 +22621,7 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21834,6 +22672,7 @@ func (p projPowInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -21891,6 +22730,9 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -21933,6 +22775,7 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -21983,6 +22826,7 @@ func (p projPowInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22040,6 +22884,9 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22082,6 +22929,7 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22132,6 +22980,7 @@ func (p projPowInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22189,6 +23038,9 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22227,6 +23079,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22269,6 +23122,7 @@ func (p projPowInt16ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22322,6 +23176,9 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22364,6 +23221,7 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22414,6 +23272,7 @@ func (p projPowInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22471,6 +23330,9 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22513,6 +23375,7 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22563,6 +23426,7 @@ func (p projPowInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22620,6 +23484,9 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22662,6 +23529,7 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22712,6 +23580,7 @@ func (p projPowInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22769,6 +23638,9 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22807,6 +23679,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22849,6 +23722,7 @@ func (p projPowInt32ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -22902,6 +23776,9 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -22944,6 +23821,7 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -22994,6 +23872,7 @@ func (p projPowInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23051,6 +23930,9 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23093,6 +23975,7 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -23143,6 +24026,7 @@ func (p projPowInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23200,6 +24084,9 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23242,6 +24129,7 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -23292,6 +24180,7 @@ func (p projPowInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23349,6 +24238,9 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Decimal()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23387,6 +24279,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -23429,6 +24322,7 @@ func (p projPowInt64ConstDecimalOp) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23482,6 +24376,9 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Float64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23515,6 +24412,7 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -23547,6 +24445,7 @@ func (p projPowFloat64ConstFloat64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23595,6 +24494,9 @@ func (p projConcatBytesConstBytesOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23716,6 +24618,9 @@ func (p projConcatDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23845,6 +24750,9 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -23881,6 +24789,7 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -23919,6 +24828,7 @@ func (p projLShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -23970,6 +24880,9 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24006,6 +24919,7 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24044,6 +24958,7 @@ func (p projLShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24095,6 +25010,9 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24131,6 +25049,7 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24169,6 +25088,7 @@ func (p projLShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24220,6 +25140,9 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24256,6 +25179,7 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24294,6 +25218,7 @@ func (p projLShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24345,6 +25270,9 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24381,6 +25309,7 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24419,6 +25348,7 @@ func (p projLShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24470,6 +25400,9 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24506,6 +25439,7 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24544,6 +25478,7 @@ func (p projLShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24595,6 +25530,9 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24631,6 +25569,7 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24669,6 +25608,7 @@ func (p projLShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24720,6 +25660,9 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24756,6 +25699,7 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24794,6 +25738,7 @@ func (p projLShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24845,6 +25790,9 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -24881,6 +25829,7 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -24919,6 +25868,7 @@ func (p projLShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -24970,6 +25920,9 @@ func (p projLShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25115,6 +26068,9 @@ func (p projLShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25260,6 +26216,9 @@ func (p projLShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25405,6 +26364,9 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25441,6 +26403,7 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -25479,6 +26442,7 @@ func (p projRShiftInt16ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -25530,6 +26494,9 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25566,6 +26533,7 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -25604,6 +26572,7 @@ func (p projRShiftInt16ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -25655,6 +26624,9 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25691,6 +26663,7 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -25729,6 +26702,7 @@ func (p projRShiftInt16ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -25780,6 +26754,9 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25816,6 +26793,7 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -25854,6 +26832,7 @@ func (p projRShiftInt32ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -25905,6 +26884,9 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -25941,6 +26923,7 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -25979,6 +26962,7 @@ func (p projRShiftInt32ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -26030,6 +27014,9 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26066,6 +27053,7 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -26104,6 +27092,7 @@ func (p projRShiftInt32ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -26155,6 +27144,9 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26191,6 +27183,7 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -26229,6 +27222,7 @@ func (p projRShiftInt64ConstInt16Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -26280,6 +27274,9 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26316,6 +27313,7 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -26354,6 +27352,7 @@ func (p projRShiftInt64ConstInt32Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -26405,6 +27404,9 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26441,6 +27443,7 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					if !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
+						//gcassert:bce
 						arg := col.Get(i)
 
 						{
@@ -26479,6 +27482,7 @@ func (p projRShiftInt64ConstInt64Op) Next(ctx context.Context) coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					//gcassert:bce
 					arg := col.Get(i)
 
 					{
@@ -26530,6 +27534,9 @@ func (p projRShiftDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26675,6 +27682,9 @@ func (p projRShiftDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26820,6 +27830,9 @@ func (p projRShiftDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -26965,6 +27978,9 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 	col = vec.Bytes()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -27110,6 +28126,9 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 	col = vec.Int16()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -27255,6 +28274,9 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 	col = vec.Int32()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -27400,6 +28422,9 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 	col = vec.Int64()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -27545,6 +28570,9 @@ func (p projJSONFetchValPathDatumConstDatumOp) Next(ctx context.Context) coldata
 	col = vec.Datum()
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.

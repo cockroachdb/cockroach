@@ -51,9 +51,14 @@ func (a *defaultOrderedAgg) Compute(
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
 		if sel == nil {
+			_ = groups[inputLen-1]
 			for tupleIdx := 0; tupleIdx < inputLen; tupleIdx++ {
-				if a.groups[tupleIdx] {
+				//gcassert:bce
+				if groups[tupleIdx] {
 					if !a.isFirstGroup {
 						res, err := a.fn.Result()
 						if err != nil {
@@ -85,7 +90,7 @@ func (a *defaultOrderedAgg) Compute(
 			// deselection - so converted values are at the same positions as
 			// the original ones.
 			for _, tupleIdx := range sel[:inputLen] {
-				if a.groups[tupleIdx] {
+				if groups[tupleIdx] {
 					if !a.isFirstGroup {
 						res, err := a.fn.Result()
 						if err != nil {

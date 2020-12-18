@@ -107,12 +107,11 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		_ = col.Get(inputLen - 1)
 		// {{if eq "_AGGKIND" "Ordered"}}
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
 		groups := a.groups
+		col := col
 		// {{/*
 		// We don't need to check whether sel is non-nil when performing
 		// hash aggregation because the hash aggregator always uses non-nil
@@ -120,13 +119,14 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 		// */}}
 		if sel == nil {
 			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
 			if nulls.MaybeHasNulls() {
 				for i := 0; i < inputLen; i++ {
-					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true, false)
 				}
 			} else {
 				for i := 0; i < inputLen; i++ {
-					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false, false)
 				}
 			}
 		} else
@@ -135,11 +135,11 @@ func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
 			sel = sel[:inputLen]
 			if nulls.MaybeHasNulls() {
 				for _, i := range sel {
-					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, true, true)
 				}
 			} else {
 				for _, i := range sel {
-					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
+					_FIND_ANY_NOT_NULL(a, groups, nulls, i, false, true)
 				}
 			}
 		}
@@ -215,11 +215,19 @@ func (a *anyNotNull_TYPE_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
 func _FIND_ANY_NOT_NULL(
-	a *anyNotNull_TYPE_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
+	a *anyNotNull_TYPE_AGGKINDAgg,
+	groups []bool,
+	nulls *coldata.Nulls,
+	i int,
+	_HAS_NULLS bool,
+	_HAS_SEL bool,
 ) { // */}}
 	// {{define "findAnyNotNull" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
+	// {{if not .HasSel}}
+	//gcassert:bce
+	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
 			// If this is a new group, check if any non-nulls have been found for the
@@ -248,6 +256,9 @@ func _FIND_ANY_NOT_NULL(
 		// If we haven't seen any non-nulls for the current group yet, and the
 		// current value is non-null, then we can pick the current value to be
 		// the output.
+		// {{if and (.Sliceable) (not .HasSel)}}
+		//gcassert:bce
+		// {{end}}
 		// {{with .Global}}
 		val := col.Get(i)
 		execgen.COPYVAL(a.curAgg, val)

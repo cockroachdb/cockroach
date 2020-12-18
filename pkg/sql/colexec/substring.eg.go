@@ -117,6 +117,8 @@ func (s *substringInt64Int16Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -197,6 +199,8 @@ func (s *substringInt64Int32Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -277,6 +281,8 @@ func (s *substringInt64Int64Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -357,6 +363,8 @@ func (s *substringInt16Int16Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -437,6 +445,8 @@ func (s *substringInt16Int32Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -517,6 +527,8 @@ func (s *substringInt16Int64Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -597,6 +609,8 @@ func (s *substringInt32Int16Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -677,6 +691,8 @@ func (s *substringInt32Int32Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {
@@ -757,6 +773,8 @@ func (s *substringInt32Int64Operator) Next(ctx context.Context) coldata.Batch {
 	s.allocator.PerformOperation(
 		[]coldata.Vec{outputVec},
 		func() {
+			// TODO(yuzefovich): refactor this loop so that BCE occurs when sel
+			// is nil.
 			for i := 0; i < n; i++ {
 				rowIdx := i
 				if sel != nil {

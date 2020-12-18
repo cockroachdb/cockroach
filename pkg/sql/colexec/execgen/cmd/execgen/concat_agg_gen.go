@@ -20,8 +20,8 @@ import (
 const concatAggTmpl = "pkg/sql/colexec/colexecagg/concat_agg_tmpl.go"
 
 func genConcatAgg(inputFileContents string, wr io.Writer) error {
-	accumulateConcatRe := makeFunctionRegex("_ACCUMULATE_CONCAT", 4)
-	s := accumulateConcatRe.ReplaceAllString(inputFileContents, `{{template "accumulateConcat" buildDict "HasNulls" $4}}`)
+	accumulateConcatRe := makeFunctionRegex("_ACCUMULATE_CONCAT", 5)
+	s := accumulateConcatRe.ReplaceAllString(inputFileContents, `{{template "accumulateConcat" buildDict "HasNulls" $4 "HasSel" $5}}`)
 
 	s = replaceManipulationFuncs(s)
 
