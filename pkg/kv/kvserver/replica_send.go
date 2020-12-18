@@ -57,8 +57,6 @@ func (r *Replica) sendWithRangeID(
 
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
-	defer cleanup()
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
