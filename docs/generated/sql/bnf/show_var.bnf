@@ -13,7 +13,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_locality_stmt
 	| show_schedules_stmt
-	| show_queries_stmt
+	| show_statements_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
 	| show_regions_stmt

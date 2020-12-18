@@ -140,7 +140,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
-	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s'", queryToCancel)
+	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query = '%s'", queryToCancel)
 
 	// conn1 is used for the query above. conn2 is solely for the CANCEL statement.
 	var conn1 *gosql.DB
