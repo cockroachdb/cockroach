@@ -2032,7 +2032,7 @@ func (s *Server) Decommission(
 	} else {
 		panic("unexpected target membership status")
 	}
-	event.CommonDetails().Timestamp = timeutil.Now()
+	event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
 	nodeDetails.RequestingNodeID = int32(s.NodeID())
 
 	for _, nodeID := range nodeIDs {

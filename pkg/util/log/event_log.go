@@ -13,7 +13,6 @@ package log
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -24,9 +23,8 @@ import (
 func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
 	// Populate the missing common fields.
 	common := event.CommonDetails()
-	var zeroTime time.Time
-	if common.Timestamp == zeroTime {
-		common.Timestamp = timeutil.Now()
+	if common.Timestamp == 0 {
+		common.Timestamp = timeutil.Now().UnixNano()
 	}
 	if len(common.EventType) == 0 {
 		common.EventType = eventpb.GetEventTypeName(event)

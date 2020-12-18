@@ -24,8 +24,9 @@ import "google/protobuf/timestamp.proto";
 
 // CommonEventDetails contains the fields common to all events.
 message CommonEventDetails {
-  // The timestamp of the event.
-  google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true, (gogoproto.jsontag) = ",omitempty"];
+  // The timestamp of the event. Expressed as nanoseconds since
+  // the Unix epoch.
+  int64 timestamp = 1 [(gogoproto.jsontag) = ",omitempty"];
   // The type of the event.
   string event_type = 2 [(gogoproto.jsontag) = ",omitempty"];
 }

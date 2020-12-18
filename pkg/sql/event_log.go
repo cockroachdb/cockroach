@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,7 +49,7 @@ func logEventInternalForSchemaChanges(
 	mutationID descpb.MutationID,
 	event eventpb.EventPayload,
 ) error {
-	event.CommonDetails().Timestamp = txn.ReadTimestamp().GoTime()
+	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
@@ -84,7 +84,7 @@ func logEventInternalForSQLStatements(
 	event eventpb.EventPayload,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
-	event.CommonDetails().Timestamp = txn.ReadTimestamp().GoTime()
+	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 	sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
@@ -135,8 +135,7 @@ func InsertEventRecord(
 	info.CommonDetails().EventType = eventType
 
 	// The caller is responsible for the timestamp field.
-	var zeroTime time.Time
-	if info.CommonDetails().Timestamp == zeroTime {
+	if info.CommonDetails().Timestamp == 0 {
 		return errors.AssertionFailedf("programming error: timestamp field in event not populated: %T", info)
 	}
 
@@ -160,7 +159,7 @@ VALUES(
 )
 `
 	args := []interface{}{
-		info.CommonDetails().Timestamp,
+		timeutil.Unix(0, info.CommonDetails().Timestamp),
 		eventType,
 		targetID,
 		reportingID,
