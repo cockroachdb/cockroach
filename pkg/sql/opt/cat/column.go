@@ -27,8 +27,8 @@ type Column struct {
 	ordinal                     int
 	stableID                    StableID
 	name                        tree.Name
-	kind                        ColumnKind
 	datumType                   *types.T
+	kind                        ColumnKind
 	nullable                    bool
 	hidden                      bool
 	virtualComputed             bool
