@@ -29,7 +29,8 @@ var psycopgBlocklists = blocklistsForVersion{
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
 var psycopgBlockList21_1 = blocklist{
-	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
+	"tests.test_async_keyword.CancelTests.test_async_cancel":    "41335",
+	"tests.test_module.ExceptionsTestCase.test_9_6_diagnostics": "58035",
 }
 
 var psycopgBlockList20_2 = blocklist{
