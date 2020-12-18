@@ -20,9 +20,10 @@ go_test(
     srcs = [
         "main_test.go",
         "traceanalyzer_test.go",
+        "utils_test.go",
     ],
+    embed = [":execstats"],
     deps = [
-        ":execstats",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
@@ -37,7 +38,10 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/optional",
         "//pkg/util/tracing",
+        "//pkg/util/uuid",
+        "//vendor/github.com/stretchr/testify/assert",
         "//vendor/github.com/stretchr/testify/require",
     ],
 )
