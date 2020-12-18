@@ -105,6 +105,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.NetRx.BytesReceived.HasValue() {
 		fn("network bytes received", humanize.IBytes(s.NetRx.BytesReceived.Value()))
 	}
+	if s.NetRx.MessagesReceived.HasValue() {
+		fn("network messages received", humanizeutil.Count(s.NetRx.MessagesReceived.Value()))
+	}
 
 	// Network Tx stats.
 	if s.NetTx.TuplesSent.HasValue() {
@@ -112,6 +115,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	}
 	if s.NetTx.BytesSent.HasValue() {
 		fn("network bytes sent", humanize.IBytes(s.NetTx.BytesSent.Value()))
+	}
+	if s.NetTx.MessagesSent.HasValue() {
+		fn("network messages sent", humanizeutil.Count(s.NetTx.MessagesSent.Value()))
 	}
 
 	// Input stats.
@@ -194,6 +200,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.NetRx.BytesReceived.HasValue() {
 		result.NetRx.BytesReceived = other.NetRx.BytesReceived
+	}
+	if !result.NetRx.MessagesReceived.HasValue() {
+		result.NetRx.MessagesReceived = other.NetRx.MessagesReceived
 	}
 
 	// Network Tx stats.
@@ -281,6 +290,10 @@ func (s *ComponentStats) MakeDeterministic() {
 		// value for tests.
 		s.NetRx.BytesReceived.Set(8 * s.NetRx.TuplesReceived.Value())
 	}
+	if s.NetRx.MessagesReceived.HasValue() {
+		// Override to a useful value for tests.
+		s.NetRx.MessagesReceived.Set(s.NetRx.TuplesReceived.Value() / 2)
+	}
 
 	// NetTx.
 	if s.NetTx.BytesSent.HasValue() {
@@ -288,6 +301,10 @@ func (s *ComponentStats) MakeDeterministic() {
 		// varying sizes across different runs (e.g. metadata). Override to a useful
 		// value for tests.
 		s.NetTx.BytesSent.Set(8 * s.NetTx.TuplesSent.Value())
+	}
+	if s.NetTx.MessagesSent.HasValue() {
+		// Override to a useful value for tests.
+		s.NetTx.MessagesSent.Set(s.NetTx.TuplesSent.Value() / 2)
 	}
 
 	// KV.

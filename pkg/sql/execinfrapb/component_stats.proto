@@ -84,6 +84,9 @@ message NetworkRxStats {
 
   optional util.optional.Uint tuples_received = 4 [(gogoproto.nullable) = false];
   optional util.optional.Uint bytes_received = 5 [(gogoproto.nullable) = false];
+
+  // Number of messages received over the network.
+  optional util.optional.Uint messages_received = 6 [(gogoproto.nullable) = false];
 }
 
 // NetworkTxStats contains statistics for components that send row data over the
@@ -91,6 +94,9 @@ message NetworkRxStats {
 message NetworkTxStats {
   optional util.optional.Uint tuples_sent = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint bytes_sent = 2 [(gogoproto.nullable) = false];
+
+  // Number of messages sent over the network.
+  optional util.optional.Uint messages_sent = 3 [(gogoproto.nullable) = false];
 }
 
 // KVStats contains statistics for components that perform KV operations.
