@@ -159,8 +159,8 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 }
 
 // SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
-// that each scan over a single key from the original scan's constraints. This
-// is beneficial in cases where the original scan had to scan over many rows but
+// that each scan over a single key from the original Scan's constraints. This
+// is beneficial in cases where the original Scan had to scan over many rows but
 // had relatively few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
@@ -175,76 +175,141 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		return nil
 	}
 
+	// Find the length of the prefix of index columns preceding the first limit
+	// ordering column. We will verify later that the entire ordering sequence is
+	// represented in the index. Ex:
+	//
+	//     Index: +1/+2/-3, Limit Ordering: +3 => Prefix Length: 2
+	//
+	if len(limitOrdering.Columns) == 0 {
+		// This case can be handled by GenerateLimitedScans.
+		return nil
+	}
+	keyPrefixLength := cons.Columns.Count()
+	for i := 0; i < cons.Columns.Count(); i++ {
+		if limitOrdering.Columns[0].Group.Contains(cons.Columns.Get(i).ID()) {
+			keyPrefixLength = i
+			break
+		}
+	}
+	if keyPrefixLength == 0 {
+		// This case can be handled by GenerateLimitedScans.
+		return nil
+	}
+
 	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
-	limitVal := int(*limit.(*tree.DInt))
 	spans := cons.Spans
 
-	// Retrieve the number of keys in the spans.
-	keyCount, ok := spans.KeyCount(&keyCtx)
-	if !ok {
-		return nil
+	// Get the total number of keys that can be extracted from the spans. Also
+	// keep track of the first span which would exceed the Scan budget if it was
+	// used to construct new Scan operators.
+	var keyCount int
+	budgetExceededIndex := spans.Count()
+	additionalScanBudget := maxScanCount
+	for i := 0; i < spans.Count(); i++ {
+		if cnt, ok := spans.Get(i).KeyCount(&keyCtx, keyPrefixLength); ok {
+			keyCount += int(cnt)
+			additionalScanBudget -= int(cnt)
+			if additionalScanBudget < 0 {
+				// Splitting any spans from this span on would lead to exceeding the max
+				// Scan count. Keep track of the index of this span.
+				budgetExceededIndex = i
+			}
+		}
 	}
-	if keyCount <= 1 {
-		// We need more than one key in order to split the existing Scan into
-		// multiple Scans.
-		return nil
-	}
-	if int(keyCount) > maxScanCount {
-		// The number of new Scans created would exceed maxScanCount.
-		return nil
-	}
-
-	// Check that the number of rows scanned by the new plan will be smaller than
-	// the number scanned by the old plan by at least a factor of "threshold".
-	if float64(int(keyCount)*limitVal*threshold) >= scan.Relational().Stats.RowCount {
-		// Splitting the scan may not be worth the overhead; creating a sequence of
-		// scans unioned together is expensive, so we don't want to create the plan
-		// only for the optimizer to use something else. We only want to create the
-		// plan if it is likely to be used.
+	if keyCount <= 0 || (keyCount == 1 && spans.Count() == 1) || budgetExceededIndex == 0 {
+		// Ensure that at least one new Scan will be constructed.
 		return nil
 	}
 
-	// Retrieve the length of the keys. All keys are required to be the same
-	// length (this will be checked later) so we can simply use the length of the
-	// first key.
-	keyLength := spans.Get(0).StartKey().Length()
+	scanCount := keyCount
+	if scanCount > maxScanCount {
+		// We will construct at most maxScanCount new Scans.
+		scanCount = maxScanCount
+	}
 
-	// If the index ordering has a prefix of columns of length keyLength followed
-	// by the limitOrdering columns, the scan can be split. Otherwise, return nil.
+	limitVal := int(*limit.(*tree.DInt))
+
+	if scan.Relational().Stats.Available &&
+		float64(scanCount*limitVal*threshold) >= scan.Relational().Stats.RowCount {
+		// Splitting the Scan may not be worth the overhead. Creating a sequence of
+		// Scans and Unions is expensive, so we only want to create the plan if it
+		// is likely to be used.
+		return nil
+	}
+
+	// The index ordering must have a prefix of columns of length keyLength
+	// followed by the limitOrdering columns either in order or in reverse order.
 	hasLimitOrderingSeq, reverse := indexHasOrderingSequence(
-		c.e.mem.Metadata(), scan, sp, limitOrdering, keyLength)
+		c.e.mem.Metadata(), scan, sp, limitOrdering, keyPrefixLength)
 	if !hasLimitOrderingSeq {
 		return nil
 	}
-
-	// Construct a hard limit for the new scans using the result of
-	// hasLimitOrderingSeq.
 	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
 
-	// Construct a new Spans object containing a new Span for each key in the
-	// original Scan's spans.
-	newSpans, ok := spans.ExtractSingleKeySpans(&keyCtx, maxScanCount)
-	if !ok {
-		// Single key spans could not be created.
-		return nil
-	}
-
-	// Construct a new ScanExpr for each span and union them all together. We
-	// output the old ColumnIDs from each union.
+	// makeNewUnion extends the Union tree rooted at 'last' to include 'newScan'.
+	// The ColumnIDs of the original Scan are used by the resulting expression.
 	oldColList := scan.Relational().OutputCols.ToList()
-	last := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(0))
-	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
-		newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(i))
-		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
+	makeNewUnion := func(last, newScan memo.RelExpr) memo.RelExpr {
+		return c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
 			LeftCols:  last.Relational().OutputCols.ToList(),
 			RightCols: newScan.Relational().OutputCols.ToList(),
 			OutCols:   oldColList,
 		})
 	}
-	return last
+
+	// Attempt to extract single-key spans and use them to construct limited
+	// Scans. Add these Scans to a Union tree. Any remaining spans will be used to
+	// construct a single unlimited Scan, which will also be added to the Unions.
+	var noLimitSpans constraint.Spans
+	var last memo.RelExpr
+	for i := 0; i < spans.Count(); i++ {
+		if i >= budgetExceededIndex {
+			// The Scan budget has been reached; no additional Scans can be created.
+			noLimitSpans.Append(spans.Get(i))
+			continue
+		}
+		singleKeySpans, ok := spans.Get(i).Split(&keyCtx, keyPrefixLength)
+		if !ok {
+			// Single key spans could not be extracted from this span, so add it to
+			// the set of spans that will be used to construct an unlimited Scan.
+			noLimitSpans.Append(spans.Get(i))
+			continue
+		}
+		for j := 0; j < singleKeySpans.Count(); j++ {
+			if last == nil {
+				// This is the first limited Scan, so no Union necessary.
+				last = c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
+				continue
+			}
+			// Construct a new Scan for each span and add it to the Union tree.
+			newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
+			last = makeNewUnion(last, newScan)
+		}
+	}
+	if noLimitSpans.Count() == spans.Count() {
+		// Expect to generate at least one new limited single-key Scan. This could
+		// happen if a valid key count could be obtained for at least span, but no
+		// span could be split into single-key spans.
+		return nil
+	}
+	if noLimitSpans.Count() == 0 {
+		// All spans could be used to generate limited Scans.
+		return last
+	}
+
+	// If any spans could not be used to generate limited Scans, use them to
+	// construct an unlimited Scan and add it to the Union tree.
+	newScanPrivate := c.DuplicateScanPrivate(sp)
+	newScanPrivate.Constraint = &constraint.Constraint{
+		Columns: sp.Constraint.Columns,
+		Spans:   noLimitSpans,
+	}
+	newScan := c.e.f.ConstructScan(newScanPrivate)
+	return makeNewUnion(last, newScan)
 }
 
-// indexHasOrderingSequence returns whether the scan can provide a given
+// indexHasOrderingSequence returns whether the Scan can provide a given
 // ordering under the assumption that we are scanning a single-key span with the
 // given keyLength (and if so, whether we need to scan it in reverse).
 // For example:
