@@ -272,7 +272,7 @@ func (t *Tracer) startSpanGeneric(
 	if !t.AlwaysTrace() &&
 		opts.recordingType() == RecordingOff &&
 		!opts.ForceRealSpan {
-		return maybeWrapCtx(ctx, t.noopSpan)
+		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.isNoop() {
@@ -348,8 +348,9 @@ func (t *Tracer) startSpanGeneric(
 	// that *only* contains `ot` or `netTr`. This is just an artifact
 	// of the history of this code and may change in the future.
 	helper := struct {
-		Span     Span
+		span     Span
 		crdbSpan crdbSpan
+		octx     optimizedContext
 	}{}
 
 	helper.crdbSpan = crdbSpan{
@@ -363,14 +364,14 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 		},
 	}
-	helper.Span = Span{
+	helper.span = Span{
 		tracer: t,
 		crdb:   &helper.crdbSpan,
 		ot:     ot,
 		netTr:  netTr,
 	}
 
-	s := &helper.Span
+	s := &helper.span
 
 	// Start recording if necessary. We inherit the recording type of the local parent, if any,
 	// over the remote parent, if any. If neither are specified, we're not recording.
@@ -409,7 +410,7 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	return maybeWrapCtx(ctx, s)
+	return maybeWrapCtx(ctx, &helper.octx, s)
 }
 
 type textMapWriterFn func(key, val string)

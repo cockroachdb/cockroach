@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "annotate.go",
         "annotate_nocgo.go",
+        "context.go",
         "grpc_interceptor.go",
         "recording.go",
         "shadow.go",
@@ -47,6 +48,7 @@ go_library(
 go_test(
     name = "tracing_test",
     srcs = [
+        "alloc_test.go",
         "helpers_test.go",
         "span_test.go",
         "tags_test.go",
@@ -54,6 +56,7 @@ go_test(
     ],
     embed = [":tracing"],
     deps = [
+        "//pkg/settings",
         "//pkg/util/tracing/tracingpb",
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
