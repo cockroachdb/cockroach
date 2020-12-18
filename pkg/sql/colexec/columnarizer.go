@@ -153,15 +153,17 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	}
 	if reallocated {
 		oldRows := c.buffered
-		c.buffered = make(rowenc.EncDatumRows, c.batch.Capacity())
-		for i := range c.buffered {
-			if len(oldRows) > 0 {
-				c.buffered[i] = oldRows[0]
-				oldRows = oldRows[1:]
-			} else {
-				c.buffered[i] = make(rowenc.EncDatumRow, len(c.typs))
-			}
+		newRows := make(rowenc.EncDatumRows, c.batch.Capacity())
+		_ = newRows[len(oldRows)]
+		for i := 0; i < len(oldRows); i++ {
+			//gcassert:bce
+			newRows[i] = oldRows[i]
 		}
+		for i := len(oldRows); i < len(newRows); i++ {
+			//gcassert:bce
+			newRows[i] = make(rowenc.EncDatumRow, len(c.typs))
+		}
+		c.buffered = newRows
 	}
 	// Buffer up rows up to the capacity of the batch.
 	nRows := 0
@@ -189,8 +191,9 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	}
 
 	// Write each column into the output batch.
+	outputRows := c.buffered[:nRows]
 	for idx, ct := range c.typs {
-		err := EncDatumRowsToColVec(c.allocator, c.buffered[:nRows], c.batch.ColVec(idx), idx, ct, &c.da)
+		err := EncDatumRowsToColVec(c.allocator, outputRows, c.batch.ColVec(idx), idx, ct, &c.da)
 		if err != nil {
 			colexecerror.InternalError(err)
 		}
