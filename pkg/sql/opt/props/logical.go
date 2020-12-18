@@ -31,7 +31,7 @@ const (
 	// field is populated.
 	InterestingOrderings
 
-	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
+	// HasHoistableSubquery is set when the Scalar.Rule_HasHoistableSubquery
 	// is populated.
 	HasHoistableSubquery
 
@@ -46,10 +46,6 @@ const (
 // Shared are properties that are shared by both relational and scalar
 // expressions.
 type Shared struct {
-	// Populated is set to true once the properties have been built for the
-	// operator.
-	Populated bool
-
 	// OuterCols is the set of columns that are referenced by variables within
 	// this sub-expression, but are not bound within the scope of the expression.
 	// For example:
@@ -69,6 +65,10 @@ type Shared struct {
 	// columns are not outer columns on the EXISTS expression, they *are* outer
 	// columns on the inner WHERE condition.
 	OuterCols opt.ColSet
+
+	// Populated is set to true once the properties have been built for the
+	// operator.
+	Populated bool
 
 	// HasSubquery is true if the subtree rooted at this node contains a subquery.
 	// The subquery can be a Subquery, Exists, Any, or ArrayFlatten expression.
@@ -285,11 +285,6 @@ type Scalar struct {
 	// satisfied.
 	Constraints *constraint.Set
 
-	// TightConstraints is true if the expression is exactly equivalent to the
-	// constraints. If it is false, the constraints are weaker than the
-	// expression.
-	TightConstraints bool
-
 	// FuncDeps is a set of functional dependencies (FDs) inferred from a
 	// boolean expression. This field is only populated for Filters expressions.
 	//
@@ -313,30 +308,34 @@ type Scalar struct {
 	// For more details, see the header comment for FuncDepSet.
 	FuncDeps FuncDepSet
 
-	// Rule encapsulates the set of properties that are maintained to assist
-	// with specific sets of transformation rules. See the Relational.Rule
-	// comment for more details.
-	Rule struct {
-		// Available contains bits that indicate whether lazily-populated Rule
-		// properties have been initialized. For example, if the
-		// HasHoistableSubquery bit is set, then the Rule.HasHoistableSubquery
-		// field has been initialized and is ready for use.
-		Available AvailableRuleProps
+	// Rule_* fields encapsulate the set of properties that are maintained to
+	// assist with specific sets of transformation rules. See the
+	// Relational.Rule comment for more details.
 
-		// HasHoistableSubquery is true if the scalar expression tree contains a
-		// subquery having one or more outer columns, and if the subquery needs
-		// to be hoisted up into its parent query as part of query decorrelation.
-		// The subquery can be a Subquery, Exists, or Any operator. These operators
-		// need to be hoisted out of scalar expression trees and turned into top-
-		// level apply joins. This property makes detection fast and easy so that
-		// the hoister doesn't waste time searching subtrees that don't contain
-		// subqueries.
-		//
-		// HasHoistableSubquery is lazily populated by rules in decorrelate.opt.
-		// It is only valid once the Rule.Available.HasHoistableSubquery bit has
-		// been set.
-		HasHoistableSubquery bool
-	}
+	// Rule_Available contains bits that indicate whether lazily-populated Rule
+	// properties have been initialized. For example, if the
+	// HasHoistableSubquery bit is set, then the Rule.HasHoistableSubquery
+	// field has been initialized and is ready for use.
+	Rule_Available AvailableRuleProps
+
+	// Rule_HasHoistableSubquery is true if the scalar expression tree contains a
+	// subquery having one or more outer columns, and if the subquery needs
+	// to be hoisted up into its parent query as part of query decorrelation.
+	// The subquery can be a Subquery, Exists, or Any operator. These operators
+	// need to be hoisted out of scalar expression trees and turned into top-
+	// level apply joins. This property makes detection fast and easy so that
+	// the hoister doesn't waste time searching subtrees that don't contain
+	// subqueries.
+	//
+	// Rule_HasHoistableSubquery is lazily populated by rules in decorrelate.opt.
+	// It is only valid once the Rule.Available.HasHoistableSubquery bit has
+	// been set.
+	Rule_HasHoistableSubquery bool
+
+	// TightConstraints is true if the expression is exactly equivalent to the
+	// constraints. If it is false, the constraints are weaker than the
+	// expression.
+	TightConstraints bool
 }
 
 // IsAvailable returns true if the specified rule property has been populated
@@ -354,11 +353,11 @@ func (r *Relational) SetAvailable(p AvailableRuleProps) {
 // IsAvailable returns true if the specified rule property has been populated
 // on this scalar properties instance.
 func (s *Scalar) IsAvailable(p AvailableRuleProps) bool {
-	return (s.Rule.Available & p) != 0
+	return (s.Rule_Available & p) != 0
 }
 
 // SetAvailable sets the available bits for the given properties, in order to
 // mark them as populated on this scalar properties instance.
 func (s *Scalar) SetAvailable(p AvailableRuleProps) {
-	s.Rule.Available |= p
+	s.Rule_Available |= p
 }

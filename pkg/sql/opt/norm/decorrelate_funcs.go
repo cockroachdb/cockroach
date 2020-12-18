@@ -34,10 +34,10 @@ func (c *CustomFuncs) HasHoistableSubquery(scalar opt.ScalarExpr) bool {
 
 		// Lazily calculate and store the HasHoistableSubquery value.
 		if !scalarProps.IsAvailable(props.HasHoistableSubquery) {
-			scalarProps.Rule.HasHoistableSubquery = c.deriveHasHoistableSubquery(scalar)
+			scalarProps.Rule_HasHoistableSubquery = c.deriveHasHoistableSubquery(scalar)
 			scalarProps.SetAvailable(props.HasHoistableSubquery)
 		}
-		return scalarProps.Rule.HasHoistableSubquery
+		return scalarProps.Rule_HasHoistableSubquery
 	}
 
 	// Otherwise fall back on full traversal of subtree.
@@ -135,7 +135,7 @@ func (c *CustomFuncs) HoistSelectSubquery(
 	hoister.init(c, input)
 	for i := range filters {
 		item := &filters[i]
-		if item.ScalarProps().Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule_HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Condition)
 			if replaced.Op() != opt.TrueOp {
 				newFilters = append(newFilters, c.f.ConstructFiltersItem(replaced))
@@ -169,7 +169,7 @@ func (c *CustomFuncs) HoistProjectSubquery(
 	hoister.init(c, input)
 	for i := range projections {
 		item := &projections[i]
-		if item.ScalarProps().Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule_HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Element)
 			newProjections = append(newProjections, c.f.ConstructProjectionsItem(replaced, item.Col))
 		} else {
@@ -209,7 +209,7 @@ func (c *CustomFuncs) HoistJoinSubquery(
 	hoister.init(c, right)
 	for i := range on {
 		item := &on[i]
-		if item.ScalarProps().Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule_HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Condition)
 			if replaced.Op() != opt.TrueOp {
 				newFilters = append(newFilters, c.f.ConstructFiltersItem(replaced))
@@ -295,7 +295,7 @@ func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipEx
 	hoister.init(c, input)
 	for i := range zip {
 		item := &zip[i]
-		if item.ScalarProps().Rule.HasHoistableSubquery {
+		if item.ScalarProps().Rule_HasHoistableSubquery {
 			replaced := hoister.hoistAll(item.Fn)
 			newZip = append(newZip, c.f.ConstructZipItem(replaced, item.Cols))
 		} else {
