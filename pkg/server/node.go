@@ -797,7 +797,7 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 		nodeDetails = &ev.CommonNodeEventDetails
 		nodeDetails.LastUp = n.startedAt
 	}
-	event.CommonDetails().Timestamp = timeutil.Now()
+	event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
 	nodeDetails.StartedAt = n.startedAt
 	nodeDetails.NodeID = int32(n.Descriptor.NodeID)
 
