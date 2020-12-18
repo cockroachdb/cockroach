@@ -620,24 +620,10 @@ func childSpan(ctx context.Context, opName string, remote bool) (context.Context
 	return ContextWithSpan(ctx, newSpan), newSpan
 }
 
-// EnsureContext checks whether the given context.Context contains a Span. If
-// not, it creates one using the provided Tracer and wraps it in the returned
-// Span. The returned closure must be called after the request has been fully
-// processed.
-//
-// Note that, if there's already a Span in the context, this method does nothing
-// even if the current context's log tags are different from that Span's tags.
-func EnsureContext(ctx context.Context, tracer *Tracer, opName string) (context.Context, func()) {
-	if SpanFromContext(ctx) == nil {
-		sp := tracer.StartSpan(opName, WithCtxLogTags(ctx))
-		return ContextWithSpan(ctx, sp), sp.Finish
-	}
-	return ctx, func() {}
-}
-
-// EnsureChildSpan is the same as EnsureContext, except it creates a child
-// Span for the input context if the input context already has an active
-// trace.
+// EnsureChildSpan looks at the supplied Context. If it contains a Span, returns
+// a child span via the WithParentAndAutoCollection option; otherwise starts a
+// new Span. In both cases, a context wrapping the Span is returned along with
+// the newly created Span.
 //
 // The caller is responsible for closing the Span (via Span.Finish).
 func EnsureChildSpan(ctx context.Context, tracer *Tracer, name string) (context.Context, *Span) {
