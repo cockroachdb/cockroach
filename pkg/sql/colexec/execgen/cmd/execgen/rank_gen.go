@@ -54,8 +54,8 @@ const rankTmpl = "pkg/sql/colexec/rank_tmpl.go"
 func genRankOps(inputFileContents string, wr io.Writer) error {
 	s := strings.ReplaceAll(inputFileContents, "_RANK_STRING", "{{.String}}")
 
-	computeRankRe := makeFunctionRegex("_COMPUTE_RANK", 0)
-	s = computeRankRe.ReplaceAllString(s, `{{template "computeRank" buildDict "Global" . "HasPartition" .HasPartition}}`)
+	computeRankRe := makeFunctionRegex("_COMPUTE_RANK", 1)
+	s = computeRankRe.ReplaceAllString(s, `{{template "computeRank" buildDict "Global" . "HasPartition" .HasPartition "HasSel" $1}}`)
 	updateRankRe := makeFunctionRegex("_UPDATE_RANK", 0)
 	s = updateRankRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.UpdateRank", 0))
 	updateRankIncrementRe := makeFunctionRegex("_UPDATE_RANK_INCREMENT", 0)

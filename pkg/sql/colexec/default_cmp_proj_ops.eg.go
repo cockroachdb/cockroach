@@ -45,9 +45,15 @@ func (d *defaultCmpProjOp) Next(ctx context.Context) coldata.Batch {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
 		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)
+		_ = leftColumn[n-1]
+		_ = rightColumn[n-1]
+		if sel != nil {
+			_ = sel[n-1]
+		}
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
+			//gcassert:bce
 			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
 			if err != nil {
 				colexecerror.ExpectedError(err)
@@ -99,9 +105,14 @@ func (d *defaultCmpRConstProjOp) Next(ctx context.Context) coldata.Batch {
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
+		_ = nonConstColumn[n-1]
+		if sel != nil {
+			_ = sel[n-1]
+		}
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
+			//gcassert:bce
 			res, err := d.adapter.eval(nonConstColumn[i], d.constArg)
 			if err != nil {
 				colexecerror.ExpectedError(err)

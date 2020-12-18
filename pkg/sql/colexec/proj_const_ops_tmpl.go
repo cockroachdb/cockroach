@@ -106,6 +106,9 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	// {{end}}
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
 		if projVec.MaybeHasNulls() {
 			// We need to make sure that there are no left over null values in the
 			// output vector.
@@ -147,13 +150,13 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
-			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, true)
 		}
 	} else {
 		_ = projCol.Get(n - 1)
 		_ = col.Get(n - 1)
 		for i := 0; i < n; i++ {
-			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS)
+			_SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS, false)
 		}
 	}
 	// _outNulls has been updated from within the _ASSIGN function to include
@@ -172,13 +175,23 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 // */}}
 
 // {{/*
-func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
+func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 	// {{define "setSingleTupleProjection" -}}
 	// {{$hasNulls := $.HasNulls}}
+	// {{$hasSel := $.HasSel}}
 	// {{with $.Overload}}
 	// {{if _HAS_NULLS}}
 	if !colNulls.NullAt(i) {
 		// We only want to perform the projection operation if the value is not null.
+		// {{end}}
+		// {{if _IS_CONST_LEFT}}
+		// {{if and (.Left.Sliceable) (not _HAS_SEL)}}
+		//gcassert:bce
+		// {{end}}
+		// {{else}}
+		// {{if and (.Right.Sliceable) (not _HAS_SEL)}}
+		//gcassert:bce
+		// {{end}}
 		// {{end}}
 		arg := col.Get(i)
 		// {{if _IS_CONST_LEFT}}
