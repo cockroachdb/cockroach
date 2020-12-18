@@ -1629,6 +1629,9 @@ func (og *operationGenerator) getTableColumns(
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if len(ret) == 0 {
+		return nil, pgx.ErrNoRows
+	}
 	for i := range ret {
 		c := &ret[i]
 		c.typ, err = og.typeFromTypeName(tx, typNames[i])
