@@ -326,9 +326,6 @@ func (s *senderTransport) SendNext(
 	}
 	s.called = true
 
-	ctx, cleanup := tracing.EnsureContext(ctx, s.tracer, "node" /* name */)
-	defer cleanup()
-
 	ba.Replica = s.replica
 	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)

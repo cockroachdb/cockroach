@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1036,9 +1035,6 @@ func (t *descriptorState) maybeQueueLeaseRenewal(
 	// Start the renewal. When it finishes, it will reset t.renewalInProgress.
 	return t.stopper.RunAsyncTask(context.Background(),
 		"lease renewal", func(ctx context.Context) {
-			var cleanup func()
-			ctx, cleanup = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
-			defer cleanup()
 			t.startLeaseRenewal(ctx, m, id, name)
 		})
 }
