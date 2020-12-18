@@ -1755,6 +1755,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.mux.Handle(debug.Endpoint, debugHandler)
 
+	apiServer := newAPIV2Server(ctx, s)
+	s.mux.Handle(apiV2Path, apiServer)
+
 	log.Event(ctx, "added http endpoints")
 
 	// Record node start in telemetry. Get the right counter for this storage
