@@ -391,7 +391,7 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 				// Rollback because the error was anticipated.
 				w.recordInHist(timeutil.Since(start), txnRollback)
 				return errors.Mark(
-					errors.Wrap(err, "***ROLLBACK; Successfully got expected execution error"),
+					errors.Wrap(err, "ROLLBACK; Successfully got expected execution error"),
 					errRunInTxnRbkSentinel,
 				)
 			}
