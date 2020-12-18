@@ -13,7 +13,9 @@ package execstats_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,41 +138,72 @@ func TestTraceAnalyzer(t *testing.T) {
 		}
 	}
 
-	t.Run("NetworkBytesSent", func(t *testing.T) {
-		for _, analyzer := range []*execstats.TraceAnalyzer{
-			rowexecTraceAnalyzer, colexecTraceAnalyzer,
-		} {
-			nodeLevelStats := analyzer.GetNodeLevelStats()
-			require.Equal(
-				t, numNodes-1, len(nodeLevelStats.NetworkBytesSentGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
-			)
+	for _, tc := range []struct {
+		analyzer            *execstats.TraceAnalyzer
+		expectedMaxMemUsage int64
+	}{
+		{
+			analyzer:            rowexecTraceAnalyzer,
+			expectedMaxMemUsage: int64(20480),
+		},
+		{
+			analyzer:            colexecTraceAnalyzer,
+			expectedMaxMemUsage: int64(30720),
+		},
+	} {
+		nodeLevelStats := tc.analyzer.GetNodeLevelStats()
+		require.Equal(
+			t, numNodes-1, len(nodeLevelStats.NetworkBytesSentGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
+		)
 
-			queryLevelStats := analyzer.GetQueryLevelStats()
+		queryLevelStats := tc.analyzer.GetQueryLevelStats()
 
-			// The stats don't count the actual bytes, but they are a synthetic value
-			// based on the number of tuples. In this test 21 tuples flow over the
-			// network.
-			require.Equal(t, queryLevelStats.NetworkBytesSent, int64(21*8))
-		}
-	})
+		// The stats don't count the actual bytes, but they are a synthetic value
+		// based on the number of tuples. In this test 21 tuples flow over the
+		// network.
+		require.Equal(t, int64(21*8), queryLevelStats.NetworkBytesSent)
 
-	t.Run("MaxMemoryUsage", func(t *testing.T) {
-		for _, tc := range []struct {
-			analyzer            *execstats.TraceAnalyzer
-			expectedMaxMemUsage int64
-		}{
-			{
-				analyzer:            rowexecTraceAnalyzer,
-				expectedMaxMemUsage: int64(20480),
+		require.Equal(t, tc.expectedMaxMemUsage, queryLevelStats.MaxMemUsage)
+
+		require.Equal(t, int64(30), queryLevelStats.KVRowsRead)
+		// For tests, the bytes read is based on the number of rows read, rather
+		// than actual bytes read.
+		require.Equal(t, int64(30*8), queryLevelStats.KVBytesRead)
+	}
+}
+
+func TestTraceAnalyzerProcessStats(t *testing.T) {
+	a := &execstats.TraceAnalyzer{FlowMetadata: &execstats.FlowMetadata{}}
+	a.AddComponentStats(
+		1, /* nodeID */
+		&execinfrapb.ComponentStats{
+			Component: execinfrapb.ProcessorComponentID(
+				execinfrapb.FlowID{UUID: uuid.MakeV4()},
+				1, /* processorID */
+			),
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(3 * time.Second),
 			},
-			{
-				analyzer:            colexecTraceAnalyzer,
-				expectedMaxMemUsage: int64(30720),
-			},
-		} {
-			queryLevelStats := tc.analyzer.GetQueryLevelStats()
+		},
+	)
 
-			require.Equal(t, tc.expectedMaxMemUsage, queryLevelStats.MaxMemUsage)
-		}
-	})
+	a.AddComponentStats(
+		2, /* nodeID */
+		&execinfrapb.ComponentStats{
+			Component: execinfrapb.ProcessorComponentID(
+				execinfrapb.FlowID{UUID: uuid.MakeV4()},
+				2, /* processorID */
+			),
+			KV: execinfrapb.KVStats{
+				KVTime: optional.MakeTimeValue(5 * time.Second),
+			},
+		},
+	)
+
+	expected := execstats.QueryLevelStats{KVTime: 8 * time.Second}
+
+	assert.NoError(t, a.ProcessStats())
+	if got := a.GetQueryLevelStats(); !reflect.DeepEqual(got, expected) {
+		t.Errorf("ProcessStats() = %v, want %v", got, expected)
+	}
 }

@@ -12,6 +12,7 @@ package execstats
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -21,6 +22,7 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+// processorStats contains stats for a specific processor extracted from a trace.
 type processorStats struct {
 	nodeID roachpb.NodeID
 	stats  *execinfrapb.ComponentStats
@@ -87,12 +89,18 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 type NodeLevelStats struct {
 	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
 	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
+	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
+	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
+	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
+	KVBytesRead      int64
+	KVRowsRead       int64
+	KVTime           time.Duration
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -185,8 +193,21 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	a.nodeLevelStats = NodeLevelStats{
 		NetworkBytesSentGroupedByNode: make(map[roachpb.NodeID]int64),
 		MaxMemoryUsageGroupedByNode:   make(map[roachpb.NodeID]int64),
+		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
+		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
+		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
 	}
 	var errs error
+
+	// Process processorStats.
+	for _, stats := range a.processorStats {
+		if stats.stats == nil {
+			continue
+		}
+		a.nodeLevelStats.KVBytesReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.BytesRead.Value())
+		a.nodeLevelStats.KVRowsReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.TuplesRead.Value())
+		a.nodeLevelStats.KVTimeGroupedByNode[stats.nodeID] += stats.stats.KV.KVTime.Value()
+	}
 
 	// Process streamStats.
 	for _, stats := range a.streamStats {
@@ -238,6 +259,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	a.queryLevelStats = QueryLevelStats{
 		NetworkBytesSent: int64(0),
 		MaxMemUsage:      int64(0),
+		KVBytesRead:      int64(0),
+		KVRowsRead:       int64(0),
+		KVTime:           time.Duration(0),
 	}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
@@ -248,6 +272,18 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if maxMemUsage > a.queryLevelStats.MaxMemUsage {
 			a.queryLevelStats.MaxMemUsage = maxMemUsage
 		}
+	}
+
+	for _, kvBytesRead := range a.nodeLevelStats.KVBytesReadGroupedByNode {
+		a.queryLevelStats.KVBytesRead += kvBytesRead
+	}
+
+	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
+		a.queryLevelStats.KVRowsRead += kvRowsRead
+	}
+
+	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
+		a.queryLevelStats.KVTime += kvTime
 	}
 	return errs
 }
