@@ -147,6 +147,10 @@ type TestServerInterface interface {
 	// authenticated to access Admin API methods (via a cookie).
 	// The user has admin privileges.
 	GetAdminAuthenticatedHTTPClient() (http.Client, error)
+	// GetRootAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	// The user has admin and superuser privileges.
+	GetRootAuthenticatedHTTPClient() (http.Client, error)
 	// GetAuthenticatedHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
