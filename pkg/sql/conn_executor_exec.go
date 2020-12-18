@@ -1499,22 +1499,20 @@ func createRootOrChildSpan(
 ) (context.Context, *tracing.Span) {
 	// WithForceRealSpan is used to support the use of session tracing, which
 	// may start recording on this span.
-	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
 		// Create a child span for this operation.
-		sp = parentSp.Tracer().StartSpan(
+		return parentSp.Tracer().StartSpanCtx(
+			parentCtx,
 			opName,
 			tracing.WithParentAndAutoCollection(parentSp),
-			tracing.WithCtxLogTags(parentCtx),
 			tracing.WithForceRealSpan(),
 		)
-	} else {
-		// Create a root span for this operations.
-		sp = tracer.StartSpan(
-			opName, tracing.WithCtxLogTags(parentCtx), tracing.WithForceRealSpan(),
-		)
 	}
-	return tracing.ContextWithSpan(parentCtx, sp), sp
+	// Create a root span for this operations.
+	return tracer.StartSpanCtx(
+		parentCtx,
+		opName, tracing.WithForceRealSpan(),
+	)
 }
 
 // logTraceAboveThreshold logs a span's recording if the duration is above a

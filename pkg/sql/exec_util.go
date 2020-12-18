@@ -1541,30 +1541,29 @@ func (st *SessionTracing) StartTracing(
 
 	// Now hijack the conn's ctx with one that has a recording span.
 
-	opName := "session recording"
-	var sp *tracing.Span
 	connCtx := st.ex.ctxHolder.connCtx
-
+	opName := "session recording"
+	var newConnCtx context.Context
+	var sp *tracing.Span
 	if parentSp := tracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
-		sp = parentSp.Tracer().StartSpan(
+		newConnCtx, sp = parentSp.Tracer().StartSpanCtx(
+			connCtx,
 			opName,
 			tracing.WithParentAndAutoCollection(parentSp),
-			tracing.WithCtxLogTags(connCtx),
 			tracing.WithForceRealSpan(),
 		)
 	} else {
 		// Create a root span while recording.
-		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(
+		newConnCtx, sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpanCtx(
+			connCtx,
 			opName, tracing.WithForceRealSpan(),
-			tracing.WithCtxLogTags(connCtx),
 		)
 	}
 	sp.SetVerbose(true)
 	st.connSpan = sp
 
 	// Hijack the connections context.
-	newConnCtx := tracing.ContextWithSpan(st.ex.ctxHolder.connCtx, sp)
 	st.ex.ctxHolder.hijack(newConnCtx)
 
 	return nil

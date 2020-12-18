@@ -930,20 +930,18 @@ func (n *Node) setupSpanForIncomingRPC(
 	// The operation name matches the one created by the interceptor in the
 	// remoteTrace case below.
 	const opName = "/cockroach.roachpb.Internal/Batch"
+	tr := n.storeCfg.AmbientCtx.Tracer
 	var newSpan, grpcSpan *tracing.Span
 	if isLocalRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.ChildSpan(ctx, opName)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName)
 	} else {
 		grpcSpan = tracing.SpanFromContext(ctx)
 		if grpcSpan == nil {
 			// If tracing information was passed via gRPC metadata, the gRPC interceptor
 			// should have opened a span for us. If not, open a span now (if tracing is
 			// disabled, this will be a noop span).
-			newSpan = n.storeCfg.AmbientCtx.Tracer.StartSpan(
-				opName, tracing.WithLogTags(n.storeCfg.AmbientCtx.LogTags()),
-			)
-			ctx = tracing.ContextWithSpan(ctx, newSpan)
+			ctx, newSpan = tr.StartSpanCtx(ctx, opName)
 		} else {
 			grpcSpan.SetTag("node", n.Descriptor.NodeID)
 		}
