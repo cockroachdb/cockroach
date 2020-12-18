@@ -28,9 +28,11 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1227,6 +1229,42 @@ func (s *statusServer) Profile(
 	}
 }
 
+func (s *statusServer) nodesHelper(
+	ctx context.Context, req *serverpb.NodesRequest,
+	limit, offset int,
+) (*serverpb.NodesResponse, int, error) {
+	startKey := keys.StatusNodePrefix
+	endKey := startKey.PrefixEnd()
+
+	b := &kv.Batch{}
+	b.Scan(startKey, endKey)
+	if err := s.db.Run(ctx, b); err != nil {
+		log.Errorf(ctx, "%v", err)
+		return nil, 0, status.Errorf(codes.Internal, err.Error())
+	}
+	rows := b.Results[0].Rows
+
+	resp := serverpb.NodesResponse{
+		Nodes: make([]statuspb.NodeStatus, len(rows)),
+	}
+	for i, row := range rows {
+		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
+			log.Errorf(ctx, "%v", err)
+			return nil, 0, status.Errorf(codes.Internal, err.Error())
+		}
+	}
+	sort.Slice(resp.Nodes, func(i, j int) bool {
+		return resp.Nodes[i].Desc.NodeID < resp.Nodes[j].Desc.NodeID
+	})
+	nodes, next := simplePaginate(resp.Nodes, limit, offset)
+	resp.Nodes = nodes.([]statuspb.NodeStatus)
+
+	clock := s.admin.server.clock
+	// TODO(bilal): Truncate this map to just have resp.Nodes nodes.
+	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.Now().GoTime(), s.st)
+	return &resp, next, nil
+}
+
 // Nodes returns all node statuses.
 //
 // The LivenessByNodeID in the response returns the known liveness
@@ -1239,31 +1277,9 @@ func (s *statusServer) Nodes(
 ) (*serverpb.NodesResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	startKey := keys.StatusNodePrefix
-	endKey := startKey.PrefixEnd()
 
-	b := &kv.Batch{}
-	b.Scan(startKey, endKey)
-	if err := s.db.Run(ctx, b); err != nil {
-		log.Errorf(ctx, "%v", err)
-		return nil, status.Errorf(codes.Internal, err.Error())
-	}
-	rows := b.Results[0].Rows
-
-	resp := serverpb.NodesResponse{
-		Nodes: make([]statuspb.NodeStatus, len(rows)),
-	}
-	for i, row := range rows {
-		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
-			log.Errorf(ctx, "%v", err)
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-	}
-
-	clock := s.admin.server.clock
-	resp.LivenessByNodeID = getLivenessStatusMap(s.nodeLiveness, clock.Now().GoTime(), s.st)
-
-	return &resp, nil
+	resp, _, err := s.nodesHelper(ctx, req, 0, 0)
+	return resp, err
 }
 
 // nodesStatusWithLiveness is like Nodes but for internal
@@ -1650,17 +1666,10 @@ func (s *statusServer) Ranges(
 	return &output, nil
 }
 
-// HotRanges returns the hottest ranges on each store on the requested node(s).
-func (s *statusServer) HotRanges(
+func (s *statusServer) hotRangesHelper(
 	ctx context.Context, req *serverpb.HotRangesRequest,
-) (*serverpb.HotRangesResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
-		return nil, err
-	}
-
+	limit int, start paginationState,
+) (*serverpb.HotRangesResponse, paginationState, error) {
 	response := &serverpb.HotRangesResponse{
 		NodeID:            s.gossip.NodeID.Get(),
 		HotRangesByNodeID: make(map[roachpb.NodeID]serverpb.HotRangesResponse_NodeResponse),
@@ -1669,21 +1678,22 @@ func (s *statusServer) HotRanges(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, start, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 
 		// Only hot ranges from the local node.
 		if local {
 			response.HotRangesByNodeID[requestedNodeID] = s.localHotRanges(ctx)
-			return response, nil
+			return response, start, nil
 		}
 
 		// Only hot ranges from one non-local node.
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
-			return nil, err
+			return nil, start, err
 		}
-		return status.HotRanges(ctx, req)
+		resp, err := status.HotRanges(ctx, req)
+		return resp, start, err
 	}
 
 	// Hot ranges from all nodes.
@@ -1692,9 +1702,9 @@ func (s *statusServer) HotRanges(
 		return client, err
 	}
 	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
-		return status.HotRanges(ctx, &remoteRequest)
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.HotRanges(ctx, &remoteRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
 		hotRangesResp := resp.(*serverpb.HotRangesResponse)
@@ -1706,11 +1716,28 @@ func (s *statusServer) HotRanges(
 		}
 	}
 
-	if err := s.iterateNodes(ctx, "hot ranges", dialFn, nodeFn, responseFn, errorFn); err != nil {
+	var next paginationState
+	var err error
+	if next, err = s.paginatedIterateNodes(
+		ctx, "hot ranges", limit, start, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, start, err
+	}
+	return response, next, nil
+}
+
+// HotRanges returns the hottest ranges on each store on the requested node(s).
+func (s *statusServer) HotRanges(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
-	return response, nil
+	response, _, err := s.hotRangesHelper(ctx, req, 0, paginationState{})
+	return response, err
 }
 
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
@@ -1739,18 +1766,10 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 	return resp
 }
 
-// Range returns rangeInfos for all nodes in the cluster about a specific
-// range. It also returns the range history for that range as well.
-func (s *statusServer) Range(
+func (s *statusServer) rangeHelper(
 	ctx context.Context, req *serverpb.RangeRequest,
-) (*serverpb.RangeResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
-		return nil, err
-	}
-
+	limit int, start paginationState,
+) (*serverpb.RangeResponse, paginationState, error) {
 	response := &serverpb.RangeResponse{
 		RangeID:           roachpb.RangeID(req.RangeId),
 		NodeID:            s.gossip.NodeID.Get(),
@@ -1767,19 +1786,26 @@ func (s *statusServer) Range(
 	}
 	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
 		status := client.(serverpb.StatusClient)
-		return status.Ranges(ctx, rangesRequest)
+		resp, err := status.Ranges(ctx, rangesRequest)
+		if err != nil {
+			return nil, err
+		}
+		sort.Slice(resp.Ranges, func(i, j int) bool {
+			return resp.Ranges[i].SourceNodeID < resp.Ranges[j].SourceNodeID
+		})
+		return resp.Ranges, nil
 	}
 	nowNanos := timeutil.Now().UnixNano()
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		rangesResp := resp.(*serverpb.RangesResponse)
+		rangesResp := resp.([]serverpb.RangeInfo)
 		// Age the MVCCStats to a consistent current timestamp. An age that is
 		// not up to date is less useful.
-		for i := range rangesResp.Ranges {
-			rangesResp.Ranges[i].State.Stats.AgeTo(nowNanos)
+		for i := range rangesResp {
+			rangesResp[i].State.Stats.AgeTo(nowNanos)
 		}
 		response.ResponsesByNodeID[nodeID] = serverpb.RangeResponse_NodeResponse{
 			Response: true,
-			Infos:    rangesResp.Ranges,
+			Infos:    rangesResp,
 		}
 	}
 	errorFn := func(nodeID roachpb.NodeID, err error) {
@@ -1788,12 +1814,31 @@ func (s *statusServer) Range(
 		}
 	}
 
-	if err := s.iterateNodes(
-		ctx, fmt.Sprintf("details about range %d", req.RangeId), dialFn, nodeFn, responseFn, errorFn,
+	var next paginationState
+	var err error
+	if next, err = s.paginatedIterateNodes(
+		ctx, fmt.Sprintf("details about range %d", req.RangeId), limit, start,
+		dialFn, nodeFn, responseFn, errorFn,
 	); err != nil {
+		return nil, start, err
+	}
+	return response, next, nil
+}
+
+// Range returns rangeInfos for all nodes in the cluster about a specific
+// range. It also returns the range history for that range as well.
+func (s *statusServer) Range(
+	ctx context.Context, req *serverpb.RangeRequest,
+) (*serverpb.RangeResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-	return response, nil
+
+	resp, _, err := s.rangeHelper(ctx, req, 0, paginationState{})
+	return resp, err
 }
 
 // ListLocalSessions returns a list of SQL sessions on this node.
@@ -1890,6 +1935,237 @@ func (s *statusServer) iterateNodes(
 	return resultErr
 }
 
+// paginatedIterateNodes iterates nodeFn over all non-removed nodes
+// sequentially.  It then calls nodeResponse for every valid result of nodeFn,
+// and nodeError on every error result. It returns the next `limit` results
+// after `offset`.
+func (s *statusServer) paginatedIterateNodes(
+	ctx context.Context,
+	errorCtx string,
+	limit int, pagState paginationState,
+	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
+	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
+	responseFn func(nodeID roachpb.NodeID, resp interface{}),
+	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
+) (next paginationState, err error) {
+	if limit == 0 {
+		return paginationState{}, s.iterateNodes(ctx, errorCtx, dialFn, nodeFn, responseFn, errorFn)
+	}
+	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	if err != nil {
+		return paginationState{}, err
+	}
+
+	// channels for responses and errors.
+	type nodeResponse struct {
+		nodeID   roachpb.NodeID
+		response interface{}
+		value    reflect.Value
+		len      int
+		err      error
+	}
+
+	numNodes := len(nodeStatuses)
+	nodeIDs := make([]roachpb.NodeID, 0, numNodes)
+	for nodeID := range nodeStatuses {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	sort.Slice(nodeIDs, func(i, j int) bool {
+		return nodeIDs[i] < nodeIDs[j]
+	})
+	pagState.mergeNodeIDs(nodeIDs)
+	nodeIDs = nodeIDs[:0]
+	if pagState.inProgress != 0 {
+		nodeIDs = append(nodeIDs, pagState.inProgress)
+	}
+	nodeIDs = append(nodeIDs, pagState.nodesToQuery...)
+	responseChan := make(chan nodeResponse, len(nodeIDs))
+	var nodeResponseMu sync.Mutex
+	var nodeResponseTurn sync.Cond
+	nodeResponseTurn.L = &nodeResponseMu
+	// The two vars below are protected by nodeResponseMu.
+	var currentIdx, currentLen int
+	var done int32
+
+	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID, idx int) {
+		if atomic.LoadInt32(&done) != 0 {
+			// There are more values than we need. currentLen >= limit.
+			return
+		}
+		var client interface{}
+		addNodeResp := func(resp nodeResponse) {
+			nodeResponseMu.Lock()
+			defer nodeResponseMu.Unlock()
+
+			for currentIdx < idx {
+				nodeResponseTurn.Wait()
+			}
+			if atomic.LoadInt32(&done) != 0 {
+				// There are more values than we need. currentLen >= limit.
+				currentIdx++
+				nodeResponseTurn.Broadcast()
+				return
+			}
+			responseChan <- resp
+			currentLen += resp.len
+			if nodeID == pagState.inProgress {
+				// Reduce currentLen by value already sent in previous call.
+				currentLen -= pagState.inProgressIndex
+			}
+			if currentLen >= limit {
+				atomic.StoreInt32(&done, 1)
+				close(responseChan)
+			}
+			currentIdx++
+			nodeResponseTurn.Broadcast()
+		}
+		err := contextutil.RunWithTimeout(ctx, "dial node", base.NetworkTimeout, func(ctx context.Context) error {
+			var err error
+			client, err = dialFn(ctx, nodeID)
+			return err
+		})
+		if err != nil {
+			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
+				nodeID, nodeStatuses[nodeID].livenessStatus)
+			addNodeResp(nodeResponse{nodeID: nodeID, err: err})
+			return
+		}
+
+		res, err := nodeFn(ctx, client, nodeID)
+		if err != nil {
+			err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
+				errorCtx, nodeID, nodeStatuses[nodeID].livenessStatus)
+		}
+		length := 0
+		value := reflect.ValueOf(res)
+		if res != nil && !value.IsNil() {
+			length = 1
+			if value.Kind() == reflect.Slice {
+				length = value.Len()
+			}
+		}
+		addNodeResp(nodeResponse{nodeID: nodeID, response: res, len: length, value: value, err: err})
+	}
+
+	// Issue the requests concurrently.
+	sem := quotapool.NewIntPool("node status", 4)
+	ctx, cancel := s.stopper.WithCancelOnStop(ctx)
+	defer cancel()
+	for idx, nodeID := range nodeIDs {
+		nodeID := nodeID // needed to ensure the closure below captures a copy.
+		idx := idx
+		if err := s.stopper.RunLimitedAsyncTask(
+			ctx, fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+			sem, true, /* wait */
+			func(ctx context.Context) { nodeQuery(ctx, nodeID, idx) },
+		); err != nil {
+			return pagState, err
+		}
+	}
+
+	var resultErr error
+	count := 0
+	numNodes = len(nodeIDs)
+	for numNodes > 0 {
+		select {
+		case res, ok := <-responseChan:
+			if res.err != nil {
+				errorFn(res.nodeID, res.err)
+			} else if res.len > 0 && count < limit {
+				var startIdx, endIdx int
+				if res.nodeID == pagState.inProgress && pagState.inProgressIndex != 0 {
+					startIdx = pagState.inProgressIndex
+				}
+				if startIdx > res.len {
+					startIdx = res.len
+				}
+				if limit < (count + res.len - startIdx) {
+					endIdx = startIdx + (limit - count)
+				} else {
+					endIdx = res.len
+				}
+				count += endIdx - startIdx
+				pagState.inProgress = res.nodeID
+				pagState.inProgressIndex = endIdx
+
+				var response interface{}
+				if res.value.Kind() == reflect.Slice {
+					response = res.value.Slice(startIdx, endIdx).Interface()
+				} else if endIdx > startIdx {
+					// res.len must be 1 if res.value.Kind is not Slice.
+					response = res.value.Interface()
+				}
+				responseFn(res.nodeID, response)
+			}
+			if res.nodeID != 0 && count < limit {
+				pagState.nodesQueried = append(pagState.nodesQueried, res.nodeID)
+				if len(pagState.nodesToQuery) > 0 {
+					pagState.inProgress = pagState.nodesToQuery[0]
+					pagState.inProgressIndex = 0
+					pagState.nodesToQuery = pagState.nodesToQuery[1:]
+				} else {
+					pagState.nodesToQuery = pagState.nodesToQuery[:0]
+					pagState.inProgress = 0
+					pagState.inProgressIndex = 0
+				}
+			}
+			if !ok {
+				return pagState, resultErr
+			}
+		case <-ctx.Done():
+			resultErr = errors.Errorf("request of %s canceled before completion", errorCtx)
+		}
+		numNodes--
+	}
+	return pagState, resultErr
+}
+
+func (s *statusServer) listSessionsHelper(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+	limit int, start paginationState,
+) (*serverpb.ListSessionsResponse, paginationState, error) {
+	response := &serverpb.ListSessionsResponse{
+		Sessions: make([]serverpb.Session, 0),
+		Errors:   make([]serverpb.ListSessionsError, 0),
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		resp, err := statusClient.ListLocalSessions(ctx, req)
+		if resp != nil && err == nil {
+			if len(resp.Errors) > 0 {
+				return nil, errors.New(resp.Errors[0].Message)
+			}
+			sort.Slice(resp.Sessions, func(i, j int) bool {
+				return resp.Sessions[i].Start.Before(resp.Sessions[j].Start)
+			})
+			return resp.Sessions, nil
+		}
+		return nil, err
+	}
+	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
+		sessions := nodeResp.([]serverpb.Session)
+		response.Sessions = append(response.Sessions, sessions...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	var err error
+	var pagState paginationState
+	if pagState, err = s.paginatedIterateNodes(
+		ctx, "session list", limit, start, dialFn, nodeFn, responseFn, errorFn); err != nil {
+		err := serverpb.ListSessionsError{Message: err.Error()}
+		response.Errors = append(response.Errors, err)
+	}
+	return response, pagState, nil
+}
+
 // ListSessions returns a list of SQL sessions on all nodes in the cluster.
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
@@ -1901,33 +2177,8 @@ func (s *statusServer) ListSessions(
 		return nil, err
 	}
 
-	response := &serverpb.ListSessionsResponse{
-		Sessions: make([]serverpb.Session, 0),
-		Errors:   make([]serverpb.ListSessionsError, 0),
-	}
-
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
-		return status.ListLocalSessions(ctx, req)
-	}
-	responseFn := func(_ roachpb.NodeID, nodeResp interface{}) {
-		sessions := nodeResp.(*serverpb.ListSessionsResponse)
-		response.Sessions = append(response.Sessions, sessions.Sessions...)
-	}
-	errorFn := func(nodeID roachpb.NodeID, err error) {
-		errResponse := serverpb.ListSessionsError{NodeID: nodeID, Message: err.Error()}
-		response.Errors = append(response.Errors, errResponse)
-	}
-
-	if err := s.iterateNodes(ctx, "session list", dialFn, nodeFn, responseFn, errorFn); err != nil {
-		err := serverpb.ListSessionsError{Message: err.Error()}
-		response.Errors = append(response.Errors, err)
-	}
-	return response, nil
+	resp, _, err := s.listSessionsHelper(ctx, req, 0 /* limit */, paginationState{})
+	return resp, err
 }
 
 // CancelSession responds to a session cancellation request by canceling the
