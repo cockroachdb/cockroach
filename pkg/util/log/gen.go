@@ -34,7 +34,7 @@ func main() {
 
 func run() error {
 	if len(os.Args) < 3 {
-		return errors.Newf("usage: %s <proto> template>\n", os.Args[0])
+		return errors.Newf("usage: %s <proto> <template>\n", os.Args[0])
 	}
 
 	// Which template are we running?
