@@ -119,7 +119,7 @@ func TestTryDecodeValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotOk, gotVal, err := tryDecodeValue(tt.s, protoName)
+			gotOk, gotVal, err := tryDecodeValue(tt.s, protoName, true /* emitDefaults */)
 			require.Equal(t, tt.wantOK, gotOk)
 			require.NoError(t, err)
 			require.Equal(t, gotVal, tt.wantVal)

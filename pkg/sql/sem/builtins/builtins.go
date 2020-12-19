@@ -3126,29 +3126,58 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.pb_to_json": makeBuiltin(
 		jsonProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"pbname", types.String},
-				{"data", types.Bytes},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				msg, err := protoreflect.DecodeMessage(
-					string(tree.MustBeDString(args[0])),
-					[]byte(tree.MustBeDBytes(args[1])),
-				)
+		func() []tree.Overload {
+			pbToJSON := func(typ string, data []byte, emitDefaults bool) (tree.Datum, error) {
+				msg, err := protoreflect.DecodeMessage(typ, data)
 				if err != nil {
 					return nil, err
 				}
-				j, err := protoreflect.MessageToJSON(msg, true /* emitDefaults */)
+				j, err := protoreflect.MessageToJSON(msg, emitDefaults)
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDJSON(j), nil
-			},
-			Info:       "Converts protocol message to its JSONB representation.",
-			Volatility: tree.VolatilityImmutable,
-		}),
+			}
+			returnType := tree.FixedReturnType(types.Jsonb)
+			const info = "Converts protocol message to its JSONB representation."
+			volatility := tree.VolatilityImmutable
+			return []tree.Overload{
+				{
+					Info:       info,
+					Volatility: volatility,
+					Types: tree.ArgTypes{
+						{"pbname", types.String},
+						{"data", types.Bytes},
+					},
+					ReturnType: returnType,
+					Fn: func(context *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+						const emitDefaults = true
+						return pbToJSON(
+							string(tree.MustBeDString(args[0])),
+							[]byte(tree.MustBeDBytes(args[1])),
+							emitDefaults,
+						)
+					},
+				},
+				{
+					Info:       info,
+					Volatility: volatility,
+					Types: tree.ArgTypes{
+						{"pbname", types.String},
+						{"data", types.Bytes},
+						{"emit_defaults", types.Bool},
+					},
+					ReturnType: returnType,
+					Fn: func(context *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+						return pbToJSON(
+							string(tree.MustBeDString(args[0])),
+							[]byte(tree.MustBeDBytes(args[1])),
+							bool(tree.MustBeDBool(args[2])),
+						)
+					},
+				},
+			}
+		}()...),
 
 	"crdb_internal.json_to_pb": makeBuiltin(
 		jsonProps(),
