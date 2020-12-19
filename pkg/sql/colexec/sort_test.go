@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -325,6 +326,78 @@ func BenchmarkSort(b *testing.B) {
 						}
 					}
 				})
+			}
+		}
+	}
+}
+
+func BenchmarkSortUUID(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
+	k := uint64(128)
+
+	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
+		for _, nCols := range []int{1, 2, 4} {
+			for _, topK := range []bool{false, true} {
+				for _, constPrefix := range []bool{false, true} {
+					name := fmt.Sprintf("rows=%d/cols=%d/topK=%t/constPrefix=%t", nBatches*coldata.BatchSize(), nCols, topK, constPrefix)
+					b.Run(name, func(b *testing.B) {
+						// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+						// batch) * nCols (number of columns / row).
+						b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+						typs := make([]*types.T, nCols)
+						for i := range typs {
+							typs[i] = types.Bytes
+						}
+						batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
+						batch.SetLength(coldata.BatchSize())
+						ordCols := make([]execinfrapb.Ordering_Column, nCols)
+						for i := range ordCols {
+							ordCols[i].ColIdx = uint32(i)
+							ordCols[i].Direction = execinfrapb.Ordering_Column_Direction(rng.Int() % 2)
+
+							col := batch.ColVec(i).Bytes()
+
+							var prefix []byte
+							if constPrefix {
+								id, err := uuid.NewV4()
+								if err != nil {
+									b.Fatalf("unexpected error: %s", err)
+								}
+								prefix = id[:8]
+							}
+
+							for j := 0; j < coldata.BatchSize(); j++ {
+								id, err := uuid.NewV4()
+								if err != nil {
+									b.Fatalf("unexpected error: %s", err)
+								}
+								idBytes := id[:16]
+								if constPrefix {
+									copy(idBytes, prefix)
+								}
+								col.Set(j, idBytes)
+							}
+						}
+						b.ResetTimer()
+						for n := 0; n < b.N; n++ {
+							source := newFiniteBatchSource(batch, typs, nBatches)
+							var sorter colexecbase.Operator
+							if topK {
+								sorter = NewTopKSorter(testAllocator, source, typs, ordCols, k)
+							} else {
+								var err error
+								sorter, err = NewSorter(testAllocator, source, typs, ordCols)
+								if err != nil {
+									b.Fatal(err)
+								}
+							}
+							sorter.Init()
+							for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
+							}
+						}
+					})
+				}
 			}
 		}
 	}
