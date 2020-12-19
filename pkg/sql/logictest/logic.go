@@ -2893,6 +2893,36 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		return errors.Errorf("descriptor validation failed:\n%s", invalidObjects)
 	}
 
+	// Ensure that all of the created descriptors can round-trip through json.
+	{
+		rows, err := t.db.Query(
+			`
+SELECT encode(descriptor, 'hex') AS descriptor
+  FROM system.descriptor
+ WHERE descriptor
+       != crdb_internal.json_to_pb(
+            'cockroach.sql.sqlbase.Descriptor',
+            crdb_internal.pb_to_json(
+                'cockroach.sql.sqlbase.Descriptor',
+                descriptor,
+                false -- emit_defaults
+            )
+        );
+`,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to test for descriptor JSON round-trip")
+		}
+		rowsMat, err := sqlutils.RowsToStrMatrix(rows)
+		if err != nil {
+			return errors.Wrap(err, "failed read rows from descriptor JSON round-trip")
+		}
+		if len(rowsMat) > 0 {
+			return errors.Errorf("some descriptors did not round-trip:\n%s",
+				sqlutils.MatrixToStr(rowsMat))
+		}
+	}
+
 	// TODO(lucy): we should really drop all created databases in this test, not
 	// just the one we started with.
 	stmt := "SET sql_safe_updates=false; DROP DATABASE IF EXISTS test CASCADE"

@@ -26,6 +26,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
