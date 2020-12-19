@@ -21,7 +21,6 @@ package colexec
 
 import (
 	"context"
-	"encoding/binary"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -136,7 +135,7 @@ func newSingleSorter(
 type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 	sortCol _GOTYPESLICE
 	// {{if .CanAbbreviate}}
-	//abbreviatedSortCol _ABBREVIATED_GOTYPESLICE
+	abbreviatedSortCol _ABBREVIATED_GOTYPESLICE
 	// {{end}}
 	nulls         *coldata.Nulls
 	order         []int
@@ -147,7 +146,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.TemplateType()
 	s.nulls = col.Nulls()
 	// {{if .CanAbbreviate}}
-	//s.abbreviatedSortCol = col.AbbreviatedTemplateType()
+	s.abbreviatedSortCol = col.AbbreviatedTemplateType()
 	// {{end}}
 	s.order = order
 }
@@ -201,14 +200,14 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{end}}
 	var lt bool
 
-	// TODO(mgartner): Hard-coding this comparison means that this is broken for
-	// DESC order.
 	// {{if .CanAbbreviate}}
 	{
-		aAbbr := s.sortCol.Get(s.order[i])[:8]
-		a := binary.BigEndian.Uint64(aAbbr)
-		bAbbr := s.sortCol.Get(s.order[j])[:8]
-		b := binary.BigEndian.Uint64(bAbbr)
+		//aAbbr := s.sortCol.Get(s.order[i])[:8]
+		//a := binary.BigEndian.Uint64(aAbbr)
+		//bAbbr := s.sortCol.Get(s.order[j])[:8]
+		//b := binary.BigEndian.Uint64(bAbbr)
+		a := s.abbreviatedSortCol[s.order[i]]
+		b := s.abbreviatedSortCol[s.order[j]]
 		// {{if eq $dir "Asc"}}
 		if a < b {
 			return true
