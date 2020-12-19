@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -151,6 +152,7 @@ type Server struct {
 	stopper         *stop.Stopper
 
 	debug *debug.Server
+	kvProber *kvprober.Prober
 
 	replicationReporter   *reports.Reporter
 	protectedtsProvider   protectedts.Provider
@@ -608,6 +610,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
+	kvProber := kvprober.NewProber(kvprober.ProberOpts{
+		AmbientCtx: cfg.AmbientCtx,
+		DB: db,
+		HistogramWindowInterval: cfg.HistogramWindowInterval(),
+		Settings: st,
+	})
+
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:      serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -673,6 +682,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		raftTransport:          raftTransport,
 		stopper:                stopper,
 		debug:                  debugServer,
+		kvProber:               kvProber,
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		protectedtsReconciler:  protectedtsReconciler,
@@ -1755,6 +1765,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// started. At this point we know that all sqlmigrations have successfully
 	// been run so it is safe to upgrade to the binary's current version.
 	s.startAttemptUpgrade(ctx)
+
+	s.kvProber.Start(ctx, s.stopper)
 
 	log.Event(ctx, "server initialized")
 	return nil
