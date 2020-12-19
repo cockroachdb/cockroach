@@ -589,7 +589,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -627,7 +629,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -665,7 +669,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -704,7 +710,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -740,7 +748,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -794,7 +804,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -830,7 +842,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -866,7 +880,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -903,7 +919,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -937,7 +955,9 @@ func (ht *hashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8575,7 +8595,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8626,7 +8648,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8679,7 +8703,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8729,7 +8755,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8786,7 +8814,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8837,7 +8867,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8890,7 +8922,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -8940,7 +8974,9 @@ func (ht *hashTable) checkColForDistinctTuples(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 

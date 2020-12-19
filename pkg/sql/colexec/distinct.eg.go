@@ -843,7 +843,9 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 								{
 									var cmpResult int
+
 									cmpResult = bytes.Compare(v, lastVal)
+
 									unique = cmpResult != 0
 								}
 
@@ -873,7 +875,9 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(v, lastVal)
+
 							unique = cmpResult != 0
 						}
 
@@ -922,7 +926,9 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 								{
 									var cmpResult int
+
 									cmpResult = bytes.Compare(v, lastVal)
+
 									unique = cmpResult != 0
 								}
 
@@ -952,7 +958,9 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(v, lastVal)
+
 							unique = cmpResult != 0
 						}
 
@@ -1022,7 +1030,9 @@ func (p partitionerBytes) partitionWithOrder(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(v, lastVal)
+
 								unique = cmpResult != 0
 							}
 
@@ -1049,7 +1059,9 @@ func (p partitionerBytes) partitionWithOrder(
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(v, lastVal)
+
 						unique = cmpResult != 0
 					}
 
@@ -1109,7 +1121,9 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(v, lastVal)
+
 								unique = cmpResult != 0
 							}
 
@@ -1139,7 +1153,9 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(v, lastVal)
+
 						unique = cmpResult != 0
 					}
 

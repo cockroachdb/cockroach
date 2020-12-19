@@ -269,7 +269,9 @@ EqLoop:
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
+
 							cmp = bytes.Compare(lVal, rVal)
+
 						}
 
 						if cmp == 0 {
@@ -295,7 +297,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newLVal, lVal)
+
 										match = cmpResult == 0
 									}
 
@@ -320,7 +324,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newRVal, rVal)
+
 										match = cmpResult == 0
 									}
 
@@ -1940,7 +1946,9 @@ EqLoop:
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
+
 							cmp = bytes.Compare(lVal, rVal)
+
 						}
 
 						if cmp == 0 {
@@ -1966,7 +1974,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newLVal, lVal)
+
 										match = cmpResult == 0
 									}
 
@@ -1991,7 +2001,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newRVal, rVal)
+
 										match = cmpResult == 0
 									}
 
@@ -3611,7 +3623,9 @@ EqLoop:
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = rSel[curRIdx]
 							rVal = rKeys.Get(rSelIdx)
+
 							cmp = bytes.Compare(lVal, rVal)
+
 						}
 
 						if cmp == 0 {
@@ -3637,7 +3651,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newLVal, lVal)
+
 										match = cmpResult == 0
 									}
 
@@ -3662,7 +3678,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newRVal, rVal)
+
 										match = cmpResult == 0
 									}
 
@@ -5282,7 +5300,9 @@ EqLoop:
 							lVal = lKeys.Get(lSelIdx)
 							rSelIdx = curRIdx
 							rVal = rKeys.Get(rSelIdx)
+
 							cmp = bytes.Compare(lVal, rVal)
+
 						}
 
 						if cmp == 0 {
@@ -5308,7 +5328,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newLVal, lVal)
+
 										match = cmpResult == 0
 									}
 
@@ -5333,7 +5355,9 @@ EqLoop:
 
 									{
 										var cmpResult int
+
 										cmpResult = bytes.Compare(newRVal, rVal)
+
 										match = cmpResult == 0
 									}
 

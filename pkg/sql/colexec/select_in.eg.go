@@ -608,7 +608,9 @@ func cmpInBytes(
 	for lo < hi {
 		i := (lo + hi) / 2
 		var cmpResult int
+
 		cmpResult = bytes.Compare(targetElem, filterRow[i])
+
 		if cmpResult == 0 {
 			return siTrue
 		} else if cmpResult > 0 {

@@ -451,6 +451,31 @@ func (b *argWidthOverloadBase) GoTypeSliceName() string {
 	return goTypeSliceName(b.CanonicalTypeFamily, b.Width)
 }
 
+func abbreviatedGoTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
+	switch canonicalTypeFamily {
+	case types.BytesFamily:
+		return "coldata.Uint64s"
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported abbreviated canonical type family %s", canonicalTypeFamily))
+	return ""
+}
+
+func (b *argWidthOverloadBase) AbbreviatedGoTypeSliceName() string {
+	return abbreviatedGoTypeSliceName(b.CanonicalTypeFamily, b.Width)
+}
+
+func canAbbreviate(canonicalTypeFamily types.Family, width int32) bool {
+	switch canonicalTypeFamily {
+	case types.BytesFamily:
+		return true
+	}
+	return false
+}
+
+func (b *argWidthOverloadBase) CanAbbreviate() bool {
+	return canAbbreviate(b.CanonicalTypeFamily, b.Width)
+}
+
 func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
 	switch canonicalTypeFamily {
 	case types.BytesFamily:

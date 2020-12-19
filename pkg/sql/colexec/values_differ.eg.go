@@ -91,7 +91,9 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 
 			{
 				var cmpResult int
+
 				cmpResult = bytes.Compare(arg1, arg2)
+
 				unique = cmpResult != 0
 			}
 

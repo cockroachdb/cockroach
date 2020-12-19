@@ -649,7 +649,9 @@ func (ht *hashTable) checkColDeleting(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -691,7 +693,9 @@ func (ht *hashTable) checkColDeleting(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -733,7 +737,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -776,7 +782,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -816,7 +824,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -876,7 +886,9 @@ func (ht *hashTable) checkColDeleting(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -918,7 +930,9 @@ func (ht *hashTable) checkColDeleting(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -960,7 +974,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -1003,7 +1019,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -1043,7 +1061,9 @@ func (ht *hashTable) checkColDeleting(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 

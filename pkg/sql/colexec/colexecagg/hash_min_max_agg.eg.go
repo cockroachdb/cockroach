@@ -279,7 +279,9 @@ func (a *minBytesHashAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -305,7 +307,9 @@ func (a *minBytesHashAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -1703,7 +1707,9 @@ func (a *maxBytesHashAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 
@@ -1729,7 +1735,9 @@ func (a *maxBytesHashAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 

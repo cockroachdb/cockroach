@@ -28900,7 +28900,9 @@ func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult == 0
 						}
 
@@ -28916,7 +28918,9 @@ func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult == 0
 						}
 
@@ -28937,7 +28941,9 @@ func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult == 0
 					}
 
@@ -28950,7 +28956,9 @@ func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult == 0
 					}
 
@@ -33760,7 +33768,9 @@ func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult != 0
 						}
 
@@ -33776,7 +33786,9 @@ func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult != 0
 						}
 
@@ -33797,7 +33809,9 @@ func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult != 0
 					}
 
@@ -33810,7 +33824,9 @@ func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult != 0
 					}
 
@@ -38620,7 +38636,9 @@ func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult < 0
 						}
 
@@ -38636,7 +38654,9 @@ func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult < 0
 						}
 
@@ -38657,7 +38677,9 @@ func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult < 0
 					}
 
@@ -38670,7 +38692,9 @@ func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult < 0
 					}
 
@@ -43480,7 +43504,9 @@ func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult <= 0
 						}
 
@@ -43496,7 +43522,9 @@ func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult <= 0
 						}
 
@@ -43517,7 +43545,9 @@ func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult <= 0
 					}
 
@@ -43530,7 +43560,9 @@ func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult <= 0
 					}
 
@@ -48340,7 +48372,9 @@ func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult > 0
 						}
 
@@ -48356,7 +48390,9 @@ func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult > 0
 						}
 
@@ -48377,7 +48413,9 @@ func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult > 0
 					}
 
@@ -48390,7 +48428,9 @@ func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult > 0
 					}
 
@@ -53200,7 +53240,9 @@ func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult >= 0
 						}
 
@@ -53216,7 +53258,9 @@ func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 						{
 							var cmpResult int
+
 							cmpResult = bytes.Compare(arg, p.constArg)
+
 							projCol[i] = cmpResult >= 0
 						}
 
@@ -53237,7 +53281,9 @@ func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult >= 0
 					}
 
@@ -53250,7 +53296,9 @@ func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 
 					{
 						var cmpResult int
+
 						cmpResult = bytes.Compare(arg, p.constArg)
+
 						projCol[i] = cmpResult >= 0
 					}
 

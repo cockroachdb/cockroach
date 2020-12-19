@@ -11,6 +11,7 @@
 package coldata
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -71,6 +72,8 @@ type Vec interface {
 	Float64() Float64s
 	// Bytes returns a flat Bytes representation.
 	Bytes() *Bytes
+	// AbbreviatedBytes returns an int64 slice.
+	AbbreviatedBytes() Uint64s
 	// Decimal returns an apd.Decimal slice.
 	Decimal() Decimals
 	// Timestamp returns a time.Time slice.
@@ -234,6 +237,19 @@ func (m *memColumn) Bytes() *Bytes {
 	return m.col.(*Bytes)
 }
 
+func (m *memColumn) AbbreviatedBytes() Uint64s {
+	bytes := m.col.(*Bytes)
+	r := make(Uint64s, m.Length())
+	for i := range r {
+		b := bytes.Get(i)
+		// Convert the first 8 bytes a int64.
+		// TODO(mgartner): there might not be 8 bytes
+		abbreviated := b[:8]
+		r[i] = binary.BigEndian.Uint64(abbreviated)
+	}
+	return r
+}
+
 func (m *memColumn) Decimal() Decimals {
 	return m.col.(Decimals)
 }
@@ -359,6 +375,8 @@ func (m *memColumn) Capacity() int {
 		return cap(m.col.(Times))
 	case types.IntervalFamily:
 		return cap(m.col.(Durations))
+	case types.UuidFamily:
+		return m.Bytes().Len()
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return m.col.(DatumVec).Cap()
 	default:

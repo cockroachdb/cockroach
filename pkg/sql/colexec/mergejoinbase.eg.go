@@ -126,7 +126,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 
 				{
 					var cmpResult int
+
 					cmpResult = bytes.Compare(prevVal, curVal)
+
 					match = cmpResult == 0
 				}
 

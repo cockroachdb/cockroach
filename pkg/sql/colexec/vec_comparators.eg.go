@@ -111,7 +111,9 @@ func (c *BytesVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	left := c.vecs[vecIdx1].Get(valIdx1)
 	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
+
 	cmp = bytes.Compare(left, right)
+
 	return cmp
 }
 

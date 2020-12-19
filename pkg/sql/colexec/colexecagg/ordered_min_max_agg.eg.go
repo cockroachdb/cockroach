@@ -443,7 +443,9 @@ func (a *minBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -485,7 +487,9 @@ func (a *minBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -529,7 +533,9 @@ func (a *minBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -570,7 +576,9 @@ func (a *minBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult < 0
 							}
 
@@ -3275,7 +3283,9 @@ func (a *maxBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 
@@ -3317,7 +3327,9 @@ func (a *maxBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 
@@ -3361,7 +3373,9 @@ func (a *maxBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 
@@ -3402,7 +3416,9 @@ func (a *maxBytesOrderedAgg) Compute(
 
 							{
 								var cmpResult int
+
 								cmpResult = bytes.Compare(candidate, a.curAgg)
+
 								cmp = cmpResult > 0
 							}
 

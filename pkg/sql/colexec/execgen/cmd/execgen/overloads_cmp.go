@@ -134,7 +134,34 @@ func (boolCustomizer) getCmpOpCompareFunc() compareFunc {
 
 func (bytesCustomizer) getCmpOpCompareFunc() compareFunc {
 	return func(targetElem, leftElem, rightElem, leftCol, rightCol string) string {
-		return fmt.Sprintf("%s = bytes.Compare(%s, %s)", targetElem, leftElem, rightElem)
+		//{
+		//a := uint64(s.abbreviatedSortCol.Get(s.order[i]))
+		//b := uint64(s.abbreviatedSortCol.Get(s.order[j]))
+		//		_aAbbr := %s[:8]
+		//		_a := binary.BigEndian.Uint64(_aAbbr)
+		//		_bAbbr := %s[:8]
+		//		_b := binary.BigEndian.Uint64(_bAbbr)
+		//		if _a < _b {
+		//			%s = -1
+		//		} else if _a > _b {
+		//			%s = 1
+		//		} else {
+		//			%s = bytes.Compare(%s, %s)
+		//		}
+		//}
+		//bytes := m.col.(*Bytes)
+		//r := make(Uint64s, m.Length())
+		//for i := range r {
+		//	b := bytes.Get(i)
+		//	// Convert the first 8 bytes a int64.
+		//	// TODO(mgartner): there might not be 8 bytes
+		//	abbreviated := b[:8]
+		//	r[i] = binary.BigEndian.Uint64(abbreviated)
+		//}
+		//return r
+		return fmt.Sprintf(`
+			%s = bytes.Compare(%s, %s)
+		`, targetElem, leftElem, rightElem) // leftElem, rightElem, targetElem, targetElem, targetElem, leftElem, rightElem)
 	}
 }
 

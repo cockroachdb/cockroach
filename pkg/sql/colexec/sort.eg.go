@@ -12,6 +12,7 @@ package colexec
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -431,6 +432,10 @@ func (s *sortBoolAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -462,7 +467,8 @@ func (s *sortBoolAscWithNullsOp) Len() int {
 }
 
 type sortBytesAscWithNullsOp struct {
-	sortCol       *coldata.Bytes
+	sortCol *coldata.Bytes
+	//abbreviatedSortCol coldata.Uint64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -471,6 +477,7 @@ type sortBytesAscWithNullsOp struct {
 func (s *sortBytesAscWithNullsOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
 	s.nulls = col.Nulls()
+	//s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.order = order
 }
 
@@ -509,13 +516,37 @@ func (s *sortBytesAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+	{
+		aAbbr := s.sortCol.Get(s.order[i])[:8]
+		a := binary.BigEndian.Uint64(aAbbr)
+		bAbbr := s.sortCol.Get(s.order[j])[:8]
+		b := binary.BigEndian.Uint64(bAbbr)
+		if a < b {
+			return true
+		} else if a > b {
+			return false
+		}
+	}
+
+	//if a < b {
+	//	return true
+	//} else if a > b {
+	//	return false
+	//}
+	//}
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
+
 		cmpResult = bytes.Compare(arg1, arg2)
+
 		lt = cmpResult < 0
 	}
 
@@ -579,6 +610,10 @@ func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -649,6 +684,10 @@ func (s *sortInt16AscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -730,6 +769,10 @@ func (s *sortInt32AscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -811,6 +854,10 @@ func (s *sortInt64AscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -892,6 +939,10 @@ func (s *sortFloat64AscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -981,6 +1032,10 @@ func (s *sortTimestampAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1058,6 +1113,10 @@ func (s *sortIntervalAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1128,6 +1187,10 @@ func (s *sortDatumAscWithNullsOp) Less(i, j int) bool {
 		return false
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1200,6 +1263,10 @@ func (s *sortBoolDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1231,7 +1298,8 @@ func (s *sortBoolDescWithNullsOp) Len() int {
 }
 
 type sortBytesDescWithNullsOp struct {
-	sortCol       *coldata.Bytes
+	sortCol *coldata.Bytes
+	//abbreviatedSortCol coldata.Uint64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1240,6 +1308,7 @@ type sortBytesDescWithNullsOp struct {
 func (s *sortBytesDescWithNullsOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
 	s.nulls = col.Nulls()
+	//s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.order = order
 }
 
@@ -1278,13 +1347,37 @@ func (s *sortBytesDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+	{
+		aAbbr := s.sortCol.Get(s.order[i])[:8]
+		a := binary.BigEndian.Uint64(aAbbr)
+		bAbbr := s.sortCol.Get(s.order[j])[:8]
+		b := binary.BigEndian.Uint64(bAbbr)
+		if a < b {
+			return false
+		} else if a > b {
+			return true
+		}
+	}
+
+	//if a < b {
+	//	return true
+	//} else if a > b {
+	//	return false
+	//}
+	//}
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
+
 		cmpResult = bytes.Compare(arg1, arg2)
+
 		lt = cmpResult > 0
 	}
 
@@ -1348,6 +1441,10 @@ func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1418,6 +1515,10 @@ func (s *sortInt16DescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1499,6 +1600,10 @@ func (s *sortInt32DescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1580,6 +1685,10 @@ func (s *sortInt64DescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1661,6 +1770,10 @@ func (s *sortFloat64DescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1750,6 +1863,10 @@ func (s *sortTimestampDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1827,6 +1944,10 @@ func (s *sortIntervalDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1897,6 +2018,10 @@ func (s *sortDatumDescWithNullsOp) Less(i, j int) bool {
 		return true
 	}
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1959,6 +2084,10 @@ func (s *sortBoolAscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortBoolAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -1990,7 +2119,8 @@ func (s *sortBoolAscOp) Len() int {
 }
 
 type sortBytesAscOp struct {
-	sortCol       *coldata.Bytes
+	sortCol *coldata.Bytes
+	//abbreviatedSortCol coldata.Uint64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -1999,6 +2129,7 @@ type sortBytesAscOp struct {
 func (s *sortBytesAscOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
 	s.nulls = col.Nulls()
+	//s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.order = order
 }
 
@@ -2027,13 +2158,37 @@ func (s *sortBytesAscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortBytesAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+	{
+		aAbbr := s.sortCol.Get(s.order[i])[:8]
+		a := binary.BigEndian.Uint64(aAbbr)
+		bAbbr := s.sortCol.Get(s.order[j])[:8]
+		b := binary.BigEndian.Uint64(bAbbr)
+		if a < b {
+			return true
+		} else if a > b {
+			return false
+		}
+	}
+
+	//if a < b {
+	//	return true
+	//} else if a > b {
+	//	return false
+	//}
+	//}
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
+
 		cmpResult = bytes.Compare(arg1, arg2)
+
 		lt = cmpResult < 0
 	}
 
@@ -2087,6 +2242,10 @@ func (s *sortDecimalAscOp) sortPartitions(ctx context.Context, partitions []int)
 
 func (s *sortDecimalAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2147,6 +2306,10 @@ func (s *sortInt16AscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortInt16AscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2218,6 +2381,10 @@ func (s *sortInt32AscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortInt32AscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2289,6 +2456,10 @@ func (s *sortInt64AscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortInt64AscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2360,6 +2531,10 @@ func (s *sortFloat64AscOp) sortPartitions(ctx context.Context, partitions []int)
 
 func (s *sortFloat64AscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2439,6 +2614,10 @@ func (s *sortTimestampAscOp) sortPartitions(ctx context.Context, partitions []in
 
 func (s *sortTimestampAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2506,6 +2685,10 @@ func (s *sortIntervalAscOp) sortPartitions(ctx context.Context, partitions []int
 
 func (s *sortIntervalAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2566,6 +2749,10 @@ func (s *sortDatumAscOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortDatumAscOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2628,6 +2815,10 @@ func (s *sortBoolDescOp) sortPartitions(ctx context.Context, partitions []int) {
 
 func (s *sortBoolDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2659,7 +2850,8 @@ func (s *sortBoolDescOp) Len() int {
 }
 
 type sortBytesDescOp struct {
-	sortCol       *coldata.Bytes
+	sortCol *coldata.Bytes
+	//abbreviatedSortCol coldata.Uint64s
 	nulls         *coldata.Nulls
 	order         []int
 	cancelChecker CancelChecker
@@ -2668,6 +2860,7 @@ type sortBytesDescOp struct {
 func (s *sortBytesDescOp) init(col coldata.Vec, order []int) {
 	s.sortCol = col.Bytes()
 	s.nulls = col.Nulls()
+	//s.abbreviatedSortCol = col.AbbreviatedBytes()
 	s.order = order
 }
 
@@ -2696,13 +2889,37 @@ func (s *sortBytesDescOp) sortPartitions(ctx context.Context, partitions []int) 
 
 func (s *sortBytesDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+	{
+		aAbbr := s.sortCol.Get(s.order[i])[:8]
+		a := binary.BigEndian.Uint64(aAbbr)
+		bAbbr := s.sortCol.Get(s.order[j])[:8]
+		b := binary.BigEndian.Uint64(bAbbr)
+		if a < b {
+			return false
+		} else if a > b {
+			return true
+		}
+	}
+
+	//if a < b {
+	//	return true
+	//} else if a > b {
+	//	return false
+	//}
+	//}
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
 
 	{
 		var cmpResult int
+
 		cmpResult = bytes.Compare(arg1, arg2)
+
 		lt = cmpResult > 0
 	}
 
@@ -2756,6 +2973,10 @@ func (s *sortDecimalDescOp) sortPartitions(ctx context.Context, partitions []int
 
 func (s *sortDecimalDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2816,6 +3037,10 @@ func (s *sortInt16DescOp) sortPartitions(ctx context.Context, partitions []int) 
 
 func (s *sortInt16DescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2887,6 +3112,10 @@ func (s *sortInt32DescOp) sortPartitions(ctx context.Context, partitions []int) 
 
 func (s *sortInt32DescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -2958,6 +3187,10 @@ func (s *sortInt64DescOp) sortPartitions(ctx context.Context, partitions []int) 
 
 func (s *sortInt64DescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -3029,6 +3262,10 @@ func (s *sortFloat64DescOp) sortPartitions(ctx context.Context, partitions []int
 
 func (s *sortFloat64DescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -3108,6 +3345,10 @@ func (s *sortTimestampDescOp) sortPartitions(ctx context.Context, partitions []i
 
 func (s *sortTimestampDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -3175,6 +3416,10 @@ func (s *sortIntervalDescOp) sortPartitions(ctx context.Context, partitions []in
 
 func (s *sortIntervalDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])
@@ -3235,6 +3480,10 @@ func (s *sortDatumDescOp) sortPartitions(ctx context.Context, partitions []int) 
 
 func (s *sortDatumDescOp) Less(i, j int) bool {
 	var lt bool
+
+	// TODO(mgartner): Hard-coding this comparison means that this is broken for
+	// DESC order.
+
 	// We always indirect via the order vector.
 	arg1 := s.sortCol.Get(s.order[i])
 	arg2 := s.sortCol.Get(s.order[j])

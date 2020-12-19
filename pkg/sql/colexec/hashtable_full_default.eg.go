@@ -581,7 +581,9 @@ func (ht *hashTable) checkCol(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -617,7 +619,9 @@ func (ht *hashTable) checkCol(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -653,7 +657,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -690,7 +696,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -724,7 +732,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -778,7 +788,9 @@ func (ht *hashTable) checkCol(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -814,7 +826,9 @@ func (ht *hashTable) checkCol(
 
 												{
 													var cmpResult int
+
 													cmpResult = bytes.Compare(probeVal, buildVal)
+
 													unique = cmpResult != 0
 												}
 
@@ -850,7 +864,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -887,7 +903,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
@@ -921,7 +939,9 @@ func (ht *hashTable) checkCol(
 
 											{
 												var cmpResult int
+
 												cmpResult = bytes.Compare(probeVal, buildVal)
+
 												unique = cmpResult != 0
 											}
 
