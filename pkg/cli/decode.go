@@ -32,8 +32,10 @@ func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
 # Press Ctrl+C or Ctrl+D to terminate.`,
 		)
 	}
-	return streamMap(os.Stdout, stdin,
-		func(s string) (bool, string, error) { return tryDecodeValue(s, debugDecodeProtoName) })
+	return streamMap(os.Stdout, os.Stdin,
+		func(s string) (bool, string, error) {
+			return tryDecodeValue(s, debugDecodeProtoName, debugDecodeProtoEmitDefaults)
+		})
 }
 
 // streamMap applies `fn` to all the scanned fields in `in`, and reports
@@ -61,7 +63,7 @@ func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error
 
 // tryDecodeValue tries to decode the given string with the given proto name
 // reports ok=false if the data was not valid proto-encoded.
-func tryDecodeValue(s, protoName string) (ok bool, val string, err error) {
+func tryDecodeValue(s, protoName string, emitDefaults bool) (ok bool, val string, err error) {
 	bytes, err := gohex.DecodeString(s)
 	if err != nil {
 		b, err := base64.StdEncoding.DecodeString(s)
@@ -74,7 +76,7 @@ func tryDecodeValue(s, protoName string) (ok bool, val string, err error) {
 	if err != nil {
 		return false, "", nil //nolint:returnerrcheck
 	}
-	j, err := protoreflect.MessageToJSON(msg, true /* emitDefaults */)
+	j, err := protoreflect.MessageToJSON(msg, emitDefaults)
 	if err != nil {
 		// Unexpected error: the data was valid protobuf, but does not
 		// reflect back to JSON. We report the protobuf struct in the

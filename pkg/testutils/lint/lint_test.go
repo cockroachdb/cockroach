@@ -944,6 +944,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!settings/settings_test.go",
+			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -983,6 +984,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
+			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
 			t.Fatal(err)

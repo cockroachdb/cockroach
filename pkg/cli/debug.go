@@ -488,6 +488,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 }
 
 var debugDecodeProtoName string
+var debugDecodeProtoEmitDefaults bool
 var debugDecodeProtoCmd = &cobra.Command{
 	Use:   "decode-proto",
 	Short: "decode-proto <proto> --name=<fully qualified proto name>",
@@ -1342,4 +1343,6 @@ func init() {
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
 		"fully qualified name of the proto to decode")
+	f.BoolVar(&debugDecodeProtoEmitDefaults, "emit-defaults", true,
+		"encode default values for every field")
 }
