@@ -1546,6 +1546,16 @@ func addProjection(
 	return colexec.NewSimpleProjectOp(op, len(typs), projection), newTypes
 }
 
+// evalIfConst checks whether expr is a constant (meaning it is a tree.Datum)
+// and evaluates it if so (e.g. replacing any placeholders). If the expression
+// is not constant, nil is returned.
+func evalIfConst(evalCtx *tree.EvalContext, expr tree.Expr) (tree.Datum, error) {
+	if constArg, ok := expr.(tree.Datum); ok {
+		return constArg.Eval(evalCtx)
+	}
+	return nil, nil
+}
+
 func planSelectionOperators(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
@@ -1643,7 +1653,12 @@ func planSelectionOperators(
 			return nil, resultIdx, ct, err
 		}
 		lTyp := ct[leftIdx]
-		if constArg, ok := t.Right.(tree.Datum); ok {
+		var constArg tree.Datum
+		constArg, err = evalIfConst(evalCtx, t.Right)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		if constArg != nil {
 			switch cmpOp {
 			case tree.Like, tree.NotLike:
 				negate := cmpOp == tree.NotLike
@@ -1994,7 +2009,12 @@ func planProjectionExpr(
 	resultIdx = -1
 	// There are 3 cases. Either the left is constant, the right is constant,
 	// or neither are constant.
-	if lConstArg, lConst := left.(tree.Datum); lConst {
+	var lConstArg tree.Datum
+	lConstArg, err = evalIfConst(evalCtx, left)
+	if err != nil {
+		return nil, resultIdx, typs, err
+	}
+	if lConstArg != nil {
 		// Case one: The left is constant.
 		// Normally, the optimizer normalizes binary exprs so that the constant
 		// argument is on the right side. This doesn't happen for non-commutative
@@ -2033,7 +2053,12 @@ func planProjectionExpr(
 			}
 			right = tupleDatum
 		}
-		if rConstArg, rConst := right.(tree.Datum); rConst {
+		var rConstArg tree.Datum
+		rConstArg, err = evalIfConst(evalCtx, right)
+		if err != nil {
+			return nil, resultIdx, typs, err
+		}
+		if rConstArg != nil {
 			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.

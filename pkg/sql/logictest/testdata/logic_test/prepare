@@ -1368,3 +1368,16 @@ query TI
 EXECUTE enum_query
 ----
 howdy 2
+
+# Regression test for the vectorized engine not handling placeholders in
+# postqueries correctly (#58028).
+statement ok
+CREATE TABLE t58028 (a INT8 PRIMARY KEY, b INT8);
+CREATE TABLE tref58028 (
+  a INT8 PRIMARY KEY,
+  t_a INT8 NOT NULL REFERENCES t58028 (a) ON DELETE CASCADE
+);
+INSERT INTO t58028 VALUES (1, 2);
+INSERT INTO tref58028 VALUES (1, 1);
+PREPARE del AS DELETE FROM t58028 WHERE a = $1;
+EXECUTE del (1);

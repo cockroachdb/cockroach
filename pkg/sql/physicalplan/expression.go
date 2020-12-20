@@ -73,18 +73,12 @@ func MakeExpression(
 		ctx = &fakeExprContext{}
 	}
 
-	evalCtx := ctx.EvalContext()
-	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
-		evalCtx: evalCtx,
+	exprVisitor := &evalAndReplaceExprVisitor{ctx: ctx}
+	outExpr, _ := tree.WalkExpr(exprVisitor, expr)
+	if exprVisitor.err != nil {
+		return execinfrapb.Expression{}, exprVisitor.err
 	}
-
-	if ctx.EvaluateSubqueries() {
-		outExpr, _ := tree.WalkExpr(subqueryVisitor, expr)
-		if subqueryVisitor.err != nil {
-			return execinfrapb.Expression{}, subqueryVisitor.err
-		}
-		expr = outExpr.(tree.TypedExpr)
-	}
+	expr = outExpr.(tree.TypedExpr)
 
 	if indexVarMap != nil {
 		// Remap our indexed vars.
@@ -96,26 +90,39 @@ func MakeExpression(
 	}
 
 	// Since the plan is not fully local, serialize the expression.
-	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
+	fmtCtx := execinfrapb.ExprFmtCtxBase(ctx.EvalContext())
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
+		log.Infof(ctx.EvalContext().Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
 	expression.Expr = fmtCtx.CloseAndGetString()
 	return expression, nil
 }
 
-type evalAndReplaceSubqueryVisitor struct {
-	evalCtx *tree.EvalContext
-	err     error
+// evalAndReplaceExprVisitor evaluates the placeholders and - depending on the
+// context - subqueries in the expressions.
+type evalAndReplaceExprVisitor struct {
+	ctx ExprContext
+	err error
 }
 
-var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
+var _ tree.Visitor = &evalAndReplaceExprVisitor{}
 
-func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+func (e *evalAndReplaceExprVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	switch expr := expr.(type) {
+	case *tree.Placeholder:
+		val, err := expr.Eval(e.ctx.EvalContext())
+		if err != nil {
+			e.err = err
+			return false, expr
+		}
+		newExpr := tree.Expr(val)
+		return false, newExpr
 	case *tree.Subquery:
-		val, err := e.evalCtx.Planner.EvalSubquery(expr)
+		if !e.ctx.EvaluateSubqueries() {
+			return false, expr
+		}
+		val, err := e.ctx.EvalContext().Planner.EvalSubquery(expr)
 		if err != nil {
 			e.err = err
 			return false, expr
@@ -131,4 +138,4 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 	}
 }
 
-func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+func (evalAndReplaceExprVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
