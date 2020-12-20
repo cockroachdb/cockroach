@@ -99,6 +99,15 @@ func (s ColSet) SingleColumn() ColumnID {
 	return col
 }
 
+// ToList converts the set to a ColList, in column ID order.
+func (s ColSet) ToList() ColList {
+	res := make(ColList, 0, s.Len())
+	s.ForEach(func(x ColumnID) {
+		res = append(res, x)
+	})
+	return res
+}
+
 // TranslateColSet is used to translate a ColSet from one set of column IDs
 // to an equivalent set. This is relevant for set operations such as UNION,
 // INTERSECT and EXCEPT, and can be used to map a ColSet defined on the left

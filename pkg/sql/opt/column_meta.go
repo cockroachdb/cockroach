@@ -87,15 +87,6 @@ func (cl ColList) Equals(other ColList) bool {
 	return true
 }
 
-// ColSetToList converts a column id set to a list, in column id order.
-func ColSetToList(set ColSet) ColList {
-	res := make(ColList, 0, set.Len())
-	set.ForEach(func(x ColumnID) {
-		res = append(res, x)
-	})
-	return res
-}
-
 // ColMap provides a 1:1 mapping from one column id to another. It is used by
 // operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap
