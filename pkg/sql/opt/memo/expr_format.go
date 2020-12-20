@@ -282,7 +282,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	default:
 		// Fall back to writing output columns in column id order.
-		colList = opt.ColSetToList(e.Relational().OutputCols)
+		colList = e.Relational().OutputCols.ToList()
 	}
 
 	f.formatColumns(e, tp, colList, required.Presentation)
@@ -294,7 +294,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		*UpsertDistinctOnExpr, *EnsureUpsertDistinctOnExpr:
 		private := e.Private().(*GroupingPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) && !private.GroupingCols.Empty() {
-			f.formatColList(e, tp, "grouping columns:", opt.ColSetToList(private.GroupingCols))
+			f.formatColList(e, tp, "grouping columns:", private.GroupingCols.ToList())
 		}
 		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
 			tp.Childf("internal-ordering: %s", private.Ordering)
