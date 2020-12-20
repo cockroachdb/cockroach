@@ -48,7 +48,7 @@ func (c *CustomFuncs) NeededMutationCols(
 	var cols opt.ColSet
 
 	// Add all input columns referenced by the mutation private.
-	addCols := func(list opt.ColList) {
+	addCols := func(list opt.OptionalColList) {
 		for _, id := range list {
 			if id != 0 {
 				cols.Add(id)
@@ -63,7 +63,7 @@ func (c *CustomFuncs) NeededMutationCols(
 	addCols(private.PartialIndexPutCols)
 	addCols(private.PartialIndexDelCols)
 	addCols(private.ReturnCols)
-	addCols(private.PassthroughCols)
+	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {
 		cols.Add(private.CanaryCol)
 	}
@@ -318,13 +318,11 @@ func (c *CustomFuncs) PruneMutationFetchCols(
 // that are not in the neededCols set to zero. This indicates that those input
 // columns are not needed by this mutation list.
 func (c *CustomFuncs) filterMutationList(
-	tabID opt.TableID, inList opt.ColList, neededCols opt.ColSet,
-) opt.ColList {
-	newList := make(opt.ColList, len(inList))
+	tabID opt.TableID, inList opt.OptionalColList, neededCols opt.ColSet,
+) opt.OptionalColList {
+	newList := make(opt.OptionalColList, len(inList))
 	for i, c := range inList {
-		if !neededCols.Contains(tabID.ColumnID(i)) {
-			newList[i] = 0
-		} else {
+		if c != 0 && neededCols.Contains(tabID.ColumnID(i)) {
 			newList[i] = c
 		}
 	}
@@ -585,7 +583,7 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// Find the columns that would need to be fetched, if no returning
 		// clause were present.
 		withoutReturningPrivate := *e.Private().(*memo.MutationPrivate)
-		withoutReturningPrivate.ReturnCols = opt.ColList{}
+		withoutReturningPrivate.ReturnCols = opt.OptionalColList{}
 		neededCols := neededMutationFetchCols(e.Memo(), e.Op(), &withoutReturningPrivate)
 
 		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
@@ -639,17 +637,12 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 	private *memo.MutationPrivate, needed opt.ColSet,
 ) *memo.MutationPrivate {
 	newPrivate := *private
-	newReturnCols := make(opt.ColList, len(private.ReturnCols))
-	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
 	tabID := c.mem.Metadata().TableMeta(private.Table).MetaID
 
 	// Prune away the ReturnCols that are unused.
-	for i := range private.ReturnCols {
-		if needed.Contains(tabID.ColumnID(i)) {
-			newReturnCols[i] = private.ReturnCols[i]
-		}
-	}
+	newPrivate.ReturnCols = c.filterMutationList(tabID, private.ReturnCols, needed)
 
+	newPassthroughCols := make(opt.ColList, 0, len(private.PassthroughCols))
 	// Prune away the PassthroughCols that are unused.
 	for _, passthroughCol := range private.PassthroughCols {
 		if passthroughCol != 0 && needed.Contains(passthroughCol) {
@@ -657,7 +650,6 @@ func (c *CustomFuncs) PruneMutationReturnCols(
 		}
 	}
 
-	newPrivate.ReturnCols = newReturnCols
 	newPrivate.PassthroughCols = newPassthroughCols
 	return &newPrivate
 }
