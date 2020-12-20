@@ -510,8 +510,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			f.formatArbiters(tp, t.Arbiters, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -520,11 +520,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 			f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -536,16 +536,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if t.CanaryCol != 0 {
 				f.formatArbiters(tp, t.Arbiters, t.Table)
 				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
-				f.formatColList(e, tp, "fetch columns:", t.FetchCols)
+				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 				f.formatMutationCols(e, tp, "update-mapping:", t.UpdateCols, t.Table)
 				f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			} else {
 				f.formatMutationCols(e, tp, "upsert-mapping:", t.InsertCols, t.Table)
 			}
-			f.formatColList(e, tp, "check columns:", t.CheckCols)
-			f.formatColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
+			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -554,8 +554,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatColList(e, tp, "fetch columns:", t.FetchCols)
-			f.formatColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
+			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
@@ -1164,6 +1164,23 @@ func (f *ExprFmtCtx) formatColList(
 		f.Buffer.Reset()
 		f.Buffer.WriteString(heading)
 		for _, col := range colList {
+			f.space()
+			f.formatCol("" /* label */, col, notNullCols)
+		}
+		tp.Child(f.Buffer.String())
+	}
+}
+
+// formatOptionalColList constructs a new treeprinter child containing the
+// specified list of optional columns formatted using the formatCol method.
+func (f *ExprFmtCtx) formatOptionalColList(
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.OptionalColList,
+) {
+	if !colList.IsEmpty() {
+		notNullCols := nd.Relational().NotNullCols
+		f.Buffer.Reset()
+		f.Buffer.WriteString(heading)
+		for _, col := range colList {
 			if col != 0 {
 				f.space()
 				f.formatCol("" /* label */, col, notNullCols)
@@ -1180,9 +1197,9 @@ func (f *ExprFmtCtx) formatColList(
 //   a:1 => x:4
 //
 func (f *ExprFmtCtx) formatMutationCols(
-	nd RelExpr, tp treeprinter.Node, heading string, colList opt.ColList, tabID opt.TableID,
+	nd RelExpr, tp treeprinter.Node, heading string, colList opt.OptionalColList, tabID opt.TableID,
 ) {
-	if len(colList) == 0 {
+	if colList.IsEmpty() {
 		return
 	}
 

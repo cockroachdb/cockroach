@@ -437,6 +437,15 @@ func (h *hasher) HashColList(val opt.ColList) {
 	h.hash = hash
 }
 
+func (h *hasher) HashOptionalColList(val opt.OptionalColList) {
+	hash := h.hash
+	for _, id := range val {
+		hash ^= internHash(id)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashOrdering(val opt.Ordering) {
 	hash := h.hash
 	for _, id := range val {
@@ -833,6 +842,10 @@ func (h *hasher) IsColSetEqual(l, r opt.ColSet) bool {
 }
 
 func (h *hasher) IsColListEqual(l, r opt.ColList) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsOptionalColListEqual(l, r opt.OptionalColList) bool {
 	return l.Equals(r)
 }
 
