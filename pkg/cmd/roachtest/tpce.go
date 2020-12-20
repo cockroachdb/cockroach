@@ -43,9 +43,7 @@ func registerTPCE(r *testRegistry) {
 
 			m := newMonitor(ctx, c, roachNodes)
 			m.Go(func(ctx context.Context) error {
-				// TODO(nvanbenschoten): switch this to `cockroachdb/tpce` once
-				// I get permissions to push the docker image there.
-				const dockerRun = `sudo docker run nvanbenschoten/tpce:latest`
+				const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 
 				roachNodeIPs := c.InternalIP(ctx, roachNodes)
 				roachNodeIPFlags := make([]string, len(roachNodeIPs))
