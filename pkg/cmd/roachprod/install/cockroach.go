@@ -32,6 +32,7 @@ var StartOpts struct {
 	Encrypt    bool
 	Sequential bool
 	SkipInit   bool
+	StoreCount int
 }
 
 // Cockroach TODO(peter): document
@@ -185,7 +186,7 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 			// addressing #51897.
 			//
 			// TODO(irfansharif): Remove this once #51897 is resolved.
-			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "cluster-bootstrapped")
+			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
 			cmdOut, err := h.run(nodeIdx, markBootstrap)
 			if err != nil {
 				log.Fatalf("unable to run cmd: %v", err)
@@ -211,11 +212,14 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 }
 
 // NodeDir implements the ClusterImpl.NodeDir interface.
-func (Cockroach) NodeDir(c *SyncedCluster, index int) string {
+func (Cockroach) NodeDir(c *SyncedCluster, index, storeIndex int) string {
 	if c.IsLocal() {
+		if storeIndex != 1 {
+			panic("Cockroach.NodeDir only supports one store for local deployments")
+		}
 		return os.ExpandEnv(fmt.Sprintf("${HOME}/local/%d/data", index))
 	}
-	return "/mnt/data1/cockroach"
+	return fmt.Sprintf("/mnt/data%d/cockroach", storeIndex)
 }
 
 // LogDir implements the ClusterImpl.NodeDir interface.
@@ -413,11 +417,29 @@ func (h *crdbInstallHelper) generateStartArgs(
 		args = append(args, "--insecure")
 	}
 
-	dir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx])
-	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
+	var storeDirs []string
 	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		args = append(args, "--store=path="+dir)
+		for i := 1; i <= StartOpts.StoreCount; i++ {
+			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
+			storeDirs = append(storeDirs, storeDir)
+			args = append(args, "--store=path="+storeDir)
+		}
+	} else {
+		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDirs = append(storeDirs, storeDir)
 	}
+
+	if StartOpts.Encrypt {
+		// Encryption at rest is turned on for the cluster.
+		for _, storeDir := range storeDirs {
+			// TODO(windchan7): allow key size to be specified through flags.
+			encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
+			encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
+			args = append(args, encryptArgs)
+		}
+	}
+
+	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
 	args = append(args, "--log-dir="+logDir)
 
 	if vers.AtLeast(version.MustParse("v1.1.0")) {
@@ -470,20 +492,6 @@ func (h *crdbInstallHelper) generateStartArgs(
 		// prints all IP addresses for the host and then we'll select
 		// the first from the list.
 		args = append(args, "--advertise-host=$(hostname -I | awk '{print $1}')")
-	}
-
-	if StartOpts.Encrypt {
-		// Encryption at rest is turned on for the cluster.
-		// TODO(windchan7): allow key size to be specified through flags.
-		encryptArgs := "--enterprise-encryption=path=%s,key=%s/aes-128.key,old-key=plain"
-		var storeDir string
-		if idx := argExists(extraArgs, "--store"); idx == -1 {
-			storeDir = dir
-		} else {
-			storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
-		}
-		encryptArgs = fmt.Sprintf(encryptArgs, storeDir, storeDir)
-		args = append(args, encryptArgs)
 	}
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
@@ -549,7 +557,7 @@ func (h *crdbInstallHelper) generateClusterSettingCmd(nodeIdx int) string {
 	}
 
 	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
-	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "settings-initialized")
+	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "settings-initialized")
 	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, 1))
 
 	clusterSettingCmd += fmt.Sprintf(`
@@ -571,7 +579,7 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 		initCmd = `cd ${HOME}/local/1 ; `
 	}
 
-	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "cluster-bootstrapped")
+	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
 	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, nodes[nodeIdx]))
 	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
 	initCmd += fmt.Sprintf(`
@@ -589,7 +597,7 @@ func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, extraArgs []string) stri
 	nodes := h.c.ServerNodes()
 	var storeDir string
 	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		storeDir = h.c.Impl.NodeDir(h.c, nodes[nodeIdx])
+		storeDir = h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */)
 	} else {
 		storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
 	}

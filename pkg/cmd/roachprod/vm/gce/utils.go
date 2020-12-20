@@ -61,7 +61,8 @@ for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-d
     sudo mkdir -p "${mountpoint}"
     sudo mkfs.ext4 -F ${d}
     sudo mount -o ${mount_opts} ${d} ${mountpoint}
-    echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
+	echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
+	sudo chmod 777 ${mountpoint}
   else
     echo "Disk ${disknum}: ${d} already mounted, skipping..."
   fi
@@ -69,9 +70,9 @@ done
 if [ "${disknum}" -eq "0" ]; then
   echo "No disks mounted, creating /mnt/data1"
   sudo mkdir -p /mnt/data1
+  sudo chmod 777 /mnt/data1
 fi
 
-sudo chmod 777 /mnt/data1
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
 sudo service sshguard stop
 # increase the number of concurrent unauthenticated connections to the sshd

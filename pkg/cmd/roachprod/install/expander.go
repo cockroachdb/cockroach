@@ -176,7 +176,7 @@ func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool
 	if !storeDirRe.MatchString(s) {
 		return s, false, nil
 	}
-	return c.Impl.NodeDir(c, e.node), true, nil
+	return c.Impl.NodeDir(c, e.node, 1 /* storeIndex */), true, nil
 }
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
