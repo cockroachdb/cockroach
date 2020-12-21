@@ -92,7 +92,8 @@ var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
-	IterOptions IterOptions
+	EnableTimeBoundIteratorOptimization bool
+	EndKey                              roachpb.Key
 	// Keys visible by the MVCCIncrementalIterator must be within (StartTime,
 	// EndTime]. Note that if {Min,Max}TimestampHints are specified in
 	// IterOptions, the timestamp hints interval should include the start and end
@@ -112,17 +113,25 @@ func NewMVCCIncrementalIterator(
 ) *MVCCIncrementalIterator {
 	var iter MVCCIterator
 	var timeBoundIter MVCCIterator
-	if !opts.IterOptions.MinTimestampHint.IsEmpty() && !opts.IterOptions.MaxTimestampHint.IsEmpty() {
+	if opts.EnableTimeBoundIteratorOptimization {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
 		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			UpperBound: opts.IterOptions.UpperBound,
+			UpperBound: opts.EndKey,
 		})
 		// The timeBoundIter is only required to see versioned keys, since the
 		// intents will be found by iter.
-		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, opts.IterOptions)
+		timeBoundIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+			UpperBound: opts.EndKey,
+			// The call to startTime.Next() converts our exclusive start bound into
+			// the inclusive start bound that MinTimestampHint expects.
+			MinTimestampHint: opts.StartTime.Next(),
+			MaxTimestampHint: opts.EndTime,
+		})
 	} else {
-		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts.IterOptions)
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			UpperBound: opts.EndKey,
+		})
 	}
 
 	return &MVCCIncrementalIterator{
