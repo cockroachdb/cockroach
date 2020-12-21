@@ -331,12 +331,19 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 		// index has the specified partition.
 		partitionName := string(n.zoneSpecifier.Partition)
-		indexes := table.FindIndexesWithPartition(partitionName)
+
+		var indexes []catalog.Index
+		for _, idx := range table.NonDropIndexes() {
+			if tabledesc.FindIndexPartitionByName(idx.IndexDesc(), partitionName) != nil {
+				indexes = append(indexes, idx)
+			}
+		}
+
 		switch len(indexes) {
 		case 0:
 			return fmt.Errorf("partition %q does not exist on table %q", partitionName, table.GetName())
 		case 1:
-			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].Name)
+			n.zoneSpecifier.TableOrIndex.Index = tree.UnrestrictedName(indexes[0].GetName())
 		default:
 			err := fmt.Errorf(
 				"partition %q exists on multiple indexes of table %q", partitionName, table.GetName())

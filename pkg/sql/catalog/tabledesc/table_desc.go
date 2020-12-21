@@ -27,6 +27,12 @@ var _ catalog.TableDescriptor = (*wrapper)(nil)
 // interface, which is overloaded by Immutable and Mutable.
 type wrapper struct {
 	descpb.TableDescriptor
+
+	// indexCache, when not nil, points to a struct containing precomputed
+	// catalog.Index slices. This can therefore only be set when creating an
+	// Immutable.
+	indexCache *indexCache
+
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
 
@@ -76,11 +82,13 @@ func (desc *wrapper) mutationIndexes(
 }
 
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
+// This method is deprecated, use DeleteOnlyNonPrimaryIndexes instead.
 func (desc *wrapper) DeleteOnlyIndexes() []descpb.IndexDescriptor {
 	return desc.mutationIndexes(descpb.DescriptorMutation_DELETE_ONLY)
 }
 
 // WritableIndexes returns a list of public and write-only mutation indexes.
+// This method is deprecated, use WritableNonPrimaryIndexes instead.
 func (desc *wrapper) WritableIndexes() []descpb.IndexDescriptor {
 	if len(desc.Mutations) == 0 {
 		return desc.Indexes
@@ -93,7 +101,8 @@ func (desc *wrapper) WritableIndexes() []descpb.IndexDescriptor {
 	return indexes
 }
 
-// DeletableIndexes implements the catalog.Descriptor interface.
+// DeletableIndexes returns a list of deletable indexes.
+// This method is deprecated, use DeletableNonPrimaryIndexes instead.
 func (desc *wrapper) DeletableIndexes() []descpb.IndexDescriptor {
 	if len(desc.Mutations) == 0 {
 		return desc.Indexes
@@ -106,7 +115,8 @@ func (desc *wrapper) DeletableIndexes() []descpb.IndexDescriptor {
 	return indexes
 }
 
-// mutationColumns returns all non-public writable columns in the specified state.
+// mutationColumns returns all non-public writable columns in the specified
+// state.
 func (desc *wrapper) mutationColumns(
 	mutationState descpb.DescriptorMutation_State,
 ) []descpb.ColumnDescriptor {
@@ -197,17 +207,9 @@ type Immutable struct {
 	// It is partitioned by the state of the column: public, write-only, delete-only
 	publicAndNonPublicCols []descpb.ColumnDescriptor
 
-	// publicAndNonPublicCols is a list of public and non-public indexes.
-	// It is partitioned by the state of the index: public, write-only, delete-only
-	publicAndNonPublicIndexes []descpb.IndexDescriptor
-
-	writeOnlyColCount   int
-	writeOnlyIndexCount int
+	writeOnlyColCount int
 
 	allChecks []descpb.TableDescriptor_CheckConstraint
-
-	// partialIndexOrds contains the ordinal of each partial index.
-	partialIndexOrds util.FastIntSet
 
 	// readableColumns is a list of columns (including those undergoing a schema change)
 	// which can be scanned. Columns in the process of a schema change
@@ -245,7 +247,9 @@ func (desc *wrapper) GetPrimaryIndexID() descpb.IndexID {
 	return desc.PrimaryIndex.ID
 }
 
-// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
+// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the
+// descriptor.
+// This method is deprecated, use PublicNonPrimaryIndexes instead.
 func (desc *wrapper) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
 	return desc.Indexes
 }
@@ -265,7 +269,8 @@ func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 	return &desc.Columns[idx]
 }
 
-// ReadableColumns implements the catalog.TableDescriptor interface
+// ReadableColumns returns a list of columns (including those undergoing a
+// schema change) which can be scanned.
 func (desc *Immutable) ReadableColumns() []descpb.ColumnDescriptor {
 	return desc.readableColumns
 }
@@ -317,4 +322,232 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// PrimaryIndexInterface returns the primary index in the form of a
+// catalog.Index interface.
+func (desc *wrapper) PrimaryIndexInterface() catalog.Index {
+	return index{desc: &desc.PrimaryIndex}
+}
+
+// getExistingOrNewIndexCache should be the only place where the indexCache
+// field in wrapper is ever read.
+func (desc *wrapper) getExistingOrNewIndexCache() *indexCache {
+	if desc.indexCache == nil {
+		return &indexCache{}
+	}
+	return desc.indexCache
+}
+
+// AllIndexes returns a slice containing all indexes represented in the table
+// descriptor, including mutations.
+func (desc *wrapper) AllIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().allIndexes(desc)
+}
+
+// ActiveIndexes returns a slice of all active (aka public) indexes.
+func (desc *wrapper) ActiveIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().activeIndexes(desc)
+}
+
+// NonDropIndexes returns a slice of all indexes (including mutations) which are
+// not being dropped.
+func (desc *wrapper) NonDropIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().nonDropIndexes(desc)
+}
+
+// PartialIndexes returns a slice of all partial indexes in the table
+// descriptor, including mutations.
+func (desc *wrapper) PartialIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().partialIndexes(desc)
+}
+
+// PublicNonPrimaryIndexes returns a slice of all active secondary indexes.
+func (desc *wrapper) PublicNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().publicNonPrimaryIndexes(desc)
+}
+
+// WritableNonPrimaryIndexes returns a slice of all secondary indexes which
+// allow being written to: active + delete-and-write-only.
+func (desc *wrapper) WritableNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().writableNonPrimaryIndexes(desc)
+}
+
+// DeletableNonPrimaryIndexes returns a slice of all secondary indexes which
+// allow being deleted from: active + delete-and-write-only + delete-only.
+func (desc *wrapper) DeletableNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().deletableNonPrimaryIndexes(desc)
+}
+
+// DeletableNonPrimaryIndexes returns a slice of all secondary indexes which
+// only allow being deleted from.
+func (desc *wrapper) DeleteOnlyNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().deleteOnlyNonPrimaryIndexes(desc)
+}
+
+// ForEachIndex runs f over each index in the table descriptor according to
+// filter parameters in opts.
+func (desc *wrapper) ForEachIndex(opts catalog.IndexOpts, f func(idx catalog.Index) error) error {
+	for _, idx := range desc.AllIndexes() {
+		if !opts.NonPhysicalPrimaryIndex && idx.Primary() && !desc.IsPhysicalTable() {
+			continue
+		}
+		if !opts.AddMutations && idx.Adding() {
+			continue
+		}
+		if !opts.DropMutations && idx.Dropped() {
+			continue
+		}
+		if err := f(idx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func forEachIndex(slice []catalog.Index, f func(idx catalog.Index) error) error {
+	for _, idx := range slice {
+		if err := f(idx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachActiveIndex is like ForEachIndex over ActiveIndexes().
+func (desc *wrapper) ForEachActiveIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.ActiveIndexes(), f)
+}
+
+// ForEachNonDropIndex is like ForEachIndex over NonDropIndexes().
+func (desc *wrapper) ForEachNonDropIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.NonDropIndexes(), f)
+}
+
+// ForEachPartialIndex is like ForEachIndex over PartialIndexes().
+func (desc *wrapper) ForEachPartialIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.PartialIndexes(), f)
+}
+
+// ForEachPublicNonPrimaryIndex is like ForEachIndex over
+// PublicNonPrimaryIndexes().
+func (desc *wrapper) ForEachPublicNonPrimaryIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.PublicNonPrimaryIndexes(), f)
+}
+
+// ForEachWritableNonPrimaryIndex is like ForEachIndex over
+// WritableNonPrimaryIndexes().
+func (desc *wrapper) ForEachWritableNonPrimaryIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.WritableNonPrimaryIndexes(), f)
+}
+
+// ForEachDeletableNonPrimaryIndex is like ForEachIndex over
+// DeletableNonPrimaryIndexes().
+func (desc *wrapper) ForEachDeletableNonPrimaryIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.DeletableNonPrimaryIndexes(), f)
+}
+
+// ForEachDeleteOnlyNonPrimaryIndex is like ForEachIndex over
+// DeleteOnlyNonPrimaryIndexes().
+func (desc *wrapper) ForEachDeleteOnlyNonPrimaryIndex(f func(idx catalog.Index) error) error {
+	return forEachIndex(desc.DeleteOnlyNonPrimaryIndexes(), f)
+}
+
+// FindIndex returns the first index for which test returns true, nil otherwise,
+// according to the parameters in opts just like ForEachIndex.
+func (desc *wrapper) FindIndex(
+	opts catalog.IndexOpts, test func(idx catalog.Index) bool,
+) catalog.Index {
+	for _, idx := range desc.AllIndexes() {
+		if !opts.NonPhysicalPrimaryIndex && idx.Primary() && !desc.IsPhysicalTable() {
+			continue
+		}
+		if !opts.AddMutations && idx.Adding() {
+			continue
+		}
+		if !opts.DropMutations && idx.Dropped() {
+			continue
+		}
+		if test(idx) {
+			return idx
+		}
+	}
+	return nil
+}
+
+func findIndex(slice []catalog.Index, test func(idx catalog.Index) bool) catalog.Index {
+	for _, idx := range slice {
+		if test(idx) {
+			return idx
+		}
+	}
+	return nil
+}
+
+// FindActiveIndex returns the first index in ActiveIndex() for which test
+// returns true.
+func (desc *wrapper) FindActiveIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.ActiveIndexes(), test)
+}
+
+// FindNonDropIndex returns the first index in NonDropIndex() for which test
+// returns true.
+func (desc *wrapper) FindNonDropIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.NonDropIndexes(), test)
+}
+
+// FindPartialIndex returns the first index in PartialIndex() for which test
+// returns true.
+func (desc *wrapper) FindPartialIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()
+// for which test returns true.
+func (desc *wrapper) FindPublicNonPrimaryIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.PublicNonPrimaryIndexes(), test)
+}
+
+// FindWritableNonPrimaryIndex returns the first index in
+// WritableNonPrimaryIndex() for which test returns true.
+func (desc *wrapper) FindWritableNonPrimaryIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.WritableNonPrimaryIndexes(), test)
+}
+
+// FindDeletableNonPrimaryIndex returns the first index in
+// DeletableNonPrimaryIndex() for which test returns true.
+func (desc *wrapper) FindDeletableNonPrimaryIndex(test func(idx catalog.Index) bool) catalog.Index {
+	return findIndex(desc.DeletableNonPrimaryIndexes(), test)
+}
+
+// FindDeleteOnlyNonPrimaryIndex returns the first index in
+// DeleteOnlyNonPrimaryIndex() for which test returns true.
+func (desc *wrapper) FindDeleteOnlyNonPrimaryIndex(
+	test func(idx catalog.Index) bool,
+) catalog.Index {
+	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
+}
+
+// FindIndexWithID returns the first catalog.Index that matches the id
+// in the set of all indexes.
+func (desc *wrapper) FindIndexWithID(id descpb.IndexID) catalog.Index {
+	return desc.FindIndex(catalog.IndexOpts{
+		NonPhysicalPrimaryIndex: true,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx catalog.Index) bool {
+		return idx.GetID() == id
+	})
+}
+
+// FindIndexWithName returns the first catalog.Index that matches the name in
+// the set of all indexes, excluding the primary index of non-physical tables.
+func (desc *wrapper) FindIndexWithName(name string) catalog.Index {
+	return desc.FindIndex(catalog.IndexOpts{
+		NonPhysicalPrimaryIndex: false,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx catalog.Index) bool {
+		return idx.GetName() == name
+	})
 }
