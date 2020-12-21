@@ -149,9 +149,14 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
-				cmd.sp = d.r.AmbientContext.Tracer.StartSpan(
-					"raft application", tracing.WithParentAndManualCollection(spanCtx), tracing.WithFollowsFrom())
-				cmd.ctx = tracing.ContextWithSpan(ctx, cmd.sp)
+				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
+					ctx,
+					"raft application",
+					// NB: we are lying here - we are not actually going to propagate
+					// the recording towards the root. That seems ok.
+					tracing.WithParentAndManualCollection(spanCtx),
+					tracing.WithFollowsFrom(),
+				)
 			}
 		} else {
 			cmd.ctx, cmd.sp = tracing.ForkCtxSpan(ctx, opName)

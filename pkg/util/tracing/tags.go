@@ -10,11 +10,7 @@
 
 package tracing
 
-import (
-	"context"
-
-	"github.com/cockroachdb/logtags"
-)
+import "github.com/cockroachdb/logtags"
 
 // LogTagsOption is a StartSpanOption that uses log tags to populate the Span tags.
 type logTagsOption logtags.Buffer
@@ -29,13 +25,13 @@ func (lt *logTagsOption) apply(opts spanOptions) spanOptions {
 // WithLogTags returns a SpanOption that sets the Span tags to the given log
 // tags. When applied, the returned option will apply any logtag name->Span tag
 // name remapping that has been registered via RegisterTagRemapping.
+//
+// Note that there is no need to use this option with StartSpanCtx, as that will
+// already propagate the log tags from the Context supplied to it to the Span.
+// However, if a WithLogTags option is supplied, it will be used and replaces
+// the Context-derived tags.
 func WithLogTags(tags *logtags.Buffer) SpanOption {
 	return (*logTagsOption)(tags)
-}
-
-// WithCtxLogTags returns WithLogTags(logtags.FromContext(ctx)).
-func WithCtxLogTags(ctx context.Context) SpanOption {
-	return WithLogTags(logtags.FromContext(ctx))
 }
 
 // tagRemap is a map that records desired conversions

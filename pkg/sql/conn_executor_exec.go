@@ -1493,28 +1493,12 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 // parentCtx for an existing span and creates a root span if none is found, or a
 // child span if one is found. A context derived from parentCtx which
 // additionally contains the new span is also returned.
-// TODO(asubiotto): Use tracing.EnsureChildSpan once that is available.
 func createRootOrChildSpan(
-	parentCtx context.Context, opName string, tracer *tracing.Tracer,
+	parentCtx context.Context, opName string, tr *tracing.Tracer,
 ) (context.Context, *tracing.Span) {
 	// WithForceRealSpan is used to support the use of session tracing, which
 	// may start recording on this span.
-	var sp *tracing.Span
-	if parentSp := tracing.SpanFromContext(parentCtx); parentSp != nil {
-		// Create a child span for this operation.
-		sp = parentSp.Tracer().StartSpan(
-			opName,
-			tracing.WithParentAndAutoCollection(parentSp),
-			tracing.WithCtxLogTags(parentCtx),
-			tracing.WithForceRealSpan(),
-		)
-	} else {
-		// Create a root span for this operations.
-		sp = tracer.StartSpan(
-			opName, tracing.WithCtxLogTags(parentCtx), tracing.WithForceRealSpan(),
-		)
-	}
-	return tracing.ContextWithSpan(parentCtx, sp), sp
+	return tracing.EnsureChildSpan(parentCtx, tr, opName, tracing.WithForceRealSpan())
 }
 
 // logTraceAboveThreshold logs a span's recording if the duration is above a

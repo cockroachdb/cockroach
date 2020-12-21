@@ -125,14 +125,14 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
-		serverSpan := tracer.StartSpan(
+		ctx, serverSpan := tracer.StartSpanCtx(
+			ctx,
 			info.FullMethod,
 			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
 		defer serverSpan.Finish()
 
-		ctx = ContextWithSpan(ctx, serverSpan)
 		resp, err = handler(ctx, req)
 		if err != nil {
 			SetSpanTags(serverSpan, err, false)
@@ -168,7 +168,8 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 			return handler(srv, ss)
 		}
 
-		serverSpan := tracer.StartSpan(
+		ctx, serverSpan := tracer.StartSpanCtx(
+			ss.Context(),
 			info.FullMethod,
 			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
@@ -176,7 +177,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
-			ctx:          ContextWithSpan(ss.Context(), serverSpan),
+			ctx:          ctx,
 		}
 		err = handler(srv, ss)
 		if err != nil {

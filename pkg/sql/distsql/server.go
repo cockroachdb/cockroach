@@ -202,27 +202,25 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	const opName = "flow"
-	var sp *tracing.Span
+	var sp *tracing.Span // will be Finish()ed by Flow.Cleanup()
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName, tracing.WithCtxLogTags(ctx))
+		ctx, sp = ds.Tracer.StartSpanCtx(ctx, opName)
 	} else if localState.IsLocal {
 		// If we're a local flow, we don't need a "follows from" relationship: we're
 		// going to run this flow synchronously.
 		// TODO(andrei): localState.IsLocal is not quite the right thing to use.
 		//  If that field is unset, we might still want to create a child span if
 		//  this flow is run synchronously.
-		sp = ds.Tracer.StartSpan(opName, tracing.WithParentAndAutoCollection(parentSpan), tracing.WithCtxLogTags(ctx))
+		ctx, sp = ds.Tracer.StartSpanCtx(ctx, opName, tracing.WithParentAndAutoCollection(parentSpan))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(
+		ctx, sp = ds.Tracer.StartSpanCtx(
+			ctx,
 			opName,
 			tracing.WithParentAndAutoCollection(parentSpan),
 			tracing.WithFollowsFrom(),
-			tracing.WithCtxLogTags(ctx),
 		)
 	}
-	// sp will be Finish()ed by Flow.Cleanup().
-	ctx = tracing.ContextWithSpan(ctx, sp)
 
 	// The monitor opened here is closed in Flow.Cleanup().
 	monitor := mon.NewMonitor(
