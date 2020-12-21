@@ -20,7 +20,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 

@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,9 +8,9 @@ go_library(
         "alias.go",
         "oid.go",
         "types.go",
-        "types.pb.go",
         "types_jsonpb.go",
     ],
+    embed = [":types_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/types",
     visibility = ["//visibility:public"],
     deps = [
@@ -21,7 +23,6 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_lib_pq//oid",
     ],
 )
@@ -37,5 +38,28 @@ go_test(
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "types_proto",
+    srcs = ["types.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb:geopb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "types_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/types",
+    proto = ":types_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "@com_github_gogo_protobuf//gogoproto",
     ],
 )
