@@ -500,12 +500,17 @@ func (s *sketchInfo) addRow(
 	}
 
 	if useFastPath {
-		var intbuf [8]byte
 		// Fast path for integers.
 		// TODO(radu): make this more general.
 		val, err := row[col].GetInt()
 		if err != nil {
 			return err
+		}
+
+		if cap(*buf) < 8 {
+			*buf = make([]byte, 8)
+		} else {
+			*buf = (*buf)[:8]
 		}
 
 		// Note: this encoding is not identical with the one in the general path
@@ -518,8 +523,8 @@ func (s *sketchInfo) addRow(
 		// it must be a very good hash function (HLL expects the hash values to
 		// be uniformly distributed in the 2^64 range). Experiments (on tpcc
 		// order_line) with simplistic functions yielded bad results.
-		binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
-		s.sketch.Insert(intbuf[:])
+		binary.LittleEndian.PutUint64(*buf, uint64(val))
+		s.sketch.Insert(*buf)
 		return nil
 	}
 	isNull := true
