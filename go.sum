@@ -162,6 +162,8 @@ github.com/cockroachdb/pebble v0.0.0-20201119153812-62f2e316b532 h1:W2qQOIPTgHOP
 github.com/cockroachdb/pebble v0.0.0-20201119153812-62f2e316b532/go.mod h1:c3G8ud5zF3+nYHCWmVmtsA8eEtjrDSa6qeLtcRZyevE=
 github.com/cockroachdb/redact v1.0.8 h1:8QG/764wK+vmEYoOlfobpe12EQcS81ukx/a4hdVMxNw=
 github.com/cockroachdb/redact v1.0.8/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
+github.com/cockroachdb/redact v1.0.9 h1:sjlUvGorKMIVQfo+w2RqDi5eewCHn453C/vdIXMzjzI=
+github.com/cockroachdb/redact v1.0.9/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9nEKZgCnOSmy8r4Oykh8BYQO8bFOTgHDS8YZA=
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2 h1:IKgmqgMQlVJIZj19CdocBeSfSaiCbEBZGKODaixqtHM=
