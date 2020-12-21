@@ -35,15 +35,10 @@ type sstIterator struct {
 	verify bool
 }
 
-// NewSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
-// It's compatible with sstables written by `RocksDBSstFileWriter` and
-// Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
-// format.
-func NewSSTIterator(path string) (SimpleMVCCIterator, error) {
-	file, err := vfs.Default.Open(path)
-	if err != nil {
-		return nil, err
-	}
+// NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
+// assumes was written by pebble `sstable.Writer`and contains keys which use
+// Cockroach's MVCC format.
+func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
 		Comparer: EngineComparer,
 	})
