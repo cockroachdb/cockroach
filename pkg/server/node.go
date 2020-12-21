@@ -825,7 +825,9 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 					int32(n.Descriptor.NodeID),
 					int32(n.Descriptor.NodeID),
 					true, /* skipExternalLog - we already call log.StructuredEvent above */
-					event)
+					event,
+					false, /* onlyLog */
+				)
 			}); err != nil {
 				log.Warningf(ctx, "%s: unable to log event %v: %v", n, event, err)
 			} else {

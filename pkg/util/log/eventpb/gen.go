@@ -483,6 +483,18 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
    }
+   {{- else if eq .FieldType "float"}}
+   if m.{{.FieldName}} != 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = strconv.AppendFloat(b, float64(m.{{.FieldName}}), 'f', -1, 32)
+   }
+   {{- else if eq .FieldType "double"}}
+   if m.{{.FieldName}} != 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = strconv.AppendFloat(b, float64(m.{{.FieldName}}), 'f', -1, 64)
+   }
    {{- else if eq .FieldType "uint16" "uint32" "uint64"}}
    if m.{{.FieldName}} != 0 {
      if printComma { b = append(b, ',')}; printComma = true

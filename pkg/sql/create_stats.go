@@ -571,7 +571,9 @@ func (r *createStatsResumer) Resume(
 			nil, /* no placeholders known at this point */
 			&eventpb.CreateStatistics{
 				TableName: details.FQTableName,
-			})
+			},
+			true, /* writeToEventLog */
+		)
 	})
 }
 
