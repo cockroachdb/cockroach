@@ -243,7 +243,6 @@ func TestIsNullSelOp(t *testing.T) {
 				Inputs:              input,
 				StreamingMemAccount: testMemAcc,
 			}
-			args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 			result, err := TestNewColOperator(ctx, flowCtx, args)
 			if err != nil {
 				return nil, err
