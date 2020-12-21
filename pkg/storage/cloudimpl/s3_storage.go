@@ -12,6 +12,7 @@ package cloudimpl
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"path"
@@ -243,28 +244,55 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 	return errors.Wrap(err, "failed to put s3 object")
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
 func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	reader, _, err := s.ReadFileAt(ctx, basename, 0)
+	return reader, err
+}
+
+// ReadFileAt opens a reader at the requested offset.
+func (s *s3Storage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	client, err := s.newS3Client(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
+	if offset != 0 {
+		req.Range = aws.String(fmt.Sprintf("bytes=%d-", offset))
 	}
 
-	out, err := client.GetObjectWithContext(ctx, &s3.GetObjectInput{
-		Bucket: s.bucket,
-		Key:    aws.String(path.Join(s.prefix, basename)),
-	})
+	out, err := client.GetObjectWithContext(ctx, req)
 	if err != nil {
 		if aerr := (awserr.Error)(nil); errors.As(err, &aerr) {
 			switch aerr.Code() {
 			// Relevant 404 errors reported by AWS.
 			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				return nil, errors.Wrapf(ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
+				return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
 			}
 		}
-		return nil, errors.Wrap(err, "failed to get s3 object")
+		return nil, 0, errors.Wrap(err, "failed to get s3 object")
 	}
-	return out.Body, nil
+
+	var size int64
+	if offset != 0 {
+		if out.ContentRange == nil {
+			return nil, 0, errors.New("expected content range for read at offset")
+		}
+		size, err = checkHTTPContentRangeHeader(*out.ContentRange, offset)
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		if out.ContentLength == nil {
+			return nil, 0, errors.New("expected content length")
+		}
+		size = *out.ContentLength
+	}
+
+	return out.Body, size, nil
 }
 
 func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
