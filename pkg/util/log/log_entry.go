@@ -179,20 +179,20 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 		makeStartLine(f, "arguments: %s", os.Args),
 	)
 
-	logging.mu.Lock()
-	if logging.mu.clusterID != "" {
-		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.mu.clusterID))
+	logging.idMu.RLock()
+	if logging.idMu.clusterID != "" {
+		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.idMu.clusterID))
 	}
-	if logging.mu.nodeID != 0 {
-		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.mu.nodeID))
+	if logging.idMu.nodeID != 0 {
+		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.idMu.nodeID))
 	}
-	if logging.mu.tenantID != "" {
-		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.mu.tenantID))
+	if logging.idMu.tenantID != "" {
+		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.idMu.tenantID))
 	}
-	if logging.mu.sqlInstanceID != 0 {
-		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.mu.sqlInstanceID))
+	if logging.idMu.sqlInstanceID != 0 {
+		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.idMu.sqlInstanceID))
 	}
-	logging.mu.Unlock()
+	logging.idMu.RUnlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
