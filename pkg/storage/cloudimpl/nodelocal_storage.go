@@ -105,20 +105,27 @@ func (l *localFileStorage) WriteFile(
 	return l.blobClient.WriteFile(ctx, joinRelativePath(l.base, basename), content)
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
 func (l *localFileStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	var err error
-	var reader io.ReadCloser
-	if reader, err = l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename)); err != nil {
+	body, _, err := l.ReadFileAt(ctx, basename, 0)
+	return body, err
+}
+
+func (l *localFileStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
+	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), offset)
+	if err != nil {
 		// The format of the error returned by the above ReadFile call differs based
 		// on whether we are reading from a local or remote nodelocal store.
 		// The local store returns a golang native ErrNotFound, whereas the remote
 		// store returns a gRPC native NotFound error.
 		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
-			return nil, errors.Wrapf(ErrFileDoesNotExist, "nodelocal storage file does not exist: %s", err.Error())
+			return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "nodelocal storage file does not exist: %s", err.Error())
 		}
-		return nil, err
+		return nil, 0, err
 	}
-	return reader, nil
+	return reader, size, nil
 }
 
 func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
