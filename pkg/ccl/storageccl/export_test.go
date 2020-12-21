@@ -287,7 +287,7 @@ func TestExportGCThreshold(t *testing.T) {
 }
 
 // exportUsingGoIterator uses the legacy implementation of export, and is used
-// as an oracle to check the correctness of the new C++ implementation.
+// as an oracle to check the correctness of pebbleExportToSst.
 func exportUsingGoIterator(
 	filter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
@@ -312,17 +312,11 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
-	io := storage.IterOptions{
-		UpperBound: endKey,
-	}
-	if enableTimeBoundIteratorOptimization {
-		io.MaxTimestampHint = endTime
-		io.MinTimestampHint = startTime.Next()
-	}
 	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-		IterOptions: io,
-		StartTime:   startTime,
-		EndTime:     endTime,
+		EndKey:                              endKey,
+		EnableTimeBoundIteratorOptimization: enableTimeBoundIteratorOptimization,
+		StartTime:                           startTime,
+		EndTime:                             endTime,
 	})
 	defer iter.Close()
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -412,21 +406,15 @@ func assertEqualKVs(
 			filter = roachpb.MVCCFilter_Latest
 		}
 
-		// Run oracle (go implementation of the IncrementalIterator).
+		// Run the oracle which is a legacy implementation of pebbleExportToSst
+		// backed by an MVCCIncrementalIterator.
 		expected, err := exportUsingGoIterator(filter, startTime, endTime,
 			startKey, endKey, enableTimeBoundIteratorOptimization, e)
 		if err != nil {
 			t.Fatalf("Oracle failed to export provided key range.")
 		}
 
-		// Run new C++ implementation of IncrementalIterator.
-		io := storage.IterOptions{
-			UpperBound: endKey,
-		}
-		if enableTimeBoundIteratorOptimization {
-			io.MaxTimestampHint = endTime
-			io.MinTimestampHint = startTime.Next()
-		}
+		// Run the actual code path used when exporting MVCCs to SSTs.
 		var kvs []storage.MVCCKeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
@@ -434,7 +422,7 @@ func assertEqualKVs(
 			maxSize := uint64(0)
 			prevStart := start
 			sst, summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
-				exportAllRevisions, targetSize, maxSize, io)
+				exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization)
 			require.NoError(t, err)
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
@@ -473,14 +461,15 @@ func assertEqualKVs(
 					maxSize--
 				}
 				_, _, _, err = e.ExportMVCCToSst(prevStart, endKey, startTime, endTime,
-					exportAllRevisions, targetSize, maxSize, io)
+					exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization)
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
 			}
 			kvs = append(kvs, loaded...)
 		}
 
-		// Compare new C++ implementation against the oracle.
+		// Compare the output of the current export MVCC to SST logic against the
+		// legacy oracle output.
 		expectedKVS := loadSST(t, expected, startKey, endKey)
 		if len(kvs) != len(expectedKVS) {
 			t.Fatalf("got %d kvs but expected %d:\n%v\n%v", len(kvs), len(expectedKVS), kvs, expectedKVS)
