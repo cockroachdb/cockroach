@@ -13,7 +13,9 @@ package cloudimpl
 import (
 	"context"
 	"io"
+	"io/ioutil"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -33,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 const (
@@ -492,3 +495,103 @@ const MaxDelayedRetryAttempts = 3
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.
 const maxNoProgressReads = 3
+
+// NewFileWrapper returns a file-like object -- that supports Read and ReadAt
+// as well as Stat()-ing for Size and closing -- for the given name from the
+// given ExternalStorage.
+func NewFileWrapper(ctx context.Context, e cloud.ExternalStorage, basename string) (vfs.File, error) {
+	// Do an initial read of the file, from the beginning, to get the file size as
+	// this is used e.g. to read the trailer.
+	reader, sz, err := e.ReadFileAt(ctx, basename, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return &fileWrapper{
+		sz:   sizeStat(sz),
+		body: reader,
+		openAt: func(offset int64) (io.ReadCloser, error) {
+			reader, _, err := e.ReadFileAt(ctx, basename, offset)
+			return reader, err
+		},
+	}, nil
+}
+
+type fileWrapper struct {
+	sz     sizeStat
+	openAt func(int64) (io.ReadCloser, error)
+
+	// body and pos are mutated by calls to Read, ReadAt and Close.
+	body io.ReadCloser
+	pos  int64
+}
+
+// Read wraps the underlying io.Reader.
+func (r *fileWrapper) Read(p []byte) (int, error) {
+	if r.body == nil {
+		b, err := r.openAt(0)
+		if err != nil {
+			return 0, err
+		}
+		r.body = b
+	}
+	read, err := r.body.Read(p)
+	r.pos += int64(read)
+	return read, err
+}
+
+// Close implements io.Closer.
+func (r *fileWrapper) Close() error {
+	r.pos = 0
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
+}
+
+// Size returns the size of the file.
+func (r *fileWrapper) Stat() (os.FileInfo, error) {
+	return r.sz, nil
+}
+
+func (fileWrapper) Write(_ []byte) (int, error) { panic("unimplemented") }
+func (fileWrapper) Sync() error                 { panic("unimplemented") }
+
+// ReadAt implements io.ReaderAt by opening a Reader at an offset before reading
+// from it. Note: contrary to io.ReaderAt, ReadAt does *not* support parallel
+// calls and `Read` should not be called on a wrapper on which ReadAt is
+// also called, as ReadAt does reposition the underlying reader when called.
+func (r *fileWrapper) ReadAt(p []byte, offset int64) (int, error) {
+	var read int
+	if r.pos != offset {
+		if err := r.Close(); err != nil {
+			return 0, err
+		}
+		b, err := r.openAt(offset)
+		if err != nil {
+			return 0, err
+		}
+		r.pos = offset
+		r.body = b
+	}
+
+	// NB: io.ReaderAt stipulates ReadAt must read len(p) or return a non-error
+	// (such as EOF), unlike `Read` which can read less than p with a nil error,
+	// so this isn't *quite* just calling Read() after the above positioning seek.
+	var err error
+	for n := 0; read < len(p) && err == nil; n, err = r.body.Read(p[read:]) {
+		read += n
+	}
+	r.pos += int64(read)
+
+	return read, err
+}
+
+type sizeStat int64
+
+func (s sizeStat) Size() int64      { return int64(s) }
+func (sizeStat) IsDir() bool        { panic("unimplemented") }
+func (sizeStat) ModTime() time.Time { panic("unimplemented") }
+func (sizeStat) Mode() os.FileMode  { panic("unimplemented") }
+func (sizeStat) Name() string       { panic("unimplemented") }
+func (sizeStat) Sys() interface{}   { panic("unimplemented") }
