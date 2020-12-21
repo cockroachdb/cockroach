@@ -173,13 +173,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx := rd.Ctx
 	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
-	// rekeys could be using table descriptors from either the old or new
-	// foreign key representation on the table descriptor, but this is fine
-	// because foreign keys don't matter for the key rewriter.
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(rd.spec.Rekeys)
-	if err != nil {
-		return summary, errors.Wrap(err, "make key rewriter")
-	}
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
@@ -285,7 +278,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
-		key.Key, ok, err = kr.RewriteKey(key.Key, false /* isFromSpan */)
+		key.Key, ok, err = rd.kr.RewriteKey(key.Key, false /* isFromSpan */)
 		if err != nil {
 			return summary, err
 		}

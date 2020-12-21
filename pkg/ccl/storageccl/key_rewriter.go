@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,29 +26,50 @@ import (
 type prefixRewrite struct {
 	OldPrefix []byte
 	NewPrefix []byte
+	noop      bool
 }
 
 // prefixRewriter is a matcher for an ordered list of pairs of byte prefix
 // rewrite rules.
-type prefixRewriter []prefixRewrite
+type prefixRewriter struct {
+	rewrites []prefixRewrite
+	last     int
+}
 
 // RewriteKey modifies key using the first matching rule and returns
 // it. If no rules matched, returns false and the original input key.
 func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
-	for _, rewrite := range p {
-		if bytes.HasPrefix(key, rewrite.OldPrefix) {
-			if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
-				copy(key[:len(rewrite.OldPrefix)], rewrite.NewPrefix)
-				return key, true
-			}
-			// TODO(dan): Special case when key's cap() is enough.
-			newKey := make([]byte, 0, len(rewrite.NewPrefix)+len(key)-len(rewrite.OldPrefix))
-			newKey = append(newKey, rewrite.NewPrefix...)
-			newKey = append(newKey, key[len(rewrite.OldPrefix):]...)
-			return newKey, true
+	if len(p.rewrites) < 1 {
+		return key, false
+	}
+
+	found := p.last
+	if !bytes.HasPrefix(key, p.rewrites[found].OldPrefix) {
+		// since prefixes are sorted, we can binary search to find where a matching
+		// prefix would be. We use the predicate HasPrefix (what we want) or greater
+		// (after what we want) to search.
+		found = sort.Search(len(p.rewrites), func(i int) bool {
+			return bytes.HasPrefix(key, p.rewrites[i].OldPrefix) || bytes.Compare(key, p.rewrites[i].OldPrefix) < 0
+		})
+		if found == len(p.rewrites) || !bytes.HasPrefix(key, p.rewrites[found].OldPrefix) {
+			return key, false
 		}
 	}
-	return key, false
+
+	p.last = found
+	rewrite := p.rewrites[found]
+	if rewrite.noop {
+		return key, true
+	}
+	if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
+		copy(key[:len(rewrite.OldPrefix)], rewrite.NewPrefix)
+		return key, true
+	}
+	// TODO(dan): Special case when key's cap() is enough.
+	newKey := make([]byte, 0, len(rewrite.NewPrefix)+len(key)-len(rewrite.OldPrefix))
+	newKey = append(newKey, rewrite.NewPrefix...)
+	newKey = append(newKey, key[len(rewrite.OldPrefix):]...)
+	return newKey, true
 }
 
 // KeyRewriter rewrites old table IDs to new table IDs. It is able to descend
@@ -88,9 +110,10 @@ func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, er
 			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.ID))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, prefixRewrite{
+				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
+					noop:      bytes.Equal(oldPrefix, newPrefix),
 				})
 			}
 			// All the encoded data for a index will have the prefix just added, but
@@ -100,13 +123,17 @@ func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, er
 			newPrefix = newPrefix.PrefixEnd()
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
-				prefixes = append(prefixes, prefixRewrite{
+				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
 					OldPrefix: oldPrefix,
 					NewPrefix: newPrefix,
+					noop:      bytes.Equal(oldPrefix, newPrefix),
 				})
 			}
 		}
 	}
+	sort.Slice(prefixes.rewrites, func(i, j int) bool {
+		return bytes.Compare(prefixes.rewrites[i].OldPrefix, prefixes.rewrites[j].OldPrefix) < 0
+	})
 	return &KeyRewriter{
 		prefixes: prefixes,
 		descs:    descs,
