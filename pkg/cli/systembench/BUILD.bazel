@@ -14,7 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/systembench",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/cli/systembench/systembenchpb",
+        "//pkg/cli/systembench/systembenchpb:systembench_go_proto",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",

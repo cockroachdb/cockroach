@@ -20,7 +20,7 @@ go_library(
         "//pkg/ccl/baseccl",
         "//pkg/ccl/cliccl/cliflagsccl",
         "//pkg/ccl/sqlproxyccl",
-        "//pkg/ccl/storageccl/engineccl/enginepbccl",
+        "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_go_proto",
         "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cli",
         "//pkg/security",

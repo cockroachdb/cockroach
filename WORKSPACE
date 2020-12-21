@@ -40,9 +40,6 @@ gazelle_dependencies()
 #
 # Ref: https://github.com/bazelbuild/rules_go/blob/0.19.0/go/workspace.rst#proto-dependencies
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
-#
-# TODO(irfansharif): We're not yet using this. We'll eventually need to when we
-# try to generate proto files through bazel.
 git_repository(
     name = "com_google_protobuf",
     commit = "09745575a923640154bcf307fba8aedff47f240a",
