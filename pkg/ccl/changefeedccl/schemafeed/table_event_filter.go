@@ -25,6 +25,7 @@ const (
 	tableEventTypeAddColumnWithBackfill
 	tableEventTypeDropColumn
 	tableEventTruncate
+	tableEventPrimaryKeyChange
 )
 
 var (
@@ -58,6 +59,8 @@ func classifyTableEvent(e TableEvent) tableEventType {
 		return tableEventTypeDropColumn
 	case tableTruncated(e):
 		return tableEventTruncate
+	case primaryKeyChanged(e):
+		return tableEventPrimaryKeyChange
 	default:
 		return tableEventTypeUnknown
 	}
@@ -73,6 +76,9 @@ func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool,
 	if et == tableEventTruncate {
 		return false, errors.Errorf(`"%s" was truncated`, e.Before.Name)
 	}
+	if et == tableEventPrimaryKeyChange {
+		return false, errors.Errorf(`"%s" primary key changed`, e.Before.Name)
+	}
 	shouldFilter, ok := b[et]
 	if !ok {
 		return false, errors.AssertionFailedf("policy does not specify how to handle event type %v", et)
@@ -83,11 +89,14 @@ func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool,
 func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 	// Make sure that the old descriptor *doesn't* have the same mutation to avoid adding
 	// the same scan boundary more than once.
-	return !dropMutationExists(e.Before) && dropMutationExists(e.After)
+	return !dropColumnMutationExists(e.Before) && dropColumnMutationExists(e.After)
 }
 
-func dropMutationExists(desc *tabledesc.Immutable) bool {
+func dropColumnMutationExists(desc *tabledesc.Immutable) bool {
 	for _, m := range desc.Mutations {
+		if m.GetColumn() == nil {
+			continue
+		}
 		if m.Direction == descpb.DescriptorMutation_DROP &&
 			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 			return true
@@ -122,4 +131,9 @@ func tableTruncated(e TableEvent) bool {
 	// PRIMARY KEY statement was not performed. TRUNCATE operates by creating
 	// a new set of indexes for the table, including a new primary index.
 	return e.Before.GetPrimaryIndexID() != e.After.GetPrimaryIndexID() && !pkChangeMutationExists(e.Before)
+}
+
+func primaryKeyChanged(e TableEvent) bool {
+	return e.Before.PrimaryIndex.ID != e.After.PrimaryIndex.ID &&
+		pkChangeMutationExists(e.Before)
 }
