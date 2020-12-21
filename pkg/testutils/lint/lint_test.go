@@ -1939,11 +1939,9 @@ func TestLint(t *testing.T) {
 		filters := []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
-			stream.GrepNot(`pkg/col/coldata/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/col/colserde/arrowserde/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*\.eg\.go:`),
-			stream.GrepNot(`pkg/sql/colexec/.*_generated\.go:`),
-			stream.GrepNot(`pkg/sql/pgwire/hba/conf.go:`),
+			stream.GrepNot(`pkg/.*\.pb\.gw\.go:`),
+			stream.GrepNot(`pkg/.*\.[eo]g\.go:`),
+			stream.GrepNot(`pkg/.*_generated\.go:`),
 
 			// Ignore types that can change by system.
 			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
@@ -1953,19 +1951,10 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`include/jemalloc/jemalloc\.h`),
 
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
-			stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
-			stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
 			// This exception is for hash.go, which re-implements runtime.noescape
 			// for efficient hashing.
 			stream.GrepNot(`pkg/sql/colexec/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
 			stream.GrepNot(`^#`), // comment line
-			// This exception is for the colexec generated files.
-			stream.GrepNot(`pkg/sql/colexec/.*\.eg.go:[0-9:]+: self-assignment of .* to .*`),
-			// Roachpb generated switch on `error`. It's OK for now because
-			// the inner error is always unwrapped (it's a protobuf
-			// enum). Eventually we want to use generalized error
-			// encode/decode instead and drop the linter exception.
-			stream.GrepNot(`pkg/roachpb/batch_generated\.go:.*invalid direct cast on error object`),
 			// Roachpb's own error package takes ownership of error unwraps
 			// (by enforcing that errors can never been wrapped under a
 			// roachpb.Error, which is an inconvenient limitation but it is
