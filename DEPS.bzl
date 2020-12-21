@@ -420,6 +420,10 @@ def go_deps():
         name = "com_github_cockroachdb_errors",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/errors",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
+        ],
         sum = "h1:rnnWK9Nn5kEMOGz9531HuDx/FOleL4NVH20VsDexVC8=",
         version = "v1.8.2",
     )
@@ -979,14 +983,6 @@ def go_deps():
         version = "v0.0.0-20180223154316-0cd9801be74a",
     )
     go_repository(
-        name = "com_github_gogo_protobuf",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/gogo/protobuf",
-        replace = "github.com/cockroachdb/gogoproto",
-        sum = "h1:UoEUWRRZjeOfGenewnmzRCA0kWWRtZogNdidaXjZ/+c=",
-        version = "v1.2.1-0.20190102194534-ca10b809dba0",
-    )
-    go_repository(
         name = "com_github_gogo_status",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gogo/status",
@@ -1062,13 +1058,6 @@ def go_deps():
         importpath = "github.com/golang/mock",
         sum = "h1:G5FRp8JnTd7RQH5kemVNlMeyXQAztQ3mOWV95KxsXH8=",
         version = "v1.1.1",
-    )
-    go_repository(
-        name = "com_github_golang_protobuf",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/golang/protobuf",
-        sum = "h1:+Z5KGCizgyZCbGh1KZqA0fcLLkwbsjIzS4aV2v7wJX0=",
-        version = "v1.4.2",
     )
     go_repository(
         name = "com_github_golang_snappy",
@@ -1229,6 +1218,10 @@ def go_deps():
         name = "com_github_grpc_ecosystem_grpc_gateway",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/grpc-ecosystem/grpc-gateway",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_grpc_ecosystem_grpc_gateway.patch",
+        ],
         replace = "github.com/cockroachdb/grpc-gateway",
         sum = "h1:pZuUpNtmLArGU2vCW+mNetvruw6jRcxDxwOnMT+XLWI=",
         version = "v1.14.6-0.20200519165156-52697fc4a249",
@@ -2196,8 +2189,15 @@ def go_deps():
     )
     go_repository(
         name = "com_github_prometheus_client_model",
-        build_file_proto_mode = "disable_global",
+        build_directives = [
+            "gazelle:proto_import_prefix prometheus/client_model/",
+        ],
+        build_file_proto_mode = "package",
         importpath = "github.com/prometheus/client_model",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_prometheus_client_model.patch",
+        ],
         sum = "h1:uq5h0d+GuxiXLJLNABMgp2qUWDPiLvgCzz2dUR+/W/M=",
         version = "v0.2.0",
     )
@@ -2837,8 +2837,12 @@ def go_deps():
     )
     go_repository(
         name = "io_etcd_go_etcd_raft_v3",
-        build_file_proto_mode = "disable",
+        build_file_proto_mode = "disable_global",
         importpath = "go.etcd.io/etcd/raft/v3",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
+        ],
         sum = "h1:+9CYw4wP53Ryj4CtTy4VJv1fzA6SgyVZkCUEubdsISg=",
         version = "v3.0.0-20201109164711-01844fd28560",
     )
@@ -2885,13 +2889,6 @@ def go_deps():
         importpath = "google.golang.org/appengine",
         sum = "h1:/wp5JvzpHIxhs/dumFmF7BXTf3Z+dd4uXta4kVyO508=",
         version = "v1.4.0",
-    )
-    go_repository(
-        name = "org_golang_google_genproto",
-        build_file_proto_mode = "disable_global",
-        importpath = "google.golang.org/genproto",
-        sum = "h1:jB9+PJSvu5tBfmJHy/OVapFdjDF3WvpkqRhxqrmzoEU=",
-        version = "v0.0.0-20200218151345-dad8c97a84f5",
     )
     go_repository(
         name = "org_golang_google_grpc",

@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -6,7 +8,6 @@ go_library(
         "addressing.go",
         "allocator.go",
         "allocator_scorer.go",
-        "api.pb.go",
         "cclglue.go",
         "consistency_queue.go",
         "debug_print.go",
@@ -20,7 +21,6 @@ go_library(
         "queue.go",
         "queue_helpers_testutil.go",
         "raft.go",
-        "raft.pb.go",
         "raft_log_queue.go",
         "raft_snapshot_queue.go",
         "raft_transport.go",
@@ -75,7 +75,6 @@ go_library(
         "split_delay_helper.go",
         "split_queue.go",
         "split_trigger_helper.go",
-        "storage_services.pb.go",
         "store.go",
         "store_create_replica.go",
         "store_init.go",
@@ -94,6 +93,7 @@ go_library(
         "track_raft_protos.go",
         "ts_maintenance_queue.go",
     ],
+    embed = [":kvserver_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
     visibility = ["//visibility:public"],
     deps = [
@@ -127,7 +127,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/observedts",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/kv/kvserver/rditer",
@@ -180,14 +180,13 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
         "@com_github_kr_pretty//:pretty",
         "@com_github_opentracing_opentracing_go//:opentracing-go",
         "@io_etcd_go_etcd_raft_v3//:raft",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
-        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_time//rate",
     ],
 )
@@ -308,7 +307,7 @@ go_test(
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/kv/kvserver/raftentry",
@@ -386,11 +385,46 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//confchange",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
-        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//metadata",
         "@org_golang_x_net//trace",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
         "@org_golang_x_time//rate",
+    ],
+)
+
+proto_library(
+    name = "kvserver_proto",
+    srcs = [
+        "api.proto",
+        "raft.proto",
+        "storage_services.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
+        "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
+    ],
+)
+
+go_proto_library(
+    name = "kvserver_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+    proto = ":kvserver_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
