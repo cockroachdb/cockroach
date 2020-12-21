@@ -102,13 +102,13 @@ func WriteInitialRangeState(
 	desc roachpb.RangeDescriptor,
 	replicaVersion roachpb.Version,
 ) error {
-	initialTruncStateType := TruncatedStateUnreplicated
+	const initialTruncStateType = TruncatedStateUnreplicated
 	return WriteInitialRangeStateWithTruncatedState(ctx, readWriter, desc, replicaVersion, initialTruncStateType)
 }
 
 // WriteInitialRangeStateWithTruncatedState is the same as
-// WriteInitialRangeState, but allows the caller to override the truncated
-// state.
+// WriteInitialRangeState, but allows the caller to override the truncated state
+// type.
 //
 // TODO(irfansharif): This can be removed in the v21.2 cycle after we no longer
 // need to test the truncated state migration.

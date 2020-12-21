@@ -102,7 +102,10 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		cluster := newCluster(m.nl, m.dialer, m.executor, m.db)
 		h := newHelper(cluster, clusterVersion)
 
-		// First, run the actual migration if any.
+		// First run the actual migration (if any). The cluster version bump
+		// will be rolled out afterwards. This lets us provide the invariant
+		// that if a version=V is active, all data is guaranteed to have
+		// migrated.
 		if migration, ok := registry[clusterVersion]; ok {
 			if err := migration.Run(ctx, h); err != nil {
 				return err
@@ -123,53 +126,37 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		// the cluster (including ones added concurrently during version
 		// upgrades) are running binaries that know about the version.
 
-		// Bumping the version gates only after running the migration itself is
-		// important for below-raft migrations. Below-raft migrations mutate
-		// replica state, making use of the Migrate(version=V) primitive when
-		// issuing it against the entire keyspace. As part of this process,
-		// migrations want to rely on the invariant that there are no extant
-		// replicas in the system that haven't seen the specific Migrate command.
-		// Consider the the following:
+		// Below-raft migrations mutate replica state, making use of the
+		// Migrate(version=V) primitive which they issue against the entire
+		// keyspace. These migrations typically want to rely on the invariant
+		// that there are no extant replicas in the system that haven't seen the
+		// specific Migrate command.
 		//
-		// - r420 is running version=87
-		// - The leaseholder for r420 generates a snapshot to add a new replica
-		//   elsewhere
-		// - While the snapshot is inflight, all existing replicas of r420 are
-		//   migrated to version=88
-		// - The snapshot is received by the store, instantiating a replica with
-		//   the pre-migrated state
+		// This is partly achieved through the implementation of the Migrate
+		// command itself, which waits until it's applied on all followers[2]
+		// before returning. This also addresses the concern of extant snapshots
+		// with pre-migrated state possibly instantiating older version
+		// replicas. The intended learner replicas are listed as part of the
+		// range descriptor, and is also waited on for during command
+		// application. As for stale snapshots, if they specify a replicaID
+		// that's no longer part of the raft group, they're discarded by the
+		// recipient. Snapshots are also discarded unless they move the LAI
+		// forward.
 		//
-		// To guard against this, we gate any incoming snapshots that were
-		// generated from a replica that (at the time) had a version[1] less
-		// than our store's current active version[2]. After executing
-		// Migrate(version=x), the infrastructure bumps the corresponding
-		// cluster version on each store, preventing future snapshots with
-		// versions < V. We should note that the reason we bump the cluster
-		// version after the Migrate request, and not before, is because the
-		// migration process itself can be arbitrarily long running. It'd be
-		// undesirable to pause rebalancing/repair mechanisms from functioning
-		// during this time.
-		//
-		// Coming back to the invariant above ("there should be no extant
-		// replicas in the system that haven't seen the corresponding Migrate
-		// command"), this is partly achieved through the implementation of the
-		// Migrate command itself, which waits until it's applied on all
-		// followers[3] before returning. That still leaves the possibility for
-		// replicas in the replica GC queue to evade detection. To address this,
-		// below-raft migrations typically take a two-phrase approach (the
-		// TruncatedAndRangeAppliedStateMigration being one example of this),
-		// where after having migrated the entire keyspace to version V, and
-		// after having prevented subsequent snapshots originating from replicas
-		// with versions < V, the migration sets out to purge outdated replicas
-		// in the system[4]. Specifically it processes all replicas in
-		// the GC queue with a version < V (which are not accessible during the
-		// application of the Migrate command).
+		// That still leaves rooms for replicas in the GC queue to evade
+		// detection. To address this, below-raft migrations typically take a
+		// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
+		// one example of this), where after having migrated the entire keyspace
+		// to version V, and after having prevented subsequent snapshots
+		// originating from replicas with versions < V, the migration sets out
+		// to purge outdated replicas in the system[3]. Specifically it
+		// processes all replicas in the GC queue with a version < V (which are
+		// not accessible during the application of the Migrate command).
 		//
 		// [1]: See ReplicaState.Version.
-		// [2]: See the snapshot version checks Store.canApplySnapshotLocked.
-		// [3]: See Replica.executeWriteBatch, specifically how proposals with the
+		// [2]: See Replica.executeWriteBatch, specifically how proposals with the
 		//      Migrate request are handled downstream of raft.
-		// [4]: See PurgeOutdatedReplicas from the Migration service.
+		// [3]: See PurgeOutdatedReplicas from the Migration service.
 
 		{
 			// The migrations infrastructure makes use of internal fence
@@ -200,18 +187,19 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// by the join RPC).
 			//
 			// All of which is to say that once we've seen the node list
-			// stabilize (as EveryNode enforces), any new nodes that can join
-			// the cluster will run a release that support the fence version,
-			// and by design also supports the actual version (which is the
-			// direct successor of the fence).
+			// stabilize (as UntilClusterStable enforces), any new nodes that
+			// can join the cluster will run a release that support the fence
+			// version, and by design also supports the actual version (which is
+			// the direct successor of the fence).
 			fenceVersion := fenceVersionFor(ctx, clusterVersion)
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &fenceVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.BumpClusterVersion(ctx, req)
-				return err
-			})
-			if err != nil {
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.BumpClusterVersion(ctx, req)
+					return err
+				})
+			}); err != nil {
 				return err
 			}
 		}
@@ -220,11 +208,12 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// cluster version bump, cluster-wide.
 			req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.ValidateTargetClusterVersion(ctx, req)
-				return err
-			})
-			if err != nil {
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.ValidateTargetClusterVersion(ctx, req)
+					return err
+				})
+			}); err != nil {
 				return err
 			}
 		}
@@ -232,9 +221,11 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// Finally, bump the real version cluster-wide.
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.BumpClusterVersion(ctx, req)
-				return err
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.BumpClusterVersion(ctx, req)
+					return err
+				})
 			}); err != nil {
 				return err
 			}

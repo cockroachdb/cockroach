@@ -29,7 +29,7 @@ func init() {
 }
 
 func declareKeysMigrate(
-	_ *roachpb.RangeDescriptor,
+	desc *roachpb.RangeDescriptor,
 	header roachpb.Header,
 	_ roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
@@ -39,6 +39,9 @@ func declareKeysMigrate(
 	// cumbersome. We could spruce up the migration type and allow authors to
 	// define the allow authors for specific set of keys each migration needs to
 	// grab latches and locks over.
+
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(header.RangeID)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
 	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
 }
@@ -59,6 +62,7 @@ func registerMigration(key clusterversion.Key, migration migration) {
 }
 
 // Migrate executes the below-raft migration corresponding to the given version.
+// See roachpb.MigrateRequest for more details.
 func Migrate(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
 ) (result.Result, error) {
@@ -128,6 +132,9 @@ func truncatedAndAppliedStateMigration(
 
 // TestingRegisterMigrationInterceptor is used in tests to register an
 // interceptor for a below-raft migration.
+//
+// TODO(irfansharif): This is a gross anti-pattern, we're letting tests mutate
+// global state. This should instead be accessed EvalKnobs() instead.
 func TestingRegisterMigrationInterceptor(version roachpb.Version, fn func()) (unregister func()) {
 	if _, ok := migrationRegistry[version]; ok {
 		panic("doubly registering migration")

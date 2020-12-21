@@ -45,12 +45,12 @@ message PurgeOutdatedReplicasRequest {
 // PurgeOutdatedReplicasRequest.
 message PurgeOutdatedReplicasResponse{}
 
-// FlushAllEnginesRequest is used to instruct the target node to flush all its
+// SyncAllEnginesRequest is used to instruct the target node to sync all its
 // engines.
-message FlushAllEnginesRequest{}
+message SyncAllEnginesRequest{}
 
-// FlushAllEnginesResponse is the response to a FlushAllEnginesRequest.
-message FlushAllEnginesResponse{}
+// SyncAllEnginesResponse is the response to a SyncAllEnginesRequest.
+message SyncAllEnginesResponse{}
 
 service Migration {
    // ValidateTargetClusterVersion is used to verify that the target node is
@@ -69,9 +69,9 @@ service Migration {
    // that would be able to support the intended version bump.
    rpc BumpClusterVersion(BumpClusterVersionRequest) returns (BumpClusterVersionResponse) { }
 
-   // FlushAllEngines is used to instruct the target node to flush all its
+   // SyncAllEngines is used to instruct the target node to sync all its
    // engines.
-   rpc FlushAllEngines (FlushAllEnginesRequest) returns (FlushAllEnginesResponse) { }
+   rpc SyncAllEngines (SyncAllEnginesRequest) returns (SyncAllEnginesResponse) { }
 
    // PurgeOutdatedReplicas is used to instruct the target node to purge all
    // replicas with a version less than the one provided.

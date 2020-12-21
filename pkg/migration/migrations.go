@@ -78,7 +78,7 @@ type migrationFn func(context.Context, *Helper) error
 //
 // TODO(irfansharif): Introduce a `system.migrations` table, and populate it here.
 func (m *Migration) Run(ctx context.Context, h *Helper) (err error) {
-	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", h.ClusterVersion()), nil)
+	ctx = logtags.AddTag(ctx, "migration", h.ClusterVersion())
 
 	if err := m.fn(ctx, h); err != nil {
 		return err
@@ -87,8 +87,8 @@ func (m *Migration) Run(ctx context.Context, h *Helper) (err error) {
 	return nil
 }
 
-// defaultPageSize controls how many ranges are paged in by default when
-// iterating through all ranges in a cluster during any given migration. We
+// defaultPageSize controls how many range descriptors are paged in by default
+// when iterating through all ranges in a cluster during any given migration. We
 // pulled this number out of thin air(-ish). Let's consider a cluster with 50k
 // ranges, with each range taking ~200ms. We're being somewhat conservative with
 // the duration, but in a wide-area cluster with large hops between the manager
@@ -101,69 +101,84 @@ func (m *Migration) Run(ctx context.Context, h *Helper) (err error) {
 const defaultPageSize = 200
 
 func truncatedStateMigration(ctx context.Context, h *Helper) error {
-	var batchIdx, numMigratedRanges int
-	init := func() { batchIdx, numMigratedRanges = 1, 0 }
-	if err := h.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
-		for _, desc := range descriptors {
-			// NB: This is a bit of a wart. We want to reach the first range,
-			// but we can't address the (local) StartKey. However, keys.LocalMax
-			// is on r1, so we'll just use that instead to target r1.
-			start, end := desc.StartKey, desc.EndKey
-			if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
-				start, _ = keys.Addr(keys.LocalMax)
+	return h.UntilClusterStable(ctx, func() error {
+		var batchIdx, numMigratedRanges int
+		init := func() { batchIdx, numMigratedRanges = 1, 0 }
+		if err := h.IterateRangeDescriptors(ctx, defaultPageSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+			for _, desc := range descriptors {
+				// NB: This is a bit of a wart. We want to reach the first range,
+				// but we can't address the (local) StartKey. However, keys.LocalMax
+				// is on r1, so we'll just use that instead to target r1.
+				start, end := desc.StartKey, desc.EndKey
+				if bytes.Compare(desc.StartKey, keys.LocalMax) < 0 {
+					start, _ = keys.Addr(keys.LocalMax)
+				}
+				if err := h.DB().Migrate(ctx, start, end, h.ClusterVersion().Version); err != nil {
+					return err
+				}
 			}
-			if err := h.DB().Migrate(ctx, start, end, h.ClusterVersion().Version); err != nil {
-				return err
-			}
+
+			// TODO(irfansharif): Instead of logging this to the debug log, we
+			// should be leveraging our jobs infrastructure for observability.
+			// See #58183.
+			numMigratedRanges += len(descriptors)
+			log.Infof(ctx, "[batch %d/??] migrated %d ranges", batchIdx, numMigratedRanges)
+			batchIdx++
+
+			return nil
+		}); err != nil {
+			return err
 		}
 
-		// TODO(irfansharif): Instead of logging this to the debug log, we
-		// should insert these into a `system.migrations` table for external
-		// observability.
-		numMigratedRanges += len(descriptors)
-		log.Infof(ctx, "[batch %d/??] migrated %d ranges", batchIdx, numMigratedRanges)
-		batchIdx++
+		log.Infof(ctx, "[batch %d/%d] migrated %d ranges", batchIdx, batchIdx, numMigratedRanges)
 
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	log.Infof(ctx, "[batch %d/%d] migrated %d ranges", batchIdx, batchIdx, numMigratedRanges)
-
-	// Make sure that all stores have synced. Given we're a below-raft
-	// migrations, this ensures that the applied state is flushed to disk.
-	req := &serverpb.FlushAllEnginesRequest{}
-	op := fmt.Sprint("flush-stores")
-	if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-		_, err := client.FlushAllEngines(ctx, req)
-		return err
-	}); err != nil {
-		return err
-	}
-
-	return nil
+		// Make sure that all stores have synced. Given we're a below-raft
+		// migrations, this ensures that the applied state is flushed to disk.
+		req := &serverpb.SyncAllEnginesRequest{}
+		op := fmt.Sprint("sync-engines")
+		return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+			_, err := client.SyncAllEngines(ctx, req)
+			return err
+		})
+	})
 }
 
 func postTruncatedStateMigration(ctx context.Context, h *Helper) error {
 	// Purge all replicas that haven't been migrated to use the unreplicated
-	// truncated state and the range applied state.
+	// truncated state and the range applied state. We're sure to also durably
+	// persist any changes made in the same closure. Doing so in separate
+	// UntilClusterStable closure runs the (small) risk that a node might have
+	// GC-ed older replicas, restarted without syncing (thus unapplying the GC),
+	// and flushing all engines after.
 	truncStateVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
-	req := &serverpb.PurgeOutdatedReplicasRequest{Version: &truncStateVersion}
-	op := fmt.Sprintf("purge-outdated-replicas=%s", req.Version)
-	if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-		_, err := client.PurgeOutdatedReplicas(ctx, req)
-		return err
-	}); err != nil {
-		return err
-	}
+	op := fmt.Sprintf("purge-outdated-replicas-and-sync=%s", truncStateVersion)
+	err := h.UntilClusterStable(ctx, func() error {
+		err := h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+			preq := &serverpb.PurgeOutdatedReplicasRequest{Version: &truncStateVersion}
+			_, err := client.PurgeOutdatedReplicas(ctx, preq)
+			if err != nil {
+				return err
+			}
 
-	return nil
+			freq := &serverpb.SyncAllEnginesRequest{}
+			_, err = client.SyncAllEngines(ctx, freq)
+			return err
+		})
+		return err
+	})
+
+	return err
 }
 
 // TestingRegisterMigrationInterceptor is used in tests to register an
 // interceptor for a version migration.
-func TestingRegisterMigrationInterceptor(cv clusterversion.ClusterVersion, fn migrationFn) (unregister func()) {
+//
+// TODO(irfansharif): This is a gross anti-pattern, we're letting tests mutate
+// global state. This should instead be a testing knob that the migration
+// manager checks when search for attached migrations.
+func TestingRegisterMigrationInterceptor(
+	cv clusterversion.ClusterVersion, fn migrationFn,
+) (unregister func()) {
 	registry[cv] = Migration{cv: cv, fn: fn}
 	return func() { delete(registry, cv) }
 }

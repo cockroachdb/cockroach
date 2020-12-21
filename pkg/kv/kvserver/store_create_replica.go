@@ -15,7 +15,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -181,12 +180,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// been set, not every code path which inspects the descriptor checks the
 	// destroy status.
 	repl.mu.state.Desc = uninitializedDesc
-
-	// We initialize the replica's version with last known active version.
-	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.ReplicaVersions) {
-		version := s.ClusterSettings().Version.ActiveVersion(ctx).Version
-		repl.mu.state.Version = &version
-	}
 
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a

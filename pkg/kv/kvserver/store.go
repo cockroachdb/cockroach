@@ -2806,12 +2806,6 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		interceptor()
 	}
 
-	cfg := s.cfg.Gossip.GetSystemConfig()
-	if cfg == nil {
-		return errors.Errorf("system config not available in gossip")
-	}
-
-	var retErr error
 	// Let's set a reasonable bound on the number of replicas being processed in
 	// parallel.
 	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
@@ -2824,16 +2818,18 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 
 		alloc, err := qp.Acquire(ctx, 1)
 		if err != nil {
-			retErr = err
+			g.GoCtx(func(ctx context.Context) error {
+				return err
+			})
 			return false
 		}
 
 		g.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			processed, err := s.replicaGCQueue.process(ctx, repl, cfg)
+			processed, err := s.replicaGCQueue.process(ctx, repl, nil)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "on %s", repl.Desc())
 			}
 			if !processed {
 				// We're either still part of the raft group, in which same
@@ -2851,11 +2847,7 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 		return true
 	})
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	return retErr
+	return g.Wait()
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local

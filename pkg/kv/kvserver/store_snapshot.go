@@ -624,21 +624,6 @@ func (s *Store) canApplySnapshotLocked(
 		return nil, existingDestroyStatus.err
 	}
 
-	// We gate any incoming snapshots that were generated from a replica, that
-	// at the time, had a version[1] less than our store's current active
-	// version. This property is relied upon by the migrations infrastructure
-	// when executing below-raft migrations[2].
-	//
-	// [1]: See comment on ReplicaState.Version.
-	// [2]: See comment within Manager.Migrate in pkg/migration.
-	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.ReplicaVersions) {
-		storeVersion := s.ClusterSettings().Version.ActiveVersion(ctx).Version
-		if snapVersion := snapHeader.State.Version; snapVersion.Less(storeVersion) {
-			return nil, errors.Newf("snapshot generated at %s, only accepting versions >= %s",
-				snapVersion, storeVersion)
-		}
-	}
-
 	// We have a key range [desc.StartKey,desc.EndKey) which we want to apply a
 	// snapshot for. Is there a conflicting existing placeholder or an
 	// overlapping range?

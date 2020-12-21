@@ -226,19 +226,20 @@ func (r *Replica) executeWriteBatch(
 				// replicaID and descriptor in the snap vs. the replicaID of the
 				// raft instance) are discarded by the recipient, and we're
 				// already checking against all replicas in the descriptor
-				// below. Snapshots are also discarded unless they move the LAI
-				// forward, so we're not worried about old snapshots (with
-				// indexes preceding the MLAI here) instantiating pre-migrated
-				// state in anyway.
-				// As for extant snapshots with pre-migrated state, initializing
-				// replicas elsewhere, we rely on higher-level orchestration[1]
-				// to ensure that snapshots with with pre-migrated state are
-				// rejected, and that replicas with older versions are
-				// purged from the system[2].
+				// below (which include learner replicas currently in the
+				// process of receiving snapshots). Snapshots are also discarded
+				// unless they move the LAI forward, so we're not worried about
+				// old snapshots (with indexes preceding the MLAI here)
+				// instantiating pre-migrated state in anyway. We also have a
+				// separate mechanism to ensure replicas with older versions are
+				// purged from the system[1]. This is driven by a higher-level
+				// orchestration layer[2], these are the replicas that we don't
+				// have a handle on here as they're eligible for GC (but may
+				// still hit replica evaluation code paths with pre-migrated
+				// state, unless explicitly purged).
 				//
-				// [1]: Look towards the snapshot+store active cluster version
-				//      check in Store.canApplySnapshotLocked.
-				// [2]: See PurgeOutdatedReplicas from the Migration service.
+				// [1]: See PurgeOutdatedReplicas from the Migration service.
+				// [2]: pkg/migration
 				desc := r.Desc()
 				// NB: waitForApplication already has a timeout.
 				applicationErr := waitForApplication(

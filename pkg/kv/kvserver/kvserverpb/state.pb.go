@@ -82,23 +82,22 @@ type ReplicaState struct {
 	//
 	// We should note that the progression of cluster versions in the cluster does
 	// not happen in lock step with replica versions for all replicas in the
-	// system. Well, not for all cluster versions. Replica versions is one the
+	// system. Well, not for all cluster versions. Replica versions are one the
 	// primitives used to coordinate below-raft migrations, and when cluster
 	// versions for those are being rolled out cluster-wide, the expectation is
 	// that all replica versions are bumped along side it. For everything else,
-	// the coupling isn't necessary nor enforced. When a new replica is being
+	// the coupling is neither necessary nor enforced. When a new replica is being
 	// initialized (either during bootstrap, or through snapshots, or splits),
 	// it's annotated with a replica version. During bootstrap, replicas source
-	// the active cluster version at the time. For replicas created through
-	// snapshots or splits, they use the version sourced from the original
-	// replica. While a below-raft migration is underway, replicas from different
-	// ranges may have differing replica versions. This is fine, we rely on higher
-	// level orchestration primitives[1][2][3] to shepherd all replicas in the
-	// system to the right version.
+	// the binary version. For replicas created through snapshots or splits, they
+	// use the version sourced from the original replica. While a below-raft
+	// migration is underway, replicas from different ranges may have differing
+	// replica versions. This is fine, we rely on higher level orchestration
+	// primitives[1][2] to shepherd all replicas in the system to the right
+	// version.
 	//
 	// [1]: migration.Manager
 	// [2]: PurgeOutdatedReplicas
-	// [3]: Use of the snapshot version check in Store.canApplySnapshotLocked.
 	Version *roachpb.Version `protobuf:"bytes,12,opt,name=version,proto3" json:"version,omitempty"`
 }
 
@@ -106,7 +105,7 @@ func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
 func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
 func (*ReplicaState) ProtoMessage()    {}
 func (*ReplicaState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_ef822cbf57456ce0, []int{0}
+	return fileDescriptor_state_a3deae515ef203ef, []int{0}
 }
 func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -178,7 +177,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_ef822cbf57456ce0, []int{1}
+	return fileDescriptor_state_a3deae515ef203ef, []int{1}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -214,7 +213,7 @@ func (m *RangeInfo_CTEntry) Reset()         { *m = RangeInfo_CTEntry{} }
 func (m *RangeInfo_CTEntry) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo_CTEntry) ProtoMessage()    {}
 func (*RangeInfo_CTEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_ef822cbf57456ce0, []int{1, 0}
+	return fileDescriptor_state_a3deae515ef203ef, []int{1, 0}
 }
 func (m *RangeInfo_CTEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -250,7 +249,7 @@ func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
 func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
 func (*LatchManagerInfo) ProtoMessage()    {}
 func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_ef822cbf57456ce0, []int{2}
+	return fileDescriptor_state_a3deae515ef203ef, []int{2}
 }
 func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1950,10 +1949,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_ef822cbf57456ce0)
+	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_a3deae515ef203ef)
 }
 
-var fileDescriptor_state_ef822cbf57456ce0 = []byte{
+var fileDescriptor_state_a3deae515ef203ef = []byte{
 	// 1061 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcd, 0x6e, 0x1b, 0x37,
 	0x10, 0xf6, 0x5a, 0x2b, 0x5b, 0xa2, 0xec, 0x58, 0x61, 0x9d, 0x78, 0xe3, 0xc4, 0x92, 0x21, 0xa0,

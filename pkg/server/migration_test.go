@@ -218,6 +218,7 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 			},
 		},
 	})
+	defer s.Stopper().Stop(context.Background())
 
 	migrationServer := s.MigrationServer().(*migrationServer)
 	if _, err := migrationServer.PurgeOutdatedReplicas(context.Background(), &serverpb.PurgeOutdatedReplicasRequest{}); err != nil {
@@ -227,6 +228,4 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	if intercepted != numStores {
 		t.Fatalf("expected to have GC-ed replicas on %d stores, found %d", numStores, intercepted)
 	}
-
-	s.Stopper().Stop(context.Background())
 }

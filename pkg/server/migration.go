@@ -144,21 +144,27 @@ func (m *migrationServer) BumpClusterVersion(
 	return resp, nil
 }
 
-// FlushAllEngines implements the MigrationServer interface.
-func (m *migrationServer) FlushAllEngines(
-	ctx context.Context, _ *serverpb.FlushAllEnginesRequest,
-) (*serverpb.FlushAllEnginesResponse, error) {
-	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "flush-all-engines")
+// SyncAllEngines implements the MigrationServer interface.
+func (m *migrationServer) SyncAllEngines(
+	ctx context.Context, _ *serverpb.SyncAllEnginesRequest,
+) (*serverpb.SyncAllEnginesResponse, error) {
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "sync-all-engines")
 	defer span.Finish()
-	ctx = logtags.AddTag(ctx, "flush-all-engines", nil)
+	ctx = logtags.AddTag(ctx, "sync-all-engines", nil)
+
+	// Let's be paranoid here and ensure that all stores have been fully
+	// initialized.
+	m.server.node.waitForAdditionalStoreInit()
 
 	for _, eng := range m.server.engines {
-		if err := eng.Flush(); err != nil {
+		batch := eng.NewBatch()
+		if err := batch.Commit(true); err != nil {
 			return nil, err
 		}
 	}
 
-	resp := &serverpb.FlushAllEnginesResponse{}
+	log.Infof(ctx, "synced %d engines", len(m.server.engines))
+	resp := &serverpb.SyncAllEnginesResponse{}
 	return resp, nil
 }
 
@@ -169,6 +175,10 @@ func (m *migrationServer) PurgeOutdatedReplicas(
 	ctx, span := m.server.AnnotateCtxWithSpan(ctx, "purged-outdated-replicas")
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, "purge-outdated-replicas", nil)
+
+	// Same as in SyncAllEngines, because stores can be added asynchronously, we
+	// need to ensure that the bootstrap process has happened.
+	m.server.node.waitForAdditionalStoreInit()
 
 	if err := m.server.node.stores.VisitStores(func(s *kvserver.Store) error {
 		return s.PurgeOutdatedReplicas(ctx, *req.Version)

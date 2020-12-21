@@ -12,6 +12,8 @@ package kvserver_test
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,6 +79,8 @@ func TestStorePurgeOutdatedReplicas(t *testing.T) {
 	// Mark the replica on n2 as eligible for GC.
 	desc := tc.RemoveVotersOrFatal(t, k, tc.Target(n2))
 
+	// We register an interceptor seeing as how we're attempting a (dummy) below
+	// raft migration below.
 	unregister := batcheval.TestingRegisterMigrationInterceptor(migrationVersion, func() {})
 	defer unregister()
 
@@ -103,17 +108,22 @@ func TestStorePurgeOutdatedReplicas(t *testing.T) {
 
 // TestMigrateWithInflightSnapshot checks to see that the Migrate command blocks
 // in the face of an in-flight snapshot that hasn't yet instantiated the
-// replica. We expect the Migrate command to wait for its own application on all
-// replicas.
+// target replica. We expect the Migrate command to wait for its own application
+// on all replicas, including learners.
 func TestMigrateWithInflightSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var once sync.Once
 	blockUntilSnapshotCh := make(chan struct{})
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true // we'll control it ourselves
 	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
-		close(blockUntilSnapshotCh)
+		// We'll want a signal for when the snapshot was received by the sender.
+		once.Do(func() { close(blockUntilSnapshotCh) })
+
+		// We'll also want to temporarily stall incoming snapshots.
 		select {
 		case <-blockSnapshotsCh:
 		case <-time.After(10 * time.Second):
@@ -144,21 +154,49 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 	require.Len(t, desc.Replicas().Voters(), 1)
 	require.Len(t, desc.Replicas().Learners(), 1)
 
+	// Enqueue the replica in the raftsnapshot queue. We use SucceedsSoon
+	// because it may take a bit for raft to figure out that we need to be
+	// generating a snapshot.
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl, err := store.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		if err != nil {
+			return err
+		}
+		if processErr != nil {
+			return processErr
+		}
+		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		formattedTrace := trace.String()
+		if !strings.Contains(formattedTrace, msg) {
+			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
+		}
+		return nil
+	})
+
 	unregister := batcheval.TestingRegisterMigrationInterceptor(migrationVersion, func() {})
 	defer unregister()
 
 	// Migrate the scratch range. We expect this to hang given the in-flight
 	// snapshot is held up.
-	err := tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, migrationVersion)
-	require.Error(t, err)
+	func() {
+		ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+
+		err := tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, migrationVersion)
+		require.True(t, testutils.IsError(err, context.DeadlineExceeded.Error()), err)
+	}()
 
 	// Unblock the snapshot and let the learner get promoted to a voter.
 	close(blockSnapshotsCh)
 	require.NoError(t, g.Wait())
 
 	// We expect the migration attempt to go through now.
-	err = tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, migrationVersion)
-	require.NoError(t, err)
+	if err := tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, migrationVersion); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, node := range []int{n1, n2} {
 		ts := tc.Servers[node]
@@ -232,14 +270,20 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 
 	// Migrate the scratch range. We expect this to hang given we've gated the
 	// command application on n3.
-	err := tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, endV)
-	require.Error(t, err)
+	func() {
+		cCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+
+		err := tc.Server(n1).DB().Migrate(cCtx, desc.StartKey, desc.EndKey, endV)
+		require.True(t, testutils.IsError(err, context.DeadlineExceeded.Error()), err)
+	}()
 
 	close(blockApplicationCh)
 
 	// We expect the migration attempt to go through now.
-	err = tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, endV)
-	require.NoError(t, err)
+	if err := tc.Server(n1).DB().Migrate(ctx, desc.StartKey, desc.EndKey, endV); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, node := range []int{n1, n2, n3} {
 		ts := tc.Servers[node]

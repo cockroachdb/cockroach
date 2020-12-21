@@ -681,9 +681,10 @@ func (db *DB) AddSSTable(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// Migrate proactively forces ranges overlapping with the provided keyspace to
-// transition out of any legacy modes of operation (as defined by the target
-// version).
+// Migrate is used instruct all ranges overlapping with the provided keyspace to
+// exercise any relevant (below-raft) migrations in order for its range state to
+// conform to what's needed by the specified version. It's a core primitive used
+// in our migrations infrastructure to phase out legacy code below raft.
 func (db *DB) Migrate(ctx context.Context, begin, end interface{}, version roachpb.Version) error {
 	b := &Batch{}
 	b.migrate(begin, end, version)

@@ -940,7 +940,6 @@ func splitTriggerHelper(
 		}
 		rightLease := leftLease
 		rightLease.Replica = replica
-
 		gcThreshold, err := MakeStateLoader(rec).LoadGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
@@ -970,6 +969,11 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load legacy truncated state")
 		} else if found {
 			truncStateType = stateloader.TruncatedStateLegacyReplicated
+		}
+
+		replicaVersion, err := MakeStateLoader(rec).LoadVersion(ctx, rec.Engine())
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 
 		// Writing the initial state is subtle since this also seeds the Raft
@@ -1002,10 +1006,6 @@ func splitTriggerHelper(
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
 
-		var replicaVersion roachpb.Version
-		if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.ReplicaVersions) {
-			replicaVersion = rec.ClusterSettings().Version.ActiveVersion(ctx).Version
-		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, truncStateType, replicaVersion,

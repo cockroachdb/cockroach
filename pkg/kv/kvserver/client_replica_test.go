@@ -3607,13 +3607,11 @@ func TestRangeMigration(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	key := tc.ScratchRange(t)
-	require.NoError(t, tc.WaitForSplitAndInitialization(key))
 	desc, err := tc.LookupRange(key)
 	require.NoError(t, err)
 	rangeID := desc.RangeID
 
 	store := tc.GetFirstStoreFromServer(t, 0)
-
 	assertVersion := func(expV roachpb.Version) {
 		repl, err := store.GetReplica(rangeID)
 		if err != nil {
