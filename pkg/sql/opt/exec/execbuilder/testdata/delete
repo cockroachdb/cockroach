@@ -416,7 +416,7 @@ vectorized: true
 │     fk: fk_pid_ref_parent
 │     input: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -476,7 +476,7 @@ vectorized: true
 │     fk: fk_pid_ref_parent
 │     input: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │

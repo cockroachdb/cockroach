@@ -2824,7 +2824,7 @@ INSERT INTO child (c, p) VALUES (200, 2)
 
 # These two test cases are sort of undefined behavior, since their
 # success/failure depends on the order in which the updates are performed.
-statement error duplicate key value \(p\)=\(3\) violates unique constraint "primary"
+statement error duplicate key value violates unique constraint "primary"\nDETAIL: Key \(p\)=\(3\) already exists\.
 UPDATE parent SET p = p + 1
 
 statement ok

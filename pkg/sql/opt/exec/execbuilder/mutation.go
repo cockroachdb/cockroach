@@ -115,7 +115,9 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 
-	// TODO(rytaft): build unique checks.
+	if err := b.buildUniqueChecks(ins.UniqueChecks); err != nil {
+		return execPlan{}, err
+	}
 
 	if err := b.buildFKChecks(ins.FKChecks); err != nil {
 		return execPlan{}, err
@@ -145,6 +147,12 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	//     and there is no guarantee that we won't produce a bigger batch.)
 	values, ok := ins.Input.(*memo.ValuesExpr)
 	if !ok || values.ChildCount() > mutations.MaxBatchSize() || values.Relational().HasSubquery {
+		return execPlan{}, false, nil
+	}
+
+	// We cannot use the fast path if any uniqueness checks are needed.
+	// TODO(rytaft): try to relax this restriction (see #58047).
+	if len(ins.UniqueChecks) > 0 {
 		return execPlan{}, false, nil
 	}
 
@@ -337,7 +345,9 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// TODO(rytaft): build unique checks.
+	if err := b.buildUniqueChecks(upd.UniqueChecks); err != nil {
+		return execPlan{}, err
+	}
 
 	if err := b.buildFKChecks(upd.FKChecks); err != nil {
 		return execPlan{}, err
@@ -421,7 +431,9 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	// TODO(rytaft): build unique checks.
+	if err := b.buildUniqueChecks(ups.UniqueChecks); err != nil {
+		return execPlan{}, err
+	}
 
 	if err := b.buildFKChecks(ups.FKChecks); err != nil {
 		return execPlan{}, err
@@ -769,6 +781,38 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	return colMap
 }
 
+// buildUniqueChecks builds uniqueness check queries. These check queries are
+// used to enforce UNIQUE WITHOUT INDEX constraints.
+//
+// The checks consist of queries that will only return rows if a constraint is
+// violated. Those queries are each wrapped in an ErrorIfRows operator, which
+// will throw an appropriate error in case the inner query returns any rows.
+func (b *Builder) buildUniqueChecks(checks memo.UniqueChecksExpr) error {
+	md := b.mem.Metadata()
+	for i := range checks {
+		c := &checks[i]
+		// Construct the query that returns uniqueness violations.
+		query, err := b.buildRelational(c.Check)
+		if err != nil {
+			return err
+		}
+		// Wrap the query in an error node.
+		mkErr := func(row tree.Datums) error {
+			keyVals := make(tree.Datums, len(c.KeyCols))
+			for i, col := range c.KeyCols {
+				keyVals[i] = row[query.getNodeColumnOrdinal(col)]
+			}
+			return mkUniqueCheckErr(md, c, keyVals)
+		}
+		node, err := b.factory.ConstructErrorIfRows(query.root, mkErr)
+		if err != nil {
+			return err
+		}
+		b.checks = append(b.checks, node)
+	}
+	return nil
+}
+
 func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 	md := b.mem.Metadata()
 	for i := range checks {
@@ -793,6 +837,48 @@ func (b *Builder) buildFKChecks(checks memo.FKChecksExpr) error {
 		b.checks = append(b.checks, node)
 	}
 	return nil
+}
+
+// mkUniqueCheckErr generates a user-friendly error describing a uniqueness
+// violation. The keyVals are the values that correspond to the
+// cat.UniqueConstraint columns.
+func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums) error {
+	tabMeta := md.TableMeta(c.Table)
+	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+	constraintName := uc.Name()
+	var msg, details bytes.Buffer
+
+	// Generate an error of the form:
+	//   ERROR:  duplicate key value violates unique constraint "foo"
+	//   DETAIL: Key (k)=(2) already exists.
+	msg.WriteString("duplicate key value violates unique constraint ")
+	lexbase.EncodeEscapedSQLIdent(&msg, constraintName)
+
+	details.WriteString("Key (")
+	for i := 0; i < uc.ColumnCount(); i++ {
+		if i > 0 {
+			details.WriteString(", ")
+		}
+		col := tabMeta.Table.Column(uc.ColumnOrdinal(tabMeta.Table, i))
+		details.WriteString(string(col.ColName()))
+	}
+	details.WriteString(")=(")
+	for i, d := range keyVals {
+		if i > 0 {
+			details.WriteString(", ")
+		}
+		details.WriteString(d.String())
+	}
+
+	details.WriteString(") already exists.")
+
+	return errors.WithDetail(
+		pgerror.WithConstraintName(
+			pgerror.Newf(pgcode.UniqueViolation, "%s", msg.String()),
+			constraintName,
+		),
+		details.String(),
+	)
 }
 
 // mkFKCheckErr generates a user-friendly error describing a foreign key

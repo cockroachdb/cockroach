@@ -1068,14 +1068,12 @@ func (ot *optTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 
 // UniqueCount is part of the cat.Table interface.
 func (ot *optTable) UniqueCount() int {
-	// TODO(rytaft): return the number of unique constraints (both with and
-	//  without indexes).
-	return 0
+	return len(ot.uniqueConstraints)
 }
 
 // Unique is part of the cat.Table interface.
 func (ot *optTable) Unique(i int) cat.UniqueConstraint {
-	panic(errors.AssertionFailedf("unique constraint [%d] does not exist", i))
+	return &ot.uniqueConstraints[i]
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A

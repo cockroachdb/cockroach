@@ -172,7 +172,7 @@ COMMIT
 -- NoTxn       -> Open        ###.....  (none)
 4: SAVEPOINT foo -- 0 rows
 -- Open        -> Open        ####....  foo
-5: INSERT INTO t(x) VALUES (1) -- pq: duplicate key value (x)=(1) violates unique constraint "t_x_key"
+5: INSERT INTO t(x) VALUES (1) -- pq: duplicate key value violates unique constraint "t_x_key"
 -- Open        -> Aborted     XXXXXXXX  foo
 6: ROLLBACK TO SAVEPOINT foo -- 0 rows
 -- Aborted     -> Open        ####....  foo

@@ -29,7 +29,7 @@ vectorized: true
 │       └── • values
 │             size: 2 columns, 2 rows
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -64,7 +64,7 @@ vectorized: true
 │             table: xy@primary
 │             spans: FULL SCAN
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -102,7 +102,7 @@ vectorized: true
 │       └── • values
 │             size: 2 columns, 2 rows
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -146,7 +146,7 @@ vectorized: true
 │       └── • values
 │             size: 4 columns, 2 rows
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -194,7 +194,7 @@ vectorized: true
 │       └── • values
 │             size: 4 columns, 2 rows
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -209,7 +209,7 @@ vectorized: true
 │               └── • scan buffer
 │                     label: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -259,7 +259,7 @@ vectorized: true
 │             table: parent@primary
 │             spans: [/3 - /3]
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -270,7 +270,7 @@ vectorized: true
 │           └── • scan buffer
 │                 label: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -303,7 +303,7 @@ vectorized: true
 │             table: parent@primary
 │             spans: [/3 - /3]
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -314,7 +314,7 @@ vectorized: true
 │           └── • scan buffer
 │                 label: buffer 1
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -325,7 +325,7 @@ vectorized: true
 │           └── • scan buffer
 │                 label: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -367,7 +367,7 @@ vectorized: true
 │             table: doubleparent@primary
 │             spans: [/10 - /10]
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -403,7 +403,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -442,7 +442,7 @@ vectorized: true
 │                 spans: [/10 - /10]
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -477,7 +477,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -503,7 +503,7 @@ vectorized: true
 │                     table: child@child_p_idx
 │                     spans: FULL SCAN
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -552,7 +552,7 @@ vectorized: true
 │                 spans: [/10 - /10]
 │                 locking strength: for update
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -568,7 +568,7 @@ vectorized: true
 │               └── • scan buffer
 │                     label: buffer 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -610,7 +610,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -659,7 +659,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -696,7 +696,7 @@ vectorized: true
 │             spans: FULL SCAN
 │             locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -735,7 +735,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-├── • fk-check
+├── • constraint-check
 │   │
 │   └── • error if rows
 │       │
@@ -751,7 +751,7 @@ vectorized: true
 │                 table: parent@primary
 │                 spans: FULL SCAN
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -803,7 +803,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -845,7 +845,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -884,7 +884,7 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1205,7 +1205,7 @@ vectorized: true
 │       └── • values
 │             size: 2 columns, 3 rows
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1244,7 +1244,7 @@ vectorized: true
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1286,7 +1286,7 @@ vectorized: true
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1326,7 +1326,7 @@ vectorized: true
 │             table: p@primary
 │             spans: [/1 - ]
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1381,7 +1381,7 @@ vectorized: true
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1419,7 +1419,7 @@ vectorized: true
 │                 spans: [/1 - ]
 │                 locking strength: for update
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1454,7 +1454,7 @@ vectorized: true
 │             table: p@primary
 │             spans: [/1 - ]
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │
@@ -1505,7 +1505,7 @@ vectorized: true
 │               │
 │               └── • emptyrow
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │

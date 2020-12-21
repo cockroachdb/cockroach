@@ -226,7 +226,7 @@ ALTER TABLE t ADD d INT UNIQUE
 statement ok
 INSERT INTO t VALUES (4, 9, 1)
 
-statement error duplicate key value \(d\)=\(1\) violates unique constraint \"t_d_key\"
+statement error duplicate key value violates unique constraint \"t_d_key\"\nDETAIL: Key \(d\)=\(1\) already exists\.
 INSERT INTO t VALUES (5, 9, 1)
 
 # Add a column with no default value

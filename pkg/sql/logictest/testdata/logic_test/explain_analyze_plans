@@ -285,7 +285,7 @@ vectorized: <hidden>
 │             spans: LIMITED SCAN
 │             limit: 1
 │
-└── • fk-check
+└── • constraint-check
     │
     └── • error if rows
         │ actual row count: 0
