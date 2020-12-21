@@ -40,6 +40,7 @@ proto_library(
         "privilege_events.proto",
         "role_events.proto",
         "session_events.proto",
+        "sql_audit_events.proto",
         "zone_events.proto",
     ],
     strip_import_prefix = "/pkg",

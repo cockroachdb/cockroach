@@ -570,7 +570,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			nil, /* no placeholders known at this point */
 			&eventpb.CreateStatistics{
 				TableName: details.FQTableName,
-			})
+			},
+			true, /* writeToEventLog */
+		)
 	})
 }
 

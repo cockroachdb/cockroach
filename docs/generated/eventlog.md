@@ -152,6 +152,91 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+## SQL Access Audit Events
+
+Events in this category are generated when a table has been
+marked as audited via `ALTER ... EXPERIMENTAL_AUDIT SET`.
+
+This feature is experimental.
+
+Note: these events are not written to `system.eventlog`, even
+when the cluster setting `system.eventlog.enabled` is set. They
+are only emitted via external logging.
+
+Events in this category are logged to channel SENSITIVE_ACCESS.
+
+
+### `sensitive_table_access`
+
+An event of type `sensitive_table_access` is recorded when an access is performed to
+a table marked as audited.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | The name of the table being audited. | yes |
+| `AccessMode` | How the table was accessed (r=read / rw=read/write). | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | yes |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+
+## SQL Execution Log
+
+Events in this category report executed queries.
+
+Note: these events are not written to `system.eventlog`, even
+when the cluster setting `system.eventlog.enabled` is set. They
+are only emitted via external logging.
+
+Events in this category are logged to channel SQL_EXEC.
+
+
+### `query_execute`
+
+An event of type `query_execute` is recorded when a query is executed,
+and the cluster setting `sql.trace.log_statement_execute` is set.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | yes |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+
 ## SQL Logical Schema Changes
 
 Events in this category pertain to DDL (Data Definition Language)
@@ -1459,6 +1544,95 @@ Events of this type are only emitted when the cluster setting
 | `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
 | `Transport` | The connection type after transport negotiation. | no |
 | `User` | The username the session is for. This is the username passed by the client, after case-folding and Unicode normalization. | yes |
+
+## SQL Slow Query Log
+
+Events in this category report slow query execution.
+
+Note: these events are not written to `system.eventlog`, even
+when the cluster setting `system.eventlog.enabled` is set. They
+are only emitted via external logging.
+
+Events in this category are logged to channel SQL_PERF.
+
+
+### `slow_query`
+
+An event of type `slow_query` is recorded when a query triggers the "slow query" condition.
+
+As of this writing, the condition requires:
+- the cluster setting `sql.log.slow_query.latency_threshold`
+set to a non-zero value, AND
+- EITHER of the following conditions:
+- the actual age of the query exceeds the configured threshold; OR
+- the query performs a full table/index scan.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | yes |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
+
+## SQL Slow Query Log (Internal)
+
+Events in this category report slow query execution by
+internal executors, i.e. when CockroachDB internally issues
+SQL statements.
+
+Note: these events are not written to `system.eventlog`, even
+when the cluster setting `system.eventlog.enabled` is set. They
+are only emitted via external logging.
+
+Events in this category are logged to channel SQL_INTERNAL_PERF.
+
+
+### `slow_query_internal`
+
+An event of type `slow_query_internal` is recorded when a query triggers the "slow query" condition,
+and the cluster setting `sql.log.slow_query.internal_queries.enabled` is
+set.
+See the documentation for the event type `slow_query` for details about
+the "slow query" condition.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `ExecMode` | How the statement was being executed (exec/prepare, etc.) | no |
+| `NumRows` | Number of rows returned. For mutation statements (INSERT, etc) that do not produce result rows, this field reports the number of rows affected. | no |
+| `SQLSTATE` | The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error. | no |
+| `ErrorText` | The text of the error if any. | yes |
+| `Age` | Age of the query in milliseconds. | no |
+| `NumRetries` | Number of retries, when the txn was reretried automatically by the server. | no |
+| `FullTableScan` | Whether the query contains a full table scan. | no |
+| `FullIndexScan` | Whether the query contains a full secondary index scan. | no |
 
 ## SQL User and Role operations
 
