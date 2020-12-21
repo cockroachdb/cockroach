@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -11,7 +13,6 @@ go_library(
         "context.go",
         "context_testutils.go",
         "heartbeat.go",
-        "heartbeat.pb.go",
         "keepalive.go",
         "metrics.go",
         "pg.go",
@@ -19,6 +20,7 @@ go_library(
         "stats_handler.go",
         "tls.go",
     ],
+    embed = [":rpc_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc",
     visibility = ["//visibility:public"],
     deps = [
@@ -48,7 +50,6 @@ go_library(
         "//vendor/github.com/cockroachdb/errors",
         "//vendor/github.com/cockroachdb/logtags",
         "//vendor/github.com/facebookgo/clock",
-        "//vendor/github.com/gogo/protobuf/proto",
         "//vendor/github.com/golang/snappy",
         "//vendor/github.com/montanaflynn/stats",
         "//vendor/golang.org/x/sync/syncmap",
@@ -111,5 +112,28 @@ go_test(
         "//vendor/google.golang.org/grpc/peer",
         "//vendor/google.golang.org/grpc/stats",
         "//vendor/google.golang.org/grpc/status",
+    ],
+)
+
+proto_library(
+    name = "rpc_proto",
+    srcs = ["heartbeat.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "//vendor/github.com/gogo/protobuf/gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "rpc_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/rpc",
+    proto = ":rpc_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//vendor/github.com/gogo/protobuf/gogoproto",
     ],
 )
