@@ -88,7 +88,6 @@ func TestColBatchScanMeta(t *testing.T) {
 		Spec:                &spec,
 		StreamingMemAccount: testMemAcc,
 	}
-	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +160,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 					Spec:                &spec,
 					StreamingMemAccount: testMemAcc,
 				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
 					b.Fatal(err)

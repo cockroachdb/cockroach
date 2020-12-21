@@ -118,7 +118,6 @@ func createTestOrdinalityOperator(
 		Inputs:              []colexecbase.Operator{input},
 		StreamingMemAccount: testMemAcc,
 	}
-	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	result, err := TestNewColOperator(ctx, flowCtx, args)
 	if err != nil {
 		return nil, err

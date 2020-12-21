@@ -90,7 +90,6 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					Inputs:              inputs,
 					StreamingMemAccount: &acc,
 				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 				var setupErr error
 				err := colexecerror.CatchVectorizedRuntimeError(func() {
 					_, setupErr = colbuilder.NewColOperator(ctx, flowCtx, args)

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
@@ -61,11 +60,10 @@ func wrapRowSources(
 ) (*colexec.Columnarizer, error) {
 	var toWrapInputs []execinfra.RowSource
 	for i, input := range inputs {
-		// Optimization: if the input is a Columnarizer, its input is necessarily a
-		// execinfra.RowSource, so remove the unnecessary conversion.
+		// Optimization: if the input is a Columnarizer, its input is
+		// necessarily a execinfra.RowSource, so remove the unnecessary
+		// conversion.
 		if c, ok := input.(*colexec.Columnarizer); ok {
-			// TODO(asubiotto): We might need to do some extra work to remove references
-			// to this operator (e.g. streamIDToOp).
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
 			// Note that this materializer is *not* added to the set of
@@ -419,15 +417,15 @@ func (r opResult) createDiskBackedSort(
 			ordering.Columns, int(matchLen),
 		)
 	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
-		// There is a limit specified, so we know exactly how many rows the sorter
-		// should output. The last part of the condition is making sure there is no
-		// overflow.
+		// There is a limit specified, so we know exactly how many rows the
+		// sorter should output. The last part of the condition is making sure
+		// there is no overflow.
 		//
 		// Choose a top K sorter, which uses a heap to avoid storing more rows
 		// than necessary.
 		//
-		// TODO(radu): we should not choose this processor when K is very large - it
-		// is slower unless we get significantly more rows than the limit.
+		// TODO(radu): we should not choose this processor when K is very large
+		// - it is slower unless we get significantly more rows than the limit.
 		sorterMemMonitorName = fmt.Sprintf("%stopk-sort-%d", memMonitorNamePrefix, processorID)
 		var topKSorterMemAccount *mon.BoundAccount
 		if useStreamingMemAccountForBuffering {
@@ -483,12 +481,6 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, monitorNamePrefix,
 			)
 			diskAccount := r.createDiskAccount(ctx, flowCtx, monitorNamePrefix)
-			// Make a copy of the DiskQueueCfg and set defaults for the sorter.
-			// The cache mode is chosen to reuse the cache to have a smaller
-			// cache per partition without affecting performance.
-			diskQueueCfg := args.DiskQueueCfg
-			diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-			diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 			if args.TestingKnobs.NumForcedRepartitions != 0 {
 				maxNumberPartitions = args.TestingKnobs.NumForcedRepartitions
 			}
@@ -499,7 +491,7 @@ func (r opResult) createDiskBackedSort(
 				execinfra.GetWorkMemLimit(flowCtx.Cfg),
 				maxNumberPartitions,
 				args.TestingKnobs.DelegateFDAcquisitions,
-				diskQueueCfg,
+				args.DiskQueueCfg,
 				args.FDSemaphore,
 				diskAccount,
 			)
@@ -583,10 +575,10 @@ func (r opResult) createAndWrapRowSource(
 		args.StreamingMemAccount,
 		spec.ProcessorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
-			// We provide a slice with a single nil as 'outputs' parameter because
-			// all processors expect a single output. Passing nil is ok here
-			// because when wrapping the processor, the materializer will be its
-			// output, and it will be set up in wrapRowSources.
+			// We provide a slice with a single nil as 'outputs' parameter
+			// because all processors expect a single output. Passing nil is ok
+			// here because when wrapping the processor, the materializer will
+			// be its output, and it will be set up in wrapRowSources.
 			proc, err := args.ProcessorConstructor(
 				ctx, flowCtx, spec.ProcessorID, &spec.Core, &spec.Post, inputs,
 				[]execinfra.RowReceiver{nil} /* outputs */, args.LocalProcessors,
@@ -753,18 +745,18 @@ func NewColOperator(
 			result.KVReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
 			result.Releasables = append(result.Releasables, scanOp)
-			// colBatchScan is wrapped with a cancel checker below, so we need to
-			// log its creation separately.
+			// colBatchScan is wrapped with a cancel checker below, so we need
+			// to log its creation separately.
 			if log.V(1) {
 				log.Infof(ctx, "made op %T\n", result.Op)
 			}
 
-			// We want to check for cancellation once per input batch, and wrapping
-			// only colBatchScan with a CancelChecker allows us to do just that.
-			// It's sufficient for most of the operators since they are extremely fast.
-			// However, some of the long-running operators (for example, sorter) are
-			// still responsible for doing the cancellation check on their own while
-			// performing long operations.
+			// We want to check for cancellation once per input batch, and
+			// wrapping only colBatchScan with a CancelChecker allows us to do
+			// just that. It's sufficient for most of the operators since they
+			// are extremely fast. However, some of the long-running operators
+			// (for example, sorter) are still responsible for doing the
+			// cancellation check on their own while performing long operations.
 			result.Op = colexec.NewCancelChecker(result.Op)
 			result.ColumnTypes = scanOp.ResultTypes
 
@@ -786,17 +778,19 @@ func NewColOperator(
 			}
 			aggSpec := core.Aggregator
 			if len(aggSpec.Aggregations) == 0 {
-				// We can get an aggregator when no aggregate functions are present if
-				// HAVING clause is present, for example, with a query as follows:
-				// SELECT 1 FROM t HAVING true. In this case, we plan a special operator
-				// that outputs a batch of length 1 without actual columns once and then
-				// zero-length batches. The actual "data" will be added by projections
-				// below.
-				// TODO(solon): The distsql plan for this case includes a TableReader, so
-				// we end up creating an orphaned colBatchScan. We should avoid that.
-				// Ideally the optimizer would not plan a scan in this unusual case.
+				// We can get an aggregator when no aggregate functions are
+				// present if HAVING clause is present, for example, with a
+				// query as follows: SELECT 1 FROM t HAVING true. In this case,
+				// we plan a special operator that outputs a batch of length 1
+				// without actual columns once and then zero-length batches. The
+				// actual "data" will be added by projections below.
+				// TODO(solon): The distsql plan for this case includes a
+				// TableReader, so we end up creating an orphaned colBatchScan.
+				// We should avoid that. Ideally the optimizer would not plan a
+				// scan in this unusual case.
 				result.Op, err = colexec.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
-				// We make ColumnTypes non-nil so that sanity check doesn't panic.
+				// We make ColumnTypes non-nil so that sanity check doesn't
+				// panic.
 				result.ColumnTypes = []*types.T{}
 				break
 			}
@@ -831,12 +825,13 @@ func NewColOperator(
 			if needHash {
 				hashAggregatorMemAccount := streamingMemAccount
 				if !useStreamingMemAccountForBuffering {
-					// Create an unlimited mem account explicitly even though there is no
-					// disk spilling because the memory usage of an aggregator is
-					// proportional to the number of groups, not the number of inputs.
-					// The row execution engine also gives an unlimited (that still
-					// needs to be approved by the upstream monitor, so not really
-					// "unlimited") amount of memory to the aggregator.
+					// Create an unlimited mem account explicitly even though
+					// there is no disk spilling because the memory usage of an
+					// aggregator is proportional to the number of groups, not
+					// the number of inputs. The row execution engine also gives
+					// an unlimited (that still needs to be approved by the
+					// upstream monitor, so not really "unlimited") amount of
+					// memory to the aggregator.
 					hashAggregatorMemAccount = result.createBufferingUnlimitedMemAccount(ctx, flowCtx, "hash-aggregator")
 				}
 				evalCtx.SingleDatumAggMemAccount = hashAggregatorMemAccount
@@ -868,10 +863,10 @@ func NewColOperator(
 				distinctMemAccount := result.createMemAccountForSpillStrategy(
 					ctx, flowCtx, distinctMemMonitorName,
 				)
-				// TODO(yuzefovich): we have an implementation of partially ordered
-				// distinct, and we should plan it when we have non-empty ordered
-				// columns and we think that the probability of distinct tuples in the
-				// input is about 0.01 or less.
+				// TODO(yuzefovich): we have an implementation of partially
+				// ordered distinct, and we should plan it when we have
+				// non-empty ordered columns and we think that the probability
+				// of distinct tuples in the input is about 0.01 or less.
 				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
 				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
 					allocator, inputs[0], core.Distinct.DistinctColumns, result.ColumnTypes,
@@ -952,9 +947,9 @@ func NewColOperator(
 				colexec.HashJoinerInitialNumBuckets,
 			)
 			if args.TestingKnobs.DiskSpillingDisabled {
-				// We will not be creating a disk-backed hash joiner because we're
-				// running a test that explicitly asked for only in-memory hash
-				// joiner.
+				// We will not be creating a disk-backed hash joiner because
+				// we're running a test that explicitly asked for only in-memory
+				// hash joiner.
 				result.Op = inMemoryHashJoiner
 			} else {
 				diskAccount := result.createDiskAccount(ctx, flowCtx, hashJoinerMemMonitorName)
@@ -1020,9 +1015,9 @@ func NewColOperator(
 			}
 
 			monitorName := "merge-joiner"
-			// We are using an unlimited memory monitor here because merge joiner
-			// itself is responsible for making sure that we stay within the memory
-			// limit, and it will fall back to disk if necessary.
+			// We are using an unlimited memory monitor here because merge
+			// joiner itself is responsible for making sure that we stay within
+			// the memory limit, and it will fall back to disk if necessary.
 			unlimitedAllocator := colmem.NewAllocator(
 				ctx, result.createBufferingUnlimitedMemAccount(
 					ctx, flowCtx, monitorName,
@@ -1088,9 +1083,10 @@ func NewColOperator(
 				peersColIdx := tree.NoColumnIdx
 				windowFn := *wf.Func.WindowFunc
 				if len(core.Windower.PartitionBy) > 0 {
-					// TODO(yuzefovich): add support for hashing partitioner (probably by
-					// leveraging hash routers once we can distribute). The decision about
-					// which kind of partitioner to use should come from the optimizer.
+					// TODO(yuzefovich): add support for hashing partitioner
+					// (probably by leveraging hash routers once we can
+					// distribute). The decision about which kind of partitioner
+					// to use should come from the optimizer.
 					partitionColIdx = int(wf.OutputColIdx)
 					input, err = colexec.NewWindowSortingPartitioner(
 						streamingAllocator, input, typs,
@@ -1155,9 +1151,9 @@ func NewColOperator(
 						args.FDSemaphore, input, typs, windowFn, wf.Ordering.Columns,
 						outputIdx, partitionColIdx, peersColIdx, diskAcc,
 					)
-					// NewRelativeRankOperator sometimes returns a constOp when there
-					// are no ordering columns, so we check that the returned operator
-					// is an Closer.
+					// NewRelativeRankOperator sometimes returns a constOp when
+					// there are no ordering columns, so we check that the
+					// returned operator is an Closer.
 					if c, ok := result.Op.(colexecbase.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
@@ -1166,8 +1162,9 @@ func NewColOperator(
 				}
 
 				if tempColOffset > 0 {
-					// We want to project out temporary columns (which have indices in the
-					// range [wf.OutputColIdx, wf.OutputColIdx+tempColOffset)).
+					// We want to project out temporary columns (which have
+					// indices in the range [wf.OutputColIdx,
+					// wf.OutputColIdx+tempColOffset)).
 					projection := make([]uint32, 0, wf.OutputColIdx+tempColOffset)
 					for i := uint32(0); i < wf.OutputColIdx; i++ {
 						projection = append(projection, i)
@@ -1214,13 +1211,11 @@ func NewColOperator(
 			)
 		}
 		if core.TableReader != nil {
-			// We cannot naively wrap a TableReader's post-processing spec since it
-			// might project out unneeded columns that are of unsupported types. These
-			// columns are still returned, either as coltypes.Unhandled if the type is
-			// unsupported, or as an empty column of a supported type. If we were to
-			// wrap an unsupported post-processing spec, a Materializer would naively
-			// decode these columns, which would return errors (e.g. UUIDs require 16
-			// bytes, coltypes.Unhandled may not be decoded).
+			// We cannot naively wrap a TableReader's post-processing spec since
+			// it might project out unneeded columns with unset values. These
+			// columns are still returned, and if we were to wrap an unsupported
+			// post-processing spec, a Materializer would naively decode these
+			// columns, which would return errors (e.g. UUIDs require 16 bytes).
 			inputTypes := make([][]*types.T, len(spec.Input))
 			for inputIdx, input := range spec.Input {
 				inputTypes[inputIdx] = make([]*types.T, len(input.ColumnTypes))
@@ -1523,8 +1518,8 @@ func planFilterExpr(
 		return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
 	}
 	if len(filterColumnTypes) > len(columnTypes) {
-		// Additional columns were appended to store projections while evaluating
-		// the filter. Project them away.
+		// Additional columns were appended to store projections while
+		// evaluating the filter. Project them away.
 		var outputColumns []uint32
 		for i := range columnTypes {
 			outputColumns = append(outputColumns, uint32(i))
@@ -1560,10 +1555,10 @@ func planSelectionOperators(
 		op, err = colexec.BoolOrUnknownToSelOp(input, columnTypes, t.Idx)
 		return op, -1, columnTypes, err
 	case *tree.AndExpr:
-		// AND expressions are handled by an implicit AND'ing of selection vectors.
-		// First we select out the tuples that are true on the left side, and then,
-		// only among the matched tuples, we select out the tuples that are true on
-		// the right side.
+		// AND expressions are handled by an implicit AND'ing of selection
+		// vectors. First we select out the tuples that are true on the left
+		// side, and then, only among the matched tuples, we select out the
+		// tuples that are true on the right side.
 		var leftOp, rightOp colexecbase.Operator
 		leftOp, _, typs, err = planSelectionOperators(
 			ctx, evalCtx, t.TypedLeft(), columnTypes, input, acc, factory,
@@ -1578,11 +1573,12 @@ func planSelectionOperators(
 	case *tree.OrExpr:
 		// OR expressions are handled by converting them to an equivalent CASE
 		// statement. Since CASE statements don't have a selection form, plan a
-		// projection and then convert the resulting boolean to a selection vector.
+		// projection and then convert the resulting boolean to a selection
+		// vector.
 		//
-		// Rewrite the OR expression as an equivalent CASE expression.
-		// "a OR b" becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END".
-		// This way we can take advantage of the short-circuiting logic built into
+		// Rewrite the OR expression as an equivalent CASE expression. "a OR b"
+		// becomes "CASE WHEN a THEN true WHEN b THEN true ELSE false END". This
+		// way we can take advantage of the short-circuiting logic built into
 		// the CASE operator. (b should not be evaluated if a is true.)
 		caseExpr, err := tree.NewTypedCaseExpr(
 			nil, /* expr */
@@ -1783,8 +1779,8 @@ func planProjectionOperators(
 		op = input
 		for _, e := range t.Exprs {
 			var err error
-			// TODO(rohany): This could be done better, especially in the case of
-			// constant arguments, because the vectorized engine right now
+			// TODO(rohany): This could be done better, especially in the case
+			// of constant arguments, because the vectorized engine right now
 			// creates a new column full of the constant value.
 			op, resultIdx, typs, err = planProjectionOperators(
 				ctx, evalCtx, e.(tree.TypedExpr), typs, op, acc, factory,
@@ -1848,9 +1844,10 @@ func planProjectionOperators(
 		caseOutputType := t.ResolvedType()
 		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) == types.BytesFamily {
 			// Currently, there is a contradiction between the way CASE operator
-			// works (which populates its output in arbitrary order) and the flat
-			// bytes implementation of Bytes type (which prohibits sets in arbitrary
-			// order), so we reject such scenario to fall back to row-by-row engine.
+			// works (which populates its output in arbitrary order) and the
+			// flat bytes implementation of Bytes type (which prohibits sets in
+			// arbitrary order), so we reject such scenario to fall back to
+			// row-by-row engine.
 			return nil, resultIdx, typs, errors.Newf(
 				"unsupported type %s in CASE operator", caseOutputType)
 		}
@@ -1865,19 +1862,20 @@ func planProjectionOperators(
 		typs = appendOneType(columnTypes, caseOutputType)
 		thenIdxs := make([]int, len(t.Whens)+1)
 		for i, when := range t.Whens {
-			// The case operator is assembled from n WHEN arms, n THEN arms, and an
-			// ELSE arm. Each WHEN arm is a boolean projection. Each THEN arm (and the
-			// ELSE arm) is a projection of the type of the CASE expression. We set up
-			// each WHEN arm to write its output to a fresh column, and likewise for
-			// the THEN arms and the ELSE arm. Each WHEN arm individually acts on the
-			// single input batch from the CaseExpr's input and is then transformed
-			// into a selection vector, after which the THEN arm runs to create the
-			// output just for the tuples that matched the WHEN arm. Each subsequent
-			// WHEN arm will use the inverse of the selection vector to avoid running
+			// The case operator is assembled from n WHEN arms, n THEN arms, and
+			// an ELSE arm. Each WHEN arm is a boolean projection. Each THEN arm
+			// (and the ELSE arm) is a projection of the type of the CASE
+			// expression. We set up each WHEN arm to write its output to a
+			// fresh column, and likewise for the THEN arms and the ELSE arm.
+			// Each WHEN arm individually acts on the single input batch from
+			// the CaseExpr's input and is then transformed into a selection
+			// vector, after which the THEN arm runs to create the output just
+			// for the tuples that matched the WHEN arm. Each subsequent WHEN
+			// arm will use the inverse of the selection vector to avoid running
 			// the WHEN projection on tuples that have already been matched by a
 			// previous WHEN arm. Finally, after each WHEN arm runs, we copy the
-			// results of the WHEN into a single output vector, assembling the final
-			// result of the case projection.
+			// results of the WHEN into a single output vector, assembling the
+			// final result of the case projection.
 			whenTyped := when.Cond.(tree.TypedExpr)
 			caseOps[i], resultIdx, typs, err = planProjectionOperators(
 				ctx, evalCtx, whenTyped, typs, buffer, acc, factory,
@@ -1898,9 +1896,9 @@ func planProjectionOperators(
 				return nil, resultIdx, typs, err
 			}
 			if !typs[thenIdxs[i]].Identical(typs[caseOutputIdx]) {
-				// It is possible that the projection of this THEN arm has different
-				// column type (for example, we expect INT2, but INT8 is given). In
-				// such case, we need to plan a cast.
+				// It is possible that the projection of this THEN arm has
+				// different column type (for example, we expect INT2, but INT8
+				// is given). In such case, we need to plan a cast.
 				fromType, toType := typs[thenIdxs[i]], typs[caseOutputIdx]
 				caseOps[i], thenIdxs[i], typs, err = planCastOperator(
 					ctx, acc, typs, caseOps[i], thenIdxs[i], fromType, toType, factory,
@@ -1953,7 +1951,8 @@ func checkSupportedProjectionExpr(left, right tree.TypedExpr) error {
 		return nil
 	}
 
-	// The types are not equivalent. Check if either is a type we'd like to avoid.
+	// The types are not equivalent. Check if either is a type we'd like to
+	// avoid.
 	for _, t := range []*types.T{leftTyp, rightTyp} {
 		switch t.Family() {
 		case types.DateFamily, types.TimestampFamily, types.TimestampTZFamily:
@@ -1997,8 +1996,9 @@ func planProjectionExpr(
 	if lConstArg, lConst := left.(tree.Datum); lConst {
 		// Case one: The left is constant.
 		// Normally, the optimizer normalizes binary exprs so that the constant
-		// argument is on the right side. This doesn't happen for non-commutative
-		// operators such as - and /, though, so we still need this case.
+		// argument is on the right side. This doesn't happen for
+		// non-commutative operators such as - and /, though, so we still need
+		// this case.
 		var rightIdx int
 		input, rightIdx, typs, err = planProjectionOperators(
 			ctx, evalCtx, right, columnTypes, input, acc, factory,
@@ -2007,8 +2007,8 @@ func planProjectionExpr(
 			return nil, resultIdx, typs, err
 		}
 		resultIdx = len(typs)
-		// The projection result will be outputted to a new column which is appended
-		// to the input batch.
+		// The projection result will be outputted to a new column which is
+		// appended to the input batch.
 		op, err = colexec.GetProjectionLConstOperator(
 			allocator, typs, left.ResolvedType(), outputType, projOp, input,
 			rightIdx, lConstArg, resultIdx, evalCtx, binFn, cmpExpr,
@@ -2035,8 +2035,8 @@ func planProjectionExpr(
 		}
 		if rConstArg, rConst := right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
-			// The projection result will be outputted to a new column which is appended
-			// to the input batch.
+			// The projection result will be outputted to a new column which is
+			// appended to the input batch.
 			resultIdx = len(typs)
 			switch projOp {
 			case tree.Like, tree.NotLike:
@@ -2065,8 +2065,8 @@ func planProjectionExpr(
 					// default comparison operator.
 					break
 				}
-				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
-				// negate when IS DISTINCT FROM is used.
+				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we
+				// want to negate when IS DISTINCT FROM is used.
 				negate := projOp == tree.IsDistinctFrom
 				op = colexec.NewIsNullProjOp(
 					allocator, input, leftIdx, resultIdx, negate, false, /* isTupleNull */

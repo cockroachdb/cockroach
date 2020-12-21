@@ -24,9 +24,9 @@ import (
 	"github.com/marusama/semaphore"
 )
 
-// TestNewColOperator is a test helper that's always aliased to builder.NewColOperator.
-// We inject this at test time, so tests can use NewColOperator from colexec
-// package.
+// TestNewColOperator is a test helper that's always aliased to
+// colbuilder.NewColOperator. We inject this at test time, so tests can use
+// NewColOperator from colexec package.
 var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, args *NewColOperatorArgs,
 ) (r *NewColOperatorResult, err error)
 
@@ -43,34 +43,34 @@ type NewColOperatorArgs struct {
 	ExprHelper           *ExprHelper
 	Factory              coldata.ColumnFactory
 	TestingKnobs         struct {
-		// SpillingCallbackFn will be called when the spilling from an in-memory to
-		// disk-backed operator occurs. It should only be set in tests.
+		// SpillingCallbackFn will be called when the spilling from an in-memory
+		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
 		// NumForcedRepartitions specifies a number of "repartitions" that a
-		// disk-backed operator should be forced to perform. "Repartition" can mean
-		// different things depending on the operator (for example, for hash joiner
-		// it is dividing original partition into multiple new partitions; for
-		// sorter it is merging already created partitions into new one before
-		// proceeding to the next partition from the input).
+		// disk-backed operator should be forced to perform. "Repartition" can
+		// mean different things depending on the operator (for example, for
+		// hash joiner it is dividing original partition into multiple new
+		// partitions; for sorter it is merging already created partitions into
+		// new one before proceeding to the next partition from the input).
 		NumForcedRepartitions int
 		// UseStreamingMemAccountForBuffering specifies whether to use
-		// StreamingMemAccount when creating buffering operators and should only be
-		// set to 'true' in tests. The idea behind this flag is reducing the number
-		// of memory accounts and monitors we need to close, so we plumbed it into
-		// the planning code so that it doesn't create extra memory monitoring
-		// infrastructure (and so that we could use testMemAccount defined in
-		// main_test.go).
+		// StreamingMemAccount when creating buffering operators and should only
+		// be set to 'true' in tests. The idea behind this flag is reducing the
+		// number of memory accounts and monitors we need to close, so we
+		// plumbed it into the planning code so that it doesn't create extra
+		// memory monitoring infrastructure (and so that we could use
+		// testMemAccount defined in main_test.go).
 		UseStreamingMemAccountForBuffering bool
-		// DiskSpillingDisabled specifies whether only in-memory operators should
-		// be created.
+		// DiskSpillingDisabled specifies whether only in-memory operators
+		// should be created.
 		DiskSpillingDisabled bool
 		// DelegateFDAcquisitions should be observed by users of a
-		// PartitionedDiskQueue. During normal operations, these should acquire the
-		// maximum number of file descriptors they will use from FDSemaphore up
-		// front. Setting this testing knob to true disables that behavior and
-		// lets the PartitionedDiskQueue interact with the semaphore as partitions
-		// are opened/closed, which ensures that the number of open files never
-		// exceeds what is expected.
+		// PartitionedDiskQueue. During normal operations, these should acquire
+		// the maximum number of file descriptors they will use from FDSemaphore
+		// up front. Setting this testing knob to true disables that behavior
+		// and lets the PartitionedDiskQueue interact with the semaphore as
+		// partitions are opened/closed, which ensures that the number of open
+		// files never exceeds what is expected.
 		DelegateFDAcquisitions bool
 	}
 }
