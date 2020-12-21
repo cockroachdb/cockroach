@@ -41,7 +41,7 @@ require (
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
 	github.com/cockroachdb/pebble v0.0.0-20201119153812-62f2e316b532
-	github.com/cockroachdb/redact v1.0.8
+	github.com/cockroachdb/redact v1.0.9
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a

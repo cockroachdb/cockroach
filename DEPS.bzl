@@ -447,8 +447,8 @@ def go_deps():
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/redact",
-        sum = "h1:8QG/764wK+vmEYoOlfobpe12EQcS81ukx/a4hdVMxNw=",
-        version = "v1.0.8",
+        sum = "h1:sjlUvGorKMIVQfo+w2RqDi5eewCHn453C/vdIXMzjzI=",
+        version = "v1.0.9",
     )
     go_repository(
         name = "com_github_cockroachdb_returncheck",
