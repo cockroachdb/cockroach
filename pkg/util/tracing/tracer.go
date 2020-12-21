@@ -204,13 +204,6 @@ func (t *Tracer) getShadowTracer() *shadowTracer {
 	return (*shadowTracer)(atomic.LoadPointer(&t.shadowTracer))
 }
 
-// noCtx is a singleton that we use internally to unify code paths that only
-// optionally take a Context. The specific construction here does not matter,
-// the only thing we need is that no outside caller could ever pass this
-// context in (i.e. we can't use context.Background() and the like), and that
-// we can compare it directly.
-var noCtx context.Context = &struct{ context.Context }{context.Background()}
-
 // StartSpan starts a Span. See SpanOption for details.
 func (t *Tracer) StartSpan(operationName string, os ...SpanOption) *Span {
 	_, sp := t.StartSpanCtx(noCtx, operationName, os...)
@@ -247,32 +240,6 @@ func (t *Tracer) AlwaysTrace() bool {
 	return t.useNetTrace() || shadowTracer != nil
 }
 
-// maybeWrapCtx returns a Context wrapping the Span, with two exceptions:
-// 1. if ctx==noCtx, it's a noop
-// 2. if ctx contains the noop Span, and sp is also the noop Span, elide
-//    allocating a new Context.
-func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
-	if ctx == noCtx {
-		return noCtx, sp
-	}
-	// NB: we check sp != nil explicitly because some callers want to remove a
-	// Span from a Context, and thus pass nil.
-	if sp != nil && sp.isNoop() {
-		// If the context originally had the noop span, and we would now be wrapping
-		// the noop span in it again, we don't have to wrap at all and can save an
-		// allocation.
-		//
-		// Note that applying this optimization for a nontrivial ctxSp would
-		// constitute a bug: A real, non-recording span might later start recording.
-		// Besides, the caller expects to get their own span, and will .Finish() it,
-		// leading to an extra, premature call to Finish().
-		if ctxSp := SpanFromContext(ctx); ctxSp != nil && ctxSp.isNoop() {
-			return ctx, sp
-		}
-	}
-	return context.WithValue(ctx, activeSpanKey{}, sp), sp
-}
-
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
 // the latter case, ctx == noCtx and the returned Context is the supplied one;
 // otherwise the returned Context reflects the returned Span.
@@ -305,7 +272,7 @@ func (t *Tracer) startSpanGeneric(
 	if !t.AlwaysTrace() &&
 		opts.recordingType() == RecordingOff &&
 		!opts.ForceRealSpan {
-		return maybeWrapCtx(ctx, t.noopSpan)
+		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.isNoop() {
@@ -381,8 +348,9 @@ func (t *Tracer) startSpanGeneric(
 	// that *only* contains `ot` or `netTr`. This is just an artifact
 	// of the history of this code and may change in the future.
 	helper := struct {
-		Span     Span
+		span     Span
 		crdbSpan crdbSpan
+		octx     optimizedContext
 	}{}
 
 	helper.crdbSpan = crdbSpan{
@@ -396,14 +364,14 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 		},
 	}
-	helper.Span = Span{
+	helper.span = Span{
 		tracer: t,
 		crdb:   &helper.crdbSpan,
 		ot:     ot,
 		netTr:  netTr,
 	}
 
-	s := &helper.Span
+	s := &helper.span
 
 	// Start recording if necessary. We inherit the recording type of the local parent, if any,
 	// over the remote parent, if any. If neither are specified, we're not recording.
@@ -442,7 +410,7 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	return maybeWrapCtx(ctx, s)
+	return maybeWrapCtx(ctx, &helper.octx, s)
 }
 
 type textMapWriterFn func(key, val string)
@@ -682,23 +650,6 @@ var optsPool = sync.Pool{
 		sl := make([]SpanOption, 0, 5)
 		return &sl
 	},
-}
-
-type activeSpanKey struct{}
-
-// SpanFromContext returns the *Span contained in the Context, if any.
-func SpanFromContext(ctx context.Context) *Span {
-	val := ctx.Value(activeSpanKey{})
-	if sp, ok := val.(*Span); ok {
-		return sp
-	}
-	return nil
-}
-
-// ContextWithSpan returns a Context wrapping the supplied Span.
-func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
-	ctx, _ = maybeWrapCtx(ctx, sp)
-	return ctx
 }
 
 // StartVerboseTrace takes in a context and returns a derived one with a
