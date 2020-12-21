@@ -185,20 +185,28 @@ func checkBaseAndJoinFilePath(prefix, basename string) (string, error) {
 	return path.Join(prefix, basename), nil
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
+func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	body, _, err := f.ReadFileAt(ctx, basename, 0)
+	return body, err
+}
+
 // ReadFile implements the ExternalStorage interface and returns the contents of
 // the file stored in the user scoped FileToTableSystem.
-func (f *fileTableStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (f *fileTableStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	reader, err := f.fs.ReadFile(ctx, filepath)
+	reader, size, err := f.fs.ReadFile(ctx, filepath, offset)
 	if oserror.IsNotExist(err) {
-		return nil, errors.Wrapf(ErrFileDoesNotExist,
+		return nil, 0, errors.Wrapf(ErrFileDoesNotExist,
 			"file %s does not exist in the UserFileTableSystem", filepath)
 	}
 
-	return reader, err
+	return reader, size, err
 }
 
 // WriteFile implements the ExternalStorage interface and writes the file to the
