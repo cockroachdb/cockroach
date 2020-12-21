@@ -92,17 +92,6 @@ type loggingT struct {
 			hideStack bool                   // hides stack trace; only in effect when f is not nil
 		}
 
-		// the Cluster ID is reported on every new log file so as to ease
-		// the correlation of panic reports with self-reported log files.
-		clusterID string
-		// the node ID is reported like the cluster ID, for the same reasons.
-		// We avoid using roahcpb.NodeID to avoid a circular reference.
-		nodeID int32
-		// ditto for the tenant ID.
-		tenantID string
-		// ditto for the SQL instance ID.
-		sqlInstanceID int32
-
 		// fatalCh is closed on fatal errors.
 		fatalCh chan struct{}
 
@@ -111,6 +100,24 @@ type loggingT struct {
 		active        bool
 		firstUseStack string
 	}
+
+	idMu struct {
+		syncutil.RWMutex
+		idPayload
+	}
+}
+
+type idPayload struct {
+	// the Cluster ID is reported on every new log file so as to ease
+	// the correlation of panic reports with self-reported log files.
+	clusterID string
+	// the node ID is reported like the cluster ID, for the same reasons.
+	// We avoid using roahcpb.NodeID to avoid a circular reference.
+	nodeID int32
+	// ditto for the tenant ID.
+	tenantID string
+	// ditto for the SQL instance ID.
+	sqlInstanceID int32
 }
 
 func init() {
@@ -212,15 +219,15 @@ func SetNodeIDs(clusterID string, nodeID int32) {
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%s", nodeID)
 
 	// Perform the change proper.
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	logging.idMu.Lock()
+	defer logging.idMu.Unlock()
 
-	if logging.mu.clusterID != "" {
+	if logging.idMu.clusterID != "" {
 		panic("clusterID already set")
 	}
 
-	logging.mu.clusterID = clusterID
-	logging.mu.nodeID = nodeID
+	logging.idMu.clusterID = clusterID
+	logging.idMu.nodeID = nodeID
 }
 
 // SetTenantIDs stores the tenant ID and instance ID for further reference.
@@ -233,15 +240,15 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, "instanceID: %d", sqlInstanceID) // TODO(knz): Use OPS here.
 
 	// Perform the change proper.
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
+	logging.idMu.Lock()
+	defer logging.idMu.Unlock()
 
-	if logging.mu.tenantID != "" {
+	if logging.idMu.tenantID != "" {
 		panic("tenantID already set")
 	}
 
-	logging.mu.tenantID = tenantID
-	logging.mu.sqlInstanceID = sqlInstanceID
+	logging.idMu.tenantID = tenantID
+	logging.idMu.sqlInstanceID = sqlInstanceID
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes
