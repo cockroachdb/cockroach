@@ -560,6 +560,7 @@ func (r *createStatsResumer) Resume(
 		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
 			details.Table.ID,
 			evalCtx.SessionData.User(),
+			evalCtx.SessionData.ApplicationName,
 			details.Statement,
 			&eventpb.CreateStatistics{
 				TableName: details.FQTableName,
