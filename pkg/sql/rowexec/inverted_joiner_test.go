@@ -203,6 +203,11 @@ func TestInvertedJoiner(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	_, err := sqlDB.Exec("SET experimental_enable_multi_column_inverted_indexes=true")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row))
 	}
@@ -216,24 +221,45 @@ func TestInvertedJoiner(t *testing.T) {
 		require.NoError(t, err)
 		return tree.NewDJSON(j)
 	}
-	sqlutils.CreateTable(t, sqlDB, "t",
-		"a INT, b INT ARRAY, c JSONB, PRIMARY KEY (a), INVERTED INDEX bi (b), INVERTED INDEX ci(c)",
+	dFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row * 10))
+	}
+	sqlutils.CreateTable(
+		t,
+		sqlDB,
+		"t",
+		`
+			a INT,
+			b INT ARRAY,
+			c JSONB,
+			d INT,
+			PRIMARY KEY (a),
+			INVERTED INDEX bi (b),
+			INVERTED INDEX ci(c),
+			INVERTED INDEX dbi(d, b),
+			INVERTED INDEX dci(d, c),
+			INVERTED INDEX daci(d, a, c)
+		`,
 		invertedJoinerNumRows,
-		sqlutils.ToRowFn(aFn, bFn, cFn))
+		sqlutils.ToRowFn(aFn, bFn, cFn, dFn))
 	const biIndex = 1
 	const ciIndex = 2
+	const dbiIndex = 3
+	const dciIndex = 4
+	const daciIndex = 5
 
 	td := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	type testCase struct {
-		description  string
-		indexIdx     uint32
-		post         execinfrapb.PostProcessSpec
-		onExpr       string
-		input        [][]tree.Datum
-		datumsToExpr invertedexpr.DatumsToInvertedExpr
-		joinType     descpb.JoinType
-		inputTypes   []*types.T
+		description           string
+		indexIdx              uint32
+		post                  execinfrapb.PostProcessSpec
+		onExpr                string
+		input                 [][]tree.Datum
+		prefixEqualityColumns []uint32
+		datumsToExpr          invertedexpr.DatumsToInvertedExpr
+		joinType              descpb.JoinType
+		inputTypes            []*types.T
 		// The output types for the case without continuation. The test adds the
 		// bool type for the case with continuation.
 		outputTypes []*types.T
@@ -248,7 +274,6 @@ func TestInvertedJoiner(t *testing.T) {
 	// so can share initialization of some fields.
 	initCommonFields := func(c testCase) testCase {
 		c.post.Projection = true
-		c.inputTypes = rowenc.OneIntCol
 		return c
 	}
 	testCases := []testCase{
@@ -262,6 +287,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes:               rowenc.OneIntCol,
 			datumsToExpr:             arrayIntersectionExpr{t: t},
 			joinType:                 descpb.InnerJoin,
 			outputTypes:              rowenc.TwoIntCols,
@@ -279,6 +305,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes: rowenc.OneIntCol,
 			datumsToExpr: arrayIntersectionExpr{
 				t: t, toExclude: &struct{ left, right int64 }{left: 5, right: 0},
 			},
@@ -300,6 +327,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes:               rowenc.OneIntCol,
 			datumsToExpr:             arrayIntersectionExpr{t: t},
 			joinType:                 descpb.InnerJoin,
 			outputTypes:              rowenc.TwoIntCols,
@@ -317,6 +345,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  arrayIntersectionExpr{t: t},
 			joinType:      descpb.LeftOuterJoin,
 			outputTypes:   rowenc.TwoIntCols,
@@ -334,6 +363,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  arrayIntersectionExpr{t: t},
 			joinType:      descpb.LeftSemiJoin,
 			outputTypes:   rowenc.OneIntCol,
@@ -349,6 +379,7 @@ func TestInvertedJoiner(t *testing.T) {
 			input: [][]tree.Datum{
 				{tree.NewDInt(tree.DInt(5))}, {tree.NewDInt(tree.DInt(20))}, {tree.NewDInt(tree.DInt(42))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  arrayIntersectionExpr{t: t},
 			joinType:      descpb.LeftAntiJoin,
 			outputTypes:   rowenc.OneIntCol,
@@ -367,6 +398,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
+			inputTypes:               rowenc.OneIntCol,
 			datumsToExpr:             jsonIntersectionExpr{},
 			joinType:                 descpb.InnerJoin,
 			outputTypes:              rowenc.TwoIntCols,
@@ -387,6 +419,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  jsonUnionExpr{},
 			joinType:      descpb.InnerJoin,
 			outputTypes:   rowenc.TwoIntCols,
@@ -429,6 +462,7 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  jsonUnionExpr{},
 			joinType:      descpb.LeftSemiJoin,
 			outputTypes:   rowenc.OneIntCol,
@@ -445,11 +479,148 @@ func TestInvertedJoiner(t *testing.T) {
 				{tree.NewDInt(tree.DInt(101))},
 				{tree.NewDInt(tree.DInt(20))},
 			},
+			inputTypes:    rowenc.OneIntCol,
 			datumsToExpr:  jsonUnionExpr{},
 			joinType:      descpb.LeftAntiJoin,
 			outputTypes:   rowenc.OneIntCol,
 			outputColumns: []uint32{0},
 			expected:      "[]",
+		},
+		{
+			description: "array intersection two-column index",
+			indexIdx:    dbiIndex,
+			// (5, 50) will match any rows have have array elements {5} and
+			// d=50, which is only row 5. Row 50 satisfies the {5} requirement
+			// but not d=50.
+			// (20, 0) will match no rows because row 20 has d=200.
+			// (42, 420) will match any rows that have array elements {2, 4} and
+			// d=420, which is only row 42. Row 24 satisfies the {2, 4}
+			// requirement but not d=420.
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(0))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(420))},
+			},
+			inputTypes:               rowenc.TwoIntCols,
+			prefixEqualityColumns:    []uint32{1},
+			datumsToExpr:             arrayIntersectionExpr{t: t},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[5 50 5] [42 420 42]]",
+			expectedWithContinuation: "[[5 50 5 false] [42 420 42 false]]",
+		},
+		{
+			description: "array intersection with pre-filter two-column index",
+			indexIdx:    dbiIndex,
+			// Similar to above, but with a pre-filter that prevents a left row
+			// 5 from matching right rows with inverted key 0.
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(200))},
+				{tree.NewDInt(tree.DInt(21)), tree.NewDInt(tree.DInt(0))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(420))},
+			},
+			inputTypes:            rowenc.TwoIntCols,
+			prefixEqualityColumns: []uint32{1},
+			datumsToExpr: arrayIntersectionExpr{
+				t: t, toExclude: &struct{ left, right int64 }{left: 5, right: 0},
+			},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[20 200 20] [42 420 42]]",
+			expectedWithContinuation: "[[20 200 20 false] [42 420 42 false]]",
+		},
+		{
+			// This case is similar to the "array intersection" case, and uses
+			// the same input, but additionally filters to only include right
+			// rows with index > 20. So the output is a subset. Note that the
+			// input 20 has its joined rows completely eliminated.
+			description: "array intersection and onExpr two-column index",
+			indexIdx:    dbiIndex,
+			onExpr:      "@3 > 20",
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(200))},
+				{tree.NewDInt(tree.DInt(21)), tree.NewDInt(tree.DInt(0))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(420))},
+			},
+			inputTypes:               rowenc.TwoIntCols,
+			prefixEqualityColumns:    []uint32{1},
+			datumsToExpr:             arrayIntersectionExpr{t: t},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[42 420 42]]",
+			expectedWithContinuation: "[[42 420 42 false]]",
+		},
+		{
+			// JSON intersection; two-column index. The left side and right
+			// side rows have the same index as described in the comment in
+			// jsonIntersectionExpr. There is no row 101 in the right so 101 is
+			// not output. There is a row 42 in the right but the value for d is
+			// 420, so 42 is not output.
+			description: "json intersection two-column index",
+			indexIdx:    dciIndex,
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(0))},
+				{tree.NewDInt(tree.DInt(101)), tree.NewDInt(tree.DInt(1010))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(200))},
+			},
+			inputTypes:               rowenc.TwoIntCols,
+			prefixEqualityColumns:    []uint32{1},
+			datumsToExpr:             jsonIntersectionExpr{},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[5 50 5] [20 200 20]]",
+			expectedWithContinuation: "[[5 50 5 false] [20 200 20 false]]",
+		},
+		{
+			// JSON union; two-column index. See the test with description "json
+			// union" for what is matched solely using the jsonUnionExpr. Those
+			// matches are pared down using the second columns in the input
+			// which are used for prefix equality.
+			description: "json union two-column index",
+			indexIdx:    dciIndex,
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(420))},
+				{tree.NewDInt(tree.DInt(101)), tree.NewDInt(tree.DInt(1010))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(200))},
+			},
+			inputTypes:               rowenc.TwoIntCols,
+			prefixEqualityColumns:    []uint32{1},
+			datumsToExpr:             jsonUnionExpr{},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[5 50 5] [42 420 42] [20 200 20]]",
+			expectedWithContinuation: "[[5 50 5 false] [42 420 42 false] [20 200 20 false]]",
+		},
+		{
+			// JSON intersection; three-column index. The left side and right
+			// side rows have the same index as described in the comment in
+			// jsonIntersectionExpr. There is no row 101 in the right so 101 is
+			// not output.
+			description: "json intersection three-column index",
+			indexIdx:    daciIndex,
+			input: [][]tree.Datum{
+				{tree.NewDInt(tree.DInt(5)), tree.NewDInt(tree.DInt(50))},
+				{tree.NewDInt(tree.DInt(42)), tree.NewDInt(tree.DInt(420))},
+				{tree.NewDInt(tree.DInt(101)), tree.NewDInt(tree.DInt(1010))},
+				{tree.NewDInt(tree.DInt(20)), tree.NewDInt(tree.DInt(200))},
+			},
+			inputTypes:               rowenc.TwoIntCols,
+			prefixEqualityColumns:    []uint32{1, 0},
+			datumsToExpr:             jsonIntersectionExpr{},
+			joinType:                 descpb.InnerJoin,
+			outputTypes:              rowenc.ThreeIntCols,
+			outputColumns:            []uint32{0, 1, 2},
+			expected:                 "[[5 50 5] [42 420 42] [20 200 20]]",
+			expectedWithContinuation: "[[5 50 5 false] [42 420 42 false] [20 200 20 false]]",
 		},
 	}
 	for i, c := range testCases {
@@ -494,11 +665,13 @@ func TestInvertedJoiner(t *testing.T) {
 
 				post := c.post
 				if outputGroupContinuation {
-					// The continuation column is only used for INNER/LEFT_OUTER joins,
-					// where the left side contributes column 0, and the right side
-					// contributes columns 1, 2, 3 (corresponding to a, b, c in the
-					// table), so the continuation column is always column 4.
-					post.OutputColumns = append(c.outputColumns, 4)
+					// Append the continuation column which is the last column.
+					// The total number of columns is the number of left columns
+					// + 4 columns from the right (a, b, c, d) + 1 continuation
+					// column, so the index of the continuation column is the
+					// number of left columns + 4.
+					continuationColumnIdx := uint32(len(c.inputTypes) + 4)
+					post.OutputColumns = append(c.outputColumns, continuationColumnIdx)
 				} else {
 					post.OutputColumns = c.outputColumns
 				}
@@ -514,6 +687,7 @@ func TestInvertedJoiner(t *testing.T) {
 						OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
 						Type:                              c.joinType,
 						OutputGroupContinuationForLeftRow: outputGroupContinuation,
+						PrefixEqualityColumns:             c.prefixEqualityColumns,
 					},
 					c.datumsToExpr,
 					in,
@@ -613,6 +787,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	})
 }
 
-// TODO(sumeer):
-// - add geospatial test cases
-// - add benchmark
+// TODO(sumeer): add geospatial test cases
+// TODO(sumeer): add geospatial benchmark
+// TODO(mgartner): add JSON/ARRAY benchmark for single and multi-column inverted
+// indexes.

@@ -225,10 +225,15 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 			"span: [k, m)  indexes (expr, set): (0, 4) (0, 1) (expr): 0 \n" +
 			"span: [m, n)  indexes (expr, set): (0, 1) (expr): 0 \n"
 
-	require.Equal(t, expectedSpans, spansToString(batchEvalUnion.init()))
+	invertedSpans, err := batchEvalUnion.init()
+	require.NoError(t, err)
+	require.Equal(t, expectedSpans, spansToString(invertedSpans))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalUnion.fragmentedSpans))
-	require.Equal(t, expectedSpans, spansToString(batchEvalIntersection.init()))
+
+	invertedSpans, err = batchEvalIntersection.init()
+	require.NoError(t, err)
+	require.Equal(t, expectedSpans, spansToString(invertedSpans))
 	require.Equal(t, expectedFragmentedSpans,
 		fragmentedSpansToString(batchEvalIntersection.fragmentedSpans))
 
@@ -252,12 +257,12 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 		indexRows[i], indexRows[j] = indexRows[j], indexRows[i]
 	})
 	for _, elem := range indexRows {
-		add, err := batchEvalUnion.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
+		add, err := batchEvalUnion.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key), nil /* encFull */)
 		require.NoError(t, err)
 		require.Equal(t, true, add)
 		err = batchEvalUnion.addIndexRow(elem.index)
 		require.NoError(t, err)
-		add, err = batchEvalIntersection.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
+		add, err = batchEvalIntersection.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key), nil /* encFull */)
 		require.NoError(t, err)
 		require.Equal(t, true, add)
 		err = batchEvalIntersection.addIndexRow(elem.index)
@@ -270,9 +275,12 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	batchBoth := batchEvalUnion
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, &protoUnion, &protoIntersection)
-	batchBoth.init()
+	_, err = batchBoth.init()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, elem := range indexRows {
-		add, err := batchBoth.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
+		add, err := batchBoth.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key), nil /* encFull */)
 		require.NoError(t, err)
 		require.Equal(t, true, add)
 		err = batchBoth.addIndexRow(elem.index)
@@ -284,7 +292,9 @@ func TestInvertedExpressionEvaluator(t *testing.T) {
 	// Reset and evaluate nil expressions.
 	batchBoth.reset()
 	batchBoth.exprs = append(batchBoth.exprs, nil, nil)
-	require.Equal(t, 0, len(batchBoth.init()))
+	invertedSpans, err = batchBoth.init()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(invertedSpans))
 	require.Equal(t, "0: \n1: \n", keyIndexesToString(batchBoth.evaluate()))
 }
 
@@ -316,7 +326,9 @@ func TestFragmentedSpans(t *testing.T) {
 	batchEval := &batchedInvertedExprEvaluator{
 		exprs: []*invertedexpr.SpanExpressionProto{&expr1, &expr2, &expr3},
 	}
-	require.Equal(t, "[a, l) [o, p) ", spansToString(batchEval.init()))
+	invertedSpans, err := batchEval.init()
+	require.NoError(t, err)
+	require.Equal(t, "[a, l) [o, p) ", spansToString(invertedSpans))
 	require.Equal(t,
 		"span: [a, d)  indexes (expr, set): (0, 0) (expr): 0 \n"+
 			"span: [d, e)  indexes (expr, set): (0, 0) (1, 0) (expr): 0 1 \n"+
@@ -385,14 +397,16 @@ func TestInvertedExpressionEvaluatorPreFilter(t *testing.T) {
 		exprs:          []*invertedexpr.SpanExpressionProto{&expr1Proto, &expr2Proto},
 		preFilterState: preFilters,
 	}
-	require.Equal(t, "[a, d) [e, h) ", spansToString(batchEval.init()))
+	invertedSpans, err := batchEval.init()
+	require.NoError(t, err)
+	require.Equal(t, "[a, d) [e, h) ", spansToString(invertedSpans))
 	require.Equal(t,
 		"span: [a, d)  indexes (expr, set): (0, 2) (0, 4) (1, 3) (expr): 0 1 \n"+
 			"span: [e, h)  indexes (expr, set): (0, 3) (1, 2) (1, 4) (expr): 0 1 \n",
 		fragmentedSpansToString(batchEval.fragmentedSpans))
 	feedIndexRows := func(indexRows []keyAndIndex, expectedAdd bool) {
 		for _, elem := range indexRows {
-			add, err := batchEval.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key))
+			add, err := batchEval.prepareAddIndexRow(invertedexpr.EncInvertedVal(elem.key), nil /* encFull */)
 			require.NoError(t, err)
 			require.Equal(t, expectedAdd, add)
 			if add {
