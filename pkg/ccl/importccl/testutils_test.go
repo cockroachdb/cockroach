@@ -255,6 +255,12 @@ func (es *generatorExternalStorage) ReadFile(
 	return es.gen.Open()
 }
 
+func (es *generatorExternalStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
+	panic("unimplemented")
+}
+
 func (es *generatorExternalStorage) Close() error {
 	return nil
 }

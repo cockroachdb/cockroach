@@ -96,6 +96,12 @@ func (s *workloadStorage) Settings() *cluster.Settings {
 	return s.settings
 }
 
+func (s *workloadStorage) ReadFileAt(
+	_ context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
+	panic("unimplemented")
+}
+
 func (s *workloadStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
 	if basename != `` {
 		return nil, errors.Errorf(`basenames are not supported by workload storage`)
