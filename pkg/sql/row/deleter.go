@@ -23,8 +23,9 @@ import (
 
 // Deleter abstracts the key/value operations for deleting table rows.
 type Deleter struct {
-	Helper               rowHelper
-	FetchCols            []sqlbase.ColumnDescriptor
+	Helper    rowHelper
+	FetchCols []sqlbase.ColumnDescriptor
+	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex map[sqlbase.ColumnID]int
 	Fks                  fkExistenceCheckForDelete
 	cascader             *cascader
@@ -35,8 +36,10 @@ type Deleter struct {
 // MakeDeleter creates a Deleter for the given table.
 //
 // The returned Deleter contains a FetchCols field that defines the
-// expectation of which values are passed as values to DeleteRow. Any column
-// passed in requestedCols will be included in FetchCols.
+// expectation of which values are passed as values to DeleteRow. If
+// requestedCols is non-nil, then only the requested columns are included in
+// FetchCols; otherwise, all columns that are part of the key of any index
+// (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -98,35 +101,40 @@ func makeRowDeleterWithoutCascader(
 ) (Deleter, error) {
 	indexes := tableDesc.DeletableIndexes()
 
-	fetchCols := requestedCols[:len(requestedCols):len(requestedCols)]
-	fetchColIDtoRowIndex := ColIDtoRowIndexFromCols(fetchCols)
-
-	maybeAddCol := func(colID sqlbase.ColumnID) error {
-		if _, ok := fetchColIDtoRowIndex[colID]; !ok {
-			col, err := tableDesc.FindColumnByID(colID)
-			if err != nil {
-				return err
+	var fetchCols []sqlbase.ColumnDescriptor
+	var fetchColIDtoRowIndex map[sqlbase.ColumnID]int
+	if requestedCols != nil {
+		fetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
+		fetchColIDtoRowIndex = ColIDtoRowIndexFromCols(fetchCols)
+	} else {
+		fetchColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
+		maybeAddCol := func(colID sqlbase.ColumnID) error {
+			if _, ok := fetchColIDtoRowIndex[colID]; !ok {
+				col, err := tableDesc.FindColumnByID(colID)
+				if err != nil {
+					return err
+				}
+				fetchColIDtoRowIndex[col.ID] = len(fetchCols)
+				fetchCols = append(fetchCols, *col)
 			}
-			fetchColIDtoRowIndex[col.ID] = len(fetchCols)
-			fetchCols = append(fetchCols, *col)
+			return nil
 		}
-		return nil
-	}
-	for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
-		if err := maybeAddCol(colID); err != nil {
-			return Deleter{}, err
-		}
-	}
-	for _, index := range indexes {
-		for _, colID := range index.ColumnIDs {
+		for _, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
 				return Deleter{}, err
 			}
 		}
-		// The extra columns are needed to fix #14601.
-		for _, colID := range index.ExtraColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return Deleter{}, err
+		for _, index := range indexes {
+			for _, colID := range index.ColumnIDs {
+				if err := maybeAddCol(colID); err != nil {
+					return Deleter{}, err
+				}
+			}
+			// The extra columns are needed to fix #14601.
+			for _, colID := range index.ExtraColumnIDs {
+				if err := maybeAddCol(colID); err != nil {
+					return Deleter{}, err
+				}
 			}
 		}
 	}
