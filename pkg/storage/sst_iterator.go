@@ -28,10 +28,10 @@ type sstIterator struct {
 	iterValid bool
 	err       error
 
-	// For allocation avoidance in NextKey.
-	nextKeyStart []byte
+	// For allocation avoidance in SeekGE and NextKey.
+	keyBuf []byte
 
-	// roachpb.Verify k/v pairs on each call to Next()
+	// roachpb.Verify k/v pairs on each call to Next.
 	verify bool
 }
 
@@ -89,8 +89,9 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 			return
 		}
 	}
+	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
-	iKey, r.value = r.iter.SeekGE(EncodeKey(key))
+	iKey, r.value = r.iter.SeekGE(r.keyBuf)
 	if iKey != nil {
 		r.iterValid = true
 		r.mvccKey, r.err = DecodeMVCCKey(iKey.UserKey)
@@ -131,8 +132,8 @@ func (r *sstIterator) NextKey() {
 	if !r.iterValid || r.err != nil {
 		return
 	}
-	r.nextKeyStart = append(r.nextKeyStart[:0], r.mvccKey.Key...)
-	for r.Next(); r.iterValid && r.err == nil && bytes.Equal(r.nextKeyStart, r.mvccKey.Key); r.Next() {
+	r.keyBuf = append(r.keyBuf[:0], r.mvccKey.Key...)
+	for r.Next(); r.iterValid && r.err == nil && bytes.Equal(r.keyBuf, r.mvccKey.Key); r.Next() {
 	}
 }
 
