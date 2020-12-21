@@ -557,7 +557,7 @@ func findSplitKeyUsingIterator(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
 
-		sizeSoFar += int64(len(iter.Value()))
+		sizeSoFar += int64(len(iter.UnsafeValue()))
 		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen

@@ -37,9 +37,9 @@ message CommonSQLPrivilegeEventDetails {
   // The user/role affected by the grant or revoke operation.
   string grantee = 1 [(gogoproto.jsontag) = ",omitempty"];
   // The privileges being granted to the grantee.
-  repeated string granted_privileges = 2 [(gogoproto.jsontag) = ",omitempty"];
+  repeated string granted_privileges = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The privileges being revoked from the grantee.
-  repeated string revoked_privileges = 3 [(gogoproto.jsontag) = ",omitempty"];
+  repeated string revoked_privileges = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // ChangeDatabasePrivilege is recorded when privileges are

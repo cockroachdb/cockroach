@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var parameterRe = regexp.MustCompile(`{[^}]*}`)
+var parameterRe = regexp.MustCompile(`{[^{}]*}`)
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
