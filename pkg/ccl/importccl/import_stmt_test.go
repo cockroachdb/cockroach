@@ -42,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -3770,15 +3772,6 @@ func TestImportDefault(t *testing.T) {
 			format:          "CSV",
 			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
 		},
-		{
-			name:          "nextval",
-			sequence:      "testseq",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT nextval('testseq')",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
 		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
 		// IMPORT INTO are supported for these file formats.
 		{
@@ -4048,6 +4041,273 @@ func TestImportDefault(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestImportDefaultNextVal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer setImportReaderParallelism(1)()
+	skip.UnderStressRace(t, "test hits a timeout before a successful run")
+
+	const nodes = 3
+	numFiles := 1
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, numFiles, rowsPerRaceFile)
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	type seqMetadata struct {
+		start                     int
+		increment                 int
+		expectedImportChunkAllocs int
+		// We process fewer rows under race.
+		expectedImportChunkAllocsUnderRace int
+	}
+
+	t.Run("nextval", func(t *testing.T) {
+		testCases := []struct {
+			name            string
+			create          string
+			targetCols      []string
+			seqToNumNextval map[string]seqMetadata
+			insertData      string
+		}{
+			{
+				name:       "simple-nextval",
+				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING",
+				targetCols: []string{"a", "c"},
+				// 1000 rows means we will allocate 3 chunks of 10, 100, 1000.
+				// The 2 inserts will add 6 more nextval calls.
+				// First insert: 1->3
+				// Import: 3->1113
+				// Second insert 1113->1116
+				seqToNumNextval: map[string]seqMetadata{"myseq": {1, 1, 1116, 116}},
+				insertData:      `(1, 'cat'), (2, 'him'), (3, 'meme')`,
+			},
+			{
+				name:       "simple-nextval-with-increment-and-start",
+				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING",
+				targetCols: []string{"a", "c"},
+				// 1000 rows means we will allocate 3 chunks of 10, 100, 1000.
+				// The 2 inserts will add 6 more nextval calls.
+				// First insert: 100->120
+				// Import: 120->11220
+				// Second insert: 11220->11250
+				seqToNumNextval: map[string]seqMetadata{"myseq": {100, 10, 11250, 1250}},
+				insertData:      `(1, 'cat'), (2, 'him'), (3, 'meme')`,
+			},
+			{
+				name:       "two-nextval-diff-seq",
+				create:     "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq2'), c STRING",
+				targetCols: []string{"a", "c"},
+				seqToNumNextval: map[string]seqMetadata{"myseq": {1, 1, 1116, 116},
+					"myseq2": {1, 1, 1116, 116}},
+				insertData: `(1, 'cat'), (2, 'him'), (3, 'meme')`,
+			},
+			// TODO(adityamaru): Unskip once #56387 is fixed.
+			//{
+			//	name:                      "two-nextval-same-seq",
+			//	create:                    "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq'),
+			//	c STRING",
+			//	targetCols:                []string{"a", "c"},
+			//	seqToNumNextval:           map[string]int{"myseq": 1, "myseq2": 1},
+			//	expectedImportChunkAllocs: 1110,
+			//},
+			{
+				name:       "two-nextval-cols-same-seq",
+				create:     "a INT, b INT DEFAULT nextval('myseq'), c STRING, d INT DEFAULT nextval('myseq')",
+				targetCols: []string{"a", "c"},
+				// myseq will allocate 10, 100, 1000, 10000 for the 2000 rows.
+				// 2 inserts will consume 12 more nextval calls.
+				// First insert: 1->6
+				// Import: 6->11116
+				// Second insert: 11116->11122
+				seqToNumNextval: map[string]seqMetadata{"myseq": {1, 1, 11122, 122}},
+				insertData:      `(1, 'cat'), (2, 'him'), (3, 'meme')`,
+			},
+		}
+
+		for _, test := range testCases {
+			t.Run(test.name, func(t *testing.T) {
+				defer sqlDB.Exec(t, `DROP TABLE t`)
+				for seqName := range test.seqToNumNextval {
+					sqlDB.Exec(t, fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, seqName))
+					sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s START %d INCREMENT %d`, seqName,
+						test.seqToNumNextval[seqName].start, test.seqToNumNextval[seqName].increment))
+				}
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+					strings.Join(test.targetCols, ", "), test.insertData))
+				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+					strings.Join(test.targetCols, ", "), strings.Join(testFiles.files, ", ")))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO t (%s) VALUES %s`,
+					strings.Join(test.targetCols, ", "), test.insertData))
+
+				for seqName := range test.seqToNumNextval {
+					var seqVal int
+					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value from %s`, seqName)).Scan(&seqVal)
+					expectedVal := test.seqToNumNextval[seqName].expectedImportChunkAllocs
+					if util.RaceEnabled {
+						expectedVal = test.seqToNumNextval[seqName].expectedImportChunkAllocsUnderRace
+					}
+					require.Equal(t, expectedVal, seqVal)
+				}
+			})
+		}
+	})
+}
+
+func TestImportDefaultWithResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer setImportReaderParallelism(1)()
+	const batchSize = 5
+	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+				},
+			},
+		})
+	registry := s.JobRegistry().(*jobs.Registry)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	testCases := []struct {
+		name       string
+		create     string
+		targetCols string
+		format     string
+		sequence   string
+	}{
+		{
+			name:       "nextval",
+			create:     "a INT, b STRING, c INT PRIMARY KEY DEFAULT nextval('mysequence')",
+			targetCols: "a, b",
+			sequence:   "mysequence",
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			defer fmt.Sprintf(`DROP SEQUENCE IF EXISTS %s`, test.sequence)
+			defer sqlDB.Exec(t, `DROP TABLE t`)
+
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE SEQUENCE %s`, test.sequence))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+
+			jobCtx, cancelImport := context.WithCancel(ctx)
+			jobIDCh := make(chan int64)
+			var jobID int64 = -1
+
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				// Arrange for our special job resumer to be
+				// returned the very first time we start the import.
+				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+					resumer := raw.(*importResumer)
+					resumer.testingKnobs.ignoreProtectedTimestamps = true
+					resumer.testingKnobs.alwaysFlushJobProgress = true
+					resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+						return nil
+					}
+					if jobID == -1 {
+						return &cancellableImportResumer{
+							ctx:     jobCtx,
+							jobIDCh: jobIDCh,
+							wrapped: resumer,
+						}
+					}
+					return resumer
+				},
+			}
+
+			expectedNumRows := 10*batchSize + 1
+			testBarrier, csvBarrier := newSyncBarrier()
+			csv1 := newCsvGenerator(0, expectedNumRows, &intGenerator{}, &strGenerator{})
+			csv1.addBreakpoint(7*batchSize, func() (bool, error) {
+				defer csvBarrier.Enter()()
+				return false, nil
+			})
+
+			// Convince distsql to use our "external" storage implementation.
+			storage := newGeneratedStorage(csv1)
+			s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+
+			// Execute import; ignore any errors returned
+			// (since we're aborting the first import run.).
+			go func() {
+				_, _ = sqlDB.DB.ExecContext(ctx,
+					fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA ($1)`, test.targetCols), storage.getGeneratorURIs()[0])
+			}()
+			jobID = <-jobIDCh
+
+			// Wait until we are blocked handling breakpoint.
+			unblockImport := testBarrier.Enter()
+			// Wait until we have recorded some job progress.
+			js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+				return js.prog.ResumePos[0] > 0
+			})
+
+			// Pause the job;
+			if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+				t.Fatal(err)
+			}
+			// Send cancellation and unblock breakpoint.
+			cancelImport()
+			unblockImport()
+
+			// Get number of sequence value chunks which have been reserved.
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+				return jobs.StatusPaused == js.status
+			})
+			// We expect two chunk entries since our breakpoint is at 7*batchSize.
+			// [1, 10] and [11, 100]
+			var id int32
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='%s'`,
+				test.sequence)).Scan(&id)
+			seqDetailsOnPause := js.prog.SequenceDetails
+			chunksOnPause := seqDetailsOnPause[0].SeqIdToChunks[id].Chunks
+			require.Equal(t, len(chunksOnPause), 2)
+			require.Equal(t, chunksOnPause[0].ChunkStartVal, int64(1))
+			require.Equal(t, chunksOnPause[0].ChunkSize, int64(10))
+			require.Equal(t, chunksOnPause[1].ChunkStartVal, int64(11))
+			require.Equal(t, chunksOnPause[1].ChunkSize, int64(100))
+
+			// Just to be doubly sure, check the sequence value before and after
+			// resumption to make sure it hasn't changed.
+			var seqValOnPause int64
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`, test.sequence)).Scan(&seqValOnPause)
+
+			// Unpause the job and wait for it to complete.
+			if err := registry.Unpause(ctx, nil, jobID); err != nil {
+				t.Fatal(err)
+			}
+			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+			// No additional chunks should have been allocated on job resumption since
+			// we already have enough chunks of the sequence values to cover all the
+			// rows.
+			seqDetailsOnSuccess := js.prog.SequenceDetails
+			require.Equal(t, seqDetailsOnPause, seqDetailsOnSuccess)
+
+			var seqValOnSuccess int64
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`,
+				test.sequence)).Scan(&seqValOnSuccess)
+			require.Equal(t, seqValOnPause, seqValOnSuccess)
+		})
+	}
 }
 
 func TestImportComputed(t *testing.T) {

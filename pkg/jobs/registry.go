@@ -567,6 +567,19 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *kv.Txn)
 	return j, nil
 }
 
+// UpdateJobWithTxn calls the Update method on an existing job with jobID, using
+// a transaction passed in the txn argument. Passing a nil transaction means
+// that a txn will be automatically created.
+func (r *Registry) UpdateJobWithTxn(
+	ctx context.Context, jobID int64, txn *kv.Txn, updateFunc UpdateFn,
+) error {
+	j := &Job{
+		id:       &jobID,
+		registry: r,
+	}
+	return j.WithTxn(txn).Update(ctx, updateFunc)
+}
+
 // DefaultCancelInterval is a reasonable interval at which to poll this node
 // for liveness failures and cancel running jobs.
 var DefaultCancelInterval = 10 * time.Second

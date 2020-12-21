@@ -229,6 +229,33 @@ message ImportDetails {
   ];
 }
 
+// SequenceValChunks represents a single chunk of sequence values allocated
+// during an IMPORT.
+message SequenceValChunk {
+  int64 chunk_start_val = 1;
+  int64 chunk_size = 2;
+
+  // The first row in the file being imported from which the current chunk of
+  // sequence values is being used.
+  int64 chunk_start_row = 3;
+  // The row in the file being imported at which the import will need to use a
+  // new chunk of sequence values.
+  int64 next_chunk_start_row = 4;
+}
+
+// SequenceDetails represents information about the sequences processed in a
+// single file during IMPORT.
+message SequenceDetails {
+  // SequenceChunks represents all the chunks reserved for a particular sequence
+  // during an IMPORT.
+  message SequenceChunks {
+    repeated SequenceValChunk chunks = 1;
+  }
+
+  // Mapping from sequence ID to allocated sequence chunks.
+  map<int32, SequenceChunks> seq_id_to_chunks = 1;
+}
+
 message ImportProgress {
   repeated float sampling_progress = 1;
   repeated float read_progress = 2;
@@ -242,6 +269,10 @@ message ImportProgress {
   // been flushed, we can advance the count here and then on resume skip over
   // that many rows without needing to convert/process them at all.
   repeated int64 resume_pos = 5; // Only set by direct import.
+
+  // Holds metadata related to sequences for every file processed during an
+  // IMPORT.
+  repeated SequenceDetails sequence_details = 6;
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
@@ -303,7 +334,7 @@ message SchemaChangeGCDetails {
 
   // The below two fields are used only in the case of TRUNCATE operating on
   // tables with interleaved indexes. They are only set together.
-  
+
   // InterleavedTable is the table being truncated. In particular, it is the
   // TableDescriptor before any of the truncate modifications have been applied.
   sqlbase.TableDescriptor interleaved_table = 4;
