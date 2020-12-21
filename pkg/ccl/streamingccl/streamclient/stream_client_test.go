@@ -45,7 +45,7 @@ func (sc mockStreamClient) ConsumePartition(
 
 	events := make(chan streamingccl.Event, 100)
 	events <- streamingccl.MakeKVEvent(sampleKV)
-	events <- streamingccl.MakeResolvedEvent(timeutil.Now())
+	events <- streamingccl.MakeCheckpointEvent(timeutil.Now())
 	close(events)
 
 	return events, nil
