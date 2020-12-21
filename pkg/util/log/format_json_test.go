@@ -37,6 +37,8 @@ func TestJSONFormats(t *testing.T) {
 
 	testCases := []logEntry{
 		logEntry{},
+		logEntry{idPayload: idPayload{clusterID: "abc", nodeID: 123}},
+		logEntry{idPayload: idPayload{tenantID: "abc", sqlInstanceID: 123}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &eventpb.RenameDatabase{
 			CommonEventDetails: eventpb.CommonEventDetails{
 				Timestamp: 123,
