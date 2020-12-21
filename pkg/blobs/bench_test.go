@@ -84,7 +84,7 @@ func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
 	for i := 0; i < b.N; i++ {
-		reader, err := tc.blobClient.ReadFile(context.Background(), tc.fileName)
+		reader, _, err := tc.blobClient.ReadFile(context.Background(), tc.fileName, 0)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -129,14 +129,16 @@ func (l *LocalStorage) WriteFile(filename string, content io.Reader) (err error)
 }
 
 // ReadFile prepends IO dir to filename and reads the content of that local file.
-func (l *LocalStorage) ReadFile(filename string) (res io.ReadCloser, err error) {
+func (l *LocalStorage) ReadFile(
+	filename string, offset int64,
+) (res io.ReadCloser, size int64, err error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	f, err := os.Open(fullPath)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() {
 		if err != nil {
@@ -145,12 +147,19 @@ func (l *LocalStorage) ReadFile(filename string) (res io.ReadCloser, err error) 
 	}()
 	fi, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if fi.IsDir() {
-		return nil, errors.Errorf("expected a file but %q is a directory", fi.Name())
+		return nil, 0, errors.Errorf("expected a file but %q is a directory", fi.Name())
 	}
-	return f, nil
+	if offset != 0 {
+		if ret, err := f.Seek(offset, 0); err != nil {
+			return nil, 0, err
+		} else if ret != offset {
+			return nil, 0, errors.Errorf("seek to offset %d returned %d", offset, ret)
+		}
+	}
+	return f, fi.Size(), nil
 }
 
 // List prepends IO dir to pattern and glob matches all local files against that pattern.

@@ -51,7 +51,7 @@ func NewBlobService(externalIODir string) (*Service, error) {
 
 // GetStream implements the gRPC service.
 func (s *Service) GetStream(req *blobspb.GetRequest, stream blobspb.Blob_GetStreamServer) error {
-	content, err := s.localStorage.ReadFile(req.Filename)
+	content, _, err := s.localStorage.ReadFile(req.Filename, req.Offset)
 	if err != nil {
 		return err
 	}
