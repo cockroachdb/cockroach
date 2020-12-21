@@ -13,9 +13,9 @@ package cloudimpltests
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/errors"
@@ -124,6 +125,8 @@ func testExportStoreWithExternalIOConfig(
 		t.Fatalf("conf does not roundtrip: started with %+v, got back %+v", conf, readConf)
 	}
 
+	rng, _ := randutil.NewPseudoRand()
+
 	t.Run("simple round trip", func(t *testing.T) {
 		sampleName := "somebytes"
 		sampleBytes := "hello world"
@@ -163,11 +166,10 @@ func testExportStoreWithExternalIOConfig(
 	// sure that files larger than that work on all the providers.
 	t.Run("8mb-tempfile", func(t *testing.T) {
 		const size = 1024 * 1024 * 8 // 8MiB
-		testingContent := make([]byte, size)
-		if _, err := rand.Read(testingContent); err != nil {
-			t.Fatal(err)
-		}
+		testingContent := randutil.RandBytes(rng, size)
 		testingFilename := "testing-123"
+
+		byteReader := bytes.NewReader(testingContent)
 
 		// Write some random data (random so it doesn't compress).
 		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader(testingContent)); err != nil {
@@ -188,6 +190,24 @@ func testExportStoreWithExternalIOConfig(
 		if !bytes.Equal(content, testingContent) {
 			t.Fatalf("wrong content")
 		}
+
+		for i := 0; i < 100; i++ {
+			offset, length := rng.Int63n(size), rng.Intn(size)
+			t.Logf("read %d of file at %d", length, offset)
+			reader, size, err := s.ReadFileAt(ctx, testingFilename, offset)
+			require.NoError(t, err)
+			defer reader.Close()
+			require.Equal(t, int64(len(testingContent)), size)
+			buf := make([]byte, length)
+			_, err = byteReader.Seek(offset, io.SeekStart)
+			require.NoError(t, err)
+
+			expectedN, expectedErr := io.ReadFull(byteReader, buf)
+			gotN, gotErr := io.ReadFull(reader, buf)
+			require.Equal(t, expectedErr != nil, gotErr != nil, "%+v vs %+v", expectedErr, gotErr)
+			require.Equal(t, expectedN, gotN)
+		}
+
 		require.NoError(t, s.Delete(ctx, testingFilename))
 	})
 	if skipSingleFile {
