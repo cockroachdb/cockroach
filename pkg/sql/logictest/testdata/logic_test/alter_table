@@ -1488,3 +1488,10 @@ unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)        
 
 # TODO(rytaft): Add test cases for dropping both a valid and not-valid
 # unique constraint once supported.
+
+# Regression for #54629.
+statement ok
+CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
+ALTER TABLE t54629 ADD CONSTRAINT pk PRIMARY KEY (c);
+INSERT INTO t54629 VALUES (1);
+DELETE FROM t54629 WHERE c = 1;
