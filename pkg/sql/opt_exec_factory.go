@@ -1374,10 +1374,6 @@ func (ef *execFactory) ConstructUpdate(
 		return nil, err
 	}
 
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
@@ -1492,10 +1488,6 @@ func (ef *execFactory) ConstructUpsert(
 		return nil, err
 	}
 
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[descpb.ColumnID]int, len(ru.UpdateCols))
@@ -1571,10 +1563,6 @@ func (ef *execFactory) ConstructDelete(
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
 	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchColDescs)
-
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	rd.FetchCols = rd.FetchCols[:len(fetchColDescs)]
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
