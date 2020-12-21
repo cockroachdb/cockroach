@@ -81,6 +81,9 @@ Each entry contains at least the following fields:
 
 	keys := make([]string, 0, len(jsonTags))
 	for c := range jsonTags {
+		if strings.IndexByte(serverIdentifierFields, c) != -1 {
+			continue
+		}
 		keys = append(keys, string(c))
 	}
 	sort.Strings(keys)
@@ -95,7 +98,13 @@ Additionally, the following fields are conditionally present:
 
 | Field               | Description |
 |---------------------|-------------|
-| ` + "`tags`" + `    | The logging context tags for the entry, if there were context tags. |
+`)
+	for _, k := range serverIdentifierFields {
+		b := byte(k)
+		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[b].tags[tags], jsonTags[b].description)
+	}
+
+	buf.WriteString(`| ` + "`tags`" + `    | The logging context tags for the entry, if there were context tags. |
 | ` + "`message`" + ` | For unstructured events, the flat text payload. |
 | ` + "`event`" + `   | The logging event, if structured (see below for details). |
 | ` + "`stacks`" + `  | Goroutine stacks, for fatal events. |
@@ -139,7 +148,18 @@ var jsonTags = map[byte]struct {
 		"The entry number on this logging sink, relative to the last process restart."},
 	'r': {[2]string{"r", "redactable"},
 		"Whether the payload is redactable (see below for details)."},
+	'N': {[2]string{"N", "node_id"},
+		"The node ID where the event was generated, once known. Only reported for single-tenant or KV servers."},
+	'x': {[2]string{"x", "cluster_id"},
+		"The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers."},
+	// SQL servers in multi-tenant deployments.
+	'q': {[2]string{"q", "instance_id"},
+		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers."},
+	'T': {[2]string{"T", "tenant_id"},
+		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers."},
 }
+
+const serverIdentifierFields = "NxqT"
 
 type tagChoice int
 
@@ -204,10 +224,41 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	n++
 	n += buf.nDigits(9, n, int(entry.ts%1000000000), '0')
 	buf.Write(buf.tmp[:n])
+	buf.WriteByte('"')
+
+	// Server identifiers.
+	if entry.clusterID != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['x'].tags[tags])
+		buf.WriteString(`":"`)
+		escapeString(buf, entry.clusterID)
+		buf.WriteByte('"')
+	}
+	if entry.nodeID != 0 {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['N'].tags[tags])
+		buf.WriteString(`":`)
+		n = buf.someDigits(0, int(entry.nodeID))
+		buf.Write(buf.tmp[:n])
+	}
+	if entry.tenantID != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['T'].tags[tags])
+		buf.WriteString(`":"`)
+		escapeString(buf, entry.tenantID)
+		buf.WriteByte('"')
+	}
+	if entry.sqlInstanceID != 0 {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['q'].tags[tags])
+		buf.WriteString(`":`)
+		n = buf.someDigits(0, int(entry.sqlInstanceID))
+		buf.Write(buf.tmp[:n])
+	}
 
 	// Severity, both in numeric form (for ease of processing) and
 	// string form (to facilitate human comprehension).
-	buf.WriteString(`","`)
+	buf.WriteString(`,"`)
 	buf.WriteString(jtags['s'].tags[tags])
 	buf.WriteString(`":`)
 	n = buf.someDigits(0, int(entry.sev))

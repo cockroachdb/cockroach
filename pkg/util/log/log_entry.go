@@ -36,6 +36,8 @@ import (
 // formatters. logpb.Entry, in comparison, was tailored specifically
 // to the legacy crdb-v1 formatter, and is a lossy representation.
 type logEntry struct {
+	idPayload
+
 	// The entry timestamp.
 	ts int64
 	// The severity of the event.
@@ -90,12 +92,17 @@ func makeUnsafePayload(m string) entryPayload {
 
 // makeEntry creates a logEntry.
 func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
+	logging.idMu.RLock()
+	ids := logging.idMu.idPayload
+	logging.idMu.RUnlock()
+
 	res = logEntry{
-		ts:   timeutil.Now().UnixNano(),
-		sev:  s,
-		ch:   c,
-		gid:  goid.Get(),
-		tags: logtags.FromContext(ctx),
+		idPayload: ids,
+		ts:        timeutil.Now().UnixNano(),
+		sev:       s,
+		ch:        c,
+		gid:       goid.Get(),
+		tags:      logtags.FromContext(ctx),
 	}
 
 	// Populate file/lineno.
