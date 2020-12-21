@@ -23,7 +23,7 @@ decommissioned.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `RequestingNodeID` | The node ID where the event was originated. |
 | `TargetNodeID` | The node ID affected by the operation. |
@@ -40,7 +40,7 @@ decommissioning.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `RequestingNodeID` | The node ID where the event was originated. |
 | `TargetNodeID` | The node ID affected by the operation. |
@@ -56,7 +56,7 @@ An event of type `node_join` is recorded when a node joins the cluster.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `NodeID` | The node ID where the event was originated. |
 | `StartedAt` | The time when this node was last started. |
@@ -74,7 +74,7 @@ recommissioned.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `RequestingNodeID` | The node ID where the event was originated. |
 | `TargetNodeID` | The node ID affected by the operation. |
@@ -91,7 +91,7 @@ after being offline.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `NodeID` | The node ID where the event was originated. |
 | `StartedAt` | The time when this node was last started. |
@@ -123,7 +123,7 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -158,7 +158,7 @@ An event of type `alter_index` is recorded when an index is altered.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -178,7 +178,7 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -200,7 +200,7 @@ An event of type `alter_table` is recorded when a table is altered.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -220,7 +220,7 @@ EventAlterType is recorded when a user-defined type is altered.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -243,7 +243,7 @@ An event of type `comment_on_column` is recorded when a column is commented.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -265,7 +265,7 @@ CommentOnTable is recorded when a database is commented.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -288,7 +288,7 @@ An event of type `comment_on_index` is recorded when an index is commented.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -310,7 +310,7 @@ An event of type `comment_on_table` is recorded when a table is commented.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -331,7 +331,7 @@ An event of type `convert_to_schema` is recorded when a database is converted to
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -351,7 +351,7 @@ An event of type `create_database` is recorded when a database is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -373,7 +373,7 @@ An event of type `create_index` is recorded when an index is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -394,7 +394,7 @@ An event of type `create_schema` is recorded when a schema is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -415,7 +415,7 @@ An event of type `create_sequence` is recorded when a sequence is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -439,7 +439,7 @@ Events of this type are only collected when the cluster setting
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -460,7 +460,7 @@ An event of type `create_table` is recorded when a table is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -481,7 +481,7 @@ An event of type `create_type` is recorded when a user-defined type is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -503,7 +503,7 @@ An event of type `create_view` is recorded when a view is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -524,7 +524,7 @@ An event of type `drop_database` is recorded when a database is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -547,7 +547,7 @@ An event of type `drop_index` is recorded when an index is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -567,7 +567,7 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -587,7 +587,7 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -608,7 +608,7 @@ An event of type `drop_table` is recorded when a table is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -628,7 +628,7 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -649,7 +649,7 @@ An event of type `drop_view` is recorded when a view is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -667,7 +667,7 @@ change has completed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
@@ -685,7 +685,7 @@ initiated schema change rollback has completed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
@@ -706,7 +706,7 @@ An event of type `rename_database` is recorded when a database is renamed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -727,7 +727,7 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -748,7 +748,7 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -769,7 +769,7 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -791,7 +791,7 @@ encounters a problem and is reversed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. |
@@ -811,7 +811,7 @@ An event of type `truncate_table` is recorded when a table is truncated.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -839,7 +839,7 @@ patch releases without advance notice.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -867,7 +867,7 @@ patch releases without advance notice.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -891,7 +891,7 @@ using crdb_internal.unsafe_upsert_descriptor().
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -921,7 +921,7 @@ patch releases without advance notice.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -955,7 +955,7 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -976,7 +976,7 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -997,7 +997,7 @@ An event of type `alter_table_owner` is recorded when the owner of a table, view
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1018,7 +1018,7 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1039,7 +1039,7 @@ added to / removed from a user for a database object.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1063,7 +1063,7 @@ removed from a user for a schema object.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1087,7 +1087,7 @@ from a user for a table, sequence or view object.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1111,7 +1111,7 @@ removed from a user for a type object.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1147,7 +1147,7 @@ An event of type `alter_role` is recorded when a role is altered.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1167,7 +1167,7 @@ An event of type `create_role` is recorded when a role is created.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1187,7 +1187,7 @@ An event of type `drop_role` is recorded when a role is dropped.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1220,7 +1220,7 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
@@ -1240,7 +1240,7 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 
 | Field | Description |
 |--|--|
-| `Timestamp` | The timestamp of the event. |
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. |
 | `EventType` | The type of the event. |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. |
 | `User` | The user account that triggered the event. |
