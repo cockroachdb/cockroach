@@ -277,7 +277,6 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 		}
 
-		var intbuf [8]byte
 		for i := range s.sketches {
 			// TODO(radu): for multi-column sketches, we will need to do this for all
 			// columns.
@@ -295,6 +294,12 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					return false, err
 				}
 
+				if cap(buf) < 8 {
+					buf = make([]byte, 8)
+				} else {
+					buf = buf[:8]
+				}
+
 				// Note: this encoding is not identical with the one in the general path
 				// below, but it achieves the same thing (we want equal integers to
 				// encode to equal []bytes). The only caveat is that all samplers must
@@ -305,8 +310,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				// it must be a very good hash function (HLL expects the hash values to
 				// be uniformly distributed in the 2^64 range). Experiments (on tpcc
 				// order_line) with simplistic functions yielded bad results.
-				binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
-				s.sketches[i].sketch.Insert(intbuf[:])
+				binary.LittleEndian.PutUint64(buf, uint64(val))
+				s.sketches[i].sketch.Insert(buf)
 			} else {
 				buf, err = row[col].Fingerprint(&s.outTypes[col], &da, buf[:0])
 				if err != nil {
