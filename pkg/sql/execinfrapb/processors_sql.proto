@@ -590,6 +590,19 @@ message HashJoinerSpec {
 // where d, e are not populated.
 // Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b |
 //
+// Multi-column inverted index example:
+// Input stream columns: | a | b | c |
+// Table columns: | d | e | f | g |
+// The InvertedExpr involves columns b, e. The non-inverted prefix key columns
+// equate c to f. The primary key for the right input is d.
+// The inverted index has columns: | f | e' | d |
+// where e' is derived from e and f is a non-inverted prefix column.
+// The OnExpr can use columns a, b, c, d, f.
+//
+// Internal columns for INNER and LEFT_OUTER: | a | b | c | d | e | f | g |
+// where e, g are not populated.
+// Internal columns for LEFT_SEMI and LEFT_ANTI: | a | b | c |
+//
 // For INNER/LEFT_OUTER with OutputGroupContinuationForLeftRow = true, the
 // internal columns include an additional bool column as the last column.
 message InvertedJoinerSpec {
@@ -644,6 +657,13 @@ message InvertedJoinerSpec {
   // indicates whether a row is a continuation of a group corresponding to a
   // left row.
   optional bool output_group_continuation_for_left_row = 8 [(gogoproto.nullable) = false];
+
+  // Column indexes in the input stream specifying the columns which match with
+  // the non-inverted prefix columns of the index, if the index is multi-column.
+  // These are the equality columns of the join. The length of
+  // prefix_equality_columns should be equal to the number of non-inverted
+  // prefix columns in the index.
+  repeated uint32 prefix_equality_columns = 9 [packed = true];
 }
 
 // InvertedFiltererSpec is the specification of a processor that does filtering

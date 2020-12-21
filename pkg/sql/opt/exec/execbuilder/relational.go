@@ -1530,6 +1530,11 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 
 	md := b.mem.Metadata()
 
+	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
+	for i, c := range join.PrefixKeyCols {
+		prefixEqCols[i] = input.getNodeColumnOrdinal(c)
+	}
+
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
 	if join.IsFirstJoinInPairedJoiner {
@@ -1595,6 +1600,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		input.root,
 		tab,
 		idx,
+		prefixEqCols,
 		lookupOrdinals,
 		onExpr,
 		join.IsFirstJoinInPairedJoiner,

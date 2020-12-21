@@ -216,7 +216,7 @@ func MakeSpanFromEncDatums(
 	alloc *DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
+	startKey, complete, containsNull, err := MakeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -400,7 +400,7 @@ func SplitSpanIntoSeparateFamilies(
 	return appendTo
 }
 
-// makeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
+// MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
 // encodings of the given EncDatum values. The values, types, and dirs
 // parameters should be specified in the same order as the index key columns and
 // may be a prefix. The complete return value is true if the resultant key
@@ -410,7 +410,7 @@ func SplitSpanIntoSeparateFamilies(
 // in place of the family id (a varint) to signal the next component of the
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
-func makeKeyFromEncDatums(
+func MakeKeyFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
