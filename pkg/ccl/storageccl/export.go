@@ -145,20 +145,6 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	io := storage.IterOptions{
-		UpperBound: args.EndKey,
-	}
-
-	// Time-bound iterators only make sense to use if the start time is set.
-	if args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty() {
-		// The call to startTime.Next() converts our exclusive start bound into the
-		// inclusive start bound that MinTimestampHint expects. This is strictly a
-		// performance optimization; omitting the call would still return correct
-		// results.
-		io.MinTimestampHint = args.StartTime.Next()
-		io.MaxTimestampHint = h.Timestamp
-	}
-
 	e := spanset.GetDBEngine(batch, roachpb.Span{Key: args.Key, EndKey: args.EndKey})
 	targetSize := uint64(args.TargetFileSize)
 	var maxSize uint64
@@ -166,9 +152,12 @@ func evalExport(
 	if targetSize > 0 && allowedOverage > 0 {
 		maxSize = targetSize + uint64(allowedOverage)
 	}
+
+	// Time-bound iterators only make sense to use if the start time is set.
+	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	for start := args.Key; start != nil; {
 		data, summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
-			h.Timestamp, exportAllRevisions, targetSize, maxSize, io)
+			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI)
 		if err != nil {
 			return result.Result{}, err
 		}

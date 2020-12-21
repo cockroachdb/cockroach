@@ -123,7 +123,7 @@ func (p *pebbleBatch) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	panic("unimplemented")
 }

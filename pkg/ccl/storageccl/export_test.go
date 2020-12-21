@@ -312,17 +312,11 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
-	io := storage.IterOptions{
-		UpperBound: endKey,
-	}
-	if enableTimeBoundIteratorOptimization {
-		io.MaxTimestampHint = endTime
-		io.MinTimestampHint = startTime.Next()
-	}
 	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
-		IterOptions: io,
-		StartTime:   startTime,
-		EndTime:     endTime,
+		EndKey:                              endKey,
+		EnableTimeBoundIteratorOptimization: enableTimeBoundIteratorOptimization,
+		StartTime:                           startTime,
+		EndTime:                             endTime,
 	})
 	defer iter.Close()
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
@@ -420,13 +414,6 @@ func assertEqualKVs(
 		}
 
 		// Run new C++ implementation of IncrementalIterator.
-		io := storage.IterOptions{
-			UpperBound: endKey,
-		}
-		if enableTimeBoundIteratorOptimization {
-			io.MaxTimestampHint = endTime
-			io.MinTimestampHint = startTime.Next()
-		}
 		var kvs []storage.MVCCKeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
@@ -434,7 +421,7 @@ func assertEqualKVs(
 			maxSize := uint64(0)
 			prevStart := start
 			sst, summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
-				exportAllRevisions, targetSize, maxSize, io)
+				exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization)
 			require.NoError(t, err)
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
@@ -473,7 +460,7 @@ func assertEqualKVs(
 					maxSize--
 				}
 				_, _, _, err = e.ExportMVCCToSst(prevStart, endKey, startTime, endTime,
-					exportAllRevisions, targetSize, maxSize, io)
+					exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization)
 				require.Regexp(t, fmt.Sprintf("export size \\(%d bytes\\) exceeds max size \\(%d bytes\\)",
 					dataSizeWhenExceeded, maxSize), err)
 			}
