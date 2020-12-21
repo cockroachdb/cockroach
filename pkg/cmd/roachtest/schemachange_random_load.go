@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -123,6 +124,11 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 	c.Start(ctx, t, roachNodes)
 	c.Run(ctx, loadNode, "./workload init schemachange")
 
+	storeDirectory, err := c.RunWithBuffer(ctx, c.l, c.Node(1), "echo", "-n", "{store-dir}")
+	if err != nil {
+		c.l.Printf("Failed to retrieve store directory from node 1: %v\n", err.Error())
+	}
+
 	runCmd := []string{
 		"./workload run schemachange --verbose=1",
 		"--tolerate-errors=false",
@@ -130,9 +136,14 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 		" --histograms=" + perfArtifactsDir + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
+		fmt.Sprintf("--txn-log %s", filepath.Join(string(storeDirectory), "transactions.json")),
 	}
 	t.Status("running schemachange workload")
-	c.Run(ctx, loadNode, runCmd...)
+	err = c.RunE(ctx, loadNode, runCmd...)
+	if err != nil {
+		saveArtifacts(ctx, c, string(storeDirectory))
+		c.t.Fatal(err)
+	}
 
 	// Drop the database to test the correctness of DROP DATABASE CASCADE, which
 	// has been a source of schema change bugs (mostly orphaned descriptors) in
@@ -148,10 +159,38 @@ func runSchemaChangeRandomLoad(ctx context.Context, t *test, c *cluster, maxOps,
 	t.Status("performing validation after workload")
 	validate(db)
 	t.Status("dropping database")
-	_, err := db.ExecContext(ctx, `USE defaultdb; DROP DATABASE schemachange CASCADE;`)
+	_, err = db.ExecContext(ctx, `USE defaultdb; DROP DATABASE schemachange CASCADE;`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Status("performing validation after dropping database")
 	validate(db)
+}
+
+// saveArtifacts saves important test artifacts in the artifacts directory.
+func saveArtifacts(ctx context.Context, c *cluster, storeDirectory string) {
+	db := c.Conn(ctx, 1)
+
+	// Save a backup file called schemachange to the store directory.
+	_, err := db.Exec("BACKUP DATABASE schemachange to 'nodelocal://1/schemachange'")
+	if err != nil {
+		c.l.Printf("Failed execute backup command on node 1: %v\n", err.Error())
+	}
+
+	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
+	localBackupFilePath := filepath.Join(c.t.ArtifactsDir(), "backup")
+	remoteTransactionsFilePath := filepath.Join(storeDirectory, "transactions.ndjson")
+	localTransactionsFilePath := filepath.Join(c.t.ArtifactsDir(), "transactions.ndjson")
+
+	// Copy the backup from the store directory to the artifacts directory.
+	err = c.Get(ctx, c.l, remoteBackupFilePath, localBackupFilePath, c.Node(1))
+	if err != nil {
+		c.l.Printf("Failed to copy backup file from node 1 to artifacts directory: %v\n", err.Error())
+	}
+
+	// Copy the txn log from the store directory to the artifacts directory.
+	err = c.Get(ctx, c.l, remoteTransactionsFilePath, localTransactionsFilePath, c.Node(1))
+	if err != nil {
+		c.l.Printf("Failed to copy txn log file from node 1 to artifacts directory: %v\n", err.Error())
+	}
 }

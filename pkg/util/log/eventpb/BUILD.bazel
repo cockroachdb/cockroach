@@ -19,6 +19,5 @@ go_library(
     deps = [
         "//pkg/util/log/logpb",
         "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/types",
     ],
 )

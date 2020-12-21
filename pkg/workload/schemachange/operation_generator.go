@@ -203,8 +203,7 @@ var opWeights = []int{
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
-	var log strings.Builder
+func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, err error) {
 	savepointCount := 0
 	for {
 		op := opType(og.params.ops.Int())
@@ -224,7 +223,7 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 		// the transaction from being aborted by spurious errors such as in the above example.
 		savepointCount++
 		if _, err := tx.Exec(fmt.Sprintf(`SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", log.String(), err
+			return "", noops, err
 		}
 
 		stmt, err := opFuncs[op](og, tx)
@@ -242,14 +241,13 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (string, string, error) {
 
 			og.opsInTxn[op] = true
 
-			return stmt, log.String(), err
+			return stmt, noops, err
 		}
-
 		if _, err := tx.Exec(fmt.Sprintf(`ROLLBACK TO SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", log.String(), err
+			return "", noops, err
 		}
 
-		log.WriteString(fmt.Sprintf("NOOP: %s -> %v\n", op, err))
+		noops = append(noops, fmt.Sprintf("NOOP: %s -> %v", op, err))
 	}
 }
 
@@ -1353,21 +1351,21 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 			tableName), nil
 	}
 
-	column, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
+	columnForDefault, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(tx, tableName, column.name)
+	columnExists, err := columnExistsOnTable(tx, tableName, columnForDefault.name)
 	if err != nil {
 		return "", err
 	}
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT "IrrelevantValue"`,
-			tableName, column.name), nil
+			tableName, columnForDefault.name), nil
 	}
 
-	datumTyp := column.typ
+	datumTyp := columnForDefault.typ
 	// Optionally change the incorrect type to potentially create errors.
 	if og.produceError() {
 		newTypeName, err := og.randType(tx, og.pctExisting(true))
@@ -1381,7 +1379,7 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 		}
 		if !typeExists {
 			og.expectedExecErrors.add(pgcode.UndefinedObject)
-			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, column.name, newTypeName.SQLString()), nil
+			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, columnForDefault.name, newTypeName.SQLString()), nil
 		}
 
 		datumTyp, err = og.typeFromTypeName(tx, newTypeName.String())
@@ -1390,13 +1388,13 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 		}
 	}
 
-	defaultDatum := rowenc.RandDatum(og.params.rng, datumTyp, column.nullable)
+	defaultDatum := rowenc.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
 
-	if (!datumTyp.Equivalent(column.typ)) && defaultDatum != tree.DNull {
+	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		og.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 
-	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, column.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)), nil
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)), nil
 }
 
 func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
@@ -1454,19 +1452,19 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, tableName), nil
 	}
 
-	column, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
+	columnForTypeChange, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
 
-	columnExists, err := columnExistsOnTable(tx, tableName, column.name)
+	columnExists, err := columnExistsOnTable(tx, tableName, columnForTypeChange.name)
 	if err != nil {
 		return "", err
 	}
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
-			tableName, column.name), nil
+			tableName, columnForTypeChange.name), nil
 	}
 
 	newTypeName, err := og.randType(tx, og.pctExisting(true))
@@ -1482,7 +1480,7 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnHasDependencies, err := columnIsDependedOn(tx, tableName, column.name)
+	columnHasDependencies, err := columnIsDependedOn(tx, tableName, columnForTypeChange.name)
 	if err != nil {
 		return "", err
 	}
@@ -1496,12 +1494,12 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		// pgcode.CannotCoerce represents an invalid type conversion (eg. array to enum),
 		// and pgcode.FeatureNotSupported represents a conversion which is only supported
 		// experimentally (eg.string to enum).
-		{code: pgcode.CannotCoerce, condition: !column.typ.Equivalent(newType)},
-		{code: pgcode.FeatureNotSupported, condition: !column.typ.Equivalent(newType)},
+		{code: pgcode.CannotCoerce, condition: !columnForTypeChange.typ.Equivalent(newType)},
+		{code: pgcode.FeatureNotSupported, condition: !columnForTypeChange.typ.Equivalent(newType)},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, column.name, newTypeName.SQLString()), nil
+		tableName, columnForTypeChange.name, newTypeName.SQLString()), nil
 }
 
 func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
@@ -1628,6 +1626,9 @@ func (og *operationGenerator) getTableColumns(
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if len(ret) == 0 {
+		return nil, pgx.ErrNoRows
 	}
 	for i := range ret {
 		c := &ret[i]
