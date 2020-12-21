@@ -11,6 +11,14 @@ The supported log output formats are documented below.
 
 - [`crdb-v1-tty-count`](#format-crdb-v1-tty-count)
 
+- [`json`](#format-json)
+
+- [`json-compact`](#format-json-compact)
+
+- [`json-fluent`](#format-json-fluent)
+
+- [`json-fluent-compact`](#format-json-fluent-compact)
+
 
 
 ## Format `crdb-v1`
@@ -146,4 +154,190 @@ Same textual format as `crdb-v1-count`.
 In addition, if the output stream happens to be a VT-compatible terminal,
 and the flag `no-color` was *not* set in the configuration, the entries
 are decorated using ANSI color codes.
+
+## Format `json`
+
+This format emits log entries as a JSON payload.
+
+The JSON object is guaranteed to not contain unescaped newlines
+or other special characters, and the entry as a whole is followed
+by a newline character. This makes the format suitable for
+processing over a stream unambiguously.
+
+Each entry contains at least the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `channel` | The name of the logging channel where the event was sent. |
+| `severity` | The severity of the event. |
+| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `file` | The name of the source file where the event was emitted. |
+| `goroutine` | The identifier of the goroutine where the event was emitted. |
+| `line` | The line number where the event was emitted in the source. |
+| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `redactable` | Whether the payload is redactable (see below for details). |
+| `severity_numeric` | The numeric value of the severity of the event. |
+| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+
+
+Additionally, the following fields are conditionally present:
+
+| Field               | Description |
+|---------------------|-------------|
+| `tags`    | The logging context tags for the entry, if there were context tags. |
+| `message` | For unstructured events, the flat text payload. |
+| `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | Goroutine stacks, for fatal events. |
+
+When an entry is structured, the `event` field maps to a dictionary
+whose structure is one of the documented structured events. See the reference
+documentation for structured events for a list of possible payloads.
+
+Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+contain delimiters (‹...›) around
+fields that are considered sensitive. These markers are automatically recognized
+by `debug zip` and `debug merge-logs` when log redaction is requested.
+
+
+
+
+## Format `json-compact`
+
+This format emits log entries as a JSON payload.
+
+The JSON object is guaranteed to not contain unescaped newlines
+or other special characters, and the entry as a whole is followed
+by a newline character. This makes the format suitable for
+processing over a stream unambiguously.
+
+Each entry contains at least the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `C` | The name of the logging channel where the event was sent. |
+| `sev` | The severity of the event. |
+| `c` | The numeric identifier for the logging channel where the event was sent. |
+| `f` | The name of the source file where the event was emitted. |
+| `g` | The identifier of the goroutine where the event was emitted. |
+| `l` | The line number where the event was emitted in the source. |
+| `n` | The entry number on this logging sink, relative to the last process restart. |
+| `r` | Whether the payload is redactable (see below for details). |
+| `s` | The numeric value of the severity of the event. |
+| `t` | The timestamp at which the event was emitted on the logging channel. |
+
+
+Additionally, the following fields are conditionally present:
+
+| Field               | Description |
+|---------------------|-------------|
+| `tags`    | The logging context tags for the entry, if there were context tags. |
+| `message` | For unstructured events, the flat text payload. |
+| `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | Goroutine stacks, for fatal events. |
+
+When an entry is structured, the `event` field maps to a dictionary
+whose structure is one of the documented structured events. See the reference
+documentation for structured events for a list of possible payloads.
+
+Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+contain delimiters (‹...›) around
+fields that are considered sensitive. These markers are automatically recognized
+by `debug zip` and `debug merge-logs` when log redaction is requested.
+
+
+
+
+## Format `json-fluent`
+
+This format emits log entries as a JSON payload.
+
+The JSON object is guaranteed to not contain unescaped newlines
+or other special characters, and the entry as a whole is followed
+by a newline character. This makes the format suitable for
+processing over a stream unambiguously.
+
+Each entry contains at least the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
+| `channel` | The name of the logging channel where the event was sent. |
+| `severity` | The severity of the event. |
+| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `file` | The name of the source file where the event was emitted. |
+| `goroutine` | The identifier of the goroutine where the event was emitted. |
+| `line` | The line number where the event was emitted in the source. |
+| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `redactable` | Whether the payload is redactable (see below for details). |
+| `severity_numeric` | The numeric value of the severity of the event. |
+| `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+
+
+Additionally, the following fields are conditionally present:
+
+| Field               | Description |
+|---------------------|-------------|
+| `tags`    | The logging context tags for the entry, if there were context tags. |
+| `message` | For unstructured events, the flat text payload. |
+| `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | Goroutine stacks, for fatal events. |
+
+When an entry is structured, the `event` field maps to a dictionary
+whose structure is one of the documented structured events. See the reference
+documentation for structured events for a list of possible payloads.
+
+Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+contain delimiters (‹...›) around
+fields that are considered sensitive. These markers are automatically recognized
+by `debug zip` and `debug merge-logs` when log redaction is requested.
+
+
+
+
+## Format `json-fluent-compact`
+
+This format emits log entries as a JSON payload.
+
+The JSON object is guaranteed to not contain unescaped newlines
+or other special characters, and the entry as a whole is followed
+by a newline character. This makes the format suitable for
+processing over a stream unambiguously.
+
+Each entry contains at least the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
+| `C` | The name of the logging channel where the event was sent. |
+| `sev` | The severity of the event. |
+| `c` | The numeric identifier for the logging channel where the event was sent. |
+| `f` | The name of the source file where the event was emitted. |
+| `g` | The identifier of the goroutine where the event was emitted. |
+| `l` | The line number where the event was emitted in the source. |
+| `n` | The entry number on this logging sink, relative to the last process restart. |
+| `r` | Whether the payload is redactable (see below for details). |
+| `s` | The numeric value of the severity of the event. |
+| `t` | The timestamp at which the event was emitted on the logging channel. |
+
+
+Additionally, the following fields are conditionally present:
+
+| Field               | Description |
+|---------------------|-------------|
+| `tags`    | The logging context tags for the entry, if there were context tags. |
+| `message` | For unstructured events, the flat text payload. |
+| `event`   | The logging event, if structured (see below for details). |
+| `stacks`  | Goroutine stacks, for fatal events. |
+
+When an entry is structured, the `event` field maps to a dictionary
+whose structure is one of the documented structured events. See the reference
+documentation for structured events for a list of possible payloads.
+
+Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+contain delimiters (‹...›) around
+fields that are considered sensitive. These markers are automatically recognized
+by `debug zip` and `debug merge-logs` when log redaction is requested.
+
+
+
 
