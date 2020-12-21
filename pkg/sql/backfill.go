@@ -718,7 +718,7 @@ func TruncateInterleavedIndexes(
 			resumeAt := resume
 			// Make a new txn just to drop this chunk.
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				rd := row.MakeDeleter(codec, table, nil)
+				rd := row.MakeDeleter(codec, table, nil /* requestedCols */)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
@@ -789,7 +789,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-				rd := row.MakeDeleter(sc.execCfg.Codec, tableDesc, nil)
+				rd := row.MakeDeleter(sc.execCfg.Codec, tableDesc, nil /* requestedCols */)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
@@ -1948,7 +1948,7 @@ func indexTruncateInTxn(
 	alloc := &rowenc.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil)
+		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil /* requestedCols */)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn, evalCtx); err != nil {
 			return err
