@@ -12476,7 +12476,8 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	// Hold the RaftLock to ensure that after evalAndPropose our proposal is in
 	// the proposal map. Entries are only removed from that map underneath raft.
 	tc.repl.RaftLock()
-	tracedCtx, cleanup := tracing.EnsureContext(ctx, cfg.AmbientCtx.Tracer, "replica send")
+	sp := cfg.AmbientCtx.Tracer.StartSpan("replica send", tracing.WithForceRealSpan())
+	tracedCtx := tracing.ContextWithSpan(ctx, sp)
 	ch, _, _, pErr := tc.repl.evalAndPropose(tracedCtx, &ba, allSpansGuard(), &lease)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -12484,7 +12485,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	errCh := make(chan *roachpb.Error)
 	go func() {
 		res := <-ch
-		cleanup()
+		sp.Finish()
 		errCh <- res.Err
 	}()
 
@@ -12565,8 +12566,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 
 	// Hold the RaftLock to encourage the reproposals to occur in the same batch.
 	tc.repl.RaftLock()
-	sp := tracer.StartSpan("replica send", tracing.WithCtxLogTags(ctx), tracing.WithForceRealSpan())
-	tracedCtx := tracing.ContextWithSpan(ctx, sp)
+	tracedCtx, sp := tracer.StartSpanCtx(ctx, "replica send", tracing.WithForceRealSpan())
 	// Go out of our way to enable recording so that expensive logging is enabled
 	// for this context.
 	sp.SetVerbose(true)
