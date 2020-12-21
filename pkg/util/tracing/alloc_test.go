@@ -66,3 +66,35 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 	}
 
 }
+
+// BenchmarkSpan_GetRecording microbenchmarks GetRecording
+// when background tracing is enabled.
+func BenchmarkSpan_GetRecording(b *testing.B) {
+	var sv settings.Values
+	tracingMode.Override(&sv, int64(modeBackground))
+	tr := NewTracer()
+	tr.Configure(&sv)
+
+	sp := tr.StartSpan("foo", WithForceRealSpan())
+
+	run := func(b *testing.B, sp *Span) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			_ = sp.GetRecording()
+		}
+	}
+
+	b.ResetTimer()
+	b.Run("root-only", func(b *testing.B) {
+		run(b, sp)
+	})
+
+	child := tr.StartSpan("bar", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	b.Run("child-only", func(b *testing.B) {
+		run(b, child)
+	})
+
+	b.Run("root-child", func(b *testing.B) {
+		run(b, sp)
+	})
+}
