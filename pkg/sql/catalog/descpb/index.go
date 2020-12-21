@@ -194,6 +194,13 @@ func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
 	return desc.ColumnIDs[len(desc.ColumnIDs)-1]
 }
 
+func (desc *IndexDescriptor) NonInvertedPrefixColumnIDs() ColumnIDs {
+	if desc.Type != IndexDescriptor_INVERTED {
+		panic(errors.AssertionFailedf("index is not inverted"))
+	}
+	return desc.ColumnIDs[:len(desc.ColumnIDs)-1]
+}
+
 // InvertedColumnName returns the name of the inverted column of the inverted
 // index. This is always the last column in ColumnNames. Panics if the index is
 // not inverted.

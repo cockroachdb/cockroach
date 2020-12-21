@@ -208,7 +208,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			row[i].Datum = tree.DNull
 		}
 	}
-	// Transform to keyRow.
+	// Transform to storedRow.
 	copy(ifr.keyRow, row[:ifr.invertedColIdx])
 	copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
 
@@ -245,7 +245,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
 	}
-	if _, err = ifr.invertedEval.prepareAddIndexRow(enc); err != nil {
+	if _, err = ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */); err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
