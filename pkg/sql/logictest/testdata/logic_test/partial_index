@@ -660,7 +660,7 @@ CREATE TABLE u (
 )
 
 # Inserting multiple rows that conflicts fails.
-statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(1\) already exists\.
 INSERT INTO u VALUES (1, 1), (1, 2)
 
 # Inserting multiple rows that don't conflict succeeds.
@@ -668,7 +668,7 @@ statement ok
 INSERT INTO u VALUES (1, 1), (2, 2), (1, -1)
 
 # Inserting a row that conflicts with an existing row fails.
-statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(1\) already exists\.
 INSERT INTO u VALUES (1, 3)
 
 query II rowsort
@@ -684,12 +684,12 @@ DELETE FROM u WHERE a = 2;
 INSERT INTO u VALUES (2, 2);
 
 # Updating a row in the unique partial index to conflict with another row fails.
-statement error pgcode 23505 duplicate key value \(a\)=\(2\) violates unique constraint \"i\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(2\) already exists\.
 UPDATE u SET a = 2 WHERE b = 1
 
 # Updating a row not in the unique partial index to conflict with a row in the
 # index fails.
-statement error pgcode 23505 duplicate key value \(a\)=\(2\) violates unique constraint \"i\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i\"\nDETAIL: Key \(a\)=\(2\) already exists\.
 UPDATE u SET a = 2, b = 1 WHERE b = -1
 
 # Updating a row not in the unique index to remain out of the unique index
@@ -885,7 +885,7 @@ statement ok
 CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
 INSERT INTO u VALUES (-1, -1);
 
-statement error pgcode 23505 duplicate key value \(a\)=\(-1\) violates unique constraint \"i2\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(-1\) already exists\.
 INSERT INTO u VALUES (-1, -1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
 
 # Two arbiters can be used to detect conflicts and avoid duplicate key errors.
@@ -1005,7 +1005,7 @@ CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
 
 # There can be duplicate key errors from unique partial indexes that are not
 # arbiters.
-statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i2\"
+statement error pgcode 23505 duplicate key value violates unique constraint \"i2\"\nDETAIL: Key \(a\)=\(1\) already exists\.
 INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 100
 
 statement ok

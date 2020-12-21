@@ -1,0 +1,809 @@
+# LogicTest: local
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT UNIQUE,
+  w INT UNIQUE WITHOUT INDEX,
+  x INT,
+  y INT,
+  UNIQUE WITHOUT INDEX (x, y)
+)
+
+statement ok
+CREATE TABLE uniq_overlaps_pk (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b),
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (a, b, d),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (c, d)
+)
+
+statement ok
+CREATE TABLE uniq_hidden_pk (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (a, b, d),
+  UNIQUE WITHOUT INDEX (a)
+)
+
+# TODO(rytaft): make this table use UNIQUE WITHOUT INDEX constraints once
+# we allow foreign keys to reference them (see #57977).
+statement ok
+CREATE TABLE uniq_fk_parent (
+  a INT UNIQUE,
+  b INT,
+  c INT,
+  UNIQUE (b, c),
+  FAMILY (rowid, a, b, c)
+)
+
+statement ok
+CREATE TABLE uniq_fk_child (
+  a INT REFERENCES uniq_fk_parent (a),
+  b INT,
+  c INT,
+  FOREIGN KEY (b, c) REFERENCES uniq_fk_parent (b, c) ON UPDATE CASCADE,
+  UNIQUE WITHOUT INDEX (c)
+)
+
+statement ok
+CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
+
+# -- Tests with INSERT --
+subtest Insert
+
+# None of the inserted values have nulls.
+query T
+EXPLAIN INSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq(k, v, w, x, y)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (w) = (column3)
+│           │ pred: column1 != k
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (column4, column5)
+            │ pred: column1 != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# No need to plan checks for w since it's aways null.
+# We still plan checks for x,y since neither column is null in all rows.
+query T
+EXPLAIN INSERT INTO uniq VALUES (4, 4, NULL, NULL, 1), (5, 5, NULL, 2, NULL)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq(k, v, w, x, y)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 5 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (column4, column5)
+            │ pred: column1 != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Insert with non-constant input.
+query T
+EXPLAIN INSERT INTO uniq SELECT k, v, w, x, y FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq(k, v, w, x, y)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: other@primary
+│             spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (w) = (w)
+│           │ pred: k != k
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (x, y) = (x, y)
+            │ pred: k != k
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq@primary
+                  spans: FULL SCAN
+
+# Add inequality filters for the primary key columns that are not part of each
+# unique constraint to prevent rows from matching themselves in the semi join.
+query T
+EXPLAIN INSERT INTO uniq_overlaps_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_overlaps_pk(a, b, c, d)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (column2, column3)
+│           │ pred: column1 != a
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_overlaps_pk@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: uniq_overlaps_pk@primary
+│           │ equality: (column1) = (a)
+│           │ pred: column2 != b
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (c, d) = (column3, column4)
+            │ pred: (column1 != a) OR (column2 != b)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_overlaps_pk@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Insert with non-constant input.
+# Add inequality filters for the hidden primary key column.
+query T
+EXPLAIN INSERT INTO uniq_hidden_pk SELECT k, v, x, y FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_hidden_pk(a, b, c, d, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (v, x) = (b, c)
+│           │ pred: column16 != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_hidden_pk@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (k, v, y) = (a, b, d)
+│           │ pred: column16 != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_hidden_pk@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (k) = (a)
+            │ pred: column16 != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_hidden_pk@primary
+                  spans: FULL SCAN
+
+# Combine unique checks with foreign keys.
+# TODO(rytaft): This currently isn't testing anything, since uniq_fk_parent
+# doesn't have any UNIQUE WITHOUT INDEX constraints. See comment above where
+# uniq_fk_parent is created.
+query T
+EXPLAIN INSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: uniq_fk_parent(a, b, c, rowid)
+│ auto commit
+│
+└── • render
+    │
+    └── • values
+          size: 3 columns, 2 rows
+
+# Combine unique checks with foreign keys. There should be two foreign key
+# checks and one uniqueness check.
+query T
+EXPLAIN INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: uniq_fk_child(a, b, c, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (c) = (column3)
+│           │ pred: column10 != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_child@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: uniq_fk_parent@uniq_fk_parent_b_c_key
+│           │ equality: (column2, column3) = (b,c)
+│           │ equality cols are key
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: uniq_fk_parent@uniq_fk_parent_a_key
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# -- Tests with UPDATE --
+subtest Update
+
+# None of the updated values have nulls.
+query T
+EXPLAIN UPDATE uniq SET w = 1, x = 2
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq
+│   │ set: w, x
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (w_new) = (w)
+│           │ pred: k != k
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (x_new, y) = (x, y)
+            │ pred: k != k
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq@primary
+                  spans: FULL SCAN
+
+# No need to plan checks for x,y since x is aways null.
+# Also update the primary key.
+query T
+EXPLAIN UPDATE uniq SET k = 1, w = 2, x = NULL
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq
+│   │ set: k, w, x
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (w_new) = (w)
+            │ pred: k_new != k
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq@primary
+                  spans: FULL SCAN
+
+# No need to plan checks since none of the columns requiring checks are updated.
+query T
+EXPLAIN UPDATE uniq SET k = 1, v = 2
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: uniq
+│ set: k, v
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: uniq@primary
+          spans: FULL SCAN
+          locking strength: for update
+
+# Add inequality filters for the primary key columns that are not part of each
+# unique constraint to prevent rows from matching themselves in the semi join.
+query T
+EXPLAIN UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_overlaps_pk
+│   │ set: a, b, c, d
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_overlaps_pk@primary
+│                 spans: [/5 - /5]
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (b_new, c_new)
+│           │ pred: a_new != a
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_overlaps_pk@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: uniq_overlaps_pk@primary
+│           │ equality: (a_new) = (a)
+│           │ pred: b_new != b
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (c, d) = (c_new, d_new)
+            │ pred: (a_new != a) OR (b_new != b)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_overlaps_pk@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Update with non-constant input.
+# No need to add a check for b,c since those columns weren't updated.
+# Add inequality filters for the hidden primary key column.
+query T
+EXPLAIN UPDATE uniq_hidden_pk SET a = k FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_hidden_pk
+│   │ set: a
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • cross join
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_hidden_pk@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (k, b, d) = (a, b, d)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_hidden_pk@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (k) = (a)
+            │ pred: rowid != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_hidden_pk@primary
+                  spans: FULL SCAN
+
+# Combine unique checks with foreign keys.
+# The cascade here affects the unique column in uniq_fk_child.
+query T
+EXPLAIN UPDATE uniq_fk_parent SET c = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_fk_parent
+│   │ set: c
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_fk_parent@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+└── • fk-cascade
+      fk: fk_b_ref_uniq_fk_parent
+      input: buffer 1
+
+# Combine unique checks with foreign keys.
+# There is no uniquness check since column c is not updated.
+query T
+EXPLAIN UPDATE uniq_fk_child SET a = 1, b = 2
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_fk_child
+│   │ set: a, b
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_fk_child@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (b, c) = (b_new, c)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@uniq_fk_parent_b_c_key
+│           │     spans: FULL SCAN
+│           │
+│           └── • filter
+│               │ filter: c IS NOT NULL
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (anti)
+            │ equality: (a_new) = (a)
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_fk_parent@uniq_fk_parent_a_key
+                  spans: FULL SCAN
+
+# Combine unique checks with foreign keys.
+# There should be one fk check and one uniqueness check.
+query T
+EXPLAIN UPDATE uniq_fk_child SET b = 1, c = 2
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: uniq_fk_child
+│   │ set: b, c
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_fk_child@primary
+│                 spans: FULL SCAN
+│                 locking strength: for update
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (c_new) = (c)
+│           │ pred: rowid != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_fk_child@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (anti)
+            │ equality: (b_new, c_new) = (b, c)
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_fk_parent@uniq_fk_parent_b_c_key
+                  spans: FULL SCAN

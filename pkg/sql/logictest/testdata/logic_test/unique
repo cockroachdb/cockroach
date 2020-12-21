@@ -1,0 +1,268 @@
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT UNIQUE,
+  w INT UNIQUE WITHOUT INDEX,
+  x INT,
+  y INT,
+  UNIQUE WITHOUT INDEX (x, y)
+)
+
+statement ok
+CREATE TABLE uniq_overlaps_pk (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b),
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (a, b, d),
+  UNIQUE WITHOUT INDEX (a),
+  UNIQUE WITHOUT INDEX (c, d)
+)
+
+statement ok
+CREATE TABLE uniq_hidden_pk (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  UNIQUE WITHOUT INDEX (b, c),
+  UNIQUE WITHOUT INDEX (a, b, d),
+  UNIQUE WITHOUT INDEX (a)
+)
+
+# TODO(rytaft): make this table use UNIQUE WITHOUT INDEX constraints once
+# we allow foreign keys to reference them (see #57977).
+statement ok
+CREATE TABLE uniq_fk_parent (
+  a INT UNIQUE,
+  b INT,
+  c INT,
+  UNIQUE (b, c)
+)
+
+statement ok
+CREATE TABLE uniq_fk_child (
+  a INT REFERENCES uniq_fk_parent (a),
+  b INT,
+  c INT,
+  FOREIGN KEY (b, c) REFERENCES uniq_fk_parent (b, c) ON UPDATE CASCADE,
+  UNIQUE WITHOUT INDEX (c)
+)
+
+statement ok
+CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
+
+# Insert some data into the other table.
+statement ok
+INSERT INTO other VALUES (10, 10, 1, 1, 1)
+
+
+# -- Tests with INSERT --
+subtest Insert
+
+# Insert some non-null data.
+statement ok
+INSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
+
+# Regular primary key violation.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(k\)=\(1\) already exists\.
+INSERT INTO uniq VALUES (1, 1, 1, 1, 1)
+
+# Regular unique index violation.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_v_key"\nDETAIL: Key \(v\)=\(1\) already exists\.
+INSERT INTO uniq VALUES (3, 1, 1, 1, 1)
+
+# Attempt to insert the same keys twice in the same statement.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(3\) already exists\.
+INSERT INTO uniq VALUES (3, 3, 3, 3, 3), (4, 4, 3, 3, 3)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(1\) already exists\.
+INSERT INTO uniq VALUES (3, 3, 1, 1, 1)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_x_y"\nDETAIL: Key \(x, y\)=\(1, 1\) already exists\.
+INSERT INTO uniq VALUES (3, 3, 3, 1, 1)
+
+# Even though y=1 already exists, (x,y)=(3,1) is unique.
+statement ok
+INSERT INTO uniq VALUES (3, 3, 3, 3, 1)
+
+# Inserting these rows should succeed since at least one of the columns in each
+# UNIQUE WITHOUT INDEX constraint is null.
+statement ok
+INSERT INTO uniq VALUES (4, 4, NULL, NULL, 1), (5, 5, NULL, 2, NULL), (6, 6, NULL, NULL, 1), (7, 7, NULL, 2, NULL)
+
+# Insert with non-constant input.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(1\) already exists\.
+INSERT INTO uniq SELECT k, v, w, x, y FROM other
+
+query IIIII colnames,rowsort
+SELECT * FROM uniq
+----
+k  v  w     x     y
+1  1  1     1     1
+2  2  2     2     2
+3  3  3     3     1
+4  4  NULL  NULL  1
+5  5  NULL  2     NULL
+6  6  NULL  NULL  1
+7  7  NULL  2     NULL
+
+
+# Insert into a table in which the primary key overlaps some of the unique
+# constraints.
+statement ok
+INSERT INTO uniq_overlaps_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+INSERT INTO uniq_overlaps_pk VALUES (1, 2, 3, 4)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_b_c"\nDETAIL: Key \(b, c\)=\(1, 1\) already exists\.
+INSERT INTO uniq_overlaps_pk VALUES (3, 1, 1, 3)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c_d"\nDETAIL: Key \(c, d\)=\(1, 1\) already exists\.
+INSERT INTO uniq_overlaps_pk VALUES (3, 3, 1, 1)
+
+statement ok
+INSERT INTO uniq_overlaps_pk VALUES (3, 3, 1, 3)
+
+query IIII colnames,rowsort
+SELECT * FROM uniq_overlaps_pk
+----
+a  b  c  d
+1  1  1  1
+2  2  2  2
+3  3  1  3
+
+
+# Insert into a table with a hidden primary key.
+statement ok
+INSERT INTO uniq_hidden_pk VALUES (1, 1, 1, 1), (2, 2, 2, 2)
+
+# Insert with non-constant input.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_b_c"\nDETAIL: Key \(b, c\)=\(1, 1\) already exists\.
+INSERT INTO uniq_hidden_pk SELECT k, w, x, y FROM other
+
+query IIII colnames,rowsort
+SELECT * FROM uniq_hidden_pk
+----
+a  b  c  d
+1  1  1  1
+2  2  2  2
+
+
+# Combine unique checks with foreign keys.
+statement ok
+INSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2);
+INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
+
+# This passes the foreign key checks but fails the uniqueness checks.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(1\) already exists\.
+INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
+
+# This fails the foreign key checks but passes the uniqueness checks.
+statement error pgcode 23503 pq: insert on table "uniq_fk_child" violates foreign key constraint "fk_b_ref_uniq_fk_parent"\nDETAIL: Key \(b, c\)=\(3, 3\) is not present in table "uniq_fk_parent"\.
+INSERT INTO uniq_fk_child VALUES (3, 3, 3), (4, 4, 4)
+
+# This fails both types of checks.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(2\) already exists\.
+INSERT INTO uniq_fk_child VALUES (1, 1, 2), (4, 2, 2)
+
+query III colnames,rowsort
+SELECT * FROM uniq_fk_child
+----
+a  b  c
+1  1  1
+2  2  2
+
+
+# -- Tests with UPDATE --
+subtest Update
+
+# Set w to the same value it already has.
+statement ok
+UPDATE uniq SET w = 1, x = 2 WHERE k = 1
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(1\) already exists\.
+UPDATE uniq SET w = 1, x = 2 WHERE k = 2
+
+# Fails because we are trying to update every row with the same values.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(100\) already exists\.
+UPDATE uniq SET w = 100, x = 200
+
+# This update targets the row (2, 2, 2, 2, 2).
+statement ok
+UPDATE uniq SET k = 10, v = 10, w = 10, x = NULL WHERE k = 2
+
+# This insert should succeed now.
+statement ok
+INSERT INTO uniq VALUES (2, 2, 2, 2, 2)
+
+# No UNIQUE WITHOUT INDEX checks since none of the columns requiring checks are
+# updated.
+statement ok
+UPDATE uniq SET k = 11, v = 11 WHERE k = 10
+
+query IIIII colnames,rowsort
+SELECT * FROM uniq
+----
+k   v   w     x     y
+1   1   1     2     1
+2   2   2     2     2
+3   3   3     3     1
+4   4   NULL  NULL  1
+5   5   NULL  2     NULL
+6   6   NULL  NULL  1
+7   7   NULL  2     NULL
+11  11  10    NULL  2
+
+
+# Update a table with multiple primary key columns.
+# There are no rows with a=5.
+statement ok
+UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 5
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(1\) already exists\.
+UPDATE uniq_overlaps_pk SET a = 1, b = 2, c = 3, d = 4 WHERE a = 3
+
+query IIII colnames,rowsort
+SELECT * FROM uniq_overlaps_pk
+----
+a  b  c  d
+1  1  1  1
+2  2  2  2
+3  3  1  3
+
+
+# Try to update a table with a hidden primary key with non-constant input.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_a"\nDETAIL: Key \(a\)=\(10\) already exists\.
+UPDATE uniq_hidden_pk SET a = k FROM other
+
+query IIII colnames,rowsort
+SELECT * FROM uniq_hidden_pk
+----
+a  b  c  d
+1  1  1  1
+2  2  2  2
+
+
+# Combine unique checks with foreign keys.
+# The cascade here should cause a uniqueness error for the child.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(1\) already exists\.
+UPDATE uniq_fk_parent SET c = 1
+
+# Combine unique checks with foreign keys.
+# This passes the foreign key checks but fails the uniqueness check.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(2\) already exists\.
+UPDATE uniq_fk_child SET b = 2, c = 2
+
+query III colnames,rowsort
+SELECT * FROM uniq_fk_child
+----
+a  b  c
+1  1  1
+2  2  2
