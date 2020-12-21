@@ -134,10 +134,12 @@ func (s *Builder) UnsetNeededFamilies() {
 	s.neededFamilies = nil
 }
 
-// SpanFromEncDatums encodes a span with prefixLen constraint columns from the index.
-// SpanFromEncDatums assumes that the EncDatums in values are in the order of the index columns.
-// It also returns whether or not the input values contain a null value or not, which can be
-// used as input for CanSplitSpanIntoSeparateFamilies.
+// SpanFromEncDatums encodes a span with prefixLen constraint columns from the
+// index prefixed with the index key prefix that includes the table and index
+// ID. SpanFromEncDatums assumes that the EncDatums in values are in the order
+// of the index columns. It also returns whether or not the input values contain
+// a null value or not, which can be used as input for
+// CanSplitSpanIntoSeparateFamilies.
 func (s *Builder) SpanFromEncDatums(
 	values rowenc.EncDatumRow, prefixLen int,
 ) (_ roachpb.Span, containsNull bool, _ error) {

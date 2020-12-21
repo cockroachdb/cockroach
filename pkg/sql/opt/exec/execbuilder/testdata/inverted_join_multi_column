@@ -1,0 +1,38 @@
+# Test that the inverted joiner creates the correct spans for lookups.
+statement ok
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON
+)
+
+statement ok
+CREATE TABLE j2 (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  j JSON,
+  INVERTED INDEX ij_idx (i, j),
+  INVERTED INDEX isj_idx (i, s, j)
+)
+
+statement ok
+INSERT INTO j1 VALUES
+  (1, '{"a": "b"}'),
+  (2, '{"x": "y"}'),
+  (3, '{"a": "b", "x": "y"}')
+
+query T kvtrace
+SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2
+ON i IN (10, 20) AND j2.j @> j1.j
+----
+Scan /Table/54/{1-2}
+Scan /Table/55/2/10/"a"/"b"{-/PrefixEnd}, /Table/55/2/10/"x"/"y"{-/PrefixEnd}, /Table/55/2/20/"a"/"b"{-/PrefixEnd}, /Table/55/2/20/"x"/"y"{-/PrefixEnd}
+
+query T kvtrace
+SELECT j1.k
+FROM j1 INNER INVERTED JOIN j2@isj_idx
+ON i = 10 AND s IN ('foo', 'bar') AND j2.j @> j1.j
+----
+Scan /Table/54/{1-2}
+Scan /Table/55/3/10/"bar"/"a"/"b"{-/PrefixEnd}, /Table/55/3/10/"bar"/"x"/"y"{-/PrefixEnd}, /Table/55/3/10/"foo"/"a"/"b"{-/PrefixEnd}, /Table/55/3/10/"foo"/"x"/"y"{-/PrefixEnd}
