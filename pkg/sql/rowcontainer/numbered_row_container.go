@@ -29,8 +29,8 @@ import (
 )
 
 // DiskBackedNumberedRowContainer that stores a map from idx => row, where idx is a
-// 0-based dense numbering. Optionally, if deDup is true, it can de-duplicate the
-// rows before assigning a number. It spills to disk if needed.
+// 0-based dense numbering. Optionally, if deDup is true, it can
+// de-duplicate the rows before assigning a number. It spills to disk if needed.
 type DiskBackedNumberedRowContainer struct {
 	deDup bool
 	rc    *DiskBackedRowContainer

@@ -613,6 +613,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	})
 }
 
-// TODO(sumeer):
-// - add geospatial test cases
-// - add benchmark
+// TODO(sumeer): add geospatial test cases
+// TODO(sumeer): add geospatial benchmark
+// TODO(mgartner): add JSON/ARRAY benchmark for single and multi-column inverted
+// indexes.

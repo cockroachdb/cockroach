@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -70,6 +71,14 @@ type invertedJoiner struct {
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
 	invertedColID descpb.ColumnID
+	// prefixEqualityCols are the ordinals of the columns from the join input
+	// that represent join values for the non-inverted prefix columns of
+	// multi-column inverted indexes. The length is equal to the number of
+	// non-inverted prefix columns of the index.
+	prefixEqualityCols []uint32
+	// prefixKey is used to generate a key representing the non-inverted prefix
+	// column datums. It is reused for generating look up spans and routing
+	// spans for batches in order to reduce allocations.
 
 	onExprHelper execinfrapb.ExprHelper
 	combinedRow  rowenc.EncDatumRow
@@ -82,24 +91,29 @@ type invertedJoiner struct {
 	alloc    rowenc.DatumAlloc
 	rowAlloc rowenc.EncDatumRowAlloc
 
-	// The row retrieved from the index represents the columns of the table
-	// with the datums corresponding to the columns in the index populated.
-	// The inverted column is in the position colIdxMap[invertedColID] and
-	// the []byte stored there is used as the first parameter in
-	// batchedExprEvaluator.addIndexRow(enc, keyIndex).
+	// tableRow and keyRow are the representations of a row retrieved from the
+	// index and the index key (without the inverted column), respectively. Note
+	// that neither includes the inverted column; it cannot be produced from an
+	// inverted index key row because it only encodes part of the column's
+	// value.
 	//
-	// The remaining columns in the index represent the primary key of the
-	// table. They are at positions described by the keys in the
-	// tableRowToKeyRowMap. The map is used to transform the retrieved table row
-	// to the keyRow, and add to the row container, which de-duplicates the
-	// primary keys. The index assigned by the container is the keyIndex in the
-	// addIndexRow() call mentioned earlier.
-	keyRow              rowenc.EncDatumRow
-	keyTypes            []*types.T
-	tableRowToKeyRowMap map[int]int
-	// The reverse transformation, from a key row to a table row, is done
-	// before evaluating the onExpr.
+	// keyRowPrefix represents the encoded index key of the non-inverted prefix
+	// columns only, if the index is a multi-column inverted index. It is used
+	// for (1) generating lookup spans and routing spans for batches, and (2)
+	// for generating key rows for routing spans during pre-filtering.
+	//
+	// All three of these fields are reused in order to reduce allocations.
+	//
+	// keyTypes is a list of the types of each column in keyRow.
+	//
+	// keyRowToTableRowMap is used to convert table rows to key rows, and vice
+	// versa. Retrieved table rows are transformed to key rows and added to the
+	// row container to de-duplicate primary keys. Key rows are transformed to a
+	// table row before evaluating the onExpr.
 	tableRow            rowenc.EncDatumRow
+	keyRow              rowenc.EncDatumRow
+	keyRowPrefix        rowenc.EncDatumRow
+	keyTypes            []*types.T
 	keyRowToTableRowMap []int
 
 	// The input being joined using the index.
@@ -169,6 +183,7 @@ func newInvertedJoiner(
 		desc:                 tabledesc.MakeImmutable(spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
+		prefixEqualityCols:   spec.PrefixEqualityColumns,
 		datumsToInvertedExpr: datumsToInvertedExpr,
 		joinType:             spec.Type,
 		batchSize:            invertedJoinerBatchSize,
@@ -180,22 +195,32 @@ func newInvertedJoiner(
 	if err != nil {
 		return nil, err
 	}
-	ij.invertedColID = ij.index.ColumnIDs[0]
+	ij.invertedColID = ij.index.InvertedColumnID()
 
+	// Create a mapping from key row column ordinal to table row column
+	// ordinals. A key row contains all the columns in the inverted index except
+	// for the inverted column. This includes non-inverted prefix columns and PK
+	// columns that are not prefix columns. It does not include stored columns
+	// because they are not supported for inverted indexes.
 	indexColumnIDs, _ := ij.index.FullColumnIDs()
+	numKeyRowCols := len(indexColumnIDs) - 1
 	// Inverted joins are not used for mutations.
 	tableColumns := ij.desc.ColumnsWithMutations(false /* mutations */)
-	ij.keyRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
-	ij.keyTypes = make([]*types.T, len(ij.keyRow))
 	ij.tableRow = make(rowenc.EncDatumRow, len(tableColumns))
-	ij.tableRowToKeyRowMap = make(map[int]int)
-	ij.keyRowToTableRowMap = make([]int, len(indexColumnIDs)-1)
-	for i := 1; i < len(indexColumnIDs); i++ {
-		keyRowIdx := i - 1
-		tableRowIdx := ij.colIdxMap.GetDefault(indexColumnIDs[i])
-		ij.tableRowToKeyRowMap[tableRowIdx] = keyRowIdx
+	ij.keyRow = make(rowenc.EncDatumRow, numKeyRowCols)
+	ij.keyTypes = make([]*types.T, len(ij.keyRow))
+	ij.keyRowPrefix = make(rowenc.EncDatumRow, len(ij.prefixEqualityCols))
+	ij.keyRowToTableRowMap = make([]int, numKeyRowCols)
+	keyRowIdx := 0
+	for _, colID := range indexColumnIDs {
+		// Do not include the inverted column in the map.
+		if colID == ij.invertedColID {
+			continue
+		}
+		tableRowIdx := ij.colIdxMap.GetDefault(colID)
 		ij.keyRowToTableRowMap[keyRowIdx] = tableRowIdx
 		ij.keyTypes[keyRowIdx] = ij.desc.Columns[tableRowIdx].Type
+		keyRowIdx++
 	}
 
 	outputColCount := len(ij.inputTypes)
@@ -404,6 +429,32 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				ij.batchedExprEval.preFilterState = append(ij.batchedExprEval.preFilterState, preFilterState)
 			}
 		}
+		if len(ij.prefixEqualityCols) > 0 {
+			if expr == nil {
+				// One of the input columns was NULL, resulting in a nil expression.
+				// The join type will emit no row since the evaluation result will be
+				// an empty set, so don't bother creating a prefix key span.
+				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, roachpb.Key{})
+			} else {
+				for prefixIdx, colIdx := range ij.prefixEqualityCols {
+					ij.keyRowPrefix[prefixIdx] = row[colIdx]
+				}
+				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+					ij.keyRowPrefix,
+					ij.keyTypes[:len(ij.keyRowPrefix)],
+					ij.index.ColumnDirections,
+					&ij.desc,
+					ij.index,
+					&ij.alloc,
+					nil, /* keyPrefix */
+				)
+				if err != nil {
+					ij.MoveToDraining(err)
+					return ijStateUnknown, ij.DrainHelper()
+				}
+				ij.batchedExprEval.nonInvertedPrefixes = append(ij.batchedExprEval.nonInvertedPrefixes, prefixKey)
+			}
+		}
 	}
 
 	if len(ij.inputRows) == 0 {
@@ -414,7 +465,11 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 	log.VEventf(ij.Ctx, 1, "read %d input rows", len(ij.inputRows))
 
-	spans := ij.batchedExprEval.init()
+	spans, err := ij.batchedExprEval.init()
+	if err != nil {
+		ij.MoveToDraining(err)
+		return ijStateUnknown, ij.DrainHelper()
+	}
 	if len(spans) == 0 {
 		// Nothing to scan. For each input row, place a nil slice in the joined
 		// rows, for emitRow() to process.
@@ -426,8 +481,6 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 	// NB: spans is already sorted, and that sorting is preserved when
 	// generating indexSpans.
-	// TODO(mgartner): Pass a constraint that constrains the prefix columns of
-	// multi-column inverted indexes.
 	indexSpans, err := ij.spanBuilder.SpansFromInvertedSpans(spans, nil /* constraint */)
 	if err != nil {
 		ij.MoveToDraining(err)
@@ -471,7 +524,29 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 		// invertedFilterer.readInput() for an example.
 		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
 		encInvertedVal := scannedRow[idx].EncodedBytes()
-		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
+		var encFullVal []byte
+		if len(ij.prefixEqualityCols) > 0 {
+			ij.transformToKeyRowPrefix(scannedRow)
+			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+				ij.keyRowPrefix,
+				ij.keyTypes[:len(ij.keyRowPrefix)],
+				ij.index.ColumnDirections,
+				&ij.desc,
+				ij.index,
+				&ij.alloc,
+				nil, /* keyPrefix */
+			)
+			if err != nil {
+				ij.MoveToDraining(err)
+				return ijStateUnknown, ij.DrainHelper()
+			}
+			// We append an encoded inverted value/datum to the key prefix
+			// representing the non-inverted prefix columns, to generate the key
+			// for the inverted index. This is similar to the internals of
+			// rowenc.appendEncDatumsToKey.
+			encFullVal = append(prefixKey, encInvertedVal...)
+		}
+		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal, encFullVal)
 		if err != nil {
 			ij.MoveToDraining(err)
 			return ijStateUnknown, ij.DrainHelper()
@@ -637,14 +712,21 @@ func (ij *invertedJoiner) renderUnmatchedRow(row rowenc.EncDatumRow) {
 }
 
 func (ij *invertedJoiner) transformToKeyRow(row rowenc.EncDatumRow) {
-	for i, rowIdx := range ij.keyRowToTableRowMap {
-		ij.keyRow[i] = row[rowIdx]
+	for keyIdx, rowIdx := range ij.keyRowToTableRowMap {
+		ij.keyRow[keyIdx] = row[rowIdx]
+	}
+}
+
+func (ij *invertedJoiner) transformToKeyRowPrefix(row rowenc.EncDatumRow) {
+	for keyIdx := range ij.keyRowPrefix {
+		rowIdx := ij.keyRowToTableRowMap[keyIdx]
+		ij.keyRowPrefix[keyIdx] = row[rowIdx]
 	}
 }
 
 func (ij *invertedJoiner) transformToTableRow(keyRow rowenc.EncDatumRow) {
-	for r, k := range ij.tableRowToKeyRowMap {
-		ij.tableRow[r] = keyRow[k]
+	for keyIdx, rowIdx := range ij.keyRowToTableRowMap {
+		ij.tableRow[rowIdx] = keyRow[keyIdx]
 	}
 }
 
