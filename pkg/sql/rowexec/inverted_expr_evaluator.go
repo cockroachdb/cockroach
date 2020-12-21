@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/errors"
 )
@@ -281,6 +282,9 @@ type batchedInvertedExprEvaluator struct {
 
 	// The evaluators for all the exprs.
 	exprEvals []*invertedExprEvaluator
+	// The spans that constrain the non-inverted prefix columns, if the index is
+	// a multi-column inverted index.
+	prefixSpans []roachpb.Span
 	// Spans here are in sorted order and non-overlapping.
 	fragmentedSpans []invertedSpanRoutingInfo
 	// The routing index computed by prepareAddIndexRow
@@ -421,10 +425,17 @@ func (b *batchedInvertedExprEvaluator) init() invertedSpans {
 			b.exprEvals[i] = nil
 			continue
 		}
+		var prefixKey roachpb.Key
+		if len(b.prefixSpans) > 0 {
+			prefixKey = b.prefixSpans[i].Key
+		}
 		b.exprEvals[i] = newInvertedExprEvaluator(&expr.Node)
 		exprSpans := b.exprEvals[i].getSpansAndSetIndex()
 		for _, spans := range exprSpans {
 			for _, span := range spans.spans {
+				if len(prefixKey) > 0 {
+					span = prefixInvertedSpan(prefixKey, span)
+				}
 				b.routingSpans = append(b.routingSpans,
 					invertedSpanRoutingInfo{
 						span:                span,
@@ -493,8 +504,31 @@ func (b *batchedInvertedExprEvaluator) prepareAddIndexRow(
 	})
 	i--
 	b.routingIndex = i
+	return b.prefilter(enc)
+}
+
+// prepareAddMultiColumnIndexRow is similar to prepareAddIndexRow; the
+// difference being that prepareAddMultiColumnIndexRow supports multi-column
+// inverted indexes. This function takes two encoded values. encFull should
+// include the entire index key, while encInv should only encode the inverted
+// column. The return value indicates whether addIndexRow should be called.
+func (b *batchedInvertedExprEvaluator) prepareAddMultiColumnIndexRow(
+	encFull invertedexpr.EncInvertedVal, encInv invertedexpr.EncInvertedVal,
+) (bool, error) {
+	i := sort.Search(len(b.fragmentedSpans), func(i int) bool {
+		return bytes.Compare(b.fragmentedSpans[i].span.Start, encFull) > 0
+	})
+	i--
+	b.routingIndex = i
+	return b.prefilter(encInv)
+}
+
+// prefilter applies b.filterer, if it exists, returning true if addIndexRow
+// should be called for the row corresponding to the encoded value.
+// prepareAddIndexRow or prepareAddMultiColumnIndexRow must be called first.
+func (b *batchedInvertedExprEvaluator) prefilter(enc invertedexpr.EncInvertedVal) (bool, error) {
 	if b.filterer != nil {
-		exprIndexList := b.fragmentedSpans[i].exprIndexList
+		exprIndexList := b.fragmentedSpans[b.routingIndex].exprIndexList
 		if len(exprIndexList) > cap(b.tempPreFilters) {
 			b.tempPreFilters = make([]interface{}, len(exprIndexList))
 			b.tempPreFilterResult = make([]bool, len(exprIndexList))
@@ -559,4 +593,19 @@ func (b *batchedInvertedExprEvaluator) reset() {
 	b.fragmentedSpans = b.fragmentedSpans[:0]
 	b.routingSpans = b.routingSpans[:0]
 	b.coveringSpans = b.coveringSpans[:0]
+	b.prefixSpans = b.prefixSpans[:0]
+}
+
+// prefixInvertedSpan returns a new invertedSpan with prefix prepended to the
+// input span's Start and End keys.
+func prefixInvertedSpan(prefix roachpb.Key, span invertedSpan) invertedSpan {
+	newSpan := invertedSpan{
+		Start: make(roachpb.Key, 0, len(prefix)+len(span.Start)),
+		End:   make(roachpb.Key, 0, len(prefix)+len(span.End)),
+	}
+	newSpan.Start = append(newSpan.Start, prefix...)
+	newSpan.Start = append(newSpan.Start, span.Start...)
+	newSpan.End = append(newSpan.End, prefix...)
+	newSpan.End = append(newSpan.End, span.End...)
+	return newSpan
 }

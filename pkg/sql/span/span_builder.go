@@ -145,6 +145,13 @@ func (s *Builder) SpanFromEncDatums(
 		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc, s.KeyPrefix)
 }
 
+func (s *Builder) SpanFromEncDatumsWithoutKeyPrefix(
+	values rowenc.EncDatumRow, prefixLen int,
+) (_ roachpb.Span, containsNull bool, _ error) {
+	return rowenc.MakeSpanFromEncDatums(
+		values[:prefixLen], s.indexColTypes[:prefixLen], s.indexColDirs[:prefixLen], s.table, s.index, &s.alloc, nil)
+}
+
 // SpanFromDatumRow generates an index span with prefixLen constraint columns from the index.
 // SpanFromDatumRow assumes that values is a valid table row for the Builder's table.
 // It also returns whether or not the input values contain a null value or not, which can be

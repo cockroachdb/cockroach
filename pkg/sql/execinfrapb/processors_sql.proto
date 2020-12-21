@@ -638,6 +638,11 @@ message InvertedJoinerSpec {
   // indicates whether a row is a continuation of a group corresponding to a
   // left row.
   optional bool output_group_continuation_for_left_row = 8 [(gogoproto.nullable) = false];
+
+  // Column indexes in the input stream specifying the columns which match with
+  // the non-inverted prefix columns of the index, if the index in multi-column.
+  // These are the equality columns of the join.
+  repeated uint32 prefix_equality_columns = 9 [packed = true];
 }
 
 // InvertedFiltererSpec is the specification of a processor that does filtering
