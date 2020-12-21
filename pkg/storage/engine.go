@@ -297,8 +297,7 @@ type Reader interface {
 	// intent is found.
 	ExportMVCCToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
-		exportAllRevisions bool, targetSize uint64, maxSize uint64,
-		io IterOptions,
+		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
 	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
