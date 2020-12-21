@@ -251,12 +251,12 @@ func TestDescriptorRepair(t *testing.T) {
 		typ  string
 		info string
 	}
-
 	for _, tc := range []struct {
 		before             []string
 		op                 string
 		expErrRE           string
 		expEventLogEntries []eventLogPattern
+		after              []string
 	}{
 		{
 			op: `
@@ -392,6 +392,10 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 					info: `"force":true,"validation_errors":"[^"]*duplicate column name: \\"i\\""`,
 				},
 			},
+			after: []string{
+				// Ensure that the table is usable.
+				`INSERT INTO [52 as t] VALUES (1), (2)`,
+			},
 		},
 		{
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -465,11 +469,13 @@ const (
     "columns": [
       {
         "id": 1,
-        "name": "i"
+        "name": "i",
+        "type": {"family": "IntFamily", "oid": 20, "width": 64}
       },
       {
         "id": 1,
-        "name": "i"
+        "name": "i",
+        "type": {"family": "IntFamily", "oid": 20, "width": 64}
       }
     ],
     "families": [
@@ -545,7 +551,8 @@ SELECT crdb_internal.unsafe_upsert_descriptor(52,
   WITH as_json AS (
                 SELECT crdb_internal.pb_to_json(
                             'cockroach.sql.sqlbase.Descriptor',
-                            descriptor
+                            descriptor,
+                            false -- emit_defaults
                         ) AS descriptor
                   FROM system.descriptor
                  WHERE id = 52
