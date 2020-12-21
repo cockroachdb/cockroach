@@ -18,13 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -237,6 +238,13 @@ func runBackupProcessor(
 					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
+
+				if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+					if backupKnobs.RunAfterExportingSpanEntry != nil {
+						backupKnobs.RunAfterExportingSpanEntry(ctx)
+					}
+				}
+
 				files := make([]BackupManifest_File, 0)
 				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 				progDetails := BackupManifest_Progress{}

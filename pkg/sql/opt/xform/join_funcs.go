@@ -525,6 +525,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			on = onCopy
 			on.RemoveCommonFilters(constFilters)
 		}
+		invertedJoin.ConstFilters = constFilters
 
 		// Check whether the filter can constrain the inverted column.
 		invertedExpr := invertedidx.TryJoinInvertedIndex(

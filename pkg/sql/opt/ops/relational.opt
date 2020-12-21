@@ -402,6 +402,11 @@ define InvertedJoinPrivate {
     # contain columns from the input and columns from the index. Any columns
     # not in the input are retrieved from the index.
     Cols ColSet
+
+    # ConstFilters contains the constant filters that are represented as
+    # equality conditions on the PrefixKeyCols. These filters are needed by the
+    # statistics code to correctly estimate selectivity.
+    ConstFilters FiltersExpr
     _ JoinPrivate
 }
 
