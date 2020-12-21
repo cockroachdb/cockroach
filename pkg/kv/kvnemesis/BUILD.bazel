@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -9,10 +11,10 @@ go_library(
         "generator.go",
         "kvnemesis.go",
         "operations.go",
-        "operations.pb.go",
         "validator.go",
         "watcher.go",
     ],
+    embed = [":kvnemesis_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis",
     visibility = ["//visibility:public"],
     deps = [
@@ -34,10 +36,8 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
-        "@com_github_gogo_protobuf//proto",
     ],
 )
 
@@ -73,5 +73,32 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+proto_library(
+    name = "kvnemesis_proto",
+    srcs = ["operations.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "kvnemesis_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis",
+    proto = ":kvnemesis_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_gogo_protobuf//gogoproto",
     ],
 )

@@ -1,54 +1,23 @@
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,  @com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway
+
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "serverpb",
     srcs = [
         "admin.go",
-        "admin.pb.go",
-        "admin.pb.gw.go",
-        "authentication.pb.go",
-        "authentication.pb.gw.go",
-        "init.pb.go",
-        "migration.pb.go",
         "status.go",
-        "status.pb.go",
-        "status.pb.gw.go",
     ],
+    embed = [":serverpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/build",
-        "//pkg/clusterversion",
-        "//pkg/config/zonepb",
-        "//pkg/gossip",
-        "//pkg/jobs/jobspb",
-        "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
-        "//pkg/server/diagnosticspb",
-        "//pkg/server/status/statuspb",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/storage/enginepb",
-        "//pkg/ts/catalog",
-        "//pkg/util",
         "//pkg/util/errorutil",
-        "//pkg/util/log/logpb",
-        "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
-        "@com_github_gogo_protobuf//proto",
-        "@com_github_gogo_protobuf//sortkeys",
-        "@com_github_gogo_protobuf//types",
-        "@com_github_golang_protobuf//descriptor",
-        "@com_github_golang_protobuf//proto",
-        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
-        "@com_github_grpc_ecosystem_grpc_gateway//utilities:go_default_library",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
-        "@org_golang_google_grpc//:grpc",
-        "@org_golang_google_grpc//codes",
-        "@org_golang_google_grpc//grpclog",
-        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -63,5 +32,72 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//assert",
+    ],
+)
+
+proto_library(
+    name = "serverpb_proto",
+    srcs = [
+        "admin.proto",
+        "authentication.proto",
+        "init.proto",
+        "migration.proto",
+        "status.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build:build_proto",
+        "//pkg/clusterversion:clusterversion_proto",
+        "//pkg/config/zonepb:zonepb_proto",
+        "//pkg/gossip:gossip_proto",
+        "//pkg/jobs/jobspb:jobspb_proto",
+        "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
+        "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/server/diagnosticspb:diagnosticspb_proto",
+        "//pkg/server/status/statuspb:statuspb_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/ts/catalog:catalog_proto",
+        "//pkg/util:util_proto",
+        "//pkg/util/log/logpb:logpb_proto",
+        "//pkg/util/metric:metric_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:timestamp_proto",
+        "@go_googleapis//google/api:annotations_proto",
+        "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
+    ],
+)
+
+go_proto_library(
+    name = "serverpb_go_proto",
+    compilers = [
+        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+        "@com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
+    proto = ":serverpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/clusterversion",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/server/diagnosticspb",
+        "//pkg/server/status/statuspb:statuspb_go_proto",
+        "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/storage/enginepb",
+        "//pkg/ts/catalog",
+        "//pkg/util",
+        "//pkg/util/log/logpb",
+        "//pkg/util/metric",
+        "@com_github_gogo_protobuf//gogoproto",
+        "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )

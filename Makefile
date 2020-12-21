@@ -1762,7 +1762,7 @@ fuzz: bin/fuzz
 # Short hand to re-generate all bazel BUILD files.
 bazel-generate: ## Generate all bazel BUILD files.
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
-	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=DEPS.bzl%go_deps
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable_global -to_macro=DEPS.bzl%go_deps
 	@bazel run //:gazelle
 
 # No need to include all the dependency files if the user is just
