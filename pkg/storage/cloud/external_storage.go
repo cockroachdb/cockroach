@@ -50,10 +50,13 @@ type ExternalStorage interface {
 	// ExternalStorage implementation.
 	Settings() *cluster.Settings
 
-	// ReadFile should return a Reader for requested name.
+	// ReadFile is shorthand for ReadFileAt with offset 0.
+	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
+
+	// ReadFileAt returns a Reader for requested name reading at offset.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
+	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
 
 	// WriteFile should write the content to requested name.
 	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
