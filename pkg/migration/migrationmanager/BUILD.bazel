@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "migrationmanager",
+    srcs = ["manager.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationmanager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv",
+        "//pkg/migration",
+        "//pkg/migration/migrationcluster",
+        "//pkg/migration/migrations",
+        "//pkg/server/serverpb",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "migrationmanager_test",
+    srcs = [
+        "main_test.go",
+        "manager_external_test.go",
+    ],
+    deps = [
+        "//pkg/base",
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/liveness",
+        "//pkg/migration",
+        "//pkg/migration/migrations",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
