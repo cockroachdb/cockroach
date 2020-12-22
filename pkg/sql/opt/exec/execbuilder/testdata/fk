@@ -1130,3 +1130,72 @@ root                               ·                    ·
 
 statement ok
 SET prefer_lookup_joins_for_fks = false
+
+# Test that partial indexes with IS NOT NULL predicates are used for performing
+# FK checks.
+subtest partial_index
+
+statement ok
+CREATE TABLE partial_parent (
+  id INT PRIMARY KEY
+)
+
+statement ok
+CREATE TABLE partial_child (
+  id INT PRIMARY KEY,
+  parent_id INT,
+  CONSTRAINT fk FOREIGN KEY (parent_id) REFERENCES partial_parent(id),
+  INDEX partial_idx (parent_id) WHERE parent_id IS NOT NULL
+)
+
+query TTT
+EXPLAIN DELETE FROM partial_parent WHERE id = 1
+----
+·                                  distribution   local
+·                                  vectorized     false
+root                               ·              ·
+ ├── delete                        ·              ·
+ │    │                            from           partial_parent
+ │    └── buffer                   ·              ·
+ │         │                       label          buffer 1
+ │         └── scan                ·              ·
+ │                                 missing stats  ·
+ │                                 table          partial_parent@primary
+ │                                 spans          [/1 - /1]
+ └── fk-check                      ·              ·
+      └── error if rows            ·              ·
+           └── lookup join (semi)  ·              ·
+                │                  table          partial_child@partial_idx (partial index)
+                │                  equality       (id) = (parent_id)
+                └── scan buffer    ·              ·
+·                                  label          buffer 1
+
+query TTT
+EXPLAIN UPDATE partial_parent SET id = 2 WHERE id = 1
+----
+·                                     distribution      local
+·                                     vectorized        false
+root                                  ·                 ·
+ ├── update                           ·                 ·
+ │    │                               table             partial_parent
+ │    │                               set               id
+ │    └── buffer                      ·                 ·
+ │         │                          label             buffer 1
+ │         └── render                 ·                 ·
+ │              └── scan              ·                 ·
+ │                                    missing stats     ·
+ │                                    table             partial_parent@primary
+ │                                    spans             [/1 - /1]
+ │                                    locking strength  for update
+ └── fk-check                         ·                 ·
+      └── error if rows               ·                 ·
+           └── lookup join (semi)     ·                 ·
+                │                     table             partial_child@partial_idx (partial index)
+                │                     equality          (id) = (parent_id)
+                └── except            ·                 ·
+                     ├── scan buffer  ·                 ·
+                     │                label             buffer 1
+                     └── scan buffer  ·                 ·
+·                                     label             buffer 1
+
+subtest end

@@ -714,3 +714,32 @@ Scan /Table/56/{1-2}
 Del /Table/56/2/1/10/0
 Del /Table/56/1/10/0
 Del /Table/56/1/20/0
+
+# ---------------------------------------------------------
+# JOIN
+# ---------------------------------------------------------
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE b (b INT, INDEX (b) WHERE b IS NOT NULL)
+
+# The partial index can be used because the ON condition implicitly implies the
+# partial index predicate, b IS NOT NULL.
+query TTT
+EXPLAIN SELECT * FROM a JOIN b ON a = b
+----
+·           distribution       local
+·           vectorized         true
+merge join  ·                  ·
+ │          equality           (a) = (b)
+ │          left cols are key  ·
+ ├── scan   ·                  ·
+ │          missing stats      ·
+ │          table              a@primary
+ │          spans              FULL SCAN
+ └── scan   ·                  ·
+·           missing stats      ·
+·           table              b@b_b_idx (partial index)
+·           spans              FULL SCAN
