@@ -7,25 +7,25 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package migration_test
+
+package migrationcluster_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
+	"github.com/cockroachdb/cockroach/pkg/migration/nodelivenesstest"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestHelperIterateRangeDescriptors(t *testing.T) {
+func TestCluster_IterateRangeDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	cv := clusterversion.ClusterVersion{}
 	ctx := context.Background()
 	const numNodes = 1
 
@@ -41,8 +41,12 @@ func TestHelperIterateRangeDescriptors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := migration.TestingNewCluster(numNodes, migration.TestingWithKV(kvDB))
-	h := migration.TestingNewHelper(c, cv)
+	c := nodelivenesstest.New(numNodes)
+	h := migrationcluster.New(migrationcluster.ClusterConfig{
+		NodeLiveness: c,
+		Dialer:       migrationcluster.NoopDialer{},
+		DB:           kvDB,
+	})
 
 	for _, blockSize := range []int{1, 5, 10, 50} {
 		var numDescs int
