@@ -1111,6 +1111,12 @@ type logicTest struct {
 
 	curPath   string
 	curLineNo int
+
+	// skipOnRetry is explicitly set to true by the skip_on_retry directive.
+	// If true, serializability violations in the test when unexpected cause the
+	// entire test to be skipped and the below skippedOnRetry to be set to true.
+	skipOnRetry    bool
+	skippedOnRetry bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1712,6 +1718,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 					t.Error(err)
 				}
 			})
+			t.maybeSkipOnRetry(nil)
 		}
 	}
 
@@ -1829,6 +1836,8 @@ func (t *logicTest) processSubtest(
 				)
 			}
 			repeat = count
+		case "skip_on_retry":
+			t.skipOnRetry = true
 
 		case "sleep":
 			var err error
@@ -2286,6 +2295,17 @@ func (t *logicTest) processSubtest(
 	return s.Err()
 }
 
+// Some tests encounter serializability failures sometimes and indicate
+// that they want to just get skipped when that happens.
+func (t *logicTest) maybeSkipOnRetry(err error) {
+	if pqErr := (*pq.Error)(nil); t.skippedOnRetry ||
+		(t.skipOnRetry && errors.As(err, &pqErr) &&
+			pgcode.MakeCode(string(pqErr.Code)) == pgcode.SerializationFailure) {
+		t.skippedOnRetry = true
+		skip.WithIssue(t.t(), 53724)
+	}
+}
+
 // verifyError checks that either:
 // - no error was found when none was expected, or
 // - in case no error was found, a notice was found when one was expected, or
@@ -2298,6 +2318,7 @@ func (t *logicTest) verifyError(
 	sql, pos, expectNotice, expectErr, expectErrCode string, err error,
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
+		t.maybeSkipOnRetry(err)
 		cont := t.unexpectedError(sql, pos, err)
 		if cont {
 			// unexpectedError() already reported via t.Errorf. no need for more.
