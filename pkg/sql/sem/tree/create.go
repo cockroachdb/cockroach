@@ -309,6 +309,8 @@ type CreateType struct {
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
 	EnumLabels EnumValueList
+	// IfNotExists is true if IF NOT EXISTS was requested.
+	IfNotExists bool
 }
 
 var _ Statement = &CreateType{}
@@ -316,6 +318,9 @@ var _ Statement = &CreateType{}
 // Format implements the NodeFormatter interface.
 func (node *CreateType) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TYPE ")
+	if node.IfNotExists {
+		ctx.WriteString("IF NOT EXISTS ")
+	}
 	ctx.FormatNode(node.TypeName)
 	ctx.WriteString(" ")
 	switch node.Variety {
