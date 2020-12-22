@@ -1,4 +1,4 @@
-# LogicTest: 5node !metamorphic
+# LogicTest: 5node
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c))
@@ -1145,63 +1145,6 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMll9vmzAUxd_3Ka7uE1GcEvOnTZEm0a1Uo0pJl0Rapy0PTrA6NooZEGlVle8-AW1KqsVmQpHymAuHc3x_R4qfMP8do4Pe3e34wg9Au_Rn89nncQ9m3tj7OAdGYAlX08kN5A8sjuHLJ2_qgaYx6MOyB9_Xw6G5AmPYg4vgEry7Ug7ai7hWhqxgL8LqKycM3lfTE1brtOf5Evr1fPX8aQ7U7vVgMr30pvDhKzAkmIiQB-yB5-h8Q4oEDSRoIkELCdq4IJhmYsXzXGTlK0-VwA__oDMkGCXpuijHC4IrkXF0nrCIipijg3O2jPmUs5Bn-hAJhrxgUVzZVPHcNIseWPaIBGcpS3IHBjoFloRAQRQ_eIYEJ-vCAZcS18DFhqBYF69-ecHuOTp0Q9pnuorigmc80-3dQPXcAc2l0AfXaKBwHMcP5qO9_sb_-F-LKHleCX2zk_ljyh0Ye1dzmHk3PlxP_KB8gxWssamxEL_WKfwUUQIiKXdTbikAzTXK4HYD9EvwVls0957iNbzIQp7xcDe2S_u42PzjqIEYiFSnu4veZ2_t2NP2xaKtiqXTgW50rZYi1bZapweqlsK_WS16vNUy2rM12rE1BrrZla0i1Zbt2YHYKvybbI3jZWu2Z2u2Y2sOdKsrW0WqLdvRgdgq_JtszeNla7Vna7Vjaw10uytbRaot2_MDsVX4N9lax8tWcWmZ8jwVSc5b_ZMPy7sAD-95fXfIxTpb8dtMrCqb-uek0lWDkOdF_ZTWP_ykflQGbIqpVGzIxYZUbO6I6VuxKY99Kre2pGpbLralYoXzaZdDn0nFI7nzSCo-l4vPu8Smio6pSiZvGVXUjHbqGVUUzVKYy5tGFVWj8q69zb7YvPsbAAD__4PTrR8=
 
-# Regression test for #35950: Make sure that lookup joins use a batch limit.
-
-statement ok
-CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))
-
-statement ok
-CREATE TABLE b (a INT PRIMARY KEY)
-
-# We insert over 10k rows, which is the currently configured batch limit.
-
-statement ok
-INSERT INTO a SELECT 1, g FROM generate_series(1,11000) g
-
-statement ok
-INSERT INTO b VALUES(1)
-
-query T
-EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
-----
-distribution: full
-vectorized: true
-·
-• group (scalar)
-│
-└── • lookup join
-    │ table: a@primary
-    │ equality: (a) = (a)
-    │
-    └── • scan
-          missing stats
-          table: b@primary
-          spans: FULL SCAN
-
-statement ok
-SET tracing = on
-
-query I
-SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
-----
-11000
-
-statement ok
-SET tracing = off
-
-let $lookupTableID
-SELECT 'a'::regclass::oid
-
-# Now assert that we get more than 1 separate batch request into the lookup
-# table, since the first one wouldn't have returned all of the results.
-
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/$lookupTableID%'
-----
-Scan /Table/63/1/{1-2}
-Scan /Table/63/1/{1/10001/0-2}
-
-
 # Regression test for #40562.
 
 statement ok
@@ -1855,56 +1798,3 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: tab4@tab4_col3_col4_key
                       spans: /NULL-
-
-# The following tests check that if the joiners can separate a row request
-# into separate families that it does, and generates spans for each family
-# instead of reading the entire row when it doesn't need to.
-
-statement ok
-CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
-
-statement ok
-INSERT INTO family_split_1 VALUES (1)
-
-statement ok
-CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
-
-statement ok
-INSERT INTO family_split_2 VALUES (1, 2, 3)
-
-query T kvtrace(Scan)
-SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
-----
-Scan /Table/74/{1-2}
-Scan /Table/75/1/1/{0-1}, /Table/75/1/1/2/{1-2}
-
-statement ok
-CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
-
-statement ok
-INSERT INTO family_index_join VALUES (1, 2, 3, 4)
-
-query T kvtrace(Scan)
-SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
-----
-Scan /Table/76/2/{2-3}
-Scan /Table/76/1/1/{0-1/2}, /Table/76/1/1/3/{1-2}
-
-# Test generating tighter spans on interleaved tables.
-statement ok
-CREATE TABLE family_interleave_1 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
-
-statement ok
-CREATE TABLE family_interleave_2 (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT family_interleave_1 (x)
-
-statement ok
-INSERT INTO family_interleave_1 VALUES (1, 2, 3)
-
-statement ok
-INSERT INTO family_interleave_2 VALUES (1, 3)
-
-query T kvtrace(Scan)
-SELECT family_interleave_1.x, family_interleave_1.z FROM family_interleave_2 INNER LOOKUP JOIN family_interleave_1 ON family_interleave_1.x = family_interleave_2.x
-----
-Scan /Table/77/{1-2}
-Scan /Table/77/1/1/{0-1}, /Table/77/1/1/2/{1-2}

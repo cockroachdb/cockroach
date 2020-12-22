@@ -1,4 +1,4 @@
-# LogicTest: local !metamorphic
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv2 (
@@ -285,73 +285,6 @@ vectorized: true
           spans: [ - /2]
           limit: 1
           locking strength: for update
-
-# Check that updates on tables with multiple column families behave as
-# they should.
-
-statement ok
-CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
-  INSERT INTO tu VALUES (1, 2, 3, 4)
-
-# Update single column family.
-query T
-EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
-----
-distribution: local
-vectorized: true
-·
-• update
-│ columns: ()
-│ estimated row count: 0 (missing stats)
-│ table: tu
-│ set: c
-│ auto commit
-│
-└── • render
-    │ columns: (a, c, d, c_new)
-    │ estimated row count: 1,000 (missing stats)
-    │ render 0: c + 1
-    │ render 1: a
-    │ render 2: c
-    │ render 3: d
-    │
-    └── • scan
-          columns: (a, c, d)
-          estimated row count: 1,000 (missing stats)
-          table: tu@primary
-          spans: FULL SCAN
-          locking strength: for update
-
-statement ok
-SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
-----
-Scan /Table/57/{1-2}
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /3/4
-Put /Table/57/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
-fast path completed
-rows affected: 1
-
-statement ok
-SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tracing = off
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
-----
-Scan /Table/57/{1-2}
-fetched: /tu/primary/1 -> NULL
-fetched: /tu/primary/1/b -> 2
-fetched: /tu/primary/1/c/d -> /4/4
-Del /Table/57/1/1/1/1
-Del /Table/57/1/1/2/1
-fast path completed
-rows affected: 1
 
 # Regression test for #35564: make sure we use the Update's input required
 # ordering for the internal projection.
@@ -726,25 +659,6 @@ vectorized: true
           missing stats
           table: kv3@kv3_v_idx
           spans: [/2 - /9]
-
-# Update single column family.
-query T
-EXPLAIN UPDATE tu SET c=c+1
-----
-distribution: local
-vectorized: true
-·
-• update
-│ table: tu
-│ set: c
-│ auto commit
-│
-└── • render
-    │
-    └── • scan
-          missing stats
-          table: tu@primary
-          spans: FULL SCAN
 
 # Reset for rest of test.
 statement ok
