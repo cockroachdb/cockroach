@@ -16,10 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
 func runResetQuorum(ctx context.Context, t *test, c *cluster) {
+	skip.WithIssue(t, 58165)
 	args := func(attr string) option {
 		return startArgs(
 			"-a=--attrs="+attr,
