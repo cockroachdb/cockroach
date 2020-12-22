@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2641,4 +2642,57 @@ func TestMetrics(t *testing.T) {
 			int64EqSoon(t, importMetrics.FailOrCancelFailed.Count, 0)
 		}
 	})
+}
+
+// TestLoseLeaseDuringExecution tests that it is safe to call update during
+// job execution when the job has lost its lease and that that update operation
+// will fail.
+//
+// This is a regression test for #58049.
+func TestLoseLeaseDuringExecution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	// Disable the loops from messing with the job execution.
+	defer jobs.TestingSetAdoptAndCancelIntervals(time.Hour, time.Hour)()
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	// The default FormatVersion value in SchemaChangeDetails corresponds to a
+	// pre-20.1 job.
+	rec := jobs.Record{
+		DescriptorIDs: []descpb.ID{1},
+		Details:       jobspb.BackupDetails{},
+		Progress:      jobspb.BackupProgress{},
+	}
+
+	defer jobs.ResetConstructors()()
+	resumed := make(chan error, 1)
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				defer close(resumed)
+				_, err := s.InternalExecutor().(sqlutil.InternalExecutor).Exec(
+					ctx, "set-claim-null", nil, /* txn */
+					`UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`,
+					*j.ID())
+				assert.NoError(t, err)
+				err = j.WithTxn(nil).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					return nil
+				})
+				resumed <- err
+				return err
+			},
+		}
+	})
+
+	_, err := registry.CreateJobWithTxn(ctx, rec, nil /* txn */)
+	require.NoError(t, err)
+	registry.TestingNudgeAdoptionQueue()
+	require.Regexp(t, `expected session '\w+' but found NULL`, <-resumed)
 }

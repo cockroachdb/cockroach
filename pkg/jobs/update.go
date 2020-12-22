@@ -130,6 +130,11 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 		}
 
 		if j.sessionID != "" {
+			if row[3] == tree.DNull {
+				return errors.Errorf(
+					"job %d: with status '%s': expected session '%s' but found NULL",
+					*j.ID(), statusString, j.sessionID)
+			}
 			storedSession := []byte(*row[3].(*tree.DBytes))
 			if !bytes.Equal(storedSession, j.sessionID.UnsafeBytes()) {
 				return errors.Errorf(
