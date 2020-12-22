@@ -199,8 +199,7 @@ func (s storage) acquire(
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
-		expiration := txn.ReadTimestamp()
-		expiration.WallTime += int64(s.jitteredLeaseDuration())
+		expiration := txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
 		if expiration.LessEq(minExpiration) {
 			// In the rare circumstances where expiration <= minExpiration
 			// use an expiration based on the minExpiration to guarantee

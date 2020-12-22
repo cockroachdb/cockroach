@@ -496,8 +496,7 @@ func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 		return true
 	}
 	// Compute the edge of the cache window.
-	edge := tc.latest
-	edge.WallTime -= MinRetentionWindow.Nanoseconds()
+	edge := tc.latest.Add(-MinRetentionWindow.Nanoseconds(), 0)
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
 	if ce.ts.LessEq(edge) {
