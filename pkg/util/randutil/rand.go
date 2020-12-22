@@ -40,6 +40,13 @@ func NewPseudoRand() (*rand.Rand, int64) {
 	return rand.New(rand.NewSource(seed)), seed
 }
 
+// NewTestPseudoRand wraps NewPseudoRand logging the seed for recovery later.
+func NewTestPseudoRand() (*rand.Rand, int64) {
+	rng, seed := NewPseudoRand()
+	log.Printf("random seed: %v", seed)
+	return rng, seed
+}
+
 // RandIntInRange returns a value in [min, max)
 func RandIntInRange(r *rand.Rand, min, max int) int {
 	return min + r.Intn(max-min)
