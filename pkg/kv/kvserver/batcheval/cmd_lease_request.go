@@ -118,7 +118,7 @@ func RequestLease(
 		// The bug prevented with this is unlikely to occur in practice
 		// since earlier commands usually apply before this lease will.
 		if ts := args.MinProposedTS; isExtension && ts != nil {
-			effectiveStart.Forward(*ts)
+			effectiveStart.Forward(ts.ToTimestamp())
 		}
 
 	} else if prevLease.Type() == roachpb.LeaseExpiration {

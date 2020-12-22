@@ -36,6 +36,31 @@ message Timestamp {
   // considered when performing structural equality checks (e.g. using the
   // == operator). Consider use of the EqOrdering method when testing for
   // equality.
+  //
+  // TODO(nvanbenschoten): invert this flag and use a bool to shave off a
+  // byte when set. This will allow the flag to serve as the dynamically
+  // typed version of ClockTimestamp. See TryToClockTimestamp.
+  //
+  // While inverting the flag optimizes the encoded size of non-clock
+  // (currently synthetic) timestamps at the expense of the encoded size
+  // of clock timestamps, it comes with major benefits. By making clock
+  // timestamps opt-in instead of opt-out, we more closely match the
+  // capability model we're trying to establish, where a clock timestamp
+  // can do everything a normal timestamp can, but can also be used to
+  // update an HLC clock. The opt-in nature mitigates the risk of bugs
+  // that forget to set this flag correctly. Instead of risking a
+  // capability escalation where a non-clock timestamp is incorrectly
+  // interpreted as a clock timestamp and used to update an HLC clock, we
+  // risk a much less harmful capability de-escalation where a clock
+  // timestamp loses its ability to update an HLC clock.
+  //
+  // Morally, this flag probably should be set for all ClockTimestamps,
+  // but that may also just be a waste due to the static typing, so it
+  // remains to be determined whether it will be or not.
+  //
+  // Should look like:
+  //   bool from_clock = 3;
+  //
   uint32 flags = 3;
 }
 

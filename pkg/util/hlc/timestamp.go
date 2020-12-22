@@ -30,6 +30,8 @@ var (
 	MaxTimestamp = Timestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
 	// MinTimestamp is the min value allowed for Timestamp.
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
+	// MaxClockTimestamp is the max value allowed for ClockTimestamp.
+	MaxClockTimestamp = ClockTimestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
 )
 
 // EqOrdering returns whether the receiver sorts equally to the parameter.
@@ -363,6 +365,96 @@ func (t LegacyTimestamp) Less(s LegacyTimestamp) bool {
 	return t.ToTimestamp().Less(s.ToTimestamp())
 }
 
+// String implements the fmt.Formatter interface.
 func (t LegacyTimestamp) String() string {
 	return t.ToTimestamp().String()
+}
+
+// ClockTimestamp is a Timestamp with the added capability of being able to
+// update a peer's HLC clock. It possesses this capability because the clock
+// timestamp itself is guaranteed to have come from an HLC clock somewhere in
+// the system. As such, a clock timestamp is an promise that some node in the
+// system has a clock with a reading equal to or above its value.
+//
+// ClockTimestamp is the statically typed version of a Timestamp with its
+// FromClock flag set. However, instances do not have their FromClock flag set,
+// as this would increase their encoded size with no real benefit.
+type ClockTimestamp Timestamp
+
+// TryToClockTimestamp attempts to downcast a Timestamp into a ClockTimestamp.
+// Returns the result and a boolean indicating whether the cast succeeded.
+func (t Timestamp) TryToClockTimestamp() (ClockTimestamp, bool) {
+	if t.IsFlagSet(TimestampFlag_SYNTHETIC) {
+		return ClockTimestamp{}, false
+	}
+	// TODO(nvanbenschoten): unset the FromClock flag here.
+	return ClockTimestamp(t), true
+}
+
+// UnsafeToClockTimestamp converts a Timestamp to a ClockTimestamp, regardless
+// of whether such a cast would be legal according to the FromClock flag. The
+// method should only be used in tests.
+func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
+	// TODO(nvanbenschoten): unset the FromClock flag here.
+	return ClockTimestamp(t)
+}
+
+// ToTimestamp upcasts a ClockTimestamp into a Timestamp. The method sets the
+// timestamp's FromClock flag so that a call to TryToClockTimestamp will succeed
+// if the resulting Timestamp is never mutated.
+func (t ClockTimestamp) ToTimestamp() Timestamp {
+	// TODO(nvanbenschoten): set the FromClock flag here.
+	return Timestamp(t)
+}
+
+// Less returns whether the receiver is less than the parameter.
+func (t ClockTimestamp) Less(s ClockTimestamp) bool { return Timestamp(t).Less(Timestamp(s)) }
+
+// String implements the fmt.Formatter interface.
+func (t ClockTimestamp) String() string { return t.ToTimestamp().String() }
+
+// SafeValue implements the redact.SafeValue interface.
+func (t ClockTimestamp) SafeValue() {}
+
+// IsEmpty retruns true if t is an empty ClockTimestamp.
+func (t ClockTimestamp) IsEmpty() bool { return Timestamp(t).IsEmpty() }
+
+// Forward is like Timestamp.Forward, but for ClockTimestamps.
+func (t *ClockTimestamp) Forward(s ClockTimestamp) bool { return (*Timestamp)(t).Forward(Timestamp(s)) }
+
+// Backward is like Timestamp.Backward, but for ClockTimestamps.
+func (t *ClockTimestamp) Backward(s ClockTimestamp) { (*Timestamp)(t).Backward(Timestamp(s)) }
+
+// Reset implements the proto.Message interface.
+func (t *ClockTimestamp) Reset() { (*Timestamp)(t).Reset() }
+
+// ProtoMessage implements the proto.Message interface.
+func (t *ClockTimestamp) ProtoMessage() {}
+
+// MarshalTo implements the protoutil.Message interface.
+func (t *ClockTimestamp) MarshalTo(data []byte) (int, error) { return (*Timestamp)(t).MarshalTo(data) }
+
+// Unmarshal implements the protoutil.Message interface.
+func (t *ClockTimestamp) Unmarshal(data []byte) error { return (*Timestamp)(t).Unmarshal(data) }
+
+// Size implements the protoutil.Message interface.
+func (t *ClockTimestamp) Size() int { return (*Timestamp)(t).Size() }
+
+// Equal is needed for the gogoproto.equal option.
+func (t *ClockTimestamp) Equal(that interface{}) bool {
+	switch v := that.(type) {
+	case nil:
+		return t == nil
+	case ClockTimestamp:
+		return (*Timestamp)(t).Equal((Timestamp)(v))
+	case *ClockTimestamp:
+		return (*Timestamp)(t).Equal((*Timestamp)(v))
+	default:
+		return false
+	}
+}
+
+// NewPopulatedClockTimestamp is needed for the gogoproto.populate option.
+func NewPopulatedClockTimestamp(r randyTimestamp, easy bool) *ClockTimestamp {
+	return (*ClockTimestamp)(NewPopulatedTimestamp(r, easy))
 }

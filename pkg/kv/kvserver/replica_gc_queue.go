@@ -141,7 +141,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 
 	if lease, _ := repl.GetLease(); lease.ProposedTS != nil {
-		lastActivity.Forward(*lease.ProposedTS)
+		lastActivity.Forward(lease.ProposedTS.ToTimestamp())
 	}
 
 	// It is critical to think of the replica as suspect if it is a learner as

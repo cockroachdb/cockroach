@@ -54,7 +54,7 @@ func (x TimestampFlag) String() string {
 	return proto.EnumName(TimestampFlag_name, int32(x))
 }
 func (TimestampFlag) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_7c076e9f3a1546ea, []int{0}
+	return fileDescriptor_timestamp_20487450db3b6825, []int{0}
 }
 
 // Timestamp represents a state of the hybrid logical clock.
@@ -74,13 +74,38 @@ type Timestamp struct {
 	// considered when performing structural equality checks (e.g. using the
 	// == operator). Consider use of the EqOrdering method when testing for
 	// equality.
+	//
+	// TODO(nvanbenschoten): invert this flag and use a bool to shave off a
+	// byte when set. This will allow the flag to serve as the dynamically
+	// typed version of ClockTimestamp. See TryToClockTimestamp.
+	//
+	// While inverting the flag optimizes the encoded size of non-clock
+	// (currently synthetic) timestamps at the expense of the encoded size
+	// of clock timestamps, it comes with major benefits. By making clock
+	// timestamps opt-in instead of opt-out, we more closely match the
+	// capability model we're trying to establish, where a clock timestamp
+	// can do everything a normal timestamp can, but can also be used to
+	// update an HLC clock. The opt-in nature mitigates the risk of bugs
+	// that forget to set this flag correctly. Instead of risking a
+	// capability escalation where a non-clock timestamp is incorrectly
+	// interpreted as a clock timestamp and used to update an HLC clock, we
+	// risk a much less harmful capability de-escalation where a clock
+	// timestamp loses its ability to update an HLC clock.
+	//
+	// Morally, this flag probably should be set for all ClockTimestamps,
+	// but that may also just be a waste due to the static typing, so it
+	// remains to be determined whether it will be or not.
+	//
+	// Should look like:
+	//   bool from_clock = 3;
+	//
 	Flags uint32 `protobuf:"varint,3,opt,name=flags,proto3" json:"flags,omitempty"`
 }
 
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 func (*Timestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_7c076e9f3a1546ea, []int{0}
+	return fileDescriptor_timestamp_20487450db3b6825, []int{0}
 }
 func (m *Timestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -513,10 +538,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_7c076e9f3a1546ea)
+	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_20487450db3b6825)
 }
 
-var fileDescriptor_timestamp_7c076e9f3a1546ea = []byte{
+var fileDescriptor_timestamp_20487450db3b6825 = []byte{
 	// 247 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,

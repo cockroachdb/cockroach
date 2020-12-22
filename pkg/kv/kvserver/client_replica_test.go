@@ -951,7 +951,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	// Start a transaction using node2 as a gateway.
 	txn := roachpb.MakeTransaction("test", keyA, 1, clock2.Now(), 250 /* maxOffsetNs */)
 	// Simulate a read to another range on node2 by setting the observed timestamp.
-	txn.UpdateObservedTimestamp(2, clock2.Now())
+	txn.UpdateObservedTimestamp(2, clock2.NowAsClockTimestamp())
 
 	defer mtc.Stop()
 	mtc.Start(t, 2)

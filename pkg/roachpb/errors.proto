@@ -579,7 +579,8 @@ message Error {
 
   // now is the current time at the node sending the response,
   // which can be used by the receiver to update its local HLC.
-  optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp now = 8 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   reserved 2;
 }

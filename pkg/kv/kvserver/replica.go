@@ -336,7 +336,7 @@ type Replica struct {
 		// - a lease cannot be used after a transfer is initiated. Moreover, even
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
-		minLeaseProposedTS hlc.Timestamp
+		minLeaseProposedTS hlc.ClockTimestamp
 		// A pointer to the zone config for this replica.
 		zone *zonepb.ZoneConfig
 		// proposalBuf buffers Raft commands as they are passed to the Raft

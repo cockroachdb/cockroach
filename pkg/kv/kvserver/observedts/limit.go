@@ -54,10 +54,11 @@ func LimitTxnMaxTimestamp(
 	// Note that we care about an observed timestamp from the leaseholder's
 	// node, even if this is a follower read on a different node. See the
 	// comment in doc.go about "Follower Reads" for more.
-	obsTS, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
+	obsClockTS, ok := txn.GetObservedTimestamp(status.Lease.Replica.NodeID)
 	if !ok {
 		return txn
 	}
+	obsTS := obsClockTS.ToTimestamp()
 	// If the lease is valid, we use the greater of the observed timestamp and
 	// the lease start time, up to the max timestamp. This ensures we avoid
 	// incorrect assumptions about when data was written, in absolute time on a
