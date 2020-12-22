@@ -198,8 +198,8 @@ func NewColBatchScan(
 	}
 
 	var neededColumns util.FastIntSet
-	for i := range spec.NeededColumns {
-		neededColumns.Add(int(spec.NeededColumns[i]))
+	for _, neededColumn := range spec.NeededColumns {
+		neededColumns.Add(int(neededColumn))
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
@@ -215,8 +215,10 @@ func NewColBatchScan(
 
 	s := colBatchScanPool.Get().(*ColBatchScan)
 	spans := s.spans[:0]
-	for i := range spec.Spans {
-		spans = append(spans, spec.Spans[i].Span)
+	specSpans := spec.Spans
+	for i := range specSpans {
+		//gcassert:bce
+		spans = append(spans, specSpans[i].Span)
 	}
 	*s = ColBatchScan{
 		ctx:       ctx,
