@@ -28,11 +28,13 @@ type txTypeResolver struct {
 	tx *pgx.Tx
 }
 
+// ResolveType implements the TypeReferenceResolver interface.
+// Note: If the name has an explicit schema, it will be resolved as
+// a user defined enum.
 func (t txTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 
-	// An explicit schema indicates the type is a user defined enum type.
 	if name.HasExplicitSchema() {
 		rows, err := t.tx.Query(`
   SELECT enumlabel, enumsortorder, pgt.oid::int
