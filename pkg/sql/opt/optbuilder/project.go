@@ -326,7 +326,7 @@ func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 // Add a projection.
 func (pb *projectionBuilder) Add(
 	name tree.Name, expr tree.Expr, desiredType *types.T,
-) opt.ColumnID {
+) (opt.ColumnID, opt.ScalarExpr) {
 	if pb.outScope == nil {
 		pb.outScope = pb.inScope.replace()
 		pb.outScope.appendColumnsFromScope(pb.inScope)
@@ -337,10 +337,10 @@ func (pb *projectionBuilder) Add(
 	// reduces clashes between column names in the metadata.
 	// TODO(radu): is this really better than using the real column name?
 	scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
-	pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
+	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
 	scopeCol.name = name
 
-	return scopeCol.id
+	return scopeCol.id, scalar
 }
 
 // Finish returns a scope that contains all the columns in the original scope

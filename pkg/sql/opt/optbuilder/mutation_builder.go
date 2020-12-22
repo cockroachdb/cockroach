@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -584,7 +585,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		// Add synthesized column. It is important to use the real column name in
 		// when this is a default column, which may latter be referred by a computed
 		// column.
-		newCol := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+		newCol, _ := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
@@ -604,16 +605,23 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 // computed column expression.
 //
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
-// are added to mb.outScope.
-func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList) {
+// are added to mb.outScope. If restrict is true, only columns that depend on
+// columns that were already in the list (plus all write-only columns) are
+// updated.
+func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList, restrict bool) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
 	pb := makeProjectionBuilder(mb.b, mb.outScope)
+	var updatedColSet opt.ColSet
+	if restrict {
+		updatedColSet = colIDs.ToSet()
+	}
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		tabCol := mb.tab.Column(i)
-		if kind := tabCol.Kind(); kind != cat.Ordinary && kind != cat.WriteOnly {
-			// Wrong kind
+		kind := tabCol.Kind()
+		if kind != cat.Ordinary && kind != cat.WriteOnly {
+			// Wrong kind.
 			continue
 		}
 		if !tabCol.IsComputed() {
@@ -628,10 +636,29 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 
-		// Add synthesized column. It is important to use the real column name in
+		// Add synthesized column. It is important to use the real column name
 		// when this is a default column, which may latter be referred by a computed
 		// column.
-		newCol := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+		newCol, scalar := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+
+		if restrict && kind != cat.WriteOnly {
+			// Check if any of the columns referred to in the computed column
+			// expression are being updated.
+			var refCols opt.ColSet
+			if scalar == nil {
+				// When the expression is a simple column reference, we don't build a
+				// new scalar; we just use the same column ID.
+				refCols.Add(newCol)
+			} else {
+				var p props.Shared
+				memo.BuildSharedProps(scalar, &p)
+				refCols = p.OuterCols
+			}
+			if !refCols.Intersects(updatedColSet) {
+				// Normalization rules will clean up the unnecessary projection.
+				continue
+			}
+		}
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol

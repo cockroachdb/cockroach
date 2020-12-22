@@ -316,7 +316,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	mb.disambiguateColumns()
 
 	// Add all computed columns in case their values have changed.
-	mb.addSynthesizedComputedCols(mb.updateColIDs)
+	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
 	mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)

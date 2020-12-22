@@ -622,7 +622,7 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
 
 	// Now add all computed columns.
-	mb.addSynthesizedComputedCols(mb.insertColIDs)
+	mb.addSynthesizedComputedCols(mb.insertColIDs, false /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
 	mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
