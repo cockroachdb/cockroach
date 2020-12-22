@@ -72,6 +72,11 @@ type Options struct {
 	// The error passed to this method will contain no internal information.
 	OnSendErrToClient func(code ErrorCode, msg string) string
 
+	// If ProxyInterceptor is set, it will be called each time a new connection
+	// is accepted.
+	// If not set, the server's proxy method will be called instead.
+	ProxyInterceptor func(proxyConn *Conn) error
+
 	// If set, will be called immediately after a new incoming connection
 	// is accepted. It can optionally negotiate SSL, provide admittance control or
 	// other types of frontend connection filtering.
@@ -84,27 +89,30 @@ type Options struct {
 	BackendDialer func(msg *pgproto3.StartupMessage) (net.Conn, error)
 }
 
+// SendErrToClient will encode and pass back to the SQL client an error message.
+// It can be called by the implementors of ProxyInterceptor to give more
+// information to the end user in case of a problem.
+func (s *Server) SendErrToClient(conn net.Conn, code ErrorCode, msg string) {
+	if s.opts.OnSendErrToClient != nil {
+		msg = s.opts.OnSendErrToClient(code, msg)
+	}
+
+	var pgCode string
+	if code == CodeIdleDisconnect {
+		pgCode = "57P01" // admin shutdown
+	} else {
+		pgCode = "08004" // rejected connection
+	}
+	_, _ = conn.Write((&pgproto3.ErrorResponse{
+		Severity: "FATAL",
+		Code:     pgCode,
+		Message:  msg,
+	}).Encode(nil))
+}
+
 // Proxy takes an incoming client connection and relays it to a backend SQL
 // server.
 func (s *Server) Proxy(proxyConn *Conn) error {
-	sendErrToClient := func(conn net.Conn, code ErrorCode, msg string) {
-		if s.opts.OnSendErrToClient != nil {
-			msg = s.opts.OnSendErrToClient(code, msg)
-		}
-
-		var pgCode string
-		if code == CodeIdleDisconnect {
-			pgCode = "57P01" // admin shutdown
-		} else {
-			pgCode = "08004" // rejected connection
-		}
-		_, _ = conn.Write((&pgproto3.ErrorResponse{
-			Severity: "FATAL",
-			Code:     pgCode,
-			Message:  msg,
-		}).Encode(nil))
-	}
-
 	frontendAdmitter := s.opts.FrontendAdmitter
 	if frontendAdmitter == nil {
 		// Keep this until all clients are switched to provide FrontendAdmitter
@@ -116,14 +124,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 	conn, msg, err := frontendAdmitter(proxyConn)
 	if err != nil {
-		var codeErr *CodeError
-		if errors.As(err, &codeErr) && codeErr.code == CodeUnexpectedInsecureStartupMessage {
-			sendErrToClient(
-				proxyConn, // Do this on the TCP connection as it means denying SSL
-				CodeUnexpectedInsecureStartupMessage,
-				"server requires encryption",
-			)
-		}
+		s.sendErrToClientIfNeeded(proxyConn, err)
 		return err
 	}
 
@@ -170,7 +171,6 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 	crdbConn, err := backendDialer(msg)
 	if err != nil {
-		s.metrics.BackendDownCount.Inc(1)
 		var codeErr *CodeError
 		if !errors.As(err, &codeErr) {
 			codeErr = &CodeError{
@@ -178,12 +178,8 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 				err:  errors.Errorf("unable to reach backend SQL server: %v", err),
 			}
 		}
-		if codeErr.code == CodeProxyRefusedConnection {
-			s.metrics.RefusedConnCount.Inc(1)
-		} else if codeErr.code == CodeParamsRoutingFailed {
-			s.metrics.RoutingErrCount.Inc(1)
-		}
-		sendErrToClient(conn, codeErr.code, codeErr.Error())
+		s.updateMetricsForError(codeErr)
+		s.sendErrToClientIfNeeded(conn, codeErr)
 		return codeErr
 	}
 	defer func() { _ = crdbConn.Close() }()
@@ -191,8 +187,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	s.metrics.SuccessfulConnCount.Inc(1)
 
 	// These channels are buffered because we'll only consume one of them.
-	errOutgoing := make(chan error, 1)
-	errIncoming := make(chan error, 1)
+	errConnectionCopy := make(chan error, 1)
 	errExpired := make(chan error, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -212,6 +207,82 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 			}()
 		}
 	}
+
+	go func() {
+		err := ConnectionCopy(crdbConn, conn)
+		errConnectionCopy <- err
+	}()
+
+	select {
+	case err := <-errConnectionCopy:
+		s.updateMetricsForError(err)
+		s.sendErrToClientIfNeeded(conn, err)
+		return err
+	case err := <-errExpired:
+		if err != nil {
+			// The client connection expired.
+			s.metrics.ExpiredClientConnCount.Inc(1)
+			code := CodeExpiredClientConnection
+			s.SendErrToClient(conn, code, err.Error())
+			return NewErrorf(code, "expired client conn: %v", err)
+		}
+		return nil
+	}
+}
+
+func (s *Server) updateMetricsForError(err error) {
+	if err == nil {
+		return
+	}
+	codeErr := (*CodeError)(nil)
+	if errors.As(err, &codeErr) {
+		if codeErr.code == CodeExpiredClientConnection {
+			s.metrics.ExpiredClientConnCount.Inc(1)
+		} else if codeErr.code == CodeBackendDisconnected {
+			s.metrics.BackendDisconnectCount.Inc(1)
+		} else if codeErr.code == CodeClientDisconnected {
+			s.metrics.ClientDisconnectCount.Inc(1)
+		} else if codeErr.code == CodeIdleDisconnect {
+			s.metrics.IdleDisconnectCount.Inc(1)
+		} else if codeErr.code == CodeProxyRefusedConnection {
+			s.metrics.RefusedConnCount.Inc(1)
+			s.metrics.BackendDownCount.Inc(1)
+		} else if codeErr.code == CodeParamsRoutingFailed {
+			s.metrics.RoutingErrCount.Inc(1)
+			s.metrics.BackendDownCount.Inc(1)
+		} else if codeErr.code == CodeBackendDown {
+			s.metrics.BackendDownCount.Inc(1)
+		}
+	}
+}
+
+func (s *Server) sendErrToClientIfNeeded(conn net.Conn, err error) {
+	if err == nil {
+		return
+	}
+	codeErr := (*CodeError)(nil)
+	if errors.As(err, &codeErr) {
+		switch codeErr.code {
+		// These are send as is.
+		case CodeExpiredClientConnection,
+			CodeBackendDown,
+			CodeParamsRoutingFailed,
+			CodeProxyRefusedConnection:
+			s.SendErrToClient(conn, codeErr.code, codeErr.Error())
+		// The rest - the message send back is sanitized.
+		case CodeIdleDisconnect:
+			s.SendErrToClient(conn, codeErr.code, "terminating connection due to idle timeout")
+		case CodeUnexpectedInsecureStartupMessage:
+			s.SendErrToClient(conn, codeErr.code, "server requires encryption")
+		}
+	}
+}
+
+// ConnectionCopy does a bi-directional copy between the backend and frontend
+// connections. It terminates when one of connections terminate.
+func ConnectionCopy(crdbConn, conn net.Conn) error {
+	errOutgoing := make(chan error, 1)
+	errIncoming := make(chan error, 1)
 
 	go func() {
 		_, err := io.Copy(crdbConn, conn)
@@ -234,31 +305,16 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 			return nil
 		} else if codeErr := (*CodeError)(nil); errors.As(err, &codeErr) &&
 			codeErr.code == CodeExpiredClientConnection {
-			s.metrics.ExpiredClientConnCount.Inc(1)
-			sendErrToClient(conn, codeErr.code, codeErr.Error())
 			return codeErr
 		} else if errors.Is(err, os.ErrDeadlineExceeded) {
-			s.metrics.IdleDisconnectCount.Inc(1)
-			sendErrToClient(conn, CodeIdleDisconnect, "terminating connection due to idle timeout")
 			return NewErrorf(CodeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
 		} else {
-			s.metrics.BackendDisconnectCount.Inc(1)
 			return NewErrorf(CodeBackendDisconnected, "copying from target server to client: %s", err)
 		}
 	case err := <-errOutgoing:
 		// The incoming connection got closed.
 		if err != nil {
-			s.metrics.ClientDisconnectCount.Inc(1)
 			return NewErrorf(CodeClientDisconnected, "copying from target server to client: %v", err)
-		}
-		return nil
-	case err := <-errExpired:
-		if err != nil {
-			// The client connection expired.
-			s.metrics.ExpiredClientConnCount.Inc(1)
-			code := CodeExpiredClientConnection
-			sendErrToClient(conn, code, err.Error())
-			return NewErrorf(code, "expired client conn: %v", err)
 		}
 		return nil
 	}

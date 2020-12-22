@@ -409,6 +409,70 @@ func TestInsecureProxy(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
+func TestWithCustomProxyInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
+	require.NoError(t, err)
+	outgoingTLSConfig.InsecureSkipVerify = true
+
+	backendDialer := func(message *pgproto3.StartupMessage) (net.Conn, error) {
+		return BackendDial(message, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+	}
+	frontendAdmitter := func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+		return FrontendAdmit(incoming, nil)
+	}
+	s := NewServer(Options{
+		ProxyInterceptor: func(proxyConn *Conn) error {
+			conn, msg, err := frontendAdmitter(proxyConn)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			crdbConn, err := backendDialer(msg)
+			if err != nil {
+				return nil
+
+				defer crdbConn.Close()
+			}
+			return ConnectionCopy(crdbConn, conn)
+		},
+	})
+	const listenAddress = "127.0.0.1:0"
+	ln, err := net.Listen("tcp", listenAddress)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.Serve(ln)
+	}()
+	defer func() {
+		_ = ln.Close()
+		wg.Wait()
+	}()
+
+	u := fmt.Sprintf(
+		"postgres://root:admin@%s/?sslmode=disable", ln.Addr().String(),
+	)
+
+	conn, err := pgx.Connect(ctx, u)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close(ctx))
+	}()
+
+	var n int
+	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
+
 func TestInsecureDoubleProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
