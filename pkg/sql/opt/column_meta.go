@@ -109,6 +109,17 @@ func (ocl OptionalColList) Find(col ColumnID) (idx int, ok bool) {
 	return -1, false
 }
 
+// ToSet returns the set of columns that are present in the list.
+func (ocl OptionalColList) ToSet() ColSet {
+	var r ColSet
+	for _, col := range ocl {
+		if col != 0 {
+			r.Add(col)
+		}
+	}
+	return r
+}
+
 // ColumnMeta stores information about one of the columns stored in the
 // metadata.
 type ColumnMeta struct {
