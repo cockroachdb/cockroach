@@ -12,7 +12,6 @@ package schemachange
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,7 +42,6 @@ func (t txTypeResolver) ResolveType(
          AND typname = $1
 				 AND nspname = $2
 ORDER BY enumsortorder`, name.Object(), name.Schema())
-		fmt.Println(err, "ASDFASDF")
 		if err != nil {
 			return nil, err
 		}
