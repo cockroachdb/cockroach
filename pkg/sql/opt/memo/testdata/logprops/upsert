@@ -454,8 +454,7 @@ project
  │    │    ├── column9:9 => c:3
  │    │    └── column8:8 => rowid:4
  │    ├── update-mapping:
- │    │    ├── column1:6 => a:1
- │    │    └── upsert_c:17 => c:3
+ │    │    └── column1:6 => a:1
  │    ├── return-mapping:
  │    │    ├── column1:6 => a:1
  │    │    ├── upsert_b:16 => b:2
@@ -562,14 +561,14 @@ project
  │              │    │    │    └── null [type=unknown]
  │              │    │    └── variable: column7:7 [type=int]
  │              │    └── variable: b:11 [type=int]
- │              ├── case [as=upsert_c:17, type=int, outer=(9,13,15)]
+ │              ├── case [as=upsert_c:17, type=int, outer=(9,12,13)]
  │              │    ├── true [type=bool]
  │              │    ├── when [type=int]
  │              │    │    ├── is [type=bool]
  │              │    │    │    ├── variable: rowid:13 [type=int]
  │              │    │    │    └── null [type=unknown]
  │              │    │    └── variable: column9:9 [type=int]
- │              │    └── variable: column15:15 [type=int]
+ │              │    └── variable: c:12 [type=int]
  │              └── case [as=upsert_rowid:18, type=int, outer=(8,13)]
  │                   ├── true [type=bool]
  │                   ├── when [type=int]

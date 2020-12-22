@@ -304,7 +304,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// table. These are not visible to queries, and will always be updated to
 	// their default values. This is necessary because they may not yet have been
 	// set by the backfiller.
-	mb.addSynthesizedDefaultCols(mb.updateColIDs, true /* onlyWriteOnly */)
+	mb.addSynthesizedDefaultCols(mb.updateColIDs, false /* includeOrdinary */)
 
 	// Possibly round DECIMAL-related columns containing update values. Do
 	// this before evaluating computed expressions, since those may depend on
@@ -316,7 +316,7 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	mb.disambiguateColumns()
 
 	// Add all computed columns in case their values have changed.
-	mb.addSynthesizedComputedCols(mb.updateColIDs)
+	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
 
 	// Possibly round DECIMAL-related computed columns.
 	mb.roundDecimalValues(mb.updateColIDs, true /* roundComputedCols */)
