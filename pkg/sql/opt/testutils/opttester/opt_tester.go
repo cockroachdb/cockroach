@@ -446,7 +446,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return s
 
 	case "build":
-		e, err := ot.OptBuild()
+		e, md, err := ot.OptBuild()
 		if err != nil {
 			if errors.HasAssertionFailure(err) {
 				d.Fatalf(tb, "%+v", err)
@@ -459,11 +459,11 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(tb, d, e)
+		ot.postProcess(tb, d, md, e)
 		return ot.FormatExpr(e)
 
 	case "norm":
-		e, err := ot.OptNorm()
+		e, md, err := ot.OptNorm()
 		if err != nil {
 			if errors.HasAssertionFailure(err) {
 				d.Fatalf(tb, "%+v", err)
@@ -476,15 +476,15 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(tb, d, e)
+		ot.postProcess(tb, d, md, e)
 		return ot.FormatExpr(e)
 
 	case "opt":
-		e, err := ot.Optimize()
+		e, md, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
+		ot.postProcess(tb, d, md, e)
 		return ot.FormatExpr(e)
 
 	case "build-cascades":
@@ -565,19 +565,19 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return result
 
 	case "expr":
-		e, err := ot.Expr()
+		e, md, err := ot.Expr()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
+		ot.postProcess(tb, d, md, e)
 		return ot.FormatExpr(e)
 
 	case "exprnorm":
-		e, err := ot.ExprNorm()
+		e, md, err := ot.ExprNorm()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
+		ot.postProcess(tb, d, md, e)
 		return ot.FormatExpr(e)
 
 	case "stats-quality":
@@ -630,8 +630,10 @@ func formatRuleSet(r RuleSet) string {
 	return buf.String()
 }
 
-func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
-	fillInLazyProps(e)
+func (ot *OptTester) postProcess(
+	tb testing.TB, d *datadriven.TestData, md *opt.Metadata, e opt.Expr,
+) {
+	fillInLazyProps(md, e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
@@ -652,7 +654,7 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 }
 
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(e opt.Expr) {
+func fillInLazyProps(md *opt.Metadata, e opt.Expr) {
 	if rel, ok := e.(memo.RelExpr); ok {
 		// These properties are derived from the normalized expression.
 		rel = rel.FirstExpr()
@@ -661,14 +663,14 @@ func fillInLazyProps(e opt.Expr) {
 		norm.DerivePruneCols(rel)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel)
+		norm.DeriveRejectNullCols(md, rel)
 
 		// Make sure the interesting orderings are calculated.
 		xform.DeriveInterestingOrderings(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		fillInLazyProps(e.Child(i))
+		fillInLazyProps(md, e.Child(i))
 	}
 }
 
@@ -884,8 +886,8 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
-// final expression tree.
-func (ot *OptTester) OptBuild() (opt.Expr, error) {
+// final expression tree. The memo metadata is also returned.
+func (ot *OptTester) OptBuild() (opt.Expr, *opt.Metadata, error) {
 	o := ot.makeOptimizer()
 	o.DisableOptimizations()
 	return ot.optimizeExpr(o)
@@ -893,8 +895,8 @@ func (ot *OptTester) OptBuild() (opt.Expr, error) {
 
 // OptNorm constructs an opt expression tree for the SQL query, with all
 // normalization transformations applied to it. The normalized output of the
-// optbuilder is the final expression tree.
-func (ot *OptTester) OptNorm() (opt.Expr, error) {
+// optbuilder is the final expression tree. The memo metadata is also returned.
+func (ot *OptTester) OptNorm() (opt.Expr, *opt.Metadata, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if !ruleName.IsNormalize() {
@@ -916,8 +918,8 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
-// the lowest estimated cost.
-func (ot *OptTester) Optimize() (opt.Expr, error) {
+// the lowest estimated cost. The memo metadata is also returned.
+func (ot *OptTester) Optimize() (opt.Expr, *opt.Metadata, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
@@ -938,24 +940,26 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 func (ot *OptTester) Memo() (string, error) {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx, ot.catalog)
-	if _, err := ot.optimizeExpr(&o); err != nil {
+	if _, _, err := ot.optimizeExpr(&o); err != nil {
 		return "", err
 	}
 	return o.FormatMemo(ot.Flags.MemoFormat), nil
 }
 
-// Expr parses the input directly into an expression; see exprgen.Build.
-func (ot *OptTester) Expr() (opt.Expr, error) {
+// Expr parses the input directly into an expression; see exprgen.Build. The
+// factory metadata is also returned.
+func (ot *OptTester) Expr() (opt.Expr, *opt.Metadata, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx, ot.catalog)
 	f.DisableOptimizations()
 
-	return exprgen.Build(ot.catalog, &f, ot.sql)
+	e, err := exprgen.Build(ot.catalog, &f, ot.sql)
+	return e, f.Metadata(), err
 }
 
 // ExprNorm parses the input directly into an expression and runs
-// normalization; see exprgen.Build.
-func (ot *OptTester) ExprNorm() (opt.Expr, error) {
+// normalization; see exprgen.Build. The factory metadata is also returned.
+func (ot *OptTester) ExprNorm() (opt.Expr, *opt.Metadata, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx, ot.catalog)
 
@@ -969,7 +973,8 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 		ot.appliedRules.Add(int(ruleName))
 	})
 
-	return exprgen.Build(ot.catalog, &f, ot.sql)
+	e, err := exprgen.Build(ot.catalog, &f, ot.sql)
+	return e, f.Metadata(), err
 }
 
 // RuleStats performs the optimization and returns statistics about how many
@@ -1003,7 +1008,7 @@ func (ot *OptTester) RuleStats() (string, error) {
 			}
 		},
 	)
-	if _, err := ot.optimizeExpr(o); err != nil {
+	if _, _, err := ot.optimizeExpr(o); err != nil {
 		return "", err
 	}
 
@@ -1328,7 +1333,7 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 		}
 	}
 
-	expr, err := ot.Optimize()
+	expr, md, err := ot.Optimize()
 	if err != nil {
 		return "", err
 	}
@@ -1366,7 +1371,7 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 	}
 
 	buf := bytes.Buffer{}
-	ot.postProcess(tb, d, expr)
+	ot.postProcess(tb, d, md, expr)
 	buf.WriteString(ot.FormatExpr(expr))
 
 	// Split the previous test output into blocks containing the stats for each
@@ -1560,19 +1565,19 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	return &o
 }
 
-func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
+func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, *opt.Metadata, error) {
 	err := ot.buildExpr(o.Factory())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	root, err := o.Optimize()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if ot.Flags.PerturbCost != 0 {
 		o.RecomputeCost()
 	}
-	return root, nil
+	return root, o.Memo().Metadata(), nil
 }
 
 func (ot *OptTester) output(format string, args ...interface{}) {

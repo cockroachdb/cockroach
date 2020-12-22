@@ -21,7 +21,7 @@ import (
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
 func (c *CustomFuncs) RejectNullCols(in memo.RelExpr) opt.ColSet {
-	return DeriveRejectNullCols(in)
+	return DeriveRejectNullCols(c.mem.Metadata(), in)
 }
 
 // HasNullRejectingFilter returns true if the filter causes some of the columns
@@ -118,7 +118,7 @@ func (c *CustomFuncs) NullRejectProjections(
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
-func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
+func DeriveRejectNullCols(md *opt.Metadata, in memo.RelExpr) opt.ColSet {
 	// Lazily calculate and store the RejectNullCols value.
 	relProps := in.Relational()
 	if relProps.IsAvailable(props.RejectNullCols) {
@@ -131,17 +131,17 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		// Pass through null-rejecting columns from both inputs.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(md, in.Child(0).(memo.RelExpr)))
 		}
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(md, in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Pass through null-rejection columns from left input, and request null-
 		// rejection on right columns.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(0).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(md, in.Child(0).(memo.RelExpr)))
 		}
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
@@ -150,7 +150,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		// rejection on left columns.
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(0).(memo.RelExpr).Relational().OutputCols)
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
-			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
+			relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(md, in.Child(1).(memo.RelExpr)))
 		}
 
 	case opt.FullJoinOp:
@@ -158,10 +158,13 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 		relProps.Rule.RejectNullCols.UnionWith(relProps.OutputCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(in))
+		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(md, in))
 
 	case opt.ProjectOp:
-		relProps.Rule.RejectNullCols.UnionWith(deriveProjectRejectNullCols(in))
+		relProps.Rule.RejectNullCols.UnionWith(deriveProjectRejectNullCols(md, in))
+
+	case opt.ScanOp:
+		relProps.Rule.RejectNullCols.UnionWith(deriveScanRejectNullCols(md, in))
 	}
 
 	return relProps.Rule.RejectNullCols
@@ -184,7 +187,7 @@ func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 //      ignored because all rows in each group must have the same value for this
 //      column, so it doesn't matter which rows are filtered.
 //
-func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
+func deriveGroupByRejectNullCols(md *opt.Metadata, in memo.RelExpr) opt.ColSet {
 	input := in.Child(0).(memo.RelExpr)
 	aggs := *in.Child(1).(*memo.AggregationsExpr)
 
@@ -215,7 +218,7 @@ func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 		savedInColID = inColID
 
-		if !DeriveRejectNullCols(input).Contains(inColID) {
+		if !DeriveRejectNullCols(md, input).Contains(inColID) {
 			// Input has not requested null rejection on the input column.
 			return opt.ColSet{}
 		}
@@ -271,8 +274,8 @@ func (c *CustomFuncs) MakeNullRejectFilters(nullRejectCols opt.ColSet) memo.Filt
 //      child operator (for example, an outer join that may be simplified). This
 //      prevents filters from getting in the way of other rules.
 //
-func deriveProjectRejectNullCols(in memo.RelExpr) opt.ColSet {
-	rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+func deriveProjectRejectNullCols(md *opt.Metadata, in memo.RelExpr) opt.ColSet {
+	rejectNullCols := DeriveRejectNullCols(md, in.Child(0).(memo.RelExpr))
 	projections := *in.Child(1).(*memo.ProjectionsExpr)
 	var projectionsRejectCols opt.ColSet
 
@@ -316,4 +319,43 @@ func deriveProjectRejectNullCols(in memo.RelExpr) opt.ColSet {
 		}
 	}
 	return (rejectNullCols.Union(projectionsRejectCols)).Intersection(in.Relational().OutputCols)
+}
+
+// deriveScanRejectNullCols returns the set of Scan columns which are eligible
+// for null rejection. Scan columns can be null-rejected only when there are
+// partial indexes that have explicit "column IS NOT NULL" expressions. Creating
+// null-rejecting filters is useful in this case because the filters may imply a
+// partial index predicate expression, allowing a scan over the index.
+func deriveScanRejectNullCols(md *opt.Metadata, in memo.RelExpr) opt.ColSet {
+	scan := in.(*memo.ScanExpr)
+
+	var rejectNullCols opt.ColSet
+	for _, pred := range md.TableMeta(scan.Table).PartialIndexPredicates {
+		predFilters := *pred.(*memo.FiltersExpr)
+		rejectNullCols.UnionWith(isNotNullCols(predFilters))
+	}
+
+	return rejectNullCols
+}
+
+// isNotNullCols returns the set of columns with explicit, top-level IS NOT NULL
+// filter conditions in the given filters. Note that And and Or expressions are
+// not traversed.
+func isNotNullCols(filters memo.FiltersExpr) opt.ColSet {
+	var notNullCols opt.ColSet
+	for i := range filters {
+		c := filters[i].Condition
+		isNot, ok := c.(*memo.IsNotExpr)
+		if !ok {
+			continue
+		}
+		col, ok := isNot.Left.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		if isNot.Right == memo.NullSingleton {
+			notNullCols.Add(col.Col)
+		}
+	}
+	return notNullCols
 }
