@@ -412,8 +412,8 @@ def go_deps():
         name = "com_github_cockroachdb_errors",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/errors",
-        sum = "h1:A5+txlVZfOqFBDa4mGz2bUWSp0aHElvHX2bKkdbQu+Y=",
-        version = "v1.8.1",
+        sum = "h1:rnnWK9Nn5kEMOGz9531HuDx/FOleL4NVH20VsDexVC8=",
+        version = "v1.8.2",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
