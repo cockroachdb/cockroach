@@ -28,7 +28,7 @@ func (s *Store) MergeRange(
 	ctx context.Context,
 	leftRepl *Replica,
 	newLeftDesc, rightDesc roachpb.RangeDescriptor,
-	freezeStart hlc.Timestamp,
+	freezeStart hlc.ClockTimestamp,
 ) error {
 	if oldLeftDesc := leftRepl.Desc(); !oldLeftDesc.EndKey.Less(newLeftDesc.EndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
@@ -87,7 +87,7 @@ func (s *Store) MergeRange(
 		// timestamps in the timestamp cache. For a full discussion, see the comment
 		// on TestStoreRangeMergeTimestampCacheCausality.
 		s.Clock().Update(freezeStart)
-		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart)
+		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart.ToTimestamp())
 	}
 
 	// Update the subsuming range's descriptor.

@@ -28,7 +28,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 		ReadTimestamp: hlc.Timestamp{WallTime: 10},
 		MaxTimestamp:  hlc.Timestamp{WallTime: 20},
 	}
-	txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 15})
+	txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 15})
 	txnWithMaxTimestamp := func(ts hlc.Timestamp) *roachpb.Transaction {
 		txnClone := txn.Clone()
 		txnClone.MaxTimestamp = ts

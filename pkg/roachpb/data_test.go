@@ -40,15 +40,27 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-func makeTS(walltime int64, logical int32) hlc.Timestamp {
-	return hlc.Timestamp{
+func makeClockTS(walltime int64, logical int32) hlc.ClockTimestamp {
+	return hlc.ClockTimestamp{
 		WallTime: walltime,
 		Logical:  logical,
 	}
 }
 
+func makeClockTSWithFlag(walltime int64, logical int32) hlc.ClockTimestamp {
+	return hlc.ClockTimestamp{
+		WallTime: walltime,
+		Logical:  logical,
+		Flags:    uint32(hlc.TimestampFlag_SYNTHETIC),
+	}
+}
+
+func makeTS(walltime int64, logical int32) hlc.Timestamp {
+	return makeClockTS(walltime, logical).ToTimestamp()
+}
+
 func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
-	return makeTS(walltime, logical).SetFlag(hlc.TimestampFlag_SYNTHETIC)
+	return makeClockTSWithFlag(walltime, logical).ToTimestamp()
 }
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -408,9 +420,9 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("running with seed %d", seed)
 	ids := append([]int{109, 104, 102, 108, 1000}, rand.Perm(100)...)
-	timestamps := make(map[NodeID]hlc.Timestamp, len(ids))
+	timestamps := make(map[NodeID]hlc.ClockTimestamp, len(ids))
 	for i := 0; i < len(ids); i++ {
-		timestamps[NodeID(i)] = hlc.Timestamp{WallTime: rng.Int63()}
+		timestamps[NodeID(i)] = hlc.ClockTimestamp{WallTime: rng.Int63()}
 	}
 	for i, n := range ids {
 		nodeID := NodeID(n)
@@ -418,7 +430,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 			t.Fatalf("%d: false positive hit %s in %v", nodeID, ts, ids[:i+1])
 		}
 		txn.UpdateObservedTimestamp(nodeID, timestamps[nodeID])
-		txn.UpdateObservedTimestamp(nodeID, hlc.MaxTimestamp) // should be noop
+		txn.UpdateObservedTimestamp(nodeID, hlc.MaxClockTimestamp) // should be noop
 		if exp, act := i+1, len(txn.ObservedTimestamps); act != exp {
 			t.Fatalf("%d: expected %d entries, got %d: %v", nodeID, exp, act, txn.ObservedTimestamps)
 		}
@@ -432,7 +444,7 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 
 	var emptyTxn Transaction
-	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
+	ts := hlc.ClockTimestamp{WallTime: 1, Logical: 2}
 	emptyTxn.UpdateObservedTimestamp(NodeID(1), ts)
 	if actTS, _ := emptyTxn.GetObservedTimestamp(NodeID(1)); actTS != ts {
 		t.Fatalf("unexpected: %s (wanted %s)", actTS, ts)
@@ -445,12 +457,12 @@ func TestFastPathObservedTimestamp(t *testing.T) {
 	if _, ok := txn.GetObservedTimestamp(nodeID); ok {
 		t.Errorf("fetched observed timestamp where none should exist")
 	}
-	expTS := hlc.Timestamp{WallTime: 10}
+	expTS := hlc.ClockTimestamp{WallTime: 10}
 	txn.UpdateObservedTimestamp(nodeID, expTS)
 	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
 		t.Errorf("expected %s; got %s", expTS, ts)
 	}
-	expTS = hlc.Timestamp{WallTime: 9}
+	expTS = hlc.ClockTimestamp{WallTime: 9}
 	txn.UpdateObservedTimestamp(nodeID, expTS)
 	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
 		t.Errorf("expected %s; got %s", expTS, ts)
@@ -472,7 +484,7 @@ var nonZeroTxn = Transaction{
 	LastHeartbeat:        makeTSWithFlag(1, 2),
 	ReadTimestamp:        makeTSWithFlag(20, 22),
 	MaxTimestamp:         makeTSWithFlag(40, 41),
-	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeTSWithFlag(1, 2)}},
+	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeClockTSWithFlag(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
@@ -923,20 +935,22 @@ func TestLeaseEquivalence(t *testing.T) {
 	ts1 := makeTS(1, 1)
 	ts2 := makeTS(2, 1)
 	ts3 := makeTS(3, 1)
+	clockTS1 := makeClockTS(1, 1)
+	clockTS2 := makeClockTS(2, 1)
 
 	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
 	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
-	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.Clone()}
-	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.Clone()}
+	expire1 := Lease{Replica: r1, Start: ts1, Expiration: &ts2}
+	expire2 := Lease{Replica: r1, Start: ts1, Expiration: &ts3}
 	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
-	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.Clone()}
+	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: &ts3}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts1.Clone()}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: ts1.Clone()}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts2.Clone()}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &clockTS1}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &clockTS1}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &clockTS2}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.Clone()}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: &ts1}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: &ts2}
 
 	r1Voter, r1Learner := r1, r1
 	r1Voter.Type = ReplicaTypeVoterFull()
@@ -984,7 +998,7 @@ func TestLeaseEquivalence(t *testing.T) {
 
 		// Similar potential bug triggers, but these were actually handled correctly.
 		DeprecatedStartStasis: new(hlc.Timestamp),
-		ProposedTS:            &hlc.Timestamp{WallTime: 10},
+		ProposedTS:            &hlc.ClockTimestamp{WallTime: 10},
 	}
 	postPRLease := prePRLease
 	postPRLease.DeprecatedStartStasis = nil
@@ -1001,7 +1015,7 @@ func TestLeaseEqual(t *testing.T) {
 		Expiration            *hlc.Timestamp
 		Replica               ReplicaDescriptor
 		DeprecatedStartStasis *hlc.Timestamp
-		ProposedTS            *hlc.Timestamp
+		ProposedTS            *hlc.ClockTimestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
 	}
@@ -1040,13 +1054,14 @@ func TestLeaseEqual(t *testing.T) {
 		t.Fatalf("expectedly compared equal")
 	}
 
-	ts := hlc.Timestamp{Logical: 1}
+	clockTS := hlc.ClockTimestamp{Logical: 1}
+	ts := clockTS.ToTimestamp()
 	testCases := []Lease{
 		{Start: ts},
 		{Expiration: &ts},
 		{Replica: ReplicaDescriptor{NodeID: 1}},
 		{DeprecatedStartStasis: &ts},
-		{ProposedTS: &ts},
+		{ProposedTS: &clockTS},
 		{Epoch: 1},
 		{Sequence: 1},
 	}
@@ -1616,7 +1631,7 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
 		return ObservedTimestamp{
 			NodeID: nodeID,
-			Timestamp: hlc.Timestamp{
+			Timestamp: hlc.ClockTimestamp{
 				WallTime: walltime,
 			},
 		}

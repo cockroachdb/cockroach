@@ -78,7 +78,7 @@ type Clock struct {
 		// be updated atomically, even though it is protected by a mutex - this
 		// enables a fast path for reading the wall time without grabbing the
 		// lock.
-		timestamp Timestamp
+		timestamp ClockTimestamp
 
 		// isMonitoringForwardClockJumps is a flag to ensure that only one jump monitoring
 		// goroutine is running per clock
@@ -278,12 +278,20 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 	}
 }
 
-// Now returns a timestamp associated with an event from
-// the local machine that may be sent to other members
-// of the distributed network. This is the counterpart
-// of Update, which is passed a timestamp received from
-// another member of the distributed network.
+// Now returns a timestamp associated with an event from the local
+// machine that may be sent to other members of the distributed network.
 func (c *Clock) Now() Timestamp {
+	return c.NowAsClockTimestamp().ToTimestamp()
+}
+
+// NowAsClockTimestamp is like Now, but returns a ClockTimestamp instead
+// of a raw Timestamp.
+//
+// This is the counterpart of Update, which is passed a ClockTimestamp
+// received from another member of the distributed network. As such,
+// callers that intend to use the returned timestamp to update a peer's
+// HLC clock should use this method.
+func (c *Clock) NowAsClockTimestamp() ClockTimestamp {
 	physicalClock := c.getPhysicalClockAndCheck(context.TODO())
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -334,7 +342,7 @@ func (c *Clock) PhysicalTime() time.Time {
 // the maximum clock offset. To receive an error response instead of forcing the
 // update in case the remote timestamp is too far into the future, use
 // UpdateAndCheckMaxOffset() instead.
-func (c *Clock) Update(rt Timestamp) {
+func (c *Clock) Update(rt ClockTimestamp) {
 
 	// Fast path to avoid grabbing the mutex if the remote time is behind. This
 	// requires c.mu.timestamp.WallTime to be written atomically, even though
@@ -366,7 +374,7 @@ func (c *Clock) Update(rt Timestamp) {
 // UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
 // returns an error in the event that the supplied remote timestamp exceeds
 // the wall clock time by more than the maximum clock offset.
-func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt Timestamp) error {
+func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
 	var err error
 	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
@@ -377,7 +385,7 @@ func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt Timestamp) error
 	}
 
 	if physicalClock > rt.WallTime {
-		c.Update(Timestamp{WallTime: physicalClock})
+		c.Update(ClockTimestamp{WallTime: physicalClock})
 	} else {
 		c.Update(rt)
 	}

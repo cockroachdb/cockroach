@@ -906,7 +906,11 @@ func MakeTransaction(
 // occurred, i.e. the maximum of ReadTimestamp and LastHeartbeat.
 func (t Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
-	ts.Forward(t.ReadTimestamp)
+	// Only forward by the ReadTimestamp if it is a clock timestamp.
+	// TODO(nvanbenschoten): replace this with look at the Synthetic bool.
+	if readTS, ok := t.ReadTimestamp.TryToClockTimestamp(); ok {
+		ts.Forward(readTS.ToTimestamp())
+	}
 	return ts
 }
 
@@ -1244,7 +1248,7 @@ func (t *Transaction) ResetObservedTimestamps() {
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
-func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.ClockTimestamp) {
 	// Fast path optimization for either no observed timestamps or
 	// exactly one, for the same nodeID as we're updating.
 	if l := len(t.ObservedTimestamps); l == 0 {
@@ -1264,7 +1268,7 @@ func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp
 // given node's clock during the transaction. The returned boolean is false if
 // no observation about the requested node was found. Otherwise, MaxTimestamp
 // can be lowered to the returned timestamp when reading from nodeID.
-func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
+func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, bool) {
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	return s.get(nodeID)
 }
@@ -1382,14 +1386,14 @@ func PrepareTransactionForRetry(
 		// Start the new transaction at the current time from the local clock.
 		// The local hlc should have been advanced to at least the error's
 		// timestamp already.
-		now := clock.Now()
+		now := clock.NowAsClockTimestamp()
 		txn = MakeTransaction(
 			txn.Name,
 			nil, // baseKey
 			// We have errTxnPri, but this wants a UserPriority. So we're going to
 			// overwrite the priority below.
 			NormalUserPriority,
-			now,
+			now.ToTimestamp(),
 			clock.MaxOffset().Nanoseconds(),
 		)
 		// Use the priority communicated back by the server.
@@ -1471,7 +1475,7 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	// If the reader encountered a newer write within the uncertainty
 	// interval, we advance the txn's timestamp just past the last observed
 	// timestamp from the node.
-	ts, ok := txn.GetObservedTimestamp(origin)
+	clockTS, ok := txn.GetObservedTimestamp(origin)
 	if !ok {
 		log.Fatalf(ctx,
 			"missing observed timestamp for node %d found on uncertainty restart. "+
@@ -1479,6 +1483,7 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 			origin, err, txn, txn.ObservedTimestamps)
 	}
 	// Also forward by the existing timestamp.
+	ts := clockTS.ToTimestamp()
 	ts.Forward(err.ExistingTimestamp.Next())
 	return ts
 }
@@ -2316,18 +2321,18 @@ func (s observedTimestampSlice) index(nodeID NodeID) int {
 
 // get the observed timestamp for the specified node, returning false if no
 // timestamp exists.
-func (s observedTimestampSlice) get(nodeID NodeID) (hlc.Timestamp, bool) {
+func (s observedTimestampSlice) get(nodeID NodeID) (hlc.ClockTimestamp, bool) {
 	i := s.index(nodeID)
 	if i < len(s) && s[i].NodeID == nodeID {
 		return s[i].Timestamp, true
 	}
-	return hlc.Timestamp{}, false
+	return hlc.ClockTimestamp{}, false
 }
 
 // update the timestamp for the specified node, or add a new entry in the
 // correct (sorted) location. The receiver is not mutated.
 func (s observedTimestampSlice) update(
-	nodeID NodeID, timestamp hlc.Timestamp,
+	nodeID NodeID, timestamp hlc.ClockTimestamp,
 ) observedTimestampSlice {
 	i := s.index(nodeID)
 	if i < len(s) && s[i].NodeID == nodeID {

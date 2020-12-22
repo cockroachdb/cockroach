@@ -1162,7 +1162,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
 					if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 						atomic.AddInt32(&clockUpdate, 1)
-						now := c.Now()
+						now := c.NowAsClockTimestamp()
 						now.WallTime += advancement.Nanoseconds()
 						c.Update(now)
 						break
@@ -1198,9 +1198,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
-					now := s.Clock().Now()
+					now := s.Clock().NowAsClockTimestamp()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), txn), txn)
 				}
 			}
 			return nil
@@ -1269,9 +1269,9 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					// Return ReadWithinUncertaintyIntervalError.
 					txn := args.Hdr.Txn
 					txn.ResetObservedTimestamps()
-					now := s.Clock().Now()
+					now := s.Clock().NowAsClockTimestamp()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), txn), txn)
 				}
 			}
 			return nil
@@ -1331,7 +1331,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 										hlc.Timestamp{},
 										nil)
 									errTxn := fArgs.Hdr.Txn.Clone()
-									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
+									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.ClockTimestamp{})
 									pErr := roachpb.NewErrorWithTxn(err, errTxn)
 									pErr.OriginNode = 2
 									return pErr

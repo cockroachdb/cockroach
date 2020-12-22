@@ -838,6 +838,9 @@ message AdminRelocateRangeResponse {
 // gossip protocol.
 message HeartbeatTxnRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
@@ -1143,7 +1146,8 @@ message RequestLeaseRequest {
   // The MinLeaseProposedTS of the proposing replica to make sure that leases
   // issued after a node restart receive a new sequence number (instead of
   // counting as a lease extension). See #23204.
-  util.hlc.Timestamp min_proposed_ts = 4 [(gogoproto.customname) = "MinProposedTS"];
+  util.hlc.Timestamp min_proposed_ts = 4 [(gogoproto.customname) = "MinProposedTS",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -1647,7 +1651,8 @@ message SubsumeResponse {
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
   // mark for the keys previously owned by the subsumed range.
-  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // RangeStatsRequest is the argument to the RangeStats() method. It requests the
@@ -2025,7 +2030,8 @@ message BatchResponse {
     Transaction txn = 3;
     // now is the highest current time from any node contacted during the request.
     // It can be used by the receiver to update its local HLC.
-    util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.tracingpb.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
