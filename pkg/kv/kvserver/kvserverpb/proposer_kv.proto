@@ -156,7 +156,7 @@ message ReplicatedEvalResult {
   // This is the proposal timestamp for the active lease while evaluating a lease request.
   // It will be used to make sure we know if a lease was extended after we sent out the request
   // but before we tried to apply it.
-  util.hlc.Timestamp prev_lease_proposal = 20;
+  util.hlc.Timestamp prev_lease_proposal = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
 }
