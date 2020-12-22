@@ -140,7 +140,7 @@ func (b *Builder) analyzeSelectList(
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for j, e := range exprs {
-						b.addColumn(outScope, aliases[j], e)
+						outScope.addColumn(aliases[j], e)
 					}
 					continue
 				}
@@ -161,7 +161,7 @@ func (b *Builder) analyzeSelectList(
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		alias := b.getColName(e)
-		b.addColumn(outScope, alias, texpr)
+		outScope.addColumn(alias, texpr)
 	}
 }
 
