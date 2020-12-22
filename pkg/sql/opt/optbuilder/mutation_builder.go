@@ -539,25 +539,26 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 	return inRows
 }
 
-// addSynthesizedCols is a helper method for addSynthesizedColsForInsert
-// and addSynthesizedColsForUpdate that scans the list of table columns, looking
-// for any that do not yet have values provided by the input expression. New
-// columns are synthesized for any missing columns, as long as the addCol
-// callback function returns true for that column.
+// addSynthesizedDefaultCols is a helper method for addSynthesizedColsForInsert
+// and addSynthesizedColsForUpdate that scans the list of Ordinary and WriteOnly
+// table columns, looking for any that are not computed and do not yet have
+// values provided by the input expression. New columns are synthesized for any
+// missing columns.
 //
 // Values are synthesized for columns based on checking these rules, in order:
-//   1. If column is computed, evaluate that expression as its value.
-//   2. If column has a default value specified for it, use that as its value.
-//   3. If column is nullable, use NULL as its value.
-//   4. If column is currently being added or dropped (i.e. a mutation column),
+//   1. If column has a default value specified for it, use that as its value.
+//   2. If column is nullable, use NULL as its value.
+//   3. If column is currently being added or dropped (i.e. a mutation column),
 //      use a default value (0 for INT column, "" for STRING column, etc). Note
 //      that the existing "fetched" value returned by the scan cannot be used,
 //      since it may not have been initialized yet by the backfiller.
 //
+// If onlyWriteOnly is true, then only WriteOnly columns are considered.
+//
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
-// are added to outScope.
-func (mb *mutationBuilder) addSynthesizedCols(
-	colIDs opt.OptionalColList, addCol func(col *cat.Column) bool,
+// are added to mb.outScope.
+func (mb *mutationBuilder) addSynthesizedDefaultCols(
+	colIDs opt.OptionalColList, onlyWriteOnly bool,
 ) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
@@ -565,14 +566,11 @@ func (mb *mutationBuilder) addSynthesizedCols(
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		tabCol := mb.tab.Column(i)
-		kind := tabCol.Kind()
-		// Skip delete-only mutation columns, since they are ignored by all
-		// mutation operators that synthesize columns.
-		if kind == cat.DeleteOnly {
+		if kind := tabCol.Kind(); !(kind == cat.WriteOnly || (!onlyWriteOnly && kind == cat.Ordinary)) {
+			// Wrong kind.
 			continue
 		}
-		// Skip system and virtual inverted columns.
-		if kind == cat.System || kind == cat.VirtualInverted {
+		if tabCol.IsComputed() {
 			continue
 		}
 		// Skip columns that are already specified.
@@ -580,8 +578,50 @@ func (mb *mutationBuilder) addSynthesizedCols(
 			continue
 		}
 
-		// Invoke addCol to determine whether column should be added.
-		if !addCol(tabCol) {
+		tabColID := mb.tabID.ColumnID(i)
+		expr := mb.parseDefaultOrComputedExpr(tabColID)
+
+		// Add synthesized column. It is important to use the real column name in
+		// when this is a default column, which may latter be referred by a computed
+		// column.
+		newCol := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+
+		// Remember id of newly synthesized column.
+		colIDs[i] = newCol
+
+		// Add corresponding target column.
+		mb.targetColList = append(mb.targetColList, tabColID)
+		mb.targetColSet.Add(tabColID)
+	}
+
+	mb.outScope = pb.Finish()
+}
+
+// addSynthesizedComputedCols is a helper method for addSynthesizedColsForInsert
+// and addSynthesizedColsForUpdate that scans the list of table columns, looking
+// for any that are computed and do not yet have values provided by the input
+// expression. New columns are synthesized for any missing columns using the
+// computed column expression.
+//
+// NOTE: colIDs is updated with the column IDs of any synthesized columns which
+// are added to mb.outScope.
+func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList) {
+	// We will construct a new Project operator that will contain the newly
+	// synthesized column(s).
+	pb := makeProjectionBuilder(mb.b, mb.outScope)
+
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		tabCol := mb.tab.Column(i)
+		if kind := tabCol.Kind(); kind != cat.Ordinary && kind != cat.WriteOnly {
+			// Wrong kind
+			continue
+		}
+		if !tabCol.IsComputed() {
+			continue
+		}
+
+		// Skip columns that are already specified (this is possible for upserts).
+		if colIDs[i] != 0 {
 			continue
 		}
 
