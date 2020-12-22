@@ -51,8 +51,8 @@ const (
 	// ProcessorIDTagKey is the key used for processor id tags in tracing spans.
 	ProcessorIDTagKey = tracing.TagPrefix + "processorid"
 
-	// StatTagPrefix is prefixed to all stats output in Span tags.
-	StatTagPrefix = tracing.TagPrefix + "stat."
+	// statTagPrefix is prefixed to all stats output in Span tags.
+	statTagPrefix = tracing.TagPrefix + "stat."
 )
 
 // StatsTags is part of the tracing.SpanStats interface.
@@ -72,7 +72,7 @@ func (s *ComponentStats) StatsTags() map[string]string {
 		// The key becomes a tracing span tag. Replace spaces with dots and use
 		// only lowercase characters.
 		key = strings.ToLower(strings.ReplaceAll(key, " ", "."))
-		result[StatTagPrefix+key] = fmt.Sprint(value)
+		result[statTagPrefix+key] = fmt.Sprint(value)
 	})
 	return result
 }
