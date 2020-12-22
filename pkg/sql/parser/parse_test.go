@@ -411,6 +411,7 @@ func TestParse(t *testing.T) {
 		{`ANALYZE db.sc.t`},
 
 		{`CREATE TYPE a AS ENUM ()`},
+		{`CREATE TYPE IF NOT EXISTS a AS ENUM ()`},
 		{`CREATE TYPE a AS ENUM ('a')`},
 		{`CREATE TYPE a AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
