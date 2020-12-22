@@ -226,7 +226,17 @@ func backup(
 
 	progressLogger := jobs.NewChunkProgressLogger(job, numTotalSpans, job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
-	requestFinishedCh := make(chan struct{}, numTotalSpans) // enough buffer to never block
+	// We intercept progress updates sent back from the DistSQL flow
+	// and forward the updates over the progCh. We (the coordinator)
+	// can inform the jobs infrastructure that progress has been made
+	// by sending a request over requestFinishedCh.
+	//
+	// Both of these should have enough buffer to never block, since we are
+	// expecting one request per span to be issued by the processor. However, to
+	// be defensive we should not perform blocking sends on these channels.
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, numTotalSpans)
+	requestFinishedCh := make(chan struct{}, numTotalSpans)
+
 	if numTotalSpans > 0 {
 		g.GoCtx(func(ctx context.Context) error {
 			// Currently the granularity of backup progress is the % of spans
@@ -236,7 +246,6 @@ func backup(
 		})
 	}
 
-	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	g.GoCtx(func(ctx context.Context) error {
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
@@ -254,7 +263,16 @@ func backup(
 			}
 
 			// Signal that an ExportRequest finished to update job progress.
-			requestFinishedCh <- struct{}{}
+			//
+			// requestFinishedCh should have enough buffer to never block, but we
+			// should be defensive and do a non-blocking send here. We prefer a bad
+			// progress estimate over blocking `progCh` and blocking the backup.
+			select {
+			case requestFinishedCh <- struct{}{}:
+			default:
+				log.VErrEvent(ctx, 2, "unexpected number of progress updates")
+			}
+
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,

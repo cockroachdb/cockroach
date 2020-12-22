@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -202,7 +203,11 @@ func distRestore(
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
 			// Send the progress up a level to be written to the manifest.
-			progCh <- meta.BulkProcessorProgress
+			select {
+			case progCh <- meta.BulkProcessorProgress:
+			default:
+				log.VErrEvent(ctx, 2, "unexpected number of progress updates")
+			}
 		}
 		return nil
 	}

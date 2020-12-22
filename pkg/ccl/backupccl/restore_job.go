@@ -579,14 +579,22 @@ func restore(
 		start = end
 	}
 
-	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
+	// We intercept progress updates sent back from the DistSQL flow
+	// and forward the updates over the progCh. We (the coordinator)
+	// can inform the jobs infrastructure that progress has been made
+	// by sending a request over requestFinishedCh.
+	//
+	// Both of these should have enough buffer to never block, since we are
+	// expecting len(importSpan) requests to be issued by the processor. However,
+	// to be defensive we should not perform blocking sends on these channels.
+	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, len(importSpans))
+	requestFinishedCh := make(chan struct{}, len(importSpans))
+
 	g.GoCtx(func(ctx context.Context) error {
 		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
 		defer progressSpan.Finish()
 		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
-
-	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	g.GoCtx(func(ctx context.Context) error {
 		// When a processor is done importing a span, it will send a progress update
@@ -616,7 +624,15 @@ func restore(
 
 			// Signal that the processor has finished importing a span, to update job
 			// progress.
-			requestFinishedCh <- struct{}{}
+			//
+			// We should not block on this channel send in case the channel somehow
+			// got filled. We prefer a bad progress estimate over blocking the
+			// restore.
+			select {
+			case requestFinishedCh <- struct{}{}:
+			default:
+				log.VErrEvent(ctx, 2, "unexpected number of progress updates")
+			}
 		}
 		return nil
 	})
