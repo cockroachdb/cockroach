@@ -1,4 +1,4 @@
-# LogicTest: local !metamorphic
+# LogicTest: local
 
 # ------------------------------------------------------------------------------
 # Test index selection for deeply interleaved tables.
@@ -304,69 +304,6 @@ query III colnames
 select * from c order by a_id, b_id, c_id
 ----
 c_id  a_id  b_id
-
-statement ok
-INSERT INTO a SELECT generate_series(1,10);
-INSERT INTO b(a_id, b_id) SELECT generate_series(1,10), 1
-
-statement ok
-SET TRACING = on,kv,results;
-
-query I
-delete from a returning *
-----
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-
-statement ok
-SET TRACING=off;
-
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION]
-WHERE message LIKE '%executing cascade %' OR message LIKE 'output row%' OR
-      message LIKE 'Del %' OR message LIKE 'rows affected%'
-----
-Del /Table/61/1/1/0
-Del /Table/61/1/2/0
-Del /Table/61/1/3/0
-Del /Table/61/1/4/0
-Del /Table/61/1/5/0
-Del /Table/61/1/6/0
-Del /Table/61/1/7/0
-Del /Table/61/1/8/0
-Del /Table/61/1/9/0
-Del /Table/61/1/10/0
-output row: [1]
-output row: [2]
-output row: [3]
-output row: [4]
-output row: [5]
-output row: [6]
-output row: [7]
-output row: [8]
-output row: [9]
-output row: [10]
-executing cascade for constraint fk_a_id_ref_a
-Del /Table/61/1/1/#/62/1/1/0
-Del /Table/61/1/2/#/62/1/1/0
-Del /Table/61/1/3/#/62/1/1/0
-Del /Table/61/1/4/#/62/1/1/0
-Del /Table/61/1/5/#/62/1/1/0
-Del /Table/61/1/6/#/62/1/1/0
-Del /Table/61/1/7/#/62/1/1/0
-Del /Table/61/1/8/#/62/1/1/0
-Del /Table/61/1/9/#/62/1/1/0
-Del /Table/61/1/10/#/62/1/1/0
-executing cascade for constraint fk_a_id_ref_b
-rows affected: 10
 
 statement ok
 DROP TABLE c; DROP TABLE b; DROP TABLE a
