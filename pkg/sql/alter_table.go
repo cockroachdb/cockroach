@@ -436,7 +436,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.PrimaryIndex.ContainsColumnID(colToDrop.ID) {
+			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.ID) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
@@ -458,7 +458,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				if !containsThisColumn {
 					for _, id := range idx.ExtraColumnIDs {
-						if n.tableDesc.PrimaryIndex.ContainsColumnID(id) {
+						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -742,20 +742,24 @@ func (n *alterTableNode) startExec(params runParams) error {
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
-				n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
+				n.tableDesc, n.tableDesc.GetPrimaryIndex(), t.PartitionBy)
 			if err != nil {
 				return err
 			}
-			descriptorChanged = descriptorChanged || !n.tableDesc.PrimaryIndex.Partitioning.Equal(&partitioning)
+			descriptorChanged = descriptorChanged || !n.tableDesc.GetPrimaryIndex().Partitioning.Equal(&partitioning)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning,
+				n.tableDesc, n.tableDesc.GetPrimaryIndex(), &n.tableDesc.GetPrimaryIndex().Partitioning,
 				&partitioning, params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
 				return err
 			}
-			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+			{
+				primaryIndex := *n.tableDesc.GetPrimaryIndex()
+				primaryIndex.Partitioning = partitioning
+				n.tableDesc.SetPrimaryIndex(primaryIndex)
+			}
 
 		case *tree.AlterTableSetAudit:
 			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
@@ -1033,7 +1037,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
+		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.ID) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.Name)
 		}

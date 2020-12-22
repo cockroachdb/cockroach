@@ -60,8 +60,8 @@ CREATE INDEX bc ON test.t(b, c);
 			cID = c.ID
 		}
 	}
-	pkID := tableDesc.PrimaryIndex.ID
-	secID := tableDesc.Indexes[0].ID
+	pkID := tableDesc.GetPrimaryIndexID()
+	secID := tableDesc.GetPublicNonPrimaryIndexes()[0].ID
 
 	// Retrieve the numeric descriptors.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "hidden")

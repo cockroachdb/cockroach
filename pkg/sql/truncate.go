@@ -194,16 +194,22 @@ func (p *planner) truncateTable(
 	}
 
 	// Collect all of the old indexes.
-	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.Indexes)+1)
-	oldIndexes[0] = *protoutil.Clone(&tableDesc.PrimaryIndex).(*descpb.IndexDescriptor)
-	for i := range tableDesc.Indexes {
-		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.Indexes[i]).(*descpb.IndexDescriptor)
+	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
+	oldIndexes[0] = *protoutil.Clone(tableDesc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.GetPublicNonPrimaryIndexes()[i]).(*descpb.IndexDescriptor)
 	}
 
 	// Reset all of the index IDs.
-	tableDesc.PrimaryIndex.ID = descpb.IndexID(0)
-	for i := range tableDesc.Indexes {
-		tableDesc.Indexes[i].ID = descpb.IndexID(0)
+	{
+		primaryIndex := *tableDesc.GetPrimaryIndex()
+		primaryIndex.ID = descpb.IndexID(0)
+		tableDesc.SetPrimaryIndex(primaryIndex)
+	}
+
+	for i, index := range tableDesc.GetPublicNonPrimaryIndexes() {
+		index.ID = descpb.IndexID(0)
+		tableDesc.SetPublicNonPrimaryIndex(i+1, index)
 	}
 	// Create new ID's for all of the indexes in the table.
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
@@ -212,9 +218,9 @@ func (p *planner) truncateTable(
 
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
-	indexIDMapping[oldIndexes[0].ID] = tableDesc.PrimaryIndex.ID
-	for i := range tableDesc.Indexes {
-		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.Indexes[i].ID
+	indexIDMapping[oldIndexes[0].ID] = tableDesc.GetPrimaryIndexID()
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -282,14 +288,14 @@ func (p *planner) truncateTable(
 	for i := range oldIndexIDs {
 		oldIndexIDs[i] = oldIndexes[i+1].ID
 	}
-	newIndexIDs := make([]descpb.IndexID, len(tableDesc.Indexes))
+	newIndexIDs := make([]descpb.IndexID, len(tableDesc.GetPublicNonPrimaryIndexes()))
 	for i := range newIndexIDs {
-		newIndexIDs[i] = tableDesc.Indexes[i].ID
+		newIndexIDs[i] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
 	}
 	swapInfo := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId: oldIndexes[0].ID,
 		OldIndexes:        oldIndexIDs,
-		NewPrimaryIndexId: tableDesc.PrimaryIndex.ID,
+		NewPrimaryIndexId: tableDesc.GetPrimaryIndexID(),
 		NewIndexes:        newIndexIDs,
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {

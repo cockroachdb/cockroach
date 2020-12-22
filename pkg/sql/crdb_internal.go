@@ -2509,7 +2509,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.Indexes {
+				for _, idx := range desc.GetPublicNonPrimaryIndexes() {
 					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
 			case *dbdesc.Immutable:

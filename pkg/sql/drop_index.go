@@ -314,10 +314,10 @@ func (p *planner) dropIndexByName(
 	// Construct a list of all the remaining indexes, so that we can see if there
 	// is another index that could replace the one we are deleting for a given
 	// foreign key constraint.
-	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.Indexes)+1)
-	remainingIndexes = append(remainingIndexes, &tableDesc.PrimaryIndex)
-	for i := range tableDesc.Indexes {
-		index := &tableDesc.Indexes[i]
+	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
+	remainingIndexes = append(remainingIndexes, tableDesc.GetPrimaryIndex())
+	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		index := &tableDesc.GetPublicNonPrimaryIndexes()[i]
 		if index.ID != idx.ID {
 			remainingIndexes = append(remainingIndexes, index)
 		}
@@ -451,7 +451,7 @@ func (p *planner) dropIndexByName(
 
 	// Currently, a replacement primary index must be specified when dropping the primary index,
 	// and this cannot be done with DROP INDEX.
-	if idx.ID == tableDesc.PrimaryIndex.ID {
+	if idx.ID == tableDesc.GetPrimaryIndexID() {
 		return errors.WithHint(
 			pgerror.Newf(pgcode.FeatureNotSupported, "cannot drop the primary index of a table using DROP INDEX"),
 			"instead, use ALTER TABLE ... ALTER PRIMARY KEY or"+
@@ -460,7 +460,7 @@ func (p *planner) dropIndexByName(
 	}
 
 	found := false
-	for i, idxEntry := range tableDesc.Indexes {
+	for i, idxEntry := range tableDesc.GetPublicNonPrimaryIndexes() {
 		if idxEntry.ID == idx.ID {
 			// Unsplit all manually split ranges in the index so they can be
 			// automatically merged by the merge queue. Gate this on being the
@@ -498,7 +498,7 @@ func (p *planner) dropIndexByName(
 			if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
-			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
+			tableDesc.RemovePublicNonPrimaryIndex(i + 1)
 			found = true
 			break
 		}

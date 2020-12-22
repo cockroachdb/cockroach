@@ -124,7 +124,7 @@ func (cb *ColumnBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex(),
 		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
@@ -564,7 +564,7 @@ func (ib *IndexBackfiller) initIndexes(desc *tabledesc.Immutable) util.FastIntSe
 			for i := range ib.cols {
 				id := ib.cols[i].ID
 				if idx.ContainsColumnID(id) ||
-					idx.GetEncodingType(desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding {
+					idx.GetEncodingType(desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding {
 					valNeededForCol.Add(i)
 				}
 			}
@@ -601,7 +601,7 @@ func (ib *IndexBackfiller) init(
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:            desc,
-		Index:           &desc.PrimaryIndex,
+		Index:           desc.GetPrimaryIndex(),
 		ColIdxMap:       ib.colIdxMap,
 		Cols:            ib.cols,
 		ValNeededForCol: valNeededForCol,

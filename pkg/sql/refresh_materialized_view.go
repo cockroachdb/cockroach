@@ -68,10 +68,10 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := protoutil.Clone(&n.desc.PrimaryIndex).(*descpb.IndexDescriptor)
-	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.Indexes))
-	for i := range n.desc.Indexes {
-		newIndexes[i] = *protoutil.Clone(&n.desc.Indexes[i]).(*descpb.IndexDescriptor)
+	newPrimaryIndex := protoutil.Clone(n.desc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
+	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.GetPublicNonPrimaryIndexes()))
+	for i := range n.desc.GetPublicNonPrimaryIndexes() {
+		newIndexes[i] = *protoutil.Clone(&n.desc.GetPublicNonPrimaryIndexes()[i]).(*descpb.IndexDescriptor)
 	}
 
 	// Reset and allocate new IDs for the new indexes.

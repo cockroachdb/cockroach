@@ -785,8 +785,8 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, len(target.PrimaryIndex.ColumnNames))
-		for i, n := range target.PrimaryIndex.ColumnNames {
+		referencedColNames = make(tree.NameList, len(target.GetPrimaryIndex().ColumnNames))
+		for i, n := range target.GetPrimaryIndex().ColumnNames {
 			referencedColNames[i] = tree.Name(n)
 		}
 	}
@@ -977,7 +977,7 @@ func addIndexForFK(
 		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
-		added := tbl.Indexes[len(tbl.Indexes)-1]
+		added := tbl.GetPublicNonPrimaryIndexes()[len(tbl.GetPublicNonPrimaryIndexes())-1]
 		return added.ID, nil
 	}
 
@@ -1025,11 +1025,11 @@ func addInterleave(
 	if err != nil {
 		return err
 	}
-	parentIndex := parentTable.PrimaryIndex
+	parentIndex := parentTable.GetPrimaryIndex()
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
-	if index.ID == desc.PrimaryIndex.ID {
+	if index.ID == desc.GetPrimaryIndexID() {
 		typeOfIndex = "primary key"
 	} else {
 		typeOfIndex = "index"
@@ -1643,7 +1643,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if len(desc.GetPrimaryIndex().ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -1695,8 +1695,8 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	for i := range desc.Indexes {
-		idx := &desc.Indexes[i]
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		// Increment the counter if this index could be storing data across multiple column families.
 		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
@@ -1704,18 +1704,22 @@ func NewTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex(), n.Interleave); err != nil {
 			return nil, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
 		if err != nil {
 			return nil, err
 		}
-		desc.PrimaryIndex.Partitioning = partitioning
+		{
+			newPrimaryIndex := *desc.GetPrimaryIndex()
+			newPrimaryIndex.Partitioning = partitioning
+			desc.SetPrimaryIndex(newPrimaryIndex)
+		}
 	}
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
@@ -2154,7 +2158,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				var def tree.TableDef = &indexDef
 				if idx.Unique {
-					isPK := idx.ID == td.PrimaryIndex.ID
+					isPK := idx.ID == td.GetPrimaryIndexID()
 					if isPK && td.IsPrimaryIndexDefaultRowID() {
 						continue
 					}
