@@ -559,7 +559,9 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 func (mb *mutationBuilder) addSynthesizedCols(
 	colIDs opt.OptionalColList, addCol func(col *cat.Column) bool,
 ) {
-	var projectionsScope *scope
+	// We will construct a new Project operator that will contain the newly
+	// synthesized column(s).
+	pb := makeProjectionBuilder(mb.b, mb.outScope)
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		tabCol := mb.tab.Column(i)
@@ -583,34 +585,23 @@ func (mb *mutationBuilder) addSynthesizedCols(
 			continue
 		}
 
-		// Construct a new Project operator that will contain the newly synthesized
-		// column(s).
-		if projectionsScope == nil {
-			projectionsScope = mb.outScope.replace()
-			projectionsScope.appendColumnsFromScope(mb.outScope)
-		}
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
-		texpr := mb.outScope.resolveAndRequireType(expr, tabCol.DatumType())
-		scopeCol := projectionsScope.addColumn("" /* alias */, texpr)
-		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
-		// Assign name to synthesized column. Computed columns may refer to default
-		// columns in the table by name.
-		scopeCol.name = tabCol.ColName()
+		// Add synthesized column. It is important to use the real column name when
+		// this is a default column, which may later be referred by a computed
+		// column.
+		newCol := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
 
 		// Remember id of newly synthesized column.
-		colIDs[i] = scopeCol.id
+		colIDs[i] = newCol
 
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
 		mb.targetColSet.Add(tabColID)
 	}
 
-	if projectionsScope != nil {
-		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
-		mb.outScope = projectionsScope
-	}
+	mb.outScope = pb.Finish()
 }
 
 // roundDecimalValues wraps each DECIMAL-related column (including arrays of
