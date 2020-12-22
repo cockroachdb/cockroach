@@ -55,6 +55,23 @@ CREATE TABLE uniq_fk_child (
 )
 
 statement ok
+CREATE TYPE region AS ENUM ('us-east', 'us-west', 'eu-west')
+
+# TODO(rytaft): When more of the multi-region syntax is supported,
+# add it here.
+statement ok
+CREATE TABLE uniq_enum (
+  r region DEFAULT 'us-east',
+  s STRING,
+  i INT,
+  j INT DEFAULT NULL,
+  PRIMARY KEY (r, i),
+  UNIQUE INDEX (r, s, j),
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE WITHOUT INDEX (s, j)
+)
+
+statement ok
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 
 # Insert some data into the other table.
@@ -179,6 +196,24 @@ a  b  c
 1  1  1
 2  2  2
 
+# Insert into a table in which the unique constraints are the suffix of an
+# index, and the prefix of the index is an enum.
+statement ok
+INSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('eu-west', 'bar', 2, 2)
+
+# Insert into a table in which the unique constraints are the suffix of an
+# index, and the prefix of the index is an enum. This case uses the default
+# value for columns r and j.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_i"\nDETAIL: Key \(i\)=\(1\) already exists\.
+INSERT INTO uniq_enum (s, i) VALUES ('foo', 1), ('bar', 2)
+
+query TTII colnames,rowsort
+SELECT * FROM uniq_enum
+----
+r        s    i  j
+us-west  foo  1  1
+eu-west  bar  2  2
+
 
 # -- Tests with UPDATE --
 subtest Update
@@ -266,3 +301,15 @@ SELECT * FROM uniq_fk_child
 a  b  c
 1  1  1
 2  2  2
+
+# Update a table in which the unique constraints are the suffix of an
+# index, and the prefix of the index is an enum.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_s_j"\nDETAIL: Key \(s, j\)=\('foo', 1\) already exists\.
+UPDATE uniq_enum SET r = DEFAULT, s = 'foo', j = 1 WHERE r = 'eu-west'
+
+query TTII colnames,rowsort
+SELECT * FROM uniq_enum
+----
+r        s    i  j
+eu-west  bar  2  2
+us-west  foo  1  1
