@@ -44,7 +44,7 @@ define MutationPrivate {
     #
     # If there is a delete-only mutation column "c", then InsertCols would contain
     # [a_colid, b_colid, 0].
-    InsertCols ColList
+    InsertCols OptionalColList
 
     # FetchCols are columns from the Input expression that will be fetched from
     # the target table. They must be a subset of the Input expression's output
@@ -69,7 +69,7 @@ define MutationPrivate {
     # updated value, and the "d" column is needed because it's in the same family
     # as "c". Taking all this into account, FetchCols would contain this list:
     # [a_colid, 0, c_colid, d_colid, 0].
-    FetchCols ColList
+    FetchCols OptionalColList
 
     # UpdateCols are columns from the Input expression that contain updated values
     # for columns of the target table. They must be a subset of the Input
@@ -85,7 +85,7 @@ define MutationPrivate {
     #
     # Since column "b" is updated, and "c" is a computed column dependent on "b",
     # then UpdateCols would contain [0, b_colid, c_colid].
-    UpdateCols ColList
+    UpdateCols OptionalColList
 
     # CheckCols are columns from the Input expression containing the results of
     # evaluating the check constraints from the target table. Evaluating a check
@@ -103,7 +103,7 @@ define MutationPrivate {
     # Since the check constraint for column "a" can be statically proven to be
     # true, CheckCols would contain [0, b_colid].
     # TODO(radu): we don't actually implement this optimization currently.
-    CheckCols ColList
+    CheckCols OptionalColList
 
     # PartialIndexPutCols are columns from the Input expression containing the
     # results of evaluating each partial index predicate from the target table
@@ -125,13 +125,13 @@ define MutationPrivate {
     # evaluating the predicate of the index on c. The index on b is not a
     # partial index, because it has no predicate, so it is not included in
     # PartialIndexPutCols.
-    PartialIndexPutCols ColList
+    PartialIndexPutCols OptionalColList
 
     # PartialIndexDelCols is similar to PartialIndexPutCols, but instead
     # indicates when the previous version of a row must be deleted from a
     # partial index during updates or deletes in order to maintain the state of
     # the index.
-    PartialIndexDelCols ColList
+    PartialIndexDelCols OptionalColList
 
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
@@ -153,7 +153,7 @@ define MutationPrivate {
     # including any columns that are undergoing mutation (being added or dropped
     # as part of online schema change). If no RETURNING clause was specified,
     # then ReturnCols is nil.
-    ReturnCols ColList
+    ReturnCols OptionalColList
 
     # PassthroughCols are columns that the mutation needs to passthrough from
     # its input. It's similar to the passthrough columns in projections. This

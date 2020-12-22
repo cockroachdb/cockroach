@@ -1729,10 +1729,10 @@ func (c *CustomFuncs) mapFilterCols(
 func (c *CustomFuncs) MakeSetPrivateForSplitDisjunction(
 	left, right *memo.ScanPrivate,
 ) *memo.SetPrivate {
-	leftAndOutCols := opt.ColSetToList(left.Cols)
+	leftAndOutCols := left.Cols.ToList()
 	return &memo.SetPrivate{
 		LeftCols:  leftAndOutCols,
-		RightCols: opt.ColSetToList(right.Cols),
+		RightCols: right.Cols.ToList(),
 		OutCols:   leftAndOutCols,
 	}
 }
