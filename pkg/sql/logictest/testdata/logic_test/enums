@@ -1283,3 +1283,15 @@ SHOW ENUMS FROM sc
 ----
 schema  name      values   owner
 sc      greeting  {hello}  root
+
+# Check that creating a type with IF NOT EXISTS succeeds.
+subtest ifne
+
+statement ok
+CREATE TYPE ifne AS ENUM ('hi')
+
+statement error pq: type "ifne" already exists
+CREATE TYPE ifne AS ENUM ('hi')
+
+statement ok
+CREATE TYPE IF NOT EXISTS ifne AS ENUM ('hi')
