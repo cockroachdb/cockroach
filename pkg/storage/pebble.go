@@ -335,7 +335,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		Merger:                      MVCCMerger,
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
-	opts.Experimental.L0SublevelCompactions = true
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -356,12 +355,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		}
 		l.EnsureDefaults()
 	}
-
-	// Set the value for FlushSplitBytes to 2x the L0 TargetFileSize. This
-	// should generally create flush split keys after every pair of
-	// L0 files. The 2x factor helps to reduce some cases of excessive flush
-	// splitting, and the overhead that comes with that.
-	opts.Experimental.FlushSplitBytes = 2 * opts.Levels[0].TargetFileSize
 
 	// Do not create bloom filters for the last level (i.e. the largest level
 	// which contains data in the LSM store). This configuration reduces the size

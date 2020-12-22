@@ -126,6 +126,7 @@ func TestOpenReadOnlyStore(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer db.Close()
 
 			key := roachpb.Key("key")
 			val := []byte("value")

@@ -40,7 +40,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
-	github.com/cockroachdb/pebble v0.0.0-20201119153812-62f2e316b532
+	github.com/cockroachdb/pebble v0.0.0-20201221143129-4b1164f6ed2d
 	github.com/cockroachdb/redact v1.0.9
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
@@ -147,13 +147,13 @@ require (
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd/raft/v3 v3.0.0-20201109164711-01844fd28560
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/exp v0.0.0-20201008143054-e3b2a7f2fdc7
+	golang.org/x/exp v0.0.0-20201221025956-e89b829e73ea
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68
+	golang.org/x/sys v0.0.0-20201221093633-bc327ba9c2f0
 	golang.org/x/text v0.3.3
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
