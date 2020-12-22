@@ -1369,7 +1369,7 @@ func TestHealthAPI(t *testing.T) {
 	defer ts.nodeLiveness.PauseAllHeartbeatsForTest()()
 	self, ok := ts.nodeLiveness.Self()
 	assert.True(t, ok)
-	s.Clock().Update(self.Expiration.ToTimestamp().Add(1, 0))
+	s.Clock().Update(self.Expiration.ToTimestamp().Add(1, 0).UnsafeToClockTimestamp())
 
 	var resp serverpb.HealthResponse
 	testutils.SucceedsSoon(t, func() error {

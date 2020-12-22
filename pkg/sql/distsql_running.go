@@ -530,7 +530,7 @@ var receiverSyncPool = sync.Pool{
 // timestamp. Usually wraps an hlc.Clock.
 type clockUpdater interface {
 	// Update updates this ClockUpdater with the observed hlc.Timestamp.
-	Update(observedTS hlc.Timestamp)
+	Update(observedTS hlc.ClockTimestamp)
 }
 
 // MakeDistSQLReceiver creates a DistSQLReceiver.

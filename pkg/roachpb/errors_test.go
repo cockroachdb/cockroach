@@ -101,7 +101,7 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
 			&Transaction{
 				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			})
 		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
@@ -139,7 +139,7 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
 			&Transaction{
 				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
-				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			}))
 		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
 		txn.ID = uuid.Nil

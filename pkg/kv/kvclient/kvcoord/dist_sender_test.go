@@ -564,7 +564,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
-	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
+	txn.UpdateObservedTimestamp(1, hlc.MaxClockTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
 	if _, pErr := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
@@ -2180,20 +2180,20 @@ func TestClockUpdateOnResponse(t *testing.T) {
 
 	// Prepare the test function
 	put := roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
-	doCheck := func(sender kv.Sender, fakeTime hlc.Timestamp) {
+	doCheck := func(sender kv.Sender, fakeTime hlc.ClockTimestamp) {
 		ds.transportFactory = SenderTransportFactory(tracing.NewTracer(), sender)
 		_, err := kv.SendWrapped(context.Background(), ds, put)
 		if err != nil && err != expectedErr {
 			t.Fatal(err)
 		}
-		newTime := ds.clock.Now()
+		newTime := ds.clock.NowAsClockTimestamp()
 		if newTime.Less(fakeTime) {
 			t.Fatalf("clock was not advanced: expected >= %s; got %s", fakeTime, newTime)
 		}
 	}
 
 	// Test timestamp propagation on valid BatchResults.
-	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	fakeTime := ds.clock.Now().Add(10000000000 /*10s*/, 0).UnsafeToClockTimestamp()
 	replyNormal := kv.SenderFunc(
 		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			rb := args.CreateReply()
@@ -2203,7 +2203,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 	doCheck(replyNormal, fakeTime)
 
 	// Test timestamp propagation on errors.
-	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0)
+	fakeTime = ds.clock.Now().Add(10000000000 /*10s*/, 0).UnsafeToClockTimestamp()
 	replyError := kv.SenderFunc(
 		func(_ context.Context, _ roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 			pErr := expectedErr

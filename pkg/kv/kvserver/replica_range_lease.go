@@ -202,7 +202,13 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Key: startKey,
 	}
 	var leaseReq roachpb.Request
-	now := p.repl.store.Clock().Now()
+	now := p.repl.store.Clock().NowAsClockTimestamp()
+	// TODO(nvanbenschoten): what if status.Timestamp > now? Is that ok?
+	// Probably not, because the existing lease may end in the future,
+	// but we may be trying to evaluate a request even further into the
+	// future.
+	// Currently, this is the interaction that prevents us from making
+	// Lease.Start a ClockTimestamp.
 	reqLease := roachpb.Lease{
 		// It's up to us to ensure that Lease.Start is greater than the
 		// end time of the previous lease. This means that if status
@@ -538,7 +544,10 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 //   processed the change in lease holdership).
 // * the client fails to read their own write.
 func (r *Replica) leaseStatus(
-	ctx context.Context, lease roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
+	ctx context.Context,
+	lease roachpb.Lease,
+	timestamp hlc.Timestamp,
+	minProposedTS hlc.ClockTimestamp,
 ) kvserverpb.LeaseStatus {
 	status := kvserverpb.LeaseStatus{Timestamp: timestamp, Lease: lease}
 	var expiration hlc.Timestamp
@@ -671,7 +680,8 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
-		status := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+		now := r.store.Clock().NowAsClockTimestamp()
+		status := r.leaseStatus(ctx, *r.mu.state.Lease, now.ToTimestamp(), r.mu.minLeaseProposedTS)
 		if status.Lease.OwnedBy(target) {
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil
@@ -716,7 +726,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				"another transfer to a different store is in progress")
 		}
 		// Stop using the current lease.
-		r.mu.minLeaseProposedTS = status.Timestamp
+		r.mu.minLeaseProposedTS = now
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
@@ -860,6 +870,9 @@ func newNotLeaseHolderError(
 // existing lease is valid and owned by the current store. This method should
 // not be called directly. Use redirectOnOrAcquireLease instead.
 func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bool) {
+	// TODO(nvanbenschoten): this should take the request timestamp and forward
+	// now by that timestamp. Should we limit how far in the future this timestamp
+	// can lead clock.Now()? Something to do with < now + RangeLeaseRenewalDuration()?
 	timestamp := r.store.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -897,6 +910,8 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 //
 // TODO(rangeLeaseRenewalDuration): what is rangeLeaseRenewalDuration
 //  referring to? It appears to have rotted.
+//
+// TODO(nvanbenschoten): reword comment to account for request timestamp.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
@@ -908,6 +923,8 @@ func (r *Replica) redirectOnOrAcquireLease(
 	// lease holder. Returns also on context.Done() (timeout or cancellation).
 	var status kvserverpb.LeaseStatus
 	for attempt := 1; ; attempt++ {
+		// TODO(nvanbenschoten): this should take the request timestamp and
+		// forward now by that timestamp. See TODO in leaseGoodToGo.
 		timestamp := r.store.Clock().Now()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
