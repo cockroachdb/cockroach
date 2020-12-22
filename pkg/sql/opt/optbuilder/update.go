@@ -228,7 +228,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		targetColMeta := mb.md.ColumnMeta(targetColID)
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := mb.b.addColumn(projectionsScope, targetColMeta.Alias+"_new", texpr)
+		scopeCol := projectionsScope.addColumn(targetColMeta.Alias+"_new", texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
 		checkCol(scopeCol, targetColID)

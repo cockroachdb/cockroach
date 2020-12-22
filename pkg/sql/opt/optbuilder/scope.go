@@ -273,6 +273,19 @@ func (s *scope) addExtraColumns(cols []scopeColumn) {
 	}
 }
 
+// addColumn adds a column to scope with the given alias and typed expression.
+// It returns a pointer to the new column. The column ID and group are left
+// empty so they can be filled in later.
+func (s *scope) addColumn(alias string, expr tree.TypedExpr) *scopeColumn {
+	name := tree.Name(alias)
+	s.cols = append(s.cols, scopeColumn{
+		name: name,
+		typ:  expr.ResolvedType(),
+		expr: expr,
+	})
+	return &s.cols[len(s.cols)-1]
+}
+
 // setOrdering sets the ordering in the physical properties and adds any new
 // columns as extra columns.
 func (s *scope) setOrdering(cols []scopeColumn, ord opt.Ordering) {
@@ -1014,7 +1027,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 
 	var typedFuncExpr = typedFunc.(*tree.FuncExpr)
 	if s.builder.shouldCreateDefaultColumn(typedFuncExpr) {
-		outCol = s.builder.addColumn(srfScope, def.Name, typedFunc)
+		outCol = srfScope.addColumn(def.Name, typedFunc)
 	}
 	out := s.builder.buildFunction(typedFuncExpr, s, srfScope, outCol, nil)
 	srf := &srf{

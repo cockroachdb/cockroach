@@ -146,7 +146,7 @@ func (b *Builder) analyzeOrderByIndex(
 
 		colItem := tree.NewColumnItem(&tn, col.ColName())
 		expr := inScope.resolveType(colItem, types.Any)
-		outCol := b.addColumn(orderByScope, "" /* alias */, expr)
+		outCol := orderByScope.addColumn("" /* alias */, expr)
 		outCol.descending = desc
 	}
 }
@@ -252,7 +252,7 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		b.addColumn(extraColsScope, "" /* alias */, e)
+		extraColsScope.addColumn("" /* alias */, e)
 	}
 }
 
