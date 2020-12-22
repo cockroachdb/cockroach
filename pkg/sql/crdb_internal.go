@@ -411,19 +411,19 @@ var crdbInternalTablesTableLastStats = virtualSchemaTable{
 CREATE TABLE crdb_internal.table_row_statistics (
   table_id                   INT         NOT NULL,
   table_name                 STRING      NOT NULL,
-  estimated_row_count        INT
+  estimated_row_count        INT,
+  updated_at                 TIMESTAMP
 )`,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		// Collect the latests statistics for all tables.
+		// Collect the latest statistics for all tables.
 		query := `
-           SELECT s."tableID", max(s."rowCount")
+           SELECT DISTINCT s."tableID", s."rowCount", s."createdAt"
              FROM system.table_statistics AS s
              JOIN (
                     SELECT "tableID", max("createdAt") AS last_dt
                       FROM system.table_statistics
                      GROUP BY "tableID"
-                  ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
-            GROUP BY s."tableID"`
+                  ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"`
 		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
 			ctx, "crdb-internal-statistics-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -432,10 +432,14 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			return err
 		}
 
-		// Convert statistics into map: tableID -> rowCount.
-		statMap := make(map[tree.DInt]tree.Datum)
+		// Convert statistics into map: tableID -> (rowCount, createdAt).
+		type row struct {
+			count     tree.Datum
+			createdAt tree.Datum
+		}
+		statMap := make(map[tree.DInt]row)
 		for _, r := range statRows {
-			statMap[tree.MustBeDInt(r[0])] = r[1]
+			statMap[tree.MustBeDInt(r[0])] = row{r[1], r[2]}
 		}
 
 		// Walk over all available tables and show row count for each of them
@@ -444,17 +448,20 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
 				tableID := tree.DInt(table.GetID())
 				rowCount := tree.DNull
+				createdAt := tree.DNull
 				// For Virtual Tables report NULL row count.
 				if !table.IsVirtualTable() {
 					rowCount = tree.NewDInt(0)
-					if cnt, ok := statMap[tableID]; ok {
-						rowCount = cnt
+					if r, ok := statMap[tableID]; ok {
+						rowCount = r.count
+						createdAt = r.createdAt
 					}
 				}
 				return addRow(
 					tree.NewDInt(tableID),
 					tree.NewDString(table.GetName()),
 					rowCount,
+					createdAt,
 				)
 			},
 		)

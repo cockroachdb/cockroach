@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 statement ok
 COMMENT ON TABLE a IS 'a_comment'
 
-query TTTTIT colnames
+query TTTTITT colnames
 SHOW TABLES FROM test
 ----
-schema_name  table_name  type   owner  estimated_row_count  locality
-public       a           table  root   0                    NULL
+schema_name  table_name  type   owner  estimated_row_count  estimate_update_time  locality
+public       a           table  root   0                    NULL                  NULL
 
 statement ok
 CREATE TABLE b (id INT PRIMARY KEY)
@@ -133,16 +133,16 @@ a            INT8       false        NULL            ·                      {pr
 b            INT8       false        NULL            ·                      {primary}  false
 c            INT8       false        NULL            ·                      {primary}  false
 
-query TTTTITT colnames
+query TTTTITTT colnames
 SHOW TABLES FROM test WITH COMMENT
 ----
-schema_name  table_name  type   owner  estimated_row_count  locality  comment
-public       a           table  root   0                    NULL      a_comment
-public       b           table  root   0                    NULL      ·
-public       c           table  root   0                    NULL      ·
-public       d           table  root   0                    NULL      ·
-public       e           table  root   0                    NULL      ·
-public       f           table  root   0                    NULL      ·
+schema_name  table_name  type   owner  estimated_row_count  estimate_update_time  locality  comment
+public       a           table  root   0                    NULL                  NULL      a_comment
+public       b           table  root   0                    NULL                  NULL      ·
+public       c           table  root   0                    NULL                  NULL      ·
+public       d           table  root   0                    NULL                  NULL      ·
+public       e           table  root   0                    NULL                  NULL      ·
+public       f           table  root   0                    NULL                  NULL      ·
 
 statement ok
 SET DATABASE = ""
@@ -523,10 +523,10 @@ statement ok
 INSERT INTO t1 SELECT a FROM generate_series(1, 1024) AS a(a)
 
 # only tables from current database
-query TTTTIT
+query TTTTITT
 SHOW TABLES
 ----
-public  t1  table  testuser  0  NULL
+public  t1  table  testuser  0  NULL  NULL
 
 # see only virtual tables (estimated_row_count is NULL)
 # and tables testuser has access to (estimated_row_count >= 0)
@@ -663,9 +663,12 @@ statement ok
 ANALYZE t1
 
 query I
-SELECT estimated_row_count FROM [SHOW TABLES] where table_name = 't1'
+SELECT estimated_row_count FROM [SHOW TABLES] WHERE table_name = 't1'
 ----
 1024
+
+let $orig_ts
+SELECT estimate_update_time FROM [SHOW TABLES] WHERE table_name = 't1'
 
 statement ok
 DELETE FROM rowtest.t1 WHERE a > 1000;
@@ -674,8 +677,15 @@ statement ok
 ANALYZE rowtest.t1
 
 query I
-SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't1'
+SELECT estimated_row_count FROM [SHOW TABLES from rowtest] WHERE table_name = 't1'
 ----
 1000
+
+# After the ANALYZE command, the timestamp for the stat should be larger than what
+# we recorded initially.
+query B
+SELECT estimate_update_time > '$orig_ts'::TIMESTAMP FROM [SHOW TABLES] WHERE table_name = 't1'
+----
+true
 
 user root

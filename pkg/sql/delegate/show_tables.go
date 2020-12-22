@@ -62,6 +62,7 @@ SELECT ns.nspname AS schema_name,
        END AS type,
        rl.rolname AS owner,
        s.estimated_row_count AS estimated_row_count,
+       s.updated_at AS estimate_update_time,
        ct.locality AS locality
        %[3]s
 FROM %[1]s.pg_catalog.pg_class AS pc
