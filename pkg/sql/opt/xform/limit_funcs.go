@@ -231,13 +231,13 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 
 	// Construct a new ScanExpr for each span and union them all together. We
 	// output the old ColumnIDs from each union.
-	oldColList := opt.ColSetToList(scan.Relational().OutputCols)
+	oldColList := scan.Relational().OutputCols.ToList()
 	last := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(0))
 	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
 		newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(i))
 		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
-			LeftCols:  opt.ColSetToList(last.Relational().OutputCols),
-			RightCols: opt.ColSetToList(newScan.Relational().OutputCols),
+			LeftCols:  last.Relational().OutputCols.ToList(),
+			RightCols: newScan.Relational().OutputCols.ToList(),
 			OutCols:   oldColList,
 		})
 	}

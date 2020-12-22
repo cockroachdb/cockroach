@@ -285,7 +285,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	}
 }
 
-func (m *Memo) checkColListLen(colList opt.ColList, expectedLen int, listName string) {
+func (m *Memo) checkColListLen(colList opt.OptionalColList, expectedLen int, listName string) {
 	if len(colList) != expectedLen {
 		panic(errors.AssertionFailedf("column list %s expected length = %d, actual length = %d",
 			listName, log.Safe(expectedLen), len(colList)))

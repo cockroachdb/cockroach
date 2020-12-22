@@ -193,7 +193,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 
 		out := &fkChecks[i]
 		out.InsertCols = make([]exec.TableColumnOrdinal, len(lookupJoin.KeyCols))
-		findCol := func(cols opt.ColList, col opt.ColumnID) int {
+		findCol := func(cols opt.OptionalColList, col opt.ColumnID) int {
 			res, ok := cols.Find(col)
 			if !ok {
 				panic(errors.AssertionFailedf("cannot find column %d", col))
@@ -203,7 +203,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		for i, keyCol := range lookupJoin.KeyCols {
 			// The keyCol comes from the WithScan operator. We must find the matching
 			// column in the mutation input.
-			withColOrd := findCol(withScan.OutCols, keyCol)
+			withColOrd := findCol(opt.OptionalColList(withScan.OutCols), keyCol)
 			inputCol := withScan.InCols[withColOrd]
 			out.InsertCols[i] = exec.TableColumnOrdinal(findCol(ins.InsertCols, inputCol))
 		}
@@ -302,7 +302,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	// to passthrough those columns so the projection above can use
 	// them.
 	if upd.NeedResults() {
-		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
+		colList = append(colList, upd.PassthroughCols...)
 	}
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
 	colList = appendColsWhenPresent(colList, upd.PartialIndexPutCols)
@@ -724,7 +724,7 @@ func (b *Builder) buildDeleteRange(
 
 // appendColsWhenPresent appends non-zero column IDs from the src list into the
 // dst list, and returns the possibly grown list.
-func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
+func appendColsWhenPresent(dst opt.ColList, src opt.OptionalColList) opt.ColList {
 	for _, col := range src {
 		if col != 0 {
 			dst = append(dst, col)
@@ -737,11 +737,8 @@ func appendColsWhenPresent(dst, src opt.ColList) opt.ColList {
 // column ID in the given list. This is used with mutation operators, which
 // maintain lists that correspond to the target table, with zero column IDs
 // indicating columns that are not involved in the mutation.
-func ordinalSetFromColList(colList opt.ColList) util.FastIntSet {
+func ordinalSetFromColList(colList opt.OptionalColList) util.FastIntSet {
 	var res util.FastIntSet
-	if colList == nil {
-		return res
-	}
 	for i, col := range colList {
 		if col != 0 {
 			res.Add(i)

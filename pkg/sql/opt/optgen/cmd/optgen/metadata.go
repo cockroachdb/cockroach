@@ -192,6 +192,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ColumnID":          {fullName: "opt.ColumnID", passByVal: true},
 		"ColSet":            {fullName: "opt.ColSet", passByVal: true},
 		"ColList":           {fullName: "opt.ColList", passByVal: true},
+		"OptionalColList":   {fullName: "opt.OptionalColList", passByVal: true},
 		"TableID":           {fullName: "opt.TableID", passByVal: true},
 		"SchemaID":          {fullName: "opt.SchemaID", passByVal: true},
 		"SequenceID":        {fullName: "opt.SequenceID", passByVal: true},
