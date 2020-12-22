@@ -169,6 +169,10 @@ func TestTraceAnalyzer(t *testing.T) {
 		// For tests, the bytes read is based on the number of rows read, rather
 		// than actual bytes read.
 		require.Equal(t, int64(30*8), queryLevelStats.KVBytesRead)
+
+		// For tests, network messages is a synthetic value based on the number of
+		// network tuples. In this test 21 tuples flow over the network.
+		require.Equal(t, int64(21/2), queryLevelStats.NetworkMessages)
 	}
 }
 

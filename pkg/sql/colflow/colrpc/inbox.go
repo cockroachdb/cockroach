@@ -109,6 +109,9 @@ type Inbox struct {
 	// bytesRead contains the number of bytes sent to the Inbox.
 	bytesRead int64
 
+	// numMessages contains the number of messages received by the Inbox.
+	numMessages int64
+
 	// deserializationStopWatch records the time Inbox spends deserializing
 	// batches.
 	deserializationStopWatch *timeutil.StopWatch
@@ -281,6 +284,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		i.deserializationStopWatch.Stop()
 		m, err := i.stream.Recv()
 		i.deserializationStopWatch.Start()
+		i.numMessages++
 		if err != nil {
 			if err == io.EOF {
 				// Done.
@@ -345,6 +349,11 @@ func (i *Inbox) GetRowsRead() int64 {
 // GetDeserializationTime is part of the colexec.NetworkReader interface.
 func (i *Inbox) GetDeserializationTime() time.Duration {
 	return i.deserializationStopWatch.Elapsed()
+}
+
+// GetNumMessages is part of the colexec.NetworkReader interface.
+func (i *Inbox) GetNumMessages() int64 {
+	return i.numMessages
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {
