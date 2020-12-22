@@ -217,6 +217,8 @@ func (t Timestamp) IsFlagSet(f TimestampFlag) bool {
 
 // Add returns a timestamp with the WallTime and Logical components increased.
 // wallTime is expressed in nanos.
+//
+// TODO(nvanbenschoten): consider an AddNanos method that takes a time.Duration.
 func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	return Timestamp{
 		WallTime: t.WallTime + wallTime,
