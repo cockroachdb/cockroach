@@ -32,6 +32,7 @@ type NetworkReader interface {
 	GetBytesRead() int64
 	GetRowsRead() int64
 	GetDeserializationTime() time.Duration
+	GetNumMessages() int64
 }
 
 // VectorizedStatsCollector is the common interface implemented by collectors.
@@ -241,6 +242,7 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 	s.NetRx.DeserializationTime.Set(nvsc.networkReader.GetDeserializationTime())
 	s.NetRx.TuplesReceived.Set(uint64(nvsc.networkReader.GetRowsRead()))
 	s.NetRx.BytesReceived.Set(uint64(nvsc.networkReader.GetBytesRead()))
+	s.NetRx.MessagesReceived.Set(uint64(nvsc.networkReader.GetNumMessages()))
 
 	s.Output.NumBatches.Set(numBatches)
 	s.Output.NumTuples.Set(numTuples)

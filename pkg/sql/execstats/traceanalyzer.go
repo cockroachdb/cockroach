@@ -92,6 +92,7 @@ type NodeLevelStats struct {
 	KVBytesReadGroupedByNode      map[roachpb.NodeID]int64
 	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
 	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
+	NetworkMessagesGroupedByNode  map[roachpb.NodeID]int64
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
@@ -101,6 +102,7 @@ type QueryLevelStats struct {
 	KVBytesRead      int64
 	KVRowsRead       int64
 	KVTime           time.Duration
+	NetworkMessages  int64
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -196,6 +198,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVBytesReadGroupedByNode:      make(map[roachpb.NodeID]int64),
 		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
 		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
+		NetworkMessagesGroupedByNode:  make(map[roachpb.NodeID]int64),
 	}
 	var errs error
 
@@ -235,6 +238,13 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.originNodeID] = memUsage
 			}
 		}
+
+		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
+		if err != nil {
+			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
+		} else {
+			a.nodeLevelStats.NetworkMessagesGroupedByNode[stats.originNodeID] += numMessages
+		}
 	}
 
 	// Process flowStats.
@@ -262,6 +272,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVBytesRead:      int64(0),
 		KVRowsRead:       int64(0),
 		KVTime:           time.Duration(0),
+		NetworkMessages:  int64(0),
 	}
 
 	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
@@ -285,6 +296,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
 		a.queryLevelStats.KVTime += kvTime
 	}
+
+	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {
+		a.queryLevelStats.NetworkMessages += networkMessages
+	}
 	return errs
 }
 
@@ -304,6 +319,24 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) (int64, er
 		return int64(v.NetTx.BytesSent.Value()), nil
 	}
 	return 0, errors.Errorf("could not get network bytes; neither BytesReceived and BytesSent is set")
+}
+
+func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (int64, error) {
+	// We expect exactly one of MessagesReceived and MessagesSent to be set.
+	// It may seem like we are double-counting everything (from both the send and
+	// the receive side) but in practice only one side of each stream presents
+	// statistics (specifically the sending side in the row engine, and the
+	// receiving side in the vectorized engine).
+	if v.NetRx.MessagesReceived.HasValue() {
+		if v.NetTx.MessagesSent.HasValue() {
+			return 0, errors.Errorf("could not get network messages; both MessagesReceived and MessagesSent are set")
+		}
+		return int64(v.NetRx.MessagesReceived.Value()), nil
+	}
+	if v.NetTx.MessagesSent.HasValue() {
+		return int64(v.NetTx.MessagesSent.Value()), nil
+	}
+	return 0, errors.Errorf("could not get network messages; neither MessagesReceived and MessagesSent is set")
 }
 
 // GetNodeLevelStats returns the node level stats calculated and stored in the TraceAnalyzer.
