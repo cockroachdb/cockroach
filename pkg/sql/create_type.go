@@ -263,9 +263,17 @@ func (p *planner) createUserDefinedEnum(params runParams, n *createTypeNode) err
 	if err != nil {
 		return err
 	}
-	return params.p.createEnumWithID(
+	err = params.p.createEnumWithID(
 		params, id, n.n.EnumLabels, n.dbDesc, n.typeName, enumTypeUserDefined,
 	)
+	if err != nil {
+		if sqlerrors.IsTypeAlreadyExistsError(err) && n.n.IfNotExists {
+			return nil
+		}
+		return err
+	}
+	return nil
+
 }
 
 func (p *planner) createEnumWithID(

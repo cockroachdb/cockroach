@@ -308,7 +308,8 @@ type CreateType struct {
 	TypeName *UnresolvedObjectName
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
-	EnumLabels EnumValueList
+	EnumLabels  EnumValueList
+	IfNotExists bool
 }
 
 var _ Statement = &CreateType{}

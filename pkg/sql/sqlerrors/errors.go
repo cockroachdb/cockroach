@@ -172,6 +172,11 @@ func IsRelationAlreadyExistsError(err error) bool {
 	return errHasCode(err, pgcode.DuplicateRelation)
 }
 
+//IsTypeAlreadyExistsError checks whether this is an error for preexisting type
+func IsTypeAlreadyExistsError(err error) bool {
+	return errHasCode(err, pgcode.DuplicateObject)
+}
+
 // NewWrongObjectTypeError creates a wrong object type error.
 func NewWrongObjectTypeError(name tree.NodeFormatter, desiredObjType string) error {
 	return pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",

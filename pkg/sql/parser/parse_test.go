@@ -415,6 +415,10 @@ func TestParse(t *testing.T) {
 		{`CREATE TYPE a AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')`},
+		{`CREATE TYPE a IF NOT EXISTS AS ENUM ('a')`},
+		{`CREATE TYPE a IF NOT EXISTS AS ENUM ('a', 'b', 'c')`},
+		{`CREATE TYPE a.b IF NOT EXISTS AS ENUM ('a', 'b', 'c')`},
+		{`CREATE TYPE a.b.c IF NOT EXISTS AS ENUM ('a', 'b', 'c')`},
 
 		{`DROP SCHEMA a`},
 		{`DROP SCHEMA a, b`},
