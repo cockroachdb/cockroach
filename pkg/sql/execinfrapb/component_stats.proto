@@ -24,6 +24,7 @@ message ComponentID {
     UNSET = 0;
     PROCESSOR = 1;
     STREAM = 2;
+    FLOW = 3;
   }
 
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,

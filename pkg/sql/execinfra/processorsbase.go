@@ -861,8 +861,10 @@ func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context
 	pb.origCtx = ctx
 	pb.Ctx, pb.span = ProcessorSpan(ctx, name)
 	if pb.span != nil && pb.span.IsVerbose() {
-		pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-		pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+		// WIP(tbg): who puts the corresponding stats in the Span and do they
+		// always populate the ComponentStats correctly?
+		// WIP pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
+		// WIP pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
 	}
 	pb.EvalCtx.Context = pb.Ctx
 	return pb.Ctx

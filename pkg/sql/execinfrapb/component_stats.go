@@ -57,14 +57,15 @@ const (
 
 // StatsTags is part of the tracing.SpanStats interface.
 func (s *ComponentStats) StatsTags() map[string]string {
+	return nil // WIP(tbg)
 	result := make(map[string]string, 4)
 	if s.Component != (ComponentID{}) {
-		result[FlowIDTagKey] = s.Component.FlowID.String()
+		result[FlowIDTagKey] = s.Component.FlowID.String() // wip
 		switch s.Component.Type {
 		case ComponentID_PROCESSOR:
-			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID))
+			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID)) // wip
 		case ComponentID_STREAM:
-			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID))
+			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID)) // wip
 		}
 	}
 

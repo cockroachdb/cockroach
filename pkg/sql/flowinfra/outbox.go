@@ -213,8 +213,8 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	ctx, span = execinfra.ProcessorSpan(ctx, "outbox")
 	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
-		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
-		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
+		// WIP span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
+		// WIP span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
 	}
 	// spanFinished specifies whether we called tracing.FinishSpan on the span.
 	// Some code paths (e.g. stats collection) need to prematurely call
