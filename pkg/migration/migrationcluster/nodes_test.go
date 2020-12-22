@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package migration
+package migrationcluster
 
 import (
 	"sort"
@@ -23,16 +23,16 @@ import (
 func TestNodesString(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	ns := func(ids ...int) nodes {
-		var nodes []node
+	ns := func(ids ...int) Nodes {
+		var nodes []Node
 		for _, id := range ids {
-			nodes = append(nodes, node{id: roachpb.NodeID(id)})
+			nodes = append(nodes, Node{ID: roachpb.NodeID(id)})
 		}
 		return nodes
 	}
 
 	var tests = []struct {
-		ns  nodes
+		ns  Nodes
 		exp string
 	}{
 		{ns(), "n{}"},
@@ -51,8 +51,8 @@ func TestNodesString(t *testing.T) {
 func TestNodesIdentical(t *testing.T) {
 	defer leaktest.AfterTest(t)
 
-	list := func(nodes ...string) nodes { // takes in strings of the form "id@epoch"
-		var ns []node
+	list := func(nodes ...string) Nodes { // takes in strings of the form "ID@Epoch"
+		var ns []Node
 		for _, n := range nodes {
 			parts := strings.Split(n, "@")
 			id, err := strconv.Atoi(parts[0])
@@ -63,29 +63,29 @@ func TestNodesIdentical(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ns = append(ns, node{id: roachpb.NodeID(id), epoch: int64(epoch)})
+			ns = append(ns, Node{ID: roachpb.NodeID(id), Epoch: int64(epoch)})
 		}
 		return ns
 	}
 
 	var tests = []struct {
-		a, b    nodes
+		a, b    Nodes
 		expOk   bool
 		expDiff string
 	}{
 		{list(), list(), true, ""},
 		{list("1@2"), list("1@2"), true, ""},
 		{list("2@1", "1@2"), list("1@2", "2@1"), true, ""},
-		{list("1@2"), list("1@3"), false, "n1's epoch changed"},
+		{list("1@2"), list("1@3"), false, "n1's Epoch changed"},
 		{list("1@2"), list("1@2", "2@1"), false, "n2 joined the cluster"},
 		{list("1@1", "2@1"), list("1@1"), false, "n2 was decommissioned"},
-		{list("3@2", "4@6"), list("4@8", "5@2"), false, "n3 was decommissioned, n4's epoch changed, n5 joined the cluster"},
+		{list("3@2", "4@6"), list("4@8", "5@2"), false, "n3 was decommissioned, n4's Epoch changed, n5 joined the cluster"},
 	}
 
 	for _, test := range tests {
-		ok, diffs := test.a.identical(test.b)
+		ok, diffs := test.a.Identical(test.b)
 		if ok != test.expOk {
-			t.Fatalf("expected identical = %t, got %t", test.expOk, ok)
+			t.Fatalf("expected Identical = %t, got %t", test.expOk, ok)
 		}
 
 		strDiffs := make([]string, len(diffs))

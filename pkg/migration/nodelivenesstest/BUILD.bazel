@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "nodelivenesstest",
+    srcs = ["test_node_liveness.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/nodelivenesstest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+    ],
+)
