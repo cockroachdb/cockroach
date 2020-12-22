@@ -420,9 +420,9 @@ func (z *zigzagJoiner) setupInfo(
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
 	if indexOrdinal == 0 {
-		info.index = &info.table.PrimaryIndex
+		info.index = info.table.GetPrimaryIndex()
 	} else {
-		info.index = &info.table.Indexes[indexOrdinal-1]
+		info.index = &info.table.GetPublicNonPrimaryIndexes()[indexOrdinal-1]
 	}
 
 	var columnIDs []descpb.ColumnID
@@ -650,8 +650,8 @@ func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, colID); idx != -1 {
-			direction, err = zi.table.PrimaryIndex.ColumnDirections[idx].ToEncodingDirection()
+		} else if idx := findColumnID(zi.table.GetPrimaryIndex().ColumnIDs, colID); idx != -1 {
+			direction, err = zi.table.GetPrimaryIndex().ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}

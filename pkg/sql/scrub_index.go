@@ -83,7 +83,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 	var pkColumns, otherColumns []*descpb.ColumnDescriptor
 
-	for _, colID := range o.tableDesc.PrimaryIndex.ColumnIDs {
+	for _, colID := range o.tableDesc.GetPrimaryIndex().ColumnIDs {
 		col := &o.tableDesc.Columns[colToIdx.GetDefault(colID)]
 		pkColumns = append(pkColumns, col)
 		colToIdx.Set(colID, -1)

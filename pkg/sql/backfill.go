@@ -1406,7 +1406,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 			// Force the primary index so that the optimizer does not create a
 			// query plan that uses the indexes being backfilled.
-			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.ID, desc.PrimaryIndex.ID)
+			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.ID, desc.GetPrimaryIndexID())
 
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
 			if err != nil {

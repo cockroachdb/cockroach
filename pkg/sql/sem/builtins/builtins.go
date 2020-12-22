@@ -3679,7 +3679,7 @@ may increase either contention or retry errors, or both.`,
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
 				indexColIDs := indexDesc.ColumnIDs
-				if indexDesc.ID != tableDesc.PrimaryIndex.ID && !indexDesc.Unique {
+				if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique {
 					indexColIDs = append(indexColIDs, indexDesc.ExtraColumnIDs...)
 				}
 
@@ -3691,7 +3691,7 @@ may increase either contention or retry errors, or both.`,
 					)
 					// If the index has some extra key columns, then output an error
 					// message with some extra information to explain the subtlety.
-					if indexDesc.ID != tableDesc.PrimaryIndex.ID && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
+					if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
 						var extraColNames []string
 						for _, id := range indexDesc.ExtraColumnIDs {
 							col, colErr := tableDesc.FindColumnByID(id)

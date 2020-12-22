@@ -303,7 +303,7 @@ const maxNonIndexCols = 100
 func createStatsDefaultColumns(
 	desc *tabledesc.Immutable, multiColEnabled bool,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
-	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.Indexes)+1)
+	colStats := make([]jobspb.CreateStatsDetails_ColStat, 0, len(desc.GetPublicNonPrimaryIndexes())+1)
 
 	requestedStats := make(map[string]struct{})
 
@@ -350,16 +350,16 @@ func createStatsDefaultColumns(
 	}
 
 	// Add column stats for the primary key.
-	for i := range desc.PrimaryIndex.ColumnIDs {
+	for i := range desc.GetPrimaryIndex().ColumnIDs {
 		// Generate stats for each column in the primary key.
-		addIndexColumnStatsIfNotExists(desc.PrimaryIndex.ColumnIDs[i], false /* isInverted */)
+		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().ColumnIDs[i], false /* isInverted */)
 
 		// Only collect multi-column stats if enabled.
 		if i == 0 || !multiColEnabled {
 			continue
 		}
 
-		colIDs := desc.PrimaryIndex.ColumnIDs[: i+1 : i+1]
+		colIDs := desc.GetPrimaryIndex().ColumnIDs[: i+1 : i+1]
 
 		// Remember the requested stats so we don't request duplicates.
 		trackStatsIfNotExists(colIDs)
@@ -372,19 +372,19 @@ func createStatsDefaultColumns(
 	}
 
 	// Add column stats for each secondary index.
-	for i := range desc.Indexes {
-		isInverted := desc.Indexes[i].Type == descpb.IndexDescriptor_INVERTED
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		isInverted := desc.GetPublicNonPrimaryIndexes()[i].Type == descpb.IndexDescriptor_INVERTED
 
-		for j := range desc.Indexes[i].ColumnIDs {
+		for j := range desc.GetPublicNonPrimaryIndexes()[i].ColumnIDs {
 			// Generate stats for each indexed column.
-			addIndexColumnStatsIfNotExists(desc.Indexes[i].ColumnIDs[j], isInverted)
+			addIndexColumnStatsIfNotExists(desc.GetPublicNonPrimaryIndexes()[i].ColumnIDs[j], isInverted)
 
 			// Only collect multi-column stats if enabled.
 			if j == 0 || !multiColEnabled {
 				continue
 			}
 
-			colIDs := desc.Indexes[i].ColumnIDs[: j+1 : j+1]
+			colIDs := desc.GetPublicNonPrimaryIndexes()[i].ColumnIDs[: j+1 : j+1]
 
 			// Check for existing stats and remember the requested stats.
 			if !trackStatsIfNotExists(colIDs) {
@@ -399,8 +399,8 @@ func createStatsDefaultColumns(
 		}
 
 		// Add columns referenced in partial index predicate expressions.
-		if desc.Indexes[i].IsPartial() {
-			expr, err := parser.ParseExpr(desc.Indexes[i].Predicate)
+		if desc.GetPublicNonPrimaryIndexes()[i].IsPartial() {
+			expr, err := parser.ParseExpr(desc.GetPublicNonPrimaryIndexes()[i].Predicate)
 			if err != nil {
 				return nil, err
 			}

@@ -199,7 +199,7 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		return key, true, nil
 	}
 	// We do not support interleaved secondary indexes.
-	if idx.ID != desc.PrimaryIndex.ID {
+	if idx.ID != desc.GetPrimaryIndexID() {
 		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
 	}
 	colIDs, _ := idx.FullColumnIDs()
