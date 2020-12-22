@@ -97,6 +97,7 @@ type SSTBatcher struct {
 	batchEndValue   []byte
 	flushKeyChecked bool
 	flushKey        roachpb.Key
+	batchCounter    roachpb.BulkOpSummary
 	// stores on-the-fly stats for the SST if disallowShadowing is true.
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
@@ -187,6 +188,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.flushKey = nil
 	b.flushKeyChecked = false
 	b.ms.Reset()
+	b.batchCounter.Reset()
 
 	b.rowCounter.BulkOpSummary.Reset()
 	return nil
@@ -332,6 +334,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
 	b.totalRows.DataSize += b.sstWriter.DataSize
+	b.batchCounter.Add(b.rowCounter.BulkOpSummary)
+	b.batchCounter.DataSize += b.sstWriter.DataSize
 	return nil
 }
 
@@ -343,6 +347,11 @@ func (b *SSTBatcher) Close() {
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	return b.totalRows
+}
+
+// GetBatchSummary returns this batcher's latest batch of added rows/bytes/etc.
+func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+	return b.batchCounter
 }
 
 // SSTSender is an interface to send SST data to an engine.
