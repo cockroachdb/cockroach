@@ -1335,13 +1335,23 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for col := range implicitCols {
-						// We add a row for each implicit column of index.
-						if err := appendRow(index, col, sequence,
-							indexDirectionAsc, false, true); err != nil {
-							return err
+					if len(implicitCols) > 0 {
+						// In order to have the implicit columns reported in a
+						// deterministic order, we will add all of them in the
+						// same order as they are mentioned in the primary key.
+						//
+						// Note that simply iterating over implicitCols map
+						// produces non-deterministic output.
+						for _, col := range table.GetPrimaryIndex().ColumnNames {
+							if _, isImplicit := implicitCols[col]; isImplicit {
+								// We add a row for each implicit column of index.
+								if err := appendRow(index, col, sequence,
+									indexDirectionAsc, false, true); err != nil {
+									return err
+								}
+								sequence++
+							}
 						}
-						sequence++
 					}
 					return nil
 				})
