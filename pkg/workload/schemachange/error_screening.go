@@ -583,15 +583,17 @@ func violatesFkConstraints(
 	return false, nil
 }
 
+// violatesFkConstraintsHelper checks if a single row will violate a foreign key constraint
+// between the childColumn and parentColumn.
 func violatesFkConstraintsHelper(
 	tx *pgx.Tx,
 	columnNameToIndexMap map[string]int,
-	parentTableSchema, parentTableName, parentColumn, childColumnName string,
+	parentTableSchema, parentTableName, parentColumn, childColumn string,
 	row []string,
 ) (bool, error) {
 
 	// If the value to insert in the child column is NULL and the column default is NULL, then it is not possible to have a fk violation.
-	childValue := row[columnNameToIndexMap[childColumnName]]
+	childValue := row[columnNameToIndexMap[childColumn]]
 	if childValue == "NULL" {
 		return false, nil
 	}
