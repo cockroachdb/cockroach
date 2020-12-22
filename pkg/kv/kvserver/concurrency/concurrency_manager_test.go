@@ -119,7 +119,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					ReadTimestamp: ts,
 					MaxTimestamp:  maxTS,
 				}
-				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts)
+				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts.UnsafeToClockTimestamp())
 				c.registerTxn(txnName, txn)
 				return ""
 

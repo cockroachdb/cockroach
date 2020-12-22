@@ -31,6 +31,7 @@ pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
 pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
 pkg/util/hlc/timestamp.go | `Timestamp`
+pkg/util/hlc/timestamp.go | `ClockTimestamp`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`
 pkg/util/log/redact.go | `reflect.TypeOf(int8(0))`

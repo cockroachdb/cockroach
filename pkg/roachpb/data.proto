@@ -148,7 +148,8 @@ message MergeTrigger {
   // before it stopped responding to requests altogether (in anticipation of
   // being subsumed). It is suitable for use as the timestamp cache's low water
   // mark for the keys previously owned by the subsumed range.
-  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp freeze_start = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -285,7 +286,8 @@ message ObservedTimestamp {
   option (gogoproto.populate) = true;
 
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // A Transaction is a unit of work performed on the database.
@@ -310,6 +312,10 @@ message Transaction {
   // The last time that the transaction's record was sent a heartbeat by its
   // coordinator to indicate client activity. Concurrent transactions will
   // avoid aborting a transaction if it observes recent-enough activity.
+  //
+  // NOTE: this could use a ClockTimestamp type, but doing so results in a
+  // large diff that doesn't seem worth it, given that we never feed this
+  // timestamp back into a clock.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
   // This flag is set if the transaction's timestamp was "leaked" beyond the
   // transaction (e.g. via cluster_logical_timestamp()). If true, this prevents
@@ -435,7 +441,7 @@ message TransactionRecord {
   option (gogoproto.populate) = true;
 
   // See comments on Transaction proto.
-  storage.enginepb.TxnMeta meta     = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  storage.enginepb.TxnMeta meta            = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   TransactionStatus status                 = 4;
   util.hlc.Timestamp last_heartbeat        = 5  [(gogoproto.nullable) = false];
   repeated Span lock_spans                 = 11 [(gogoproto.nullable) = false];
@@ -525,7 +531,8 @@ message Lease {
   // to help with the rollout (such that a lease applied by some nodes before
   // the rollout and some nodes after the rollout is serialized the same).
   // TODO(andrei): Make this non-nullable after the rollout.
-  util.hlc.Timestamp proposed_ts  = 5 [(gogoproto.customname) = "ProposedTS"];
+  util.hlc.Timestamp proposed_ts  = 5 [(gogoproto.customname) = "ProposedTS",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   // The epoch of the lease holder's node liveness entry. If this value is
   // non-zero, the expiration field is ignored.

@@ -323,7 +323,7 @@ func (tc *testContext) Sender() kv.Sender {
 				tc.Fatal(err)
 			}
 		}
-		tc.Clock().Update(ba.Timestamp)
+		tc.Clock().Update(ba.Timestamp.UnsafeToClockTimestamp())
 		return ba
 	})
 }
@@ -823,7 +823,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	minLeaseProposedTS := tc.repl.mu.minLeaseProposedTS
 	leaseStartTS := tc.repl.mu.state.Lease.Start
 	tc.repl.mu.Unlock()
-	if minLeaseProposedTS.LessEq(leaseStartTS) {
+	if minLeaseProposedTS.ToTimestamp().LessEq(leaseStartTS) {
 		t.Fatalf("expected minLeaseProposedTS > lease start. minLeaseProposedTS: %s, "+
 			"leas start: %s", minLeaseProposedTS, leaseStartTS)
 	}
@@ -1653,7 +1653,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
 	if tc.repl.leaseStatus(context.Background(),
-		lease, tc.Clock().Now(), hlc.Timestamp{}).State != kvserverpb.LeaseState_EXPIRED {
+		lease, tc.Clock().Now(), hlc.ClockTimestamp{}).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -2161,10 +2161,10 @@ func TestAcquireLease(t *testing.T) {
 
 				tc.repl.mu.Lock()
 				if !withMinLeaseProposedTS {
-					tc.repl.mu.minLeaseProposedTS = hlc.Timestamp{}
+					tc.repl.mu.minLeaseProposedTS = hlc.ClockTimestamp{}
 					expStart = lease.Start
 				} else {
-					expStart = tc.repl.mu.minLeaseProposedTS
+					expStart = tc.repl.mu.minLeaseProposedTS.ToTimestamp()
 				}
 				tc.repl.mu.Unlock()
 
@@ -2261,7 +2261,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		for i := 0; i < num; i++ {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
-				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
+				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, ts, hlc.ClockTimestamp{})
 				llHandle := tc.repl.requestLeaseLocked(ctx, status)
 				tc.repl.mu.Unlock()
 				wg.Done()

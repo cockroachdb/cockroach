@@ -1854,11 +1854,12 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			}
 
 			// Determine the timestamp to read at.
-			readTs := store.cfg.Clock.Now()
+			clockTs := store.cfg.Clock.NowAsClockTimestamp()
+			readTs := clockTs.ToTimestamp()
 			// Give the pusher a previous observed timestamp equal to this read
 			// timestamp. This ensures that the pusher doesn't need to push the
 			// intent any higher just to push it out of its uncertainty window.
-			pusher.UpdateObservedTimestamp(store.Ident.NodeID, readTs)
+			pusher.UpdateObservedTimestamp(store.Ident.NodeID, clockTs)
 
 			// If the pushee is already pushed, update the transaction record.
 			if tc.pusheeAlreadyPushed {
