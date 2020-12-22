@@ -66,8 +66,10 @@ func TestKafkaSink(t *testing.T) {
 	}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   map[string]struct{}{`t`: {}},
 	}
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
+	sink.setTargets(targets)
 	sink.start()
 	defer func() {
 		if err := sink.Close(); err != nil {
@@ -156,8 +158,10 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   map[string]struct{}{SQLNameToKafkaName(`☃`): {}},
 	}
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
+	sink.setTargets(targets)
 	sink.start()
 	defer func() { require.NoError(t, sink.Close()) }()
 	if err := sink.EmitRow(ctx, table(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
