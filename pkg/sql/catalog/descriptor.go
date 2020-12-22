@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -222,7 +224,9 @@ func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error 
 		}
 		return NewInactiveDescriptorError(err)
 	case desc.Adding():
-		return errTableAdding
+		// Only table descriptors can be in the adding state.
+		return pgerror.WithCandidateCode(newAddingTableError(desc.(TableDescriptor)),
+			pgcode.ObjectNotInPrerequisiteState)
 	default:
 		return nil
 	}

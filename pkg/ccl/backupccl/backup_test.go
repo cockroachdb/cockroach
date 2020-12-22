@@ -6676,15 +6676,15 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `USE d`)
 
-		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d`)
-		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d.sc`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `SHOW TABLES FROM d`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `SHOW TABLES FROM d.sc`)
 
-		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `SELECT * FROM d.sc.tb`)
-		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `ALTER TABLE d.sc.tb ADD COLUMN b INT`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `SELECT * FROM d.sc.tb`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `ALTER TABLE d.sc.tb ADD COLUMN b INT`)
 
-		sqlDB.ExpectErr(t, `type "d.sc.typ" does not exist`, `ALTER TYPE d.sc.typ RENAME TO typ2`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `ALTER TYPE d.sc.typ RENAME TO typ2`)
 
-		sqlDB.ExpectErr(t, `cannot create "d.sc.other" because the target database or schema does not exist`, `CREATE TABLE d.sc.other()`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `CREATE TABLE d.sc.other()`)
 
 		close(continueNotif)
 		require.NoError(t, g.Wait())
@@ -6714,6 +6714,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		sqlDB.Exec(t, `
 CREATE DATABASE d;
 USE d;
+CREATE TABLE tb (x INT);
 CREATE SCHEMA sc;
 CREATE TABLE sc.tb (x INT);
 CREATE TYPE sc.typ AS ENUM ('hello');
@@ -6745,8 +6746,11 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
 
-		tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.State)
+		publicTableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "public", "tb")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, publicTableDesc.State)
+
+		scTableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		require.Equal(t, descpb.DescriptorState_OFFLINE, scTableDesc.State)
 
 		typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.State)
@@ -6772,7 +6776,10 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 			{"public", security.AdminRole},
 		})
 
-		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM newdb.sc`)
+		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SHOW TABLES FROM newdb.sc`)
+
+		sqlDB.ExpectErr(t, `relation "tb" is offline: restoring`, `SELECT * FROM newdb.tb`)
+		sqlDB.ExpectErr(t, `relation "tb" is offline: restoring`, `SELECT * FROM newdb.public.tb`)
 
 		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SELECT * FROM newdb.sc.tb`)
 		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SELECT * FROM sc.tb`)

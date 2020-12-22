@@ -2980,7 +2980,7 @@ func TestImportIntoCSV(t *testing.T) {
 			<-importBodyFinished
 
 			err := sqlDB.DB.QueryRowContext(ctx, `SELECT 1 FROM t`).Scan(&unused)
-			if !testutils.IsError(err, "relation \"t\" does not exist") {
+			if !testutils.IsError(err, `relation "t" is offline: importing`) {
 				return err
 			}
 			return nil

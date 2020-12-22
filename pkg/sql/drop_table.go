@@ -273,7 +273,9 @@ func (p *planner) dropTableImpl(
 
 	// Remove foreign key back references from tables that this table has foreign
 	// keys to.
-	for i := range tableDesc.OutboundFKs {
+	// Copy out the set of outbound fks as it may be overwritten in the loop.
+	outboundFKs := append([]descpb.ForeignKeyConstraint(nil), tableDesc.OutboundFKs...)
+	for i := range outboundFKs {
 		ref := &tableDesc.OutboundFKs[i]
 		if err := p.removeFKBackReference(ctx, tableDesc, ref); err != nil {
 			return droppedViews, err
@@ -283,7 +285,9 @@ func (p *planner) dropTableImpl(
 
 	// Remove foreign key forward references from tables that have foreign keys
 	// to this table.
-	for i := range tableDesc.InboundFKs {
+	// Copy out the set of inbound fks as it may be overwritten in the loop.
+	inboundFKs := append([]descpb.ForeignKeyConstraint(nil), tableDesc.InboundFKs...)
+	for i := range inboundFKs {
 		ref := &tableDesc.InboundFKs[i]
 		if err := p.removeFKForBackReference(ctx, tableDesc, ref); err != nil {
 			return droppedViews, err
@@ -321,7 +325,9 @@ func (p *planner) dropTableImpl(
 
 	// Drop all views that depend on this table, assuming that we wouldn't have
 	// made it to this point if `cascade` wasn't enabled.
-	for _, ref := range tableDesc.DependedOnBy {
+	// Copy out the set of dependencies as it may be overwritten in the loop.
+	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), tableDesc.DependedOnBy...)
+	for _, ref := range dependedOnBy {
 		viewDesc, err := p.getViewDescForCascade(
 			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
 		)
@@ -571,7 +577,8 @@ func removeFKBackReferenceFromTable(
 			"for constraint %q on table %q", fkName, originTableDesc.GetName())
 	}
 	// Delete our match.
-	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx], referencedTableDesc.InboundFKs[matchIdx+1:]...)
+	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx],
+		referencedTableDesc.InboundFKs[matchIdx+1:]...)
 	return nil
 }
 
