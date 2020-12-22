@@ -157,7 +157,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 			return execPlan{}, errors.WithSecondaryError(
 				unimplemented.NewWithIssuef(26508,
-					"schema change statement cannot follow a statement that has written in the same transaction"),
+					"if the first write statement occurs before the first schema change statement in a transaction, "+
+						"then no schema change statements may follow the write statement"),
 				err)
 		}
 	}

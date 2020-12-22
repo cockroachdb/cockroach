@@ -3579,7 +3579,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 			name:        `insert-create`,
 			firstStmt:   `INSERT INTO t.kv VALUES ('e', 'f')`,
 			secondStmt:  `CREATE INDEX foo2 ON t.kv (v)`,
-			expectedErr: `schema change statement cannot follow a statement that has written in the same transaction`,
+			expectedErr: `if the first write statement occurs before the first schema change statement in a transaction, then no schema change statements may follow the write statement`,
 		},
 		// schema change at the end of a read only transaction.
 		{
