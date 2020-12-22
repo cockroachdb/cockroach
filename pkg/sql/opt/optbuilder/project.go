@@ -301,3 +301,56 @@ func (b *Builder) finishBuildScalarRef(
 	b.projectColumn(outCol, col)
 	return outCol.scalar
 }
+
+// projectionBuilder is a helper for adding projected columns to a scope and
+// constructing a Project operator as needed.
+//
+// Sample usage:
+//
+//   pb := makeProjectionBuilder(b, scope)
+//   b.Add(name, expr, typ)
+//   ...
+//   scope = pb.Finish()
+//
+// Note that this is all a cheap no-op if Add is not called.
+type projectionBuilder struct {
+	b        *Builder
+	inScope  *scope
+	outScope *scope
+}
+
+func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
+	return projectionBuilder{b: b, inScope: inScope}
+}
+
+// Add a projection.
+func (pb *projectionBuilder) Add(
+	name tree.Name, expr tree.Expr, desiredType *types.T,
+) opt.ColumnID {
+	if pb.outScope == nil {
+		pb.outScope = pb.inScope.replace()
+		pb.outScope.appendColumnsFromScope(pb.inScope)
+	}
+	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType)
+	// Instead of passing the column name here, we let the column get an
+	// auto-generated name in the metadata. We then override it below. This
+	// reduces clashes between column names in the metadata.
+	// TODO(radu): is this really better than using the real column name?
+	scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
+	pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
+	scopeCol.name = name
+
+	return scopeCol.id
+}
+
+// Finish returns a scope that contains all the columns in the original scope
+// plus all the projected columns. If no columns have been added, returns the
+// original scope.
+func (pb *projectionBuilder) Finish() (outScope *scope) {
+	if pb.outScope == nil {
+		// No columns were added; return the original scope.
+		return pb.inScope
+	}
+	pb.b.constructProjectForScope(pb.inScope, pb.outScope)
+	return pb.outScope
+}
