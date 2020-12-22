@@ -39,6 +39,8 @@ type operationGeneratorParams struct {
 	ops                *deck
 	maxSourceTables    int
 	sequenceOwnedByPct int
+	fkParentInvalidPct int
+	fkChildInvalidPct  int
 }
 
 // The OperationBuilder has the sole responsibility of generating ops
@@ -88,8 +90,10 @@ func (og *operationGenerator) resetTxnState() {
 type opType int
 
 const (
-	addColumn     opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
-	addConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
+	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
+	addConstraint                         // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
+	addForeignKeyConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
+	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
 
 	createIndex    // CREATE INDEX <index> ON <table> <def>
 	createSequence // CREATE SEQUENCE <sequence> <def>
@@ -128,35 +132,37 @@ const (
 )
 
 var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
-	addColumn:         (*operationGenerator).addColumn,
-	addConstraint:     (*operationGenerator).addConstraint,
-	createIndex:       (*operationGenerator).createIndex,
-	createSequence:    (*operationGenerator).createSequence,
-	createTable:       (*operationGenerator).createTable,
-	createTableAs:     (*operationGenerator).createTableAs,
-	createView:        (*operationGenerator).createView,
-	createEnum:        (*operationGenerator).createEnum,
-	createSchema:      (*operationGenerator).createSchema,
-	dropColumn:        (*operationGenerator).dropColumn,
-	dropColumnDefault: (*operationGenerator).dropColumnDefault,
-	dropColumnNotNull: (*operationGenerator).dropColumnNotNull,
-	dropColumnStored:  (*operationGenerator).dropColumnStored,
-	dropConstraint:    (*operationGenerator).dropConstraint,
-	dropIndex:         (*operationGenerator).dropIndex,
-	dropSequence:      (*operationGenerator).dropSequence,
-	dropTable:         (*operationGenerator).dropTable,
-	dropView:          (*operationGenerator).dropView,
-	dropSchema:        (*operationGenerator).dropSchema,
-	renameColumn:      (*operationGenerator).renameColumn,
-	renameIndex:       (*operationGenerator).renameIndex,
-	renameSequence:    (*operationGenerator).renameSequence,
-	renameTable:       (*operationGenerator).renameTable,
-	renameView:        (*operationGenerator).renameView,
-	setColumnDefault:  (*operationGenerator).setColumnDefault,
-	setColumnNotNull:  (*operationGenerator).setColumnNotNull,
-	setColumnType:     (*operationGenerator).setColumnType,
-	insertRow:         (*operationGenerator).insertRow,
-	validate:          (*operationGenerator).validate,
+	addColumn:               (*operationGenerator).addColumn,
+	addConstraint:           (*operationGenerator).addConstraint,
+	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
+	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
+	createIndex:             (*operationGenerator).createIndex,
+	createSequence:          (*operationGenerator).createSequence,
+	createTable:             (*operationGenerator).createTable,
+	createTableAs:           (*operationGenerator).createTableAs,
+	createView:              (*operationGenerator).createView,
+	createEnum:              (*operationGenerator).createEnum,
+	createSchema:            (*operationGenerator).createSchema,
+	dropColumn:              (*operationGenerator).dropColumn,
+	dropColumnDefault:       (*operationGenerator).dropColumnDefault,
+	dropColumnNotNull:       (*operationGenerator).dropColumnNotNull,
+	dropColumnStored:        (*operationGenerator).dropColumnStored,
+	dropConstraint:          (*operationGenerator).dropConstraint,
+	dropIndex:               (*operationGenerator).dropIndex,
+	dropSequence:            (*operationGenerator).dropSequence,
+	dropTable:               (*operationGenerator).dropTable,
+	dropView:                (*operationGenerator).dropView,
+	dropSchema:              (*operationGenerator).dropSchema,
+	renameColumn:            (*operationGenerator).renameColumn,
+	renameIndex:             (*operationGenerator).renameIndex,
+	renameSequence:          (*operationGenerator).renameSequence,
+	renameTable:             (*operationGenerator).renameTable,
+	renameView:              (*operationGenerator).renameView,
+	setColumnDefault:        (*operationGenerator).setColumnDefault,
+	setColumnNotNull:        (*operationGenerator).setColumnNotNull,
+	setColumnType:           (*operationGenerator).setColumnType,
+	insertRow:               (*operationGenerator).insertRow,
+	validate:                (*operationGenerator).validate,
 }
 
 func init() {
@@ -167,35 +173,37 @@ func init() {
 }
 
 var opWeights = []int{
-	addColumn:         1,
-	addConstraint:     0, // TODO(spaskob): unimplemented
-	createIndex:       1,
-	createSequence:    1,
-	createTable:       1,
-	createTableAs:     1,
-	createView:        1,
-	createEnum:        1,
-	createSchema:      1,
-	dropColumn:        1,
-	dropColumnDefault: 1,
-	dropColumnNotNull: 1,
-	dropColumnStored:  1,
-	dropConstraint:    1,
-	dropIndex:         1,
-	dropSequence:      1,
-	dropTable:         1,
-	dropView:          1,
-	dropSchema:        1,
-	renameColumn:      1,
-	renameIndex:       1,
-	renameSequence:    1,
-	renameTable:       1,
-	renameView:        1,
-	setColumnDefault:  1,
-	setColumnNotNull:  1,
-	setColumnType:     1,
-	insertRow:         1,
-	validate:          2, // validate twice more often
+	addColumn:               1,
+	addConstraint:           0, // TODO(spaskob): unimplemented
+	addForeignKeyConstraint: 1,
+	addUniqueConstraint:     1,
+	createIndex:             1,
+	createSequence:          1,
+	createTable:             1,
+	createTableAs:           1,
+	createView:              1,
+	createEnum:              1,
+	createSchema:            1,
+	dropColumn:              1,
+	dropColumnDefault:       1,
+	dropColumnNotNull:       1,
+	dropColumnStored:        1,
+	dropConstraint:          1,
+	dropIndex:               1,
+	dropSequence:            1,
+	dropTable:               1,
+	dropView:                1,
+	dropSchema:              1,
+	renameColumn:            1,
+	renameIndex:             1,
+	renameSequence:          1,
+	renameTable:             1,
+	renameView:              1,
+	setColumnDefault:        1,
+	setColumnNotNull:        1,
+	setColumnType:           1,
+	insertRow:               1,
+	validate:                2, // validate twice more often
 }
 
 // randOp attempts to produce a random schema change operation. It returns a
@@ -309,6 +317,135 @@ func (og *operationGenerator) addConstraint(tx *pgx.Tx) (string, error) {
 	// TODO(peter): unimplemented
 	// - Export sqlbase.randColumnTableDef.
 	return "", nil
+}
+
+func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
+	tableName, err := og.randTable(tx, og.pctExisting(true), "")
+	if err != nil {
+		return "", err
+	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT IrrelevantConstraintName UNIQUE (IrrelevantColumnName)`, tableName), nil
+	}
+
+	columnForConstraint, err := og.randColumnWithMeta(tx, *tableName, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+
+	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
+
+	columnExistsOnTable, err := columnExistsOnTable(tx, tableName, columnForConstraint.name)
+	if err != nil {
+		return "", err
+	}
+	constraintExists, err := constraintExists(tx, constaintName)
+	if err != nil {
+		return "", err
+	}
+
+	canApplyConstraint := true
+	if columnExistsOnTable {
+		canApplyConstraint, err = canApplyUniqueConstraint(tx, tableName, []string{columnForConstraint.name})
+		if err != nil {
+			return "", err
+		}
+	}
+
+	codesWithConditions{
+		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
+		{code: pgcode.DuplicateObject, condition: constraintExists},
+		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
+	}.add(og.expectedExecErrors)
+
+	if !canApplyConstraint {
+		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+	}
+
+	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
+}
+
+func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error) {
+
+	parentTable, parentColumn, err := og.randParentColumnForFkRelation(tx, og.randIntn(100) >= og.params.fkParentInvalidPct)
+	if err != nil {
+		return "", err
+	}
+
+	fetchInvalidChild := og.randIntn(100) < og.params.fkChildInvalidPct
+	// Potentially create an error by choosing the wrong type for the child column.
+	childType := parentColumn.typ
+	if fetchInvalidChild {
+		typeName, err := og.randType(tx, og.pctExisting(true))
+		if err != nil {
+			return "", err
+		}
+		childType, err = og.typeFromTypeName(tx, typeName.String())
+		if err != nil {
+			return "", err
+		}
+	}
+
+	childTable, childColumn, err := og.randChildColumnForFkRelation(tx, !fetchInvalidChild, childType.SQLString())
+	if err != nil {
+		return "", err
+	}
+
+	constraintName := tree.Name(fmt.Sprintf("%s_%s_%s_%s_fk", parentTable.Object(), parentColumn.name, childTable.Object(), childColumn.name))
+
+	def := &tree.AlterTable{
+		Table: childTable.ToUnresolvedObjectName(),
+		Cmds: tree.AlterTableCmds{
+			&tree.AlterTableAddConstraint{
+				ConstraintDef: &tree.ForeignKeyConstraintTableDef{
+					Name:     constraintName,
+					Table:    *parentTable,
+					FromCols: tree.NameList{tree.Name(childColumn.name)},
+					ToCols:   tree.NameList{tree.Name(parentColumn.name)},
+					Actions: tree.ReferenceActions{
+						Update: tree.Cascade,
+						Delete: tree.Cascade,
+					},
+				},
+				ValidationBehavior: tree.ValidationDefault,
+			},
+		},
+	}
+
+	parentColumnHasUniqueConstraint, err := columnHasSingleUniqueConstraint(tx, parentTable, parentColumn.name)
+	if err != nil {
+		return "", err
+	}
+	childColumnIsComputed, err := columnIsComputed(tx, parentTable, parentColumn.name)
+	if err != nil {
+		return "", err
+	}
+	constraintExists, err := constraintExists(tx, string(constraintName))
+	if err != nil {
+		return "", err
+	}
+	rowsSatisfyConstraint, err := rowsSatisfyFkConstraint(tx, parentTable, parentColumn, childTable, childColumn)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
+		{code: pgcode.FeatureNotSupported, condition: childColumnIsComputed},
+		{code: pgcode.DuplicateObject, condition: constraintExists},
+		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
+	}.add(og.expectedExecErrors)
+
+	if !rowsSatisfyConstraint {
+		og.candidateExpectedCommitErrors.add(pgcode.ForeignKeyViolation)
+	}
+
+	return tree.Serialize(def), nil
 }
 
 func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
@@ -480,6 +617,7 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 					Name:          tree.SeqOptOwnedBy,
 					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: "IrrelevantColumnName"}},
 			)
+			og.expectedExecErrors.add(pgcode.UndefinedTable)
 		} else {
 			column, err := og.randColumn(tx, *table, og.pctExisting(true))
 			if err != nil {
@@ -1544,9 +1682,18 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if uniqueConstraintViolation {
-		og.expectedExecErrors.add(pgcode.UniqueViolation)
+
+	// Verify if the new row will violate fk constraints by checking the constraints and rows
+	// in the database.
+	foreignKeyViolation, err := violatesFkConstraints(tx, tableName, colNames, rows)
+	if err != nil {
+		return "", err
 	}
+
+	codesWithConditions{
+		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
+		{code: pgcode.ForeignKeyViolation, condition: foreignKeyViolation},
+	}.add(og.expectedExecErrors)
 
 	formattedRows := []string{}
 	for _, row := range rows {
@@ -1704,6 +1851,120 @@ ORDER BY random()
 	}
 
 	return col, nil
+}
+
+// randChildColumnForFkRelation gets a column to use as the child column in a foreign key relation.
+// To successfully use a column as the child, the column must have the same type as the parent and must not be computed.
+func (og *operationGenerator) randChildColumnForFkRelation(
+	tx *pgx.Tx, isNotComputed bool, typ string,
+) (*tree.TableName, *column, error) {
+
+	query := strings.Builder{}
+	query.WriteString(`
+    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
+      FROM information_schema.columns
+		 WHERE table_name ~ 'table[0-9]+'
+  `)
+	query.WriteString(fmt.Sprintf(`
+			AND crdb_sql_type = '%s'
+	`, typ))
+
+	if isNotComputed {
+		query.WriteString(`AND is_generated = 'NO'`)
+	} else {
+		query.WriteString(`AND is_generated = 'YES'`)
+	}
+
+	var tableSchema string
+	var tableName string
+	var columnName string
+	var typName string
+	var nullable string
+
+	err := tx.QueryRow(query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	columnToReturn := column{
+		name:     columnName,
+		nullable: nullable == "YES",
+	}
+	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(tableSchema),
+		ExplicitSchema: true,
+	}, tree.Name(tableName))
+
+	columnToReturn.typ, err = og.typeFromTypeName(tx, typName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &table, &columnToReturn, nil
+}
+
+// randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
+// To successfully use a column as the parent, the column must be unique and must not be generated.
+func (og *operationGenerator) randParentColumnForFkRelation(
+	tx *pgx.Tx, unique bool,
+) (*tree.TableName, *column, error) {
+
+	subQuery := strings.Builder{}
+	subQuery.WriteString(`
+		SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, contype, conkey
+      FROM (
+        SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, ordinal_position,
+               concat(table_schema, '.', table_name)::REGCLASS::INT8 AS tableid
+          FROM information_schema.columns
+           ) AS cols
+		  JOIN (
+		        SELECT contype, conkey, conrelid
+		          FROM pg_catalog.pg_constraint
+		       ) AS cons ON cons.conrelid = cols.tableid
+		 WHERE table_name ~ 'table[0-9]+'
+  `)
+	if unique {
+		subQuery.WriteString(`
+		 AND (contype = 'u' OR contype = 'p')
+		 AND array_length(conkey, 1) = 1
+		 AND conkey[1] = ordinal_position
+		`)
+	}
+
+	subQuery.WriteString(`
+		ORDER BY random()
+    LIMIT 1
+  `)
+
+	var tableSchema string
+	var tableName string
+	var columnName string
+	var typName string
+	var nullable string
+
+	err := tx.QueryRow(fmt.Sprintf(`
+	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
+		%s
+	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	columnToReturn := column{
+		name:     columnName,
+		nullable: nullable == "YES",
+	}
+	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+		SchemaName:     tree.Name(tableSchema),
+		ExplicitSchema: true,
+	}, tree.Name(tableName))
+
+	columnToReturn.typ, err = og.typeFromTypeName(tx, typName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &table, &columnToReturn, nil
 }
 
 func (og *operationGenerator) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
