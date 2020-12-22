@@ -65,6 +65,8 @@ func (s *ComponentStats) StatsTags() map[string]string {
 			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID))
 		case ComponentID_STREAM:
 			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID))
+		case ComponentID_FLOW:
+			// Nothing extra to set.
 		}
 	}
 

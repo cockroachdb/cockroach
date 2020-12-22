@@ -948,11 +948,16 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
 						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
-							// At the last outbox, we can accurately retrieve stats for the whole flow from parent monitors.
-							// These stats are added to a flow-level span.
-							// TODO(radu): add a ComponentID type for the flow itself.
+							// At the last outbox, we can accurately retrieve stats for the
+							// whole flow from parent monitors. These stats are added to a
+							// flow-level span.
 							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
 							span.SetSpanStats(&execinfrapb.ComponentStats{
+								Component: execinfrapb.ComponentID{
+									Type:   execinfrapb.ComponentID_FLOW,
+									FlowID: flowCtx.ID,
+									// TODO(radu): the node ID should be part of the ComponentID.
+								},
 								FlowStats: execinfrapb.FlowStats{
 									MaxMemUsage: optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
 								},
