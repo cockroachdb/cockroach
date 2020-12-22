@@ -1352,7 +1352,7 @@ func (mb *mutationBuilder) projectPartialIndexDistinctColumn(
 	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
 
 	alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
-	scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+	scopeCol := projectionScope.addColumn(alias, texpr)
 	mb.b.buildScalar(texpr, mb.outScope, projectionScope, scopeCol, nil)
 
 	mb.b.constructProjectForScope(mb.outScope, projectionScope)

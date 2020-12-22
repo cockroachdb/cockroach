@@ -592,7 +592,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 		texpr := mb.outScope.resolveAndRequireType(expr, tabCol.DatumType())
-		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
+		scopeCol := projectionsScope.addColumn("" /* alias */, texpr)
 		mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
 
 		// Assign name to synthesized column. Computed columns may refer to default
@@ -758,7 +758,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 
 			alias := fmt.Sprintf("check%d", i+1)
 			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
+			scopeCol := projectionsScope.addColumn(alias, texpr)
 
 			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
 			// and instead use the constraints stored in the table metadata.
@@ -868,7 +868,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 			if putScope != nil {
 				texpr := putScope.resolveAndRequireType(expr, types.Bool)
 				alias := fmt.Sprintf("partial_index_put%d", ord+1)
-				scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+				scopeCol := projectionScope.addColumn(alias, texpr)
 
 				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
 				mb.partialIndexPutColIDs[ord] = scopeCol.id
@@ -878,7 +878,7 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 			if delScope != nil {
 				texpr := delScope.resolveAndRequireType(expr, types.Bool)
 				alias := fmt.Sprintf("partial_index_del%d", ord+1)
-				scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+				scopeCol := projectionScope.addColumn(alias, texpr)
 
 				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
 				mb.partialIndexDelColIDs[ord] = scopeCol.id

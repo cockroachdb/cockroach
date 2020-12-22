@@ -634,7 +634,7 @@ func (b *Builder) buildGrouping(
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
-		col := b.addColumn(aggInScope, alias, e)
+		col := aggInScope.addColumn(alias, e)
 		b.buildScalar(e, fromScope, aggInScope, col, nil)
 		fromScope.groupby.groupStrs[exprStr] = col
 	}
@@ -648,7 +648,7 @@ func (b *Builder) buildAggArg(
 ) opt.ScalarExpr {
 	// This synthesizes a new tempScope column, unless the argument is a
 	// simple VariableOp.
-	col := b.addColumn(tempScope, "" /* alias */, e)
+	col := tempScope.addColumn("" /* alias */, e)
 	b.buildScalar(e, fromScope, tempScope, col, &info.colRefs)
 	if col.scalar != nil {
 		return col.scalar
