@@ -1,0 +1,110 @@
+# LogicTest: 5node !metamorphic
+
+# Regression test for #35950: Make sure that lookup joins use a batch limit.
+
+statement ok
+CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))
+
+statement ok
+CREATE TABLE b (a INT PRIMARY KEY)
+
+# We insert over 10k rows, which is the currently configured batch limit.
+
+statement ok
+INSERT INTO a SELECT 1, g FROM generate_series(1,11000) g
+
+statement ok
+INSERT INTO b VALUES(1)
+
+query T
+EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
+----
+distribution: full
+vectorized: true
+·
+• group (scalar)
+│
+└── • lookup join
+    │ table: a@primary
+    │ equality: (a) = (a)
+    │
+    └── • scan
+          missing stats
+          table: b@primary
+          spans: FULL SCAN
+
+statement ok
+SET tracing = on
+
+query I
+SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
+----
+11000
+
+statement ok
+SET tracing = off
+
+let $lookupTableID
+SELECT 'a'::regclass::oid
+
+# Now assert that we get more than 1 separate batch request into the lookup
+# table, since the first one wouldn't have returned all of the results.
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/$lookupTableID%'
+----
+Scan /Table/53/1/{1-2}
+Scan /Table/53/1/{1/10001/0-2}
+
+# The following tests check that if the joiners can separate a row request
+# into separate families that it does, and generates spans for each family
+# instead of reading the entire row when it doesn't need to.
+
+statement ok
+CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
+
+statement ok
+INSERT INTO family_split_1 VALUES (1)
+
+statement ok
+CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
+
+statement ok
+INSERT INTO family_split_2 VALUES (1, 2, 3)
+
+query T kvtrace(Scan)
+SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
+----
+Scan /Table/55/{1-2}
+Scan /Table/56/1/1/{0-1}, /Table/56/1/1/2/{1-2}
+
+statement ok
+CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
+
+statement ok
+INSERT INTO family_index_join VALUES (1, 2, 3, 4)
+
+query T kvtrace(Scan)
+SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
+----
+Scan /Table/57/2/{2-3}
+Scan /Table/57/1/1/{0-1/2}, /Table/57/1/1/3/{1-2}
+
+# Test generating tighter spans on interleaved tables.
+statement ok
+CREATE TABLE family_interleave_1 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
+
+statement ok
+CREATE TABLE family_interleave_2 (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT family_interleave_1 (x)
+
+statement ok
+INSERT INTO family_interleave_1 VALUES (1, 2, 3)
+
+statement ok
+INSERT INTO family_interleave_2 VALUES (1, 3)
+
+query T kvtrace(Scan)
+SELECT family_interleave_1.x, family_interleave_1.z FROM family_interleave_2 INNER LOOKUP JOIN family_interleave_1 ON family_interleave_1.x = family_interleave_2.x
+----
+Scan /Table/58/{1-2}
+Scan /Table/58/1/1/{0-1}, /Table/58/1/1/2/{1-2}
