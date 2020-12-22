@@ -150,7 +150,12 @@ func (s *Server) Serve(ln net.Listener) error {
 			tBegin := timeutil.Now()
 			remoteAddr := conn.RemoteAddr()
 			log.Infof(context.Background(), "handling client %s", remoteAddr)
-			err := s.Proxy(conn)
+			var err error
+			if s.opts.ProxyInterceptor != nil {
+				err = s.opts.ProxyInterceptor(s, conn)
+			} else {
+				err = s.Proxy(conn)
+			}
 			log.Infof(context.Background(), "client %s disconnected after %.2fs: %v",
 				remoteAddr, timeutil.Since(tBegin).Seconds(), err)
 		}()
