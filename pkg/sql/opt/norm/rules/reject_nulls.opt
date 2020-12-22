@@ -179,7 +179,8 @@
 
 # RejectNullsUnderJoinRight mirrors RejectNullsUnderJoinLeft.
 [RejectNullsUnderJoinRight, Normalize, LowPriority]
-(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply | SemiJoin
+        | AntiJoin
     $left:*
     $right:* &
         ^(ColsAreEmpty $rejectCols:(RejectNullCols $right))
