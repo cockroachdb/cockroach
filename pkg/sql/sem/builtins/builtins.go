@@ -18,6 +18,7 @@ import (
 	"crypto/sha512"
 	gojson "encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"hash"
 	"hash/crc32"
 	"hash/fnv"
@@ -4673,6 +4674,42 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDInt(tree.DInt(numNonNulls)), nil
 			},
 			Info:       "Returns the number of nonnull arguments.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	// bisect_bytes is a builtin added so that users of CockroachDB can
+	// easily construct lexicographically sorted lists that allow for
+	// insertion into the middle of the list. This is useful for implementing
+	// data types like ENUMs or reorderable lists.
+	"bisect_bytes": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     categoryString,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"prev", types.Bytes},
+				{"next", types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				getArg := func(d tree.Datum) []byte {
+					if d == tree.DNull {
+						return []byte{}
+					}
+					return []byte(tree.MustBeDBytes(d))
+				}
+				prev, next := getArg(args[0]), getArg(args[1])
+				result, err := enum.GenByteStringBetween(prev, next, enum.SpreadSpacing)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(result)), nil
+			},
+			Info: "Return a byte string that sorts between the two input bytes. NULL values" +
+				" are treated as negative/positive infinity when used as the prev/next argument." +
+				" Bytes passed to bisect_bytes must not end with the reserved byte '0'. Suggested" +
+				" usage is to use the outputs of bisect_bytes as inputs to future calls.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),

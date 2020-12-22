@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/enum",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase:lex",
         "//pkg/sql/paramparse",

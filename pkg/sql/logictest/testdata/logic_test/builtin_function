@@ -2888,3 +2888,25 @@ query T
 SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
 ----
 {3,0,1}
+
+subtest bisect_bytes
+
+statement error pq: bisect_bytes\(\): argument prev ends with reserved token 0
+SELECT bisect_bytes('\x00', NULL::BYTES)
+
+statement error pq: bisect_bytes\(\): argument next ends with reserved token 0
+SELECT bisect_bytes(NULL::BYTES, '\x00')
+
+# Do some basic tests with bisect_bytes, as this behavior is already
+# well tested in the enum package. Nesting of calls is used here instead
+# of storing results in a variable because the logictest framework can't
+# re-escape the bytes when substituting them back in.
+query B
+SELECT bisect_bytes(NULL::BYTES, NULL::BYTES) < bisect_bytes(bisect_bytes(NULL::BYTES, NULL::BYTES), NULL::BYTES)
+----
+true
+
+query B
+SELECT bisect_bytes(NULL::BYTES, bisect_bytes(NULL::BYTES, NULL::BYTES)) < bisect_bytes(NULL::BYTES, NULL::BYTES)
+----
+true
