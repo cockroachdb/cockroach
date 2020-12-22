@@ -23,10 +23,18 @@ message Timestamp {
 
   // Holds a wall time, typically a unix epoch time expressed in
   // nanoseconds.
+  //
+  // It is not safe to mutate this field directly. Instead, use one of
+  // the methods on Timestamp, which ensure that the from_clock flag is
+  // updated appropriately.
   int64 wall_time = 1;
   // The logical component captures causality for events whose wall times
   // are equal. It is effectively bounded by (maximum clock skew)/(minimal
   // ns between events) and nearly impossible to overflow.
+  //
+  // It is not safe to mutate this field directly. Instead, use one of
+  // the methods on Timestamp, which ensure that the from_clock flag is
+  // updated appropriately.
   int32 logical = 2;
   // A collection of bit flags that provide details about the timestamp
   // and its meaning. The data type is a uint32, but the number of flags

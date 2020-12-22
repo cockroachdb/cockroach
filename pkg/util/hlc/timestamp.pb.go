@@ -54,17 +54,25 @@ func (x TimestampFlag) String() string {
 	return proto.EnumName(TimestampFlag_name, int32(x))
 }
 func (TimestampFlag) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_20487450db3b6825, []int{0}
+	return fileDescriptor_timestamp_f17828ad9e656dd1, []int{0}
 }
 
 // Timestamp represents a state of the hybrid logical clock.
 type Timestamp struct {
 	// Holds a wall time, typically a unix epoch time expressed in
 	// nanoseconds.
+	//
+	// It is not safe to mutate this field directly. Instead, use one of
+	// the methods on Timestamp, which ensure that the from_clock flag is
+	// updated appropriately.
 	WallTime int64 `protobuf:"varint,1,opt,name=wall_time,json=wallTime,proto3" json:"wall_time,omitempty"`
 	// The logical component captures causality for events whose wall times
 	// are equal. It is effectively bounded by (maximum clock skew)/(minimal
 	// ns between events) and nearly impossible to overflow.
+	//
+	// It is not safe to mutate this field directly. Instead, use one of
+	// the methods on Timestamp, which ensure that the from_clock flag is
+	// updated appropriately.
 	Logical int32 `protobuf:"varint,2,opt,name=logical,proto3" json:"logical,omitempty"`
 	// A collection of bit flags that provide details about the timestamp
 	// and its meaning. The data type is a uint32, but the number of flags
@@ -105,7 +113,7 @@ type Timestamp struct {
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 func (*Timestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_20487450db3b6825, []int{0}
+	return fileDescriptor_timestamp_f17828ad9e656dd1, []int{0}
 }
 func (m *Timestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -538,10 +546,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_20487450db3b6825)
+	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_f17828ad9e656dd1)
 }
 
-var fileDescriptor_timestamp_20487450db3b6825 = []byte{
+var fileDescriptor_timestamp_f17828ad9e656dd1 = []byte{
 	// 247 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,
