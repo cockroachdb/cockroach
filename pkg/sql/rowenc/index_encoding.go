@@ -359,7 +359,7 @@ func NeededColumnFamilyIDs(
 		return nil
 	})
 	if family0 == nil {
-		panic("column family 0 not found")
+		panic(errors.AssertionFailedf("column family 0 not found"))
 	}
 
 	// If all the needed families are nullable, we also need family 0 as a
@@ -1238,11 +1238,11 @@ func EncodeSecondaryIndexes(
 	indexBoundAccount mon.BoundAccount,
 ) ([]IndexEntry, error) {
 	if len(secondaryIndexEntries) > 0 {
-		panic("Length of secondaryIndexEntries was non-zero")
+		panic(errors.AssertionFailedf("length of secondaryIndexEntries was non-zero"))
 	}
 
 	if indexBoundAccount.Monitor() == nil {
-		panic("Memory monitor passed to EncodeSecondaryIndexes was nil")
+		panic(errors.AssertionFailedf("memory monitor passed to EncodeSecondaryIndexes was nil"))
 	}
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
 

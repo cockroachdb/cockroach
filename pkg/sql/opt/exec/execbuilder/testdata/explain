@@ -1203,3 +1203,23 @@ insert                                       ·                      ·
 ·                                            missing stats          ·
 ·                                            table                  u@primary
 ·                                            spans                  [/1 - /1]
+
+# Make sure EXPLAIN (VERBOSE) works when there is a constrained scan of a
+# virtual table (#58193).
+statement ok
+CREATE TABLE ab (a INT, b INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT attnum FROM pg_attribute WHERE attrelid = 'ab'::regclass AND attname = 'b';
+----
+·                        distribution         local                                   ·                            ·
+·                        vectorized           false                                   ·                            ·
+project                  ·                    ·                                       (attnum)                     ·
+ │                       estimated row count  1 (missing stats)                       ·                            ·
+ └── filter              ·                    ·                                       (attrelid, attname, attnum)  ·
+      │                  estimated row count  1 (missing stats)                       ·                            ·
+      │                  filter               attname = 'b'                           ·                            ·
+      └── virtual table  ·                    ·                                       (attrelid, attname, attnum)  ·
+·                        estimated row count  10 (missing stats)                      ·                            ·
+·                        table                pg_attribute@pg_attribute_attrelid_idx  ·                            ·
+·                        spans                [/ab - /ab]                             ·                            ·
