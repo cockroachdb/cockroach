@@ -149,7 +149,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 		}
 
 		next, liveAtEpoch, err := p.cfg.Clock(p.cfg.NodeID)
-		next.WallTime -= int64(targetDuration)
+		next = next.Add(-int64(targetDuration), 0)
 		if err != nil {
 			if everBeenLive && p.everyClockLog.ShouldLog() {
 				log.Warningf(ctx, "unable to move closed timestamp forward: %+v", err)
