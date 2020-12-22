@@ -22,8 +22,19 @@ import "util/optional/optional.proto";
 message ComponentID {
   enum Type {
     UNSET = 0;
+
+    // The component is a processor; the ID field corresponds to a processor ID
+    // in the plan.
     PROCESSOR = 1;
+
+    // The component is a stream; the ID field corresponds to a stream ID in the
+    // plan.
     STREAM = 2;
+
+    // The "component" is a flow (specifically, the part of a distributed plan
+    // that runs on a given node).
+    // TODO(radu): the ID field should correspond to a node ID in the plan.
+    FLOW = 3;
   }
 
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
