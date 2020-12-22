@@ -441,8 +441,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	// window.
 	minTSToRetain := hlc.MaxTimestamp
 	if s.clock != nil {
-		minTSToRetain = s.clock.Now()
-		minTSToRetain.WallTime -= s.minRet.Nanoseconds()
+		minTSToRetain = s.clock.Now().Add(-s.minRet.Nanoseconds(), 0)
 	}
 
 	// Iterate over the pages in reverse, evicting pages that are no longer
