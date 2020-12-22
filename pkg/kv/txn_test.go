@@ -280,7 +280,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 							if errors.HasType(test.err, (*roachpb.ReadWithinUncertaintyIntervalError)(nil)) {
 								// This error requires an observed timestamp to have been
 								// recorded on the origin node.
-								ba.Txn.UpdateObservedTimestamp(1, hlc.Timestamp{WallTime: 1, Logical: 1})
+								ba.Txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 1, Logical: 1})
 								pErr = roachpb.NewErrorWithTxn(test.err, ba.Txn)
 								pErr.OriginNode = 1
 							} else {

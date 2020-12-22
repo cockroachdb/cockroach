@@ -36,6 +36,14 @@ message Timestamp {
   // considered when performing structural equality checks (e.g. using the
   // == operator). Consider use of the EqOrdering method when testing for
   // equality.
+  //
+  // TODO(nvanbenschoten): use a bool to shave off a
+  // byte when set. This will allow the flag to serve as the dynamically
+  // typed version of ClockTimestamp. See TryToClockTimestamp.
+  //
+  // Should look like:
+  //   bool synthetic = 3;
+  //
   uint32 flags = 3;
 }
 
