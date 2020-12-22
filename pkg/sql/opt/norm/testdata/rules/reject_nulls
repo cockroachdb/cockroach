@@ -1166,6 +1166,120 @@ left-join-apply
  └── filters
       └── u:1 = y:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
+exec-ddl
+CREATE TABLE ab (
+  a INT,
+  b INT,
+  c INT,
+  INDEX b_idx (b) WHERE b IS NOT NULL,
+  INDEX c_idx (c) WHERE c > 0
+)
+----
+
+# Reject nulls for a scan with an IS NOT NULL partial index predicate expression
+# on the right side of a semi-join.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM ab t1 WHERE EXISTS (SELECT * FROM ab t2 WHERE t1.a = t2.b)
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3
+ ├── scan ab [as=t1]
+ │    ├── columns: t1.a:1 t1.b:2 t1.c:3
+ │    └── partial index predicates
+ │         ├── b_idx: filters
+ │         │    └── t1.b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │         └── c_idx: filters
+ │              └── t1.c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: t2.b:7!null
+ │    ├── scan ab [as=t2]
+ │    │    ├── columns: t2.b:7
+ │    │    └── partial index predicates
+ │    │         ├── b_idx: filters
+ │    │         │    └── t2.b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │         └── c_idx: filters
+ │    │              └── t2.c:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── filters
+ │         └── t2.b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ └── filters
+      └── t1.a:1 = t2.b:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Fully optimizing the query shows that a partial index scan is generated
+# because the null-reject filters imply the partial index predicate.
+opt expect=(RejectNullsUnderJoinRight,GeneratePartialIndexScans)
+SELECT * FROM ab t1 WHERE EXISTS (SELECT * FROM ab t2 WHERE t1.a = t2.b)
+----
+project
+ ├── columns: a:1 b:2 c:3
+ └── inner-join (hash)
+      ├── columns: t1.a:1!null t1.b:2 t1.c:3 t2.b:7!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      ├── fd: (1)==(7), (7)==(1)
+      ├── scan ab [as=t1]
+      │    ├── columns: t1.a:1 t1.b:2 t1.c:3
+      │    └── partial index predicates
+      │         ├── b_idx: filters
+      │         │    └── t1.b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+      │         └── c_idx: filters
+      │              └── t1.c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+      ├── distinct-on
+      │    ├── columns: t2.b:7!null
+      │    ├── grouping columns: t2.b:7!null
+      │    ├── internal-ordering: +7
+      │    ├── key: (7)
+      │    └── scan ab@b_idx,partial [as=t2]
+      │         ├── columns: t2.b:7!null
+      │         └── ordering: +7
+      └── filters
+           └── t1.a:1 = t2.b:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Reject nulls for a scan with an IS NOT NULL partial index predicate expression
+# on the right side of a anti-join.
+norm expect=RejectNullsUnderJoinRight
+SELECT * FROM ab t1 WHERE NOT EXISTS (SELECT * FROM ab t2 WHERE t1.a = t2.b)
+----
+anti-join (hash)
+ ├── columns: a:1 b:2 c:3
+ ├── scan ab [as=t1]
+ │    ├── columns: t1.a:1 t1.b:2 t1.c:3
+ │    └── partial index predicates
+ │         ├── b_idx: filters
+ │         │    └── t1.b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │         └── c_idx: filters
+ │              └── t1.c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: t2.b:7!null
+ │    ├── scan ab [as=t2]
+ │    │    ├── columns: t2.b:7
+ │    │    └── partial index predicates
+ │    │         ├── b_idx: filters
+ │    │         │    └── t2.b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ │    │         └── c_idx: filters
+ │    │              └── t2.c:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+ │    └── filters
+ │         └── t2.b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+ └── filters
+      └── t1.a:1 = t2.b:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Fully optimizing the query shows that a partial index scan is generated
+# because the null-reject filters imply the partial index predicate.
+opt expect=(RejectNullsUnderJoinRight,GeneratePartialIndexScans)
+SELECT * FROM ab t1 WHERE NOT EXISTS (SELECT * FROM ab t2 WHERE t1.a = t2.b)
+----
+anti-join (hash)
+ ├── columns: a:1 b:2 c:3
+ ├── scan ab [as=t1]
+ │    ├── columns: t1.a:1 t1.b:2 t1.c:3
+ │    └── partial index predicates
+ │         ├── b_idx: filters
+ │         │    └── t1.b:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │         └── c_idx: filters
+ │              └── t1.c:3 > 0 [outer=(3), constraints=(/3: [/1 - ]; tight)]
+ ├── scan ab@b_idx,partial [as=t2]
+ │    └── columns: t2.b:7!null
+ └── filters
+      └── t1.a:1 = t2.b:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
 # ----------------------------------------------------------
 # RejectNullsProject
 # ----------------------------------------------------------
