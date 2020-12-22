@@ -78,6 +78,13 @@ type SpanStats interface {
 	StatsTags() map[string]string
 }
 
+// Structured is an opaque protobuf that can be attached to a trace via
+// `Span.LogStructured`. This is the only kind of data a Span carries when
+// `trace.mode = background`.
+type Structured interface {
+	proto.Message
+}
+
 type atomicRecordingType RecordingType
 
 // load returns the recording type.
@@ -117,7 +124,8 @@ type crdbSpanMu struct {
 	// those that were set before recording started)?
 	tags opentracing.Tags
 
-	stats SpanStats
+	stats      SpanStats
+	structured []Structured
 
 	// The Span's associated baggage.
 	Baggage map[string]string
@@ -393,10 +401,15 @@ func (sc *SpanMeta) isNilOrNoop() bool {
 
 // SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
 // the Span tags.
+//
+// This is deprecated. Use LogStructured instead.
+//
+// TODO(tbg): remove this in the 21.2 cycle.
 func (s *Span) SetSpanStats(stats SpanStats) {
 	if s.isNoop() {
 		return
 	}
+	s.LogStructured(stats)
 	s.crdb.mu.Lock()
 	s.crdb.mu.stats = stats
 	for name, value := range stats.StatsTags() {
@@ -584,6 +597,21 @@ func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
 	s.LogFields(fields...)
 }
 
+func (s *Span) LogStructured(item Structured) {
+	if s.isNoop() {
+		return
+	}
+	s.crdb.LogStructured(item)
+}
+
+// LogStructured adds a Structured payload to the Span. The caller must not
+// mutate the item once LogStructured has been called.
+func (s *crdbSpan) LogStructured(item Structured) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.structured = append(s.mu.structured, item)
+}
+
 // SetBaggageItem is part of the opentracing.Span interface.
 func (s *Span) SetBaggageItem(restrictedKey, value string) *Span {
 	if s.isNoop() {
@@ -668,6 +696,19 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 			panic(err)
 		}
 		rs.Stats = stats
+	}
+
+	if s.mu.structured != nil {
+		rs.Structured = make([]*types.Any, 0, len(s.mu.structured))
+		for i := range s.mu.structured {
+			item, err := types.MarshalAny(s.mu.structured[i])
+			if err != nil {
+				// An error here is an error from Marshal; these
+				// are unlikely to happen.
+				continue
+			}
+			rs.Structured = append(rs.Structured, item)
+		}
 	}
 
 	if len(s.mu.Baggage) > 0 {

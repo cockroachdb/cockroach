@@ -66,6 +66,9 @@ message RecordedSpan {
 
   // Stats collected in this span.
   google.protobuf.Any stats = 10;
+
+  // Structured payloads attached to this Span.
+  repeated google.protobuf.Any structured = 11;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

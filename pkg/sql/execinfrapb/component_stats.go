@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
@@ -319,14 +320,28 @@ func ExtractStatsFromSpans(
 ) map[ComponentID]*ComponentStats {
 	statsMap := make(map[ComponentID]*ComponentStats)
 	for i := range spans {
-		if spans[i].Stats == nil {
-			continue
+		span := &spans[i]
+		var stats ComponentStats
+
+		found := false
+		for _, item := range span.Structured {
+			if !types.Is(item, &stats) {
+				continue
+			}
+			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+				continue
+			}
+			found = true
+			break
+		}
+		if !found {
+			// Legacy path exercised by 20.2 nodes and earlier.
+			// Can be removed in 21.2.
+			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
+				found = false
+			}
 		}
 
-		var stats ComponentStats
-		if err := types.UnmarshalAny(spans[i].Stats, &stats); err != nil {
-			continue
-		}
 		if stats.Component == (ComponentID{}) {
 			continue
 		}

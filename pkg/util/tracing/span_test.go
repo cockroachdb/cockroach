@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/require"
@@ -180,4 +181,20 @@ Span grandchild:
     === operation:grandchild _verbose:1
 `
 	require.Equal(t, exp, recToStrippedString(childRec))
+}
+
+func TestSpan_LogStructured(t *testing.T) {
+	tr := NewTracer()
+	tr._mode = int32(modeBackground)
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+
+	sp.LogStructured(&types.Int32Value{Value: 4})
+	rec := sp.GetRecording()
+	require.Len(t, rec, 1)
+	sl := rec[0].Structured
+	require.Len(t, sl, 1)
+	var d1 types.DynamicAny
+	require.NoError(t, types.UnmarshalAny(sl[0], &d1))
+	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
 }
