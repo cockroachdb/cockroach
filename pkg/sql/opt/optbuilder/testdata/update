@@ -66,7 +66,6 @@ update abcde
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
  │    ├── a_new:15 => a:1
- │    ├── column16:16 => d:4
  │    └── a_new:15 => e:5
  └── project
       ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
@@ -250,8 +249,7 @@ update abcde
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
  │    ├── b_new:15 => b:2
- │    ├── column16:16 => d:4
- │    └── a:8 => e:5
+ │    └── column16:16 => d:4
  └── project
       ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15!null
       ├── project
@@ -574,7 +572,6 @@ project
       ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
       ├── update-mapping:
       │    ├── a_new:15 => a:1
-      │    ├── column16:16 => d:4
       │    └── a_new:15 => e:5
       └── project
            ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
@@ -607,7 +604,6 @@ project
  │    ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  │    ├── update-mapping:
  │    │    ├── a_new:15 => a:1
- │    │    ├── column16:16 => d:4
  │    │    └── a_new:15 => e:5
  │    └── project
  │         ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
@@ -645,7 +641,6 @@ with &1
  │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
  │         ├── update-mapping:
  │         │    ├── a_new:15 => abcde.a:1
- │         │    ├── column16:16 => abcde.d:4
  │         │    └── a_new:15 => abcde.e:5
  │         └── project
  │              ├── columns: column16:16 abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
@@ -692,11 +687,9 @@ UPDATE abcde SET rowid=rowid+1 RETURNING rowid
 project
  ├── columns: rowid:6!null
  └── update abcde
-      ├── columns: a:1!null b:2 c:3 d:4 e:5!null rowid:6!null
+      ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
       ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
       ├── update-mapping:
-      │    ├── column16:16 => d:4
-      │    ├── a:8 => e:5
       │    └── rowid_new:15 => rowid:6
       └── project
            ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 rowid_new:15!null
@@ -740,8 +733,7 @@ update abcde
  ├── update-mapping:
  │    ├── b_new:15 => b:2
  │    ├── c_new:16 => c:3
- │    ├── column17:17 => d:4
- │    └── a:8 => e:5
+ │    └── column17:17 => d:4
  └── project
       ├── columns: column17:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
       ├── project
@@ -769,7 +761,6 @@ update abcde
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
  │    ├── a_new:15 => a:1
- │    ├── column16:16 => d:4
  │    └── a_new:15 => e:5
  └── project
       ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
@@ -866,8 +857,7 @@ update abcde
  ├── update-mapping:
  │    ├── b_new:15 => b:2
  │    ├── c_new:16 => c:3
- │    ├── column17:17 => d:4
- │    └── a:8 => e:5
+ │    └── column17:17 => d:4
  └── project
       ├── columns: column17:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
       ├── project
@@ -946,7 +936,6 @@ update abcde
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
  │    ├── one:15 => a:1
- │    ├── column16:16 => d:4
  │    └── one:15 => e:5
  └── project
       ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 one:15
@@ -1178,14 +1167,13 @@ build
 UPDATE abcde AS abcde1 SET b=(SELECT b FROM abcde AS abcde2 WHERE abcde2.rowid=abcde1.a) RETURNING *
 ----
 project
- ├── columns: a:1!null b:2 c:3 d:4 e:5!null
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
  └── update abcde [as=abcde1]
-      ├── columns: abcde1.a:1!null abcde1.b:2 abcde1.c:3 abcde1.d:4 abcde1.e:5!null abcde1.rowid:6!null
+      ├── columns: abcde1.a:1!null abcde1.b:2 abcde1.c:3 abcde1.d:4 abcde1.e:5 abcde1.rowid:6!null
       ├── fetch columns: abcde1.a:8 abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13
       ├── update-mapping:
       │    ├── b_new:22 => abcde1.b:2
-      │    ├── column23:23 => abcde1.d:4
-      │    └── abcde1.a:8 => abcde1.e:5
+      │    └── column23:23 => abcde1.d:4
       └── project
            ├── columns: column23:23 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14 b_new:22
            ├── project
@@ -1514,9 +1502,8 @@ update checks
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8 d:9
  ├── update-mapping:
- │    ├── a_new:11 => a:1
- │    └── column12:12 => d:4
- ├── check columns: check1:13 check2:14
+ │    └── a_new:11 => a:1
+ ├── check columns: check2:14
  └── project
       ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null column12:12
       ├── project
@@ -1535,7 +1522,7 @@ update checks
       │    └── projections
       │         └── c:8 + 1 [as=column12:12]
       └── projections
-           ├── b:7 < column12:12 [as=check1:13]
+           ├── b:7 < d:9 [as=check1:13]
            └── a_new:11 > 0 [as=check2:14]
 
 # Update one column in constraint, but not the other.
@@ -1546,8 +1533,7 @@ update checks
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8 d:9
  ├── update-mapping:
- │    ├── b_new:11 => b:2
- │    └── column12:12 => d:4
+ │    └── b_new:11 => b:2
  ├── check columns: check1:13
  └── project
       ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null column12:12
@@ -1567,7 +1553,7 @@ update checks
       │    └── projections
       │         └── c:8 + 1 [as=column12:12]
       └── projections
-           ├── b_new:11 < column12:12 [as=check1:13]
+           ├── b_new:11 < d:9 [as=check1:13]
            └── a:6 > 0 [as=check2:14]
 
 # Update using tuple and subquery.
@@ -1579,8 +1565,7 @@ update checks
  ├── fetch columns: checks.a:6 checks.b:7 checks.c:8 checks.d:9
  ├── update-mapping:
  │    ├── abcde.a:11 => checks.a:1
- │    ├── abcde.b:12 => checks.b:2
- │    └── column18:18 => checks.d:4
+ │    └── abcde.b:12 => checks.b:2
  ├── check columns: check1:19 check2:20
  └── project
       ├── columns: check1:19 check2:20 checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12 column18:18
@@ -1614,7 +1599,7 @@ update checks
       │    └── projections
       │         └── checks.c:8 + 1 [as=column18:18]
       └── projections
-           ├── abcde.b:12 < column18:18 [as=check1:19]
+           ├── abcde.b:12 < checks.d:9 [as=check1:19]
            └── abcde.a:11 > 0 [as=check2:20]
 
 # ------------------------------------------------------------------------------
