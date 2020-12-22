@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -48,6 +49,7 @@ import (
 // 5. A meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 58165)
 	ctx := context.Background()
 
 	livenessDuration := 3000 * time.Millisecond
