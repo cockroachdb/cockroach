@@ -170,7 +170,7 @@ type NodeLiveness struct {
 	db                *kv.DB
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
-	heartbeatInterval time.Duration
+	renewalDuration   time.Duration
 	selfSem           chan struct{}
 	st                *cluster.Settings
 	otherSem          chan struct{}
@@ -269,7 +269,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		db:                   opts.DB,
 		gossip:               opts.Gossip,
 		livenessThreshold:    opts.LivenessThreshold,
-		heartbeatInterval:    opts.LivenessThreshold - opts.RenewalDuration,
+		renewalDuration:      opts.RenewalDuration,
 		selfSem:              make(chan struct{}, 1),
 		st:                   opts.Settings,
 		otherSem:             make(chan struct{}, 1),
@@ -676,7 +676,8 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 		defer sp.Finish()
 
 		incrementEpoch := true
-		ticker := time.NewTicker(nl.heartbeatInterval)
+		heartbeatInterval := nl.livenessThreshold - nl.renewalDuration
+		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -686,7 +687,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 			}
 			// Give the context a timeout approximately as long as the time we
 			// have left before our liveness entry expires.
-			if err := contextutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.livenessThreshold-nl.heartbeatInterval,
+			if err := contextutil.RunWithTimeout(ctx, "node liveness heartbeat", nl.renewalDuration,
 				func(ctx context.Context) error {
 					// Retry heartbeat in the event the conditional put fails.
 					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
