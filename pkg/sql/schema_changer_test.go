@@ -6114,6 +6114,67 @@ SELECT value
 	})
 }
 
+// TestDropTableWhileSchemaChangeReverting tests that schema changes in the
+// reverting state end up as failed when the table is dropped.
+func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer setTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	// Closed when we enter the RunBeforeOnFailOrCancel knob, at which point the
+	// job is in the reverting state.
+	beforeOnFailOrCancelNotification := make(chan struct{})
+	// Closed when we're ready to continue with the schema change (rollback).
+	continueNotification := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeOnFailOrCancel: func(_ int64) error {
+				close(beforeOnFailOrCancelNotification)
+				<-continueNotification
+				// Return a retry error, so that we can be sure to test the path where
+				// the job is marked as failed by the DROP TABLE instead of running to
+				// completion and ending up in the failed state on its own.
+				return jobs.NewRetryJobError("injected retry error")
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
+INSERT INTO t.test VALUES (1, 2), (2, 2);
+`)
+	require.NoError(t, err)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		// Try to create a unique index which won't be valid and will need a rollback.
+		_, err = sqlDB.Exec(`CREATE UNIQUE INDEX i ON t.test(v);`)
+		assert.Regexp(t, "violates unique constraint", err)
+		return nil
+	})
+
+	<-beforeOnFailOrCancelNotification
+
+	_, err = sqlDB.Exec(`DROP TABLE t.test;`)
+	require.NoError(t, err)
+
+	close(continueNotification)
+	require.NoError(t, g.Wait())
+
+	var status jobs.Status
+	var jobError string
+	require.NoError(t, sqlDB.QueryRow(`
+SELECT status, error FROM crdb_internal.jobs WHERE description LIKE '%CREATE UNIQUE INDEX%'
+`).Scan(&status, &jobError))
+	require.Equal(t, jobs.StatusFailed, status)
+	require.Regexp(t, "violates unique constraint", jobError)
+}
+
 // TestPermanentErrorDuringRollback tests that a permanent error while rolling
 // back a schema change causes the job to fail, and that the appropriate error
 // is displayed in the jobs table.
@@ -6123,7 +6184,7 @@ func TestPermanentErrorDuringRollback(t *testing.T) {
 	defer setTestJobsAdoptInterval()()
 	ctx := context.Background()
 
-	runTest := func(params base.TestServerArgs) {
+	runTest := func(t *testing.T, params base.TestServerArgs, gcJobRecord bool) {
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
@@ -6140,10 +6201,20 @@ CREATE UNIQUE INDEX i ON t.test(v);
 `)
 		require.Regexp(t, "violates unique constraint", err.Error())
 
+		var jobID int64
 		var jobErr string
-		row := sqlDB.QueryRow("SELECT error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
-		require.NoError(t, row.Scan(&jobErr))
+		row := sqlDB.QueryRow("SELECT job_id, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+		require.NoError(t, row.Scan(&jobID, &jobErr))
 		require.Regexp(t, "cannot be reverted, manual cleanup may be required: permanent error", jobErr)
+
+		if gcJobRecord {
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id = $1`, jobID)
+			require.NoError(t, err)
+		}
+
+		// Test that dropping the table is still possible.
+		_, err = sqlDB.Exec(`DROP TABLE t.test`)
+		require.NoError(t, err)
 	}
 
 	t.Run("error-before-backfill", func(t *testing.T) {
@@ -6168,7 +6239,9 @@ CREATE UNIQUE INDEX i ON t.test(v);
 				},
 			},
 		}
-		runTest(params)
+		// Don't GC the job record after the schema change, so we can test dropping
+		// the table with a failed mutation job.
+		runTest(t, params, false /* gcJobRecord */)
 	})
 
 	t.Run("error-before-reversing-mutations", func(t *testing.T) {
@@ -6193,7 +6266,9 @@ CREATE UNIQUE INDEX i ON t.test(v);
 				},
 			},
 		}
-		runTest(params)
+		// GC the job record after the schema change, so we can test dropping the
+		// table with a nonexistent mutation job.
+		runTest(t, params, true /* gcJobRecord */)
 	})
 }
 
