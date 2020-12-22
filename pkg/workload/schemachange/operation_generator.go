@@ -372,8 +372,6 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 
 func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error) {
 
-	// Use og.produceError() to determine if errors will be produced due to the column being generated
-	// or not being unique.
 	parentTable, parentColumn, err := og.randParentColumnForFkRelation(tx, og.randIntn(100) >= og.params.fkParentInvalidPct)
 	if err != nil {
 		return "", err
