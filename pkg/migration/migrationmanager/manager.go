@@ -8,18 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package migration captures the facilities needed to define and execute
-// migrations for a crdb cluster. These migrations can be arbitrarily long
-// running, are free to send out arbitrary requests cluster wide, change
-// internal DB state, and much more. They're typically reserved for crdb
-// internal operations and state. Each migration is idempotent in nature, is
-// associated with a specific cluster version, and executed when the cluster
-// version is made activate on every node in the cluster.
-//
-// Examples of migrations that apply would be migrations to move all raft state
-// from one storage engine to another, or purging all usage of the replicated
-// truncated state in KV. A "sister" package of interest is pkg/sqlmigrations.
-package migration
+// Package migrationmanager provides an implementation of migration.Manager
+// for use on kv nodes.
+package migrationmanager
 
 import (
 	"context"
@@ -27,11 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/migration"
+	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 )
@@ -39,30 +28,21 @@ import (
 // Manager is the instance responsible for executing migrations across the
 // cluster.
 type Manager struct {
-	dialer   *nodedialer.Dialer
-	nl       nodeLiveness
-	executor *sql.InternalExecutor
-	db       *kv.DB
-}
-
-// nodeLiveness is the subset of the interface satisfied by CRDB's node liveness
-// component that the migration manager relies upon.
-type nodeLiveness interface {
-	GetLivenessesFromKV(context.Context) ([]livenesspb.Liveness, error)
-	IsLive(roachpb.NodeID) (bool, error)
+	c migration.Cluster
 }
 
 // NewManager constructs a new Manager.
 //
 // TODO(irfansharif): We'll need to eventually plumb in on a lease manager here.
 func NewManager(
-	dialer *nodedialer.Dialer, nl nodeLiveness, executor *sql.InternalExecutor, db *kv.DB,
+	dialer migrationcluster.NodeDialer, nl migrationcluster.NodeLiveness, db *kv.DB,
 ) *Manager {
 	return &Manager{
-		dialer:   dialer,
-		executor: executor,
-		db:       db,
-		nl:       nl,
+		c: migrationcluster.New(migrationcluster.ClusterConfig{
+			NodeLiveness: nl,
+			Dialer:       dialer,
+			DB:           db,
+		}),
 	}
 }
 
@@ -99,15 +79,9 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 
 	for _, clusterVersion := range clusterVersions {
-		cluster := newCluster(m.nl, m.dialer, m.executor, m.db)
-		h := newHelper(cluster, clusterVersion)
-
-		// First run the actual migration (if any). The cluster version bump
-		// will be rolled out afterwards. This lets us provide the invariant
-		// that if a version=V is active, all data is guaranteed to have
-		// migrated.
-		if migration, ok := registry[clusterVersion]; ok {
-			if err := migration.Run(ctx, h); err != nil {
+		// First, run the actual migration if any.
+		if mig, ok := migration.GetMigration(clusterVersion); ok {
+			if err := mig.Run(ctx, clusterVersion, m.c); err != nil {
 				return err
 			}
 		}
@@ -122,7 +96,7 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		//
 		// For each intermediate version, we'll need to first bump the fence
 		// version before bumping the "real" one. Doing so allows us to provide
-		// the invariant that whenever a cluster version is active, all nodes in
+		// the invariant that whenever a cluster version is active, all Nodes in
 		// the cluster (including ones added concurrently during version
 		// upgrades) are running binaries that know about the version.
 
@@ -163,10 +137,10 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// versions when stepping through consecutive versions. It's
 			// instructive to walk through how we expect a version migration
 			// from v21.1 to v21.2 to take place, and how we behave in the
-			// presence of new v21.1 or v21.2 nodes being added to the cluster.
+			// presence of new v21.1 or v21.2 Nodes being added to the cluster.
 			//
-			//   - All nodes are running v21.1
-			//   - All nodes are rolled into v21.2 binaries, but with active
+			//   - All Nodes are running v21.1
+			//   - All Nodes are rolled into v21.2 binaries, but with active
 			//     cluster version still as v21.1
 			//   - The first version bump will be into v21.2-1(fence), see the
 			//     migration manager above for where that happens
@@ -176,11 +150,11 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			//   - A new node is added to the cluster, but running binary v21.1
 			//   - We try bumping the cluster gates to v21.2-1(fence)
 			//
-			// If the v21.1 nodes manages to sneak in before the version bump,
+			// If the v21.1 Nodes manages to sneak in before the version bump,
 			// it's fine as the version bump is a no-op one (all fence versions
 			// are). Any subsequent bumps (including the "actual" one bumping to
 			// v21.2) will fail during the validation step where we'll first
-			// check to see that all nodes are running v21.2 binaries.
+			// check to see that all Nodes are running v21.2 binaries.
 			//
 			// If the v21.1 node is only added after v21.2-1(fence) is active,
 			// it won't be able to actually join the cluster (it'll be prevented
@@ -191,11 +165,11 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// can join the cluster will run a release that support the fence
 			// version, and by design also supports the actual version (which is
 			// the direct successor of the fence).
-			fenceVersion := fenceVersionFor(ctx, clusterVersion)
+			fenceVersion := migration.FenceVersionFor(ctx, clusterVersion)
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &fenceVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := h.UntilClusterStable(ctx, func() error {
-				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+			if err := m.c.UntilClusterStable(ctx, func() error {
+				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 					_, err := client.BumpClusterVersion(ctx, req)
 					return err
 				})
@@ -208,8 +182,8 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// cluster version bump, cluster-wide.
 			req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := h.UntilClusterStable(ctx, func() error {
-				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+			if err := m.c.UntilClusterStable(ctx, func() error {
+				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 					_, err := client.ValidateTargetClusterVersion(ctx, req)
 					return err
 				})
@@ -221,8 +195,8 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// Finally, bump the real version cluster-wide.
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := h.UntilClusterStable(ctx, func() error {
-				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+			if err := m.c.UntilClusterStable(ctx, func() error {
+				return m.c.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
 					_, err := client.BumpClusterVersion(ctx, req)
 					return err
 				})
