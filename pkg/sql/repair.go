@@ -383,6 +383,16 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 			return err
 		}
 	}
+
+	// Set the descriptor to dropped so that subsequent attempts to use it in
+	// the transaction fail and deleting its namespace entry becomes permitted.
+	if mut != nil {
+		mut.MaybeIncrementVersion()
+		mut.SetDropped()
+		if err := p.Descriptors().AddUncommittedDescriptor(mut); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+	}
 	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
 	if err := p.txn.Del(ctx, descKey); err != nil {
 		return err
