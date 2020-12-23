@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ParseAndRequireString parses s as type t for simple types. Arrays and collated
+// ParseAndRequireString parses s as type t for simple types. Collated
 // strings are not handled.
 //
 // The dependsOnContext return value indicates if we had to consult the

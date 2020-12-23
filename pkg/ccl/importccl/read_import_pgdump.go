@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -821,7 +820,10 @@ func (m *pgDumpReader) readFile(
 						if s == nil {
 							conv.Datums[idx] = tree.DNull
 						} else {
-							conv.Datums[idx], err = rowenc.ParseDatumStringAs(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
+							// We use ParseAndRequireString instead of ParseDatumStringAs
+							// because postgres dumps arrays in COPY statements using their
+							// internal string representation.
+							conv.Datums[idx], _, err = tree.ParseAndRequireString(conv.VisibleColTypes[idx], *s, conv.EvalCtx)
 							if err != nil {
 								col := conv.VisibleCols[idx]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
