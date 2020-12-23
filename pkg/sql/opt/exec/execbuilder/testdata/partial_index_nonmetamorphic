@@ -882,64 +882,6 @@ UPSERT INTO inv VALUES (6, '{"x": "y", "num": 8}', 'baz')
 Scan /Table/55/1/6{-/#}
 CPut /Table/55/1/6/0 -> /TUPLE/
 
-# ---------------------------------------------------------
-# EXPLAIN
-# ---------------------------------------------------------
-
-# EXPLAIN output shows the partial index label on scans over partial indexes.
-query T
-EXPLAIN SELECT b FROM t WHERE b > 10
-----
-distribution: local
-vectorized: true
-·
-• scan
-  missing stats
-  table: t@b_partial (partial index)
-  spans: FULL SCAN
-
-query T
-EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
-----
-distribution: local
-vectorized: true
-·
-• scan
-  missing stats
-  table: inv@i (partial index)
-  spans: 1 span
-
-query T
-EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
-----
-distribution: local
-vectorized: true
-·
-• filter
-│ filter: c = 'foo'
-│
-└── • index join
-    │ table: inv@primary
-    │
-    └── • scan
-          missing stats
-          table: inv@i (partial index)
-          spans: 1 span
-
-query T
-EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
-----
-distribution: local
-vectorized: true
-·
-• index join
-│ table: inv@primary
-│
-└── • scan
-      missing stats
-      table: inv@i (partial index)
-      spans: 1 span
-
 # Regression test for #57085. Cascading DELETEs should not issue DEL operations
 # for partial indexes of a child table when the deleted row was not in the
 # partial index.
