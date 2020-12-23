@@ -27,8 +27,8 @@ type Accessor interface {
 	// descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
 	//
-	// Warning: This method uses no "logical" schema information and only exists
-	// to accommodate the existing resolver.SchemaResolver interface (see #58228).
+	// Warning: This method uses no virtual schema information and only exists to
+	// accommodate the existing resolver.SchemaResolver interface (see #58228).
 	// Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 	// descs.Collection instead when possible.
 	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (DatabaseDescriptor, error)

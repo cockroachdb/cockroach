@@ -254,10 +254,9 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(
+	_, db, err := params.p.Descriptors().GetImmutableDatabaseByName(
 		params.ctx,
 		params.p.txn,
-		params.p.ExecCfg().Codec,
 		v.dbName,
 		tree.DatabaseLookupFlags{
 			Required: true, AvoidCached: params.p.avoidCachedDescriptors,
@@ -266,7 +265,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	v.db = db.(*dbdesc.Immutable)
+	v.db = db
 	return err
 }
 
