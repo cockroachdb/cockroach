@@ -12,10 +12,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -101,6 +104,11 @@ func (n *alterDatabaseOwnerNode) Next(runParams) (bool, error) { return false, n
 func (n *alterDatabaseOwnerNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
 
+type alterDatabaseAddRegionNode struct {
+	n    *tree.AlterDatabaseAddRegion
+	desc *dbdesc.Mutable
+}
+
 // AlterDatabaseAddRegion transforms a tree.AlterDatabaseAddRegion into a plan node.
 func (p *planner) AlterDatabaseAddRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddRegion,
@@ -112,8 +120,91 @@ func (p *planner) AlterDatabaseAddRegion(
 	); err != nil {
 		return nil, err
 	}
-	return nil, unimplemented.New("alter database add region", "implementation pending")
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true /* required */)
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseAddRegionNode{n: n, desc: dbDesc}, nil
 }
+
+func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
+	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
+	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	// If we get to this point and the RegionConfig is nil, it means that the database doesn't
+	// yet have a primary region.  Since we need a primary region before we can add a region,
+	// return an error here.
+	if n.desc.RegionConfig == nil {
+		return pgerror.Newf(pgcode.InvalidDatabaseDefinition,
+			"cannot add region %q to database %q.  Please add primary region first.",
+			n.n.Region.String(),
+			n.n.Name.String())
+	}
+
+	// Add the region to the database descriptor.  This function validates that the region
+	// we're adding is an active member of the cluster and isn't already present in the
+	// RegionConfig.
+	if err := params.p.addRegionToRegionConfig(n.desc, n.n); err != nil {
+		return err
+	}
+
+	// Write the modified database descriptor.
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Get the type descriptor for the multi-region enum
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID)
+	if err != nil {
+		return err
+	}
+
+	// Add the new region value to the enum.  This function adds the value to the enum and
+	// persists the new value to the supplied type descriptor.
+	jobDesc := fmt.Sprintf("Adding new region value %q to %q", tree.EnumValue(n.n.Region), tree.RegionEnum)
+	if err := params.p.addEnumValue(
+		params.ctx,
+		typeDesc,
+		&tree.AlterTypeAddValue{
+			NewVal:      tree.EnumValue(n.n.Region),
+			IfNotExists: false,
+			Placement:   nil},
+		jobDesc); err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		tree.Name(n.desc.Name),
+		*n.desc.RegionConfig); err != nil {
+		return err
+	}
+
+	// Log Alter Database Add Region event. This is an auditable log event and is recorded
+	// in the same transaction as the database descriptor, type descriptor, and zone
+	// configuration updates.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabaseAddRegion{
+			DatabaseName: n.desc.GetName(),
+			RegionName:   n.n.Region.String(),
+		})
+}
+
+func (n *alterDatabaseAddRegionNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseAddRegionNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
 
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(
