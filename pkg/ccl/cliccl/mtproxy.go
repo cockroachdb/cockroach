@@ -146,15 +146,19 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 		InsecureSkipVerify: true,
 	}
 	server := sqlproxyccl.NewServer(sqlproxyccl.Options{
-		FrontendAdmitter: func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+		FrontendAdmitter: func(
+			ctx context.Context, incoming net.Conn,
+		) (net.Conn, *pgproto3.StartupMessage, error) {
 			return sqlproxyccl.FrontendAdmit(
-				incoming,
+				ctx, incoming,
 				&tls.Config{
 					Certificates: []tls.Certificate{cer},
 				},
 			)
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			params := msg.Parameters
 			const magic = "prancing-pony"
 			if strings.HasPrefix(params["database"], magic+".") {
@@ -162,7 +166,9 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 			} else if params["options"] != "--cluster="+magic {
 				return nil, errors.Errorf("client failed to pass '%s' via database or options", magic)
 			}
-			conn, err := sqlproxyccl.BackendDial(msg, sqlProxyTargetAddr, outgoingConf)
+			conn, err := sqlproxyccl.BackendDial(
+				ctx, msg, sqlProxyTargetAddr, outgoingConf,
+			)
 			if err != nil {
 				return nil, err
 			}

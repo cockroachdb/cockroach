@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 )
 
@@ -75,13 +76,19 @@ type Options struct {
 	// If set, will be called immediately after a new incoming connection
 	// is accepted. It can optionally negotiate SSL, provide admittance control or
 	// other types of frontend connection filtering.
-	FrontendAdmitter func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error)
+	FrontendAdmitter func(
+		ctx context.Context, incoming net.Conn,
+	) (net.Conn, *pgproto3.StartupMessage, error)
 
 	// If set, will be used to establish and return connection to the backend.
 	// If not set, the old logic will be used.
 	// The argument is the startup message received from the frontend. It
 	// contains the protocol version and params sent by the client.
-	BackendDialer func(msg *pgproto3.StartupMessage) (net.Conn, error)
+	// The incoming connection may be used by some implementations that
+	// want to take into account the incoming connection when dialing to backend.
+	BackendDialer func(
+		ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+	) (net.Conn, error)
 }
 
 // Proxy takes an incoming client connection and relays it to a backend SQL
@@ -105,16 +112,22 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		}).Encode(nil))
 	}
 
+	ctx := logtags.AddTag(
+		context.Background(), "remote-addr", proxyConn.RemoteAddr(),
+	)
+
 	frontendAdmitter := s.opts.FrontendAdmitter
 	if frontendAdmitter == nil {
 		// Keep this until all clients are switched to provide FrontendAdmitter
 		// at what point we can also drop IncomingTLSConfig
-		frontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
-			return FrontendAdmit(incoming, s.opts.IncomingTLSConfig)
+		frontendAdmitter = func(
+			ctx context.Context, incoming net.Conn,
+		) (net.Conn, *pgproto3.StartupMessage, error) {
+			return FrontendAdmit(ctx, incoming, s.opts.IncomingTLSConfig)
 		}
 	}
 
-	conn, msg, err := frontendAdmitter(proxyConn)
+	conn, msg, err := frontendAdmitter(ctx, proxyConn)
 	if err != nil {
 		var codeErr *CodeError
 		if errors.As(err, &codeErr) && codeErr.code == CodeUnexpectedInsecureStartupMessage {
@@ -125,6 +138,12 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 			)
 		}
 		return err
+	}
+
+	if msg != nil {
+		if db, ok := msg.Parameters["database"]; ok {
+			ctx = logtags.AddTag(ctx, "db", db)
+		}
 	}
 
 	// This currently only happens for CancelRequest type of startup messages
@@ -140,7 +159,9 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		// This we need to keep until all the clients are switched to provide BackendDialer.
 		// It constructs a backend dialer from the information provided via
 		// BackendConfigFromParams function.
-		backendDialer = func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		backendDialer = func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			backendConfig, clientErr := s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
 			if clientErr != nil {
 				var codeErr *CodeError
@@ -159,7 +180,9 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 				s.opts.ModifyRequestParams(msg.Parameters)
 			}
 
-			crdbConn, err := BackendDial(msg, backendConfig.OutgoingAddress, backendConfig.TLSConf)
+			crdbConn, err := BackendDial(
+				ctx, msg, backendConfig.OutgoingAddress, backendConfig.TLSConf,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -168,7 +191,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 		}
 	}
 
-	crdbConn, err := backendDialer(msg)
+	crdbConn, err := backendDialer(ctx, conn, msg)
 	if err != nil {
 		s.metrics.BackendDownCount.Inc(1)
 		var codeErr *CodeError
@@ -195,7 +218,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	errIncoming := make(chan error, 1)
 	errExpired := make(chan error, 1)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	if s.opts.BackendConfigFromParams != nil {
 		// Ignore the next error as we already did all checks in the BackendDialer

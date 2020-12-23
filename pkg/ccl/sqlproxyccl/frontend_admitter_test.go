@@ -58,7 +58,9 @@ func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 		fmt.Printf("Done\n")
 	}()
 
-	frontendCon, msg, err := FrontendAdmit(srv, nil)
+	frontendCon, msg, err := FrontendAdmit(
+		context.Background(), srv, nil,
+	)
 	require.NoError(t, err)
 	require.Equal(t, srv, frontendCon)
 	require.NotNil(t, msg)
@@ -88,7 +90,9 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 
 	tlsConfig, err := tlsConfig()
 	require.NoError(t, err)
-	frontendCon, msg, err := FrontendAdmit(srv, tlsConfig)
+	frontendCon, msg, err := FrontendAdmit(
+		context.Background(), srv, tlsConfig,
+	)
 	require.NoError(t, err)
 	require.NotEqual(t, srv, frontendCon) // The connection was replaced by SSL
 	require.NotNil(t, msg)
@@ -107,7 +111,9 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	frontendCon, msg, err := FrontendAdmit(srv, nil)
+	frontendCon, msg, err := FrontendAdmit(
+		context.Background(), srv, nil,
+	)
 	require.EqualError(t, err,
 		"CodeUnexpectedStartupMessage: "+
 			"unsupported post-TLS startup message: *pgproto3.CancelRequest",
@@ -139,7 +145,9 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 
 	tlsConfig, err := tlsConfig()
 	require.NoError(t, err)
-	frontendCon, msg, err := FrontendAdmit(srv, tlsConfig)
+	frontendCon, msg, err := FrontendAdmit(
+		context.Background(), srv, tlsConfig,
+	)
 	require.EqualError(t, err,
 		"CodeUnexpectedStartupMessage: "+
 			"unsupported post-TLS startup message: *pgproto3.CancelRequest",

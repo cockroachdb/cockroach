@@ -40,8 +40,11 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
 `
 	cer, err := tls.LoadX509KeyPair("testserver.crt", "testserver.key")
 	require.NoError(t, err)
-	opts.FrontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+	opts.FrontendAdmitter = func(
+		ctx context.Context, incoming net.Conn,
+	) (net.Conn, *pgproto3.StartupMessage, error) {
 		return FrontendAdmit(
+			ctx,
 			incoming,
 			&tls.Config{
 				Certificates: []tls.Certificate{cer},
@@ -74,35 +77,33 @@ openssl req -new -x509 -sha256 -key testserver.key -out testserver.crt \
 }
 
 func testingTenantIDFromDatabaseForAddr(
-	addr string, validTenant string,
-) func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-	return func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-		const dbKey = "database"
-		p := msg.Parameters
-		db, ok := p[dbKey]
-		if !ok {
-			return nil, NewErrorf(
-				CodeParamsRoutingFailed, "need to specify database",
-			)
-		}
-		sl := strings.SplitN(db, "_", 2)
-		if len(sl) != 2 {
-			return nil, NewErrorf(
-				CodeParamsRoutingFailed, "malformed database name",
-			)
-		}
-		db, tenantID := sl[0], sl[1]
-
-		if tenantID != validTenant {
-			return nil, NewErrorf(CodeParamsRoutingFailed, "invalid tenantID")
-		}
-
-		p[dbKey] = db
-		return BackendDial(msg, addr, &tls.Config{
-			// NB: this would be false in production.
-			InsecureSkipVerify: true,
-		})
+	ctx context.Context, msg *pgproto3.StartupMessage, addr string, validTenant string,
+) (net.Conn, error) {
+	const dbKey = "database"
+	p := msg.Parameters
+	db, ok := p[dbKey]
+	if !ok {
+		return nil, NewErrorf(
+			CodeParamsRoutingFailed, "need to specify database",
+		)
 	}
+	sl := strings.SplitN(db, "_", 2)
+	if len(sl) != 2 {
+		return nil, NewErrorf(
+			CodeParamsRoutingFailed, "malformed database name",
+		)
+	}
+	db, tenantID := sl[0], sl[1]
+
+	if tenantID != validTenant {
+		return nil, NewErrorf(CodeParamsRoutingFailed, "invalid tenantID")
+	}
+
+	p[dbKey] = db
+	return BackendDial(ctx, msg, addr, &tls.Config{
+		// NB: this would be false in production.
+		InsecureSkipVerify: true,
+	})
 }
 
 type assertCtx struct {
@@ -144,7 +145,9 @@ func TestLongDBName(t *testing.T) {
 	ac := makeAssertCtx()
 
 	opts := Options{
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			return nil, NewErrorf(CodeParamsRoutingFailed, "boom")
 		},
 		OnSendErrToClient: ac.onSendErrToClient,
@@ -166,9 +169,13 @@ func TestFailedConnection(t *testing.T) {
 
 	ac := makeAssertCtx()
 	opts := Options{
-		BackendDialer: testingTenantIDFromDatabaseForAddr(
-			"undialable%$!@$", "29",
-		),
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
+			return testingTenantIDFromDatabaseForAddr(
+				ctx, msg, "undialable%$!@$", "29",
+			)
+		},
 		OnSendErrToClient: ac.onSendErrToClient,
 	}
 	s, addr, done := setupTestProxyWithCerts(t, &opts)
@@ -239,9 +246,11 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 				OnConnectionSuccess: func() { connSuccess = true },
 			}, nil
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			return BackendDial(
-				msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
+				ctx, msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
 			)
 		},
 	}
@@ -287,9 +296,11 @@ func TestProxyTLSClose(t *testing.T) {
 				OnConnectionSuccess: func() { connSuccess = true },
 			}, nil
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			return BackendDial(
-				msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
+				ctx, msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
 			)
 		},
 	}
@@ -327,7 +338,9 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	outgoingTLSConfig.InsecureSkipVerify = true
 
 	opts := Options{
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			params := msg.Parameters
 			require.EqualValues(t, map[string]string{
 				"authToken": "abc123",
@@ -339,7 +352,9 @@ func TestProxyModifyRequestParams(t *testing.T) {
 			delete(params, "authToken")
 			params["user"] = "root"
 
-			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+			return BackendDial(
+				ctx, msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
+			)
 		},
 	}
 	s, proxyAddr, done := setupTestProxyWithCerts(t, &opts)
@@ -363,8 +378,10 @@ func newInsecureProxyServer(
 	t *testing.T, outgoingAddr string, outgoingTLSConfig *tls.Config,
 ) (addr string, cleanup func()) {
 	s := NewServer(Options{
-		BackendDialer: func(message *pgproto3.StartupMessage) (net.Conn, error) {
-			return BackendDial(message, outgoingAddr, outgoingTLSConfig)
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, message *pgproto3.StartupMessage,
+		) (net.Conn, error) {
+			return BackendDial(ctx, message, outgoingAddr, outgoingTLSConfig)
 		},
 	})
 	const listenAddress = "127.0.0.1:0"
@@ -450,7 +467,9 @@ func TestProxyRefuseConn(t *testing.T) {
 
 	ac := makeAssertCtx()
 	opts := Options{
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
 			return nil, NewErrorf(CodeProxyRefusedConnection, "too many attempts")
 		},
 		OnSendErrToClient: ac.onSendErrToClient,
@@ -496,8 +515,12 @@ func TestProxyKeepAlive(t *testing.T) {
 				},
 			}, nil
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
+			return BackendDial(
+				ctx, msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
+			)
 		},
 	}
 	s, addr, done := setupTestProxyWithCerts(t, &opts)
@@ -541,8 +564,10 @@ func TestProxyAgainstSecureCRDBWithIdleTimeout(t *testing.T) {
 				OnConnectionSuccess: func() { connSuccess = true },
 			}, nil
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			conn, err := BackendDial(msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+		BackendDialer: func(
+			ctx context.Context, incoming net.Conn, msg *pgproto3.StartupMessage,
+		) (net.Conn, error) {
+			conn, err := BackendDial(ctx, msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
 			if err != nil {
 				return nil, err
 			}

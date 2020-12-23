@@ -9,6 +9,7 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 
@@ -19,7 +20,7 @@ import (
 // upgrade to an optional SSL connection, and will handle and verify
 // the startup message received from the PG SQL client.
 func FrontendAdmit(
-	conn net.Conn, incomingTLSConfig *tls.Config,
+	ctx context.Context, conn net.Conn, incomingTLSConfig *tls.Config,
 ) (net.Conn, *pgproto3.StartupMessage, error) {
 	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
 	// hence it's important to close `conn` rather than `proxyConn` since closing
