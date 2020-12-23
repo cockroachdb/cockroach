@@ -19,7 +19,6 @@ interface ISummaryCardProps {
 
 const cx = classnames.bind(styles);
 
-// tslint:disable-next-line: variable-name
 export const SummaryCard: React.FC<ISummaryCardProps> = ({
   children,
   className = "",

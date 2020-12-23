@@ -47,10 +47,8 @@ function mapStateToProps(state: AdminUIState): OwnProps {
  * on the current license status.
  */
 export default function swapByLicense<TProps>(
-  // tslint:disable:variable-name
   OSSComponent: React.ComponentClass<TProps>,
   CCLComponent: React.ComponentClass<TProps>,
-  // tslint:enable:variable-name
 ) {
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);

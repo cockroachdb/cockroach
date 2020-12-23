@@ -97,7 +97,6 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
       temporary fix, remove as soon antd can be updated
     */
 
-    // tslint:disable-next-line: variable-name
     const MyInput = Input as any;
 
     return (

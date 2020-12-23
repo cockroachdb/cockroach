@@ -99,7 +99,6 @@ export function BytesWithPrecision(bytes: number, precision: number): string {
 /**
  * Cast bytes to provided scale units
  */
-// tslint:disable-next-line: variable-name
 export const BytesFitScale = (scale: string) => (bytes: number) => {
   if (!bytes) {
     return `0.00 ${scale}`;
@@ -144,7 +143,6 @@ export function Duration(nanoseconds: number): string {
 /**
  * Cast nanonseconds to provided scale units
  */
-// tslint:disable-next-line: variable-name
 export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   if (!nanoseconds) {
     return `0.00 ${scale}`;
