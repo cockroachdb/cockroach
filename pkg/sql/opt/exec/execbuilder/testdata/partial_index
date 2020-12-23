@@ -22,7 +22,8 @@ CREATE TABLE inv (
 # EXPLAIN
 # ---------------------------------------------------------
 
-# EXPLAIN output shows the partial index label on scans over partial indexes.
+# EXPLAIN output shows the partial index label on scans and joins on partial
+# indexes.
 query T
 EXPLAIN SELECT b FROM t WHERE b > 10
 ----
@@ -33,6 +34,21 @@ vectorized: true
   missing stats
   table: t@b_partial (partial index)
   spans: FULL SCAN
+
+query T
+EXPLAIN SELECT t1.a FROM t t1 INNER LOOKUP JOIN t t2 ON t1.a = t2.b AND t2.b > 10
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: t@b_partial (partial index)
+│ equality: (a) = (b)
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: [/11 - ]
 
 query T
 EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
