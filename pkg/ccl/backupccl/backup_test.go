@@ -1206,20 +1206,19 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 			false,
 		},
 	} {
-		var encryptionOption string
-		var sanitizedEncryptionOption string
-		if tc.useKMS {
-			correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
-			encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
-			sanitizedURI, err := redactTestKMSURI(correctKMSURI)
-			require.NoError(t, err)
-			sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
-		} else {
-			encryptionOption = "encryption_passphrase='abcdefg'"
-			sanitizedEncryptionOption = "encryption_passphrase='redacted'"
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
+			var encryptionOption string
+			var sanitizedEncryptionOption string
+			if tc.useKMS {
+				correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
+				encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
+				sanitizedURI, err := redactTestKMSURI(correctKMSURI)
+				require.NoError(t, err)
+				sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
+			} else {
+				encryptionOption = "encryption_passphrase='abcdefg'"
+				sanitizedEncryptionOption = "encryption_passphrase='redacted'"
+			}
 			_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitManualReplication)
 			conn := sqlDB.DB.(*gosql.DB)
 			defer cleanupFn()
@@ -4228,18 +4227,17 @@ func TestEncryptedBackup(t *testing.T) {
 			false,
 		},
 	} {
-		var encryptionOption string
-		var incorrectEncryptionOption string
-		if tc.useKMS {
-			correctKMSURI, incorrectKeyARNURI := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
-			encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
-			incorrectEncryptionOption = fmt.Sprintf("kms='%s'", incorrectKeyARNURI)
-		} else {
-			encryptionOption = "encryption_passphrase='abcdefg'"
-			incorrectEncryptionOption = "encryption_passphrase='wrongpassphrase'"
-		}
-
 		t.Run(tc.name, func(t *testing.T) {
+			var encryptionOption string
+			var incorrectEncryptionOption string
+			if tc.useKMS {
+				correctKMSURI, incorrectKeyARNURI := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
+				encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
+				incorrectEncryptionOption = fmt.Sprintf("kms='%s'", incorrectKeyARNURI)
+			} else {
+				encryptionOption = "encryption_passphrase='abcdefg'"
+				incorrectEncryptionOption = "encryption_passphrase='wrongpassphrase'"
+			}
 			ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitManualReplication)
 			defer cleanupFn()
 
