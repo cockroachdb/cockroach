@@ -89,7 +89,10 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	}
 
 	// Fallthrough.
-	return l.tc.GetSchemaByName(ctx, txn, dbID, scName, flags)
+	if flags.RequireMutable {
+		return l.tc.GetMutableSchemaByName(ctx, txn, dbID, scName, flags)
+	}
+	return l.tc.GetImmutableSchemaByName(ctx, txn, dbID, scName, flags)
 }
 
 // GetObjectNames implements the DatabaseLister interface.
