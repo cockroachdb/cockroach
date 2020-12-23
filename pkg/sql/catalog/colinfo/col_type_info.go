@@ -163,3 +163,25 @@ func GetColumnTypes(
 	}
 	return outTypes, nil
 }
+
+// GetColumnTypesFromColDescs populates the types of the columns with the given
+// IDs into the outTypes slice, returning it. You must use the returned slice,
+// as this function might allocate a new slice.
+func GetColumnTypesFromColDescs(
+	cols []descpb.ColumnDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
+) []*types.T {
+	if cap(outTypes) < len(columnIDs) {
+		outTypes = make([]*types.T, len(columnIDs))
+	} else {
+		outTypes = outTypes[:len(columnIDs)]
+	}
+	for i, id := range columnIDs {
+		for j := range cols {
+			if id == cols[j].ID {
+				outTypes[i] = cols[j].Type
+				break
+			}
+		}
+	}
+	return outTypes
+}

@@ -143,6 +143,12 @@ message TableReaderSpec {
   // post-processing stage and, therefore, are to be populated. It is ignored
   // if is_check is true.
   repeated uint32 needed_columns = 15;
+
+  // Indicates a virtual column which may have a different type than the column
+  // stored in the table descriptor. For example, the inverted column in an
+  // inverted index has a different type than the column it indexes in the base
+  // table.
+  optional sqlbase.ColumnDescriptor virtual_column = 16;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
