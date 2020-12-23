@@ -5,7 +5,7 @@ go_library(
     srcs = ["search.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/search",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
@@ -14,6 +14,6 @@ go_test(
     embed = [":search"],
     deps = [
         "//pkg/util/timeutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -11,6 +11,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/sysutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -16,6 +16,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
         "//pkg/util/stop",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

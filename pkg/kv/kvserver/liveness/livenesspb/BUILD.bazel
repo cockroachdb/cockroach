@@ -12,8 +12,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/google.golang.org/grpc/codes",
-        "//vendor/google.golang.org/grpc/status",
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )

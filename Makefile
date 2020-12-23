@@ -324,8 +324,6 @@ endif
 vendor_rebuild: bin/.submodules-initialized
 	$(GO_INSTALL) -v -mod=mod github.com/goware/modvendor
 	./build/vendor_rebuild.sh
-	bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=DEPS.bzl%go_deps
-	bazel run //:gazelle
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
@@ -1758,7 +1756,7 @@ fuzz: bin/fuzz
 bazel-generate: ## Generate all bazel BUILD files.
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=DEPS.bzl%go_deps
-	@bazel run //:gazelle
+	@bazel run //:gazelle -- -index=false
 
 # No need to include all the dependency files if the user is just
 # requesting help or cleanup.

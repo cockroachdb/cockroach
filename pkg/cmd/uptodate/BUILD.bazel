@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/uptodate",
     visibility = ["//visibility:private"],
     deps = [
-        "//vendor/github.com/MichaelTJones/walk",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_michaeltjones_walk//:walk",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 

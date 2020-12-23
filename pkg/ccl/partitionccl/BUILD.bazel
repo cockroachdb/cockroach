@@ -21,7 +21,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -70,8 +70,8 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

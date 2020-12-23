@@ -21,7 +21,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/pebble",
+        "@com_github_cockroachdb_pebble//:pebble",
     ],
 )
 
@@ -37,6 +37,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors/oserror",
+        "@com_github_cockroachdb_errors//oserror",
     ],
 )

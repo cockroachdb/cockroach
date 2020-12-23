@@ -42,6 +42,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding/csv",
         "//pkg/util/randutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

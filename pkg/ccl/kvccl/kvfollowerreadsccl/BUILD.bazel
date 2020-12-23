@@ -61,6 +61,6 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

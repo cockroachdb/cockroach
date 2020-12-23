@@ -15,8 +15,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geographiclib",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/golang/geo/s1",
-        "//vendor/github.com/golang/geo/s2",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
     ],
 )
 
@@ -25,8 +25,8 @@ go_test(
     srcs = ["geographiclib_test.go"],
     embed = [":geographiclib"],
     deps = [
-        "//vendor/github.com/golang/geo/s1",
-        "//vendor/github.com/golang/geo/s2",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
+        "@com_github_stretchr_testify//require",
     ],
 )

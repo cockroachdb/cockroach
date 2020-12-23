@@ -25,7 +25,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_x_sync//errgroup",
     ],
 )

@@ -12,7 +12,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -23,7 +23,6 @@ go_test(
         "verifier_test.go",
     ],
     deps = [
-        ":ptverifier",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
@@ -31,6 +30,7 @@ go_test(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
+        "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -41,7 +41,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

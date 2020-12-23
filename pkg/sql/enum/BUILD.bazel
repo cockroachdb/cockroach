@@ -14,6 +14,6 @@ go_test(
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

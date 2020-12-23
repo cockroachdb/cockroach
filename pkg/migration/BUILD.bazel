@@ -24,10 +24,10 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/log",
         "//pkg/util/quotapool",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -45,6 +45,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/migration",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -56,6 +57,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/syncutil",
-        "//vendor/google.golang.org/grpc",
+        "@org_golang_google_grpc//:grpc",
     ],
 )

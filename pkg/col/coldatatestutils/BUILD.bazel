@@ -18,6 +18,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

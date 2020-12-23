@@ -24,8 +24,8 @@ go_library(
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -45,6 +45,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
+        "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/log",
         "//pkg/util/randutil",
@@ -52,9 +53,9 @@ go_test(
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

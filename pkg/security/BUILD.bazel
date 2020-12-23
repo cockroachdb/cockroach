@@ -22,7 +22,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/lexbase:lex",
+        "//pkg/sql/lexbase",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
@@ -31,13 +31,13 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/golang.org/x/crypto/bcrypt",
-        "//vendor/golang.org/x/crypto/ocsp",
-        "//vendor/golang.org/x/crypto/ssh/terminal",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_x_crypto//bcrypt",
+        "@org_golang_x_crypto//ocsp",
+        "@org_golang_x_crypto//ssh/terminal",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -56,10 +56,10 @@ go_test(
         "x509_test.go",
     ],
     deps = [
-        ":security",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",
@@ -68,51 +68,51 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/golang.org/x/exp/rand",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//rand",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:android": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:darwin": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:illumos": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:ios": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:js": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:nacl": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:plan9": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//vendor/golang.org/x/sys/unix",
+            "@org_golang_x_sys//unix",
         ],
         "//conditions:default": [],
     }),

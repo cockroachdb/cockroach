@@ -11,7 +11,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -23,7 +23,7 @@ go_test(
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
         "//pkg/testutils",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
     ],
 )

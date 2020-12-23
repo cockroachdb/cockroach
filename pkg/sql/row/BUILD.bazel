@@ -55,7 +55,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -86,6 +86,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
@@ -100,8 +101,8 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

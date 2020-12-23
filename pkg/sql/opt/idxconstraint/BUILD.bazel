@@ -15,7 +15,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/json",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -24,10 +24,10 @@ go_test(
     srcs = ["index_constraints_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":idxconstraint",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/exec/execbuilder",
+        "//pkg/sql/opt/idxconstraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
@@ -35,6 +35,6 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

@@ -28,7 +28,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/ring",
         "//pkg/util/sort",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -59,7 +59,7 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

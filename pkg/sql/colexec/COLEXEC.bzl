@@ -64,7 +64,7 @@ def gen_eg_go_rules():
     )
     native.alias(
         name = "goimports",
-        actual = "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
+        actual = "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     )
 
     for target, template in targets:

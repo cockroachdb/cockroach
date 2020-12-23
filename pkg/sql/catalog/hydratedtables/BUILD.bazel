@@ -19,8 +19,8 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
-        "//vendor/github.com/biogo/store/llrb",
-        "//vendor/github.com/prometheus/client_model/go",
+        "@com_github_biogo_store//llrb",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
@@ -40,6 +40,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )
