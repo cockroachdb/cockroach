@@ -237,6 +237,17 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
 	}
+	if colCfg.virtualColumns != nil {
+		trSpec.VirtualColumns = make([]*descpb.ColumnDescriptor, len(colCfg.virtualColumns))
+		idx := 0
+		for i := range cols {
+			if _, ok := colCfg.virtualColumns[tree.ColumnID(cols[i].ID)]; ok {
+				trSpec.VirtualColumns[idx] = cols[i]
+				idx++
+			}
+		}
+	}
+
 	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
 	if err != nil {
 		return nil, err

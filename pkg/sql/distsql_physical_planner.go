@@ -990,6 +990,16 @@ func initTableReaderSpec(
 		HasSystemColumns: n.containsSystemColumns,
 		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
 	}
+	if n.colCfg.virtualColumns != nil {
+		s.VirtualColumns = make([]*descpb.ColumnDescriptor, len(n.colCfg.virtualColumns))
+		idx := 0
+		for i := range n.cols {
+			if _, ok := n.colCfg.virtualColumns[tree.ColumnID(n.cols[i].ID)]; ok {
+				s.VirtualColumns[idx] = n.cols[i]
+				idx++
+			}
+		}
+	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
@@ -1281,25 +1291,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
-	numCols := len(info.desc.Columns)
-	if returnMutations {
-		numCols += len(info.desc.MutationColumns())
-	}
-	if info.containsSystemColumns {
-		numCols += len(colinfo.AllSystemColumnDescs)
-	}
-
-	typs := make([]*types.T, 0, numCols)
-	for i := range info.desc.Columns {
-		typs = append(typs, info.desc.Columns[i].Type)
-	}
-	if returnMutations {
-		mutationColumns := info.desc.MutationColumns()
-		for i := range mutationColumns {
-			typs = append(typs, mutationColumns[i].Type)
-		}
-	}
+	typs := info.desc.ColumnTypesWithMutationsAndVirtualCols(returnMutations, info.spec.VirtualColumns)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)
@@ -2952,7 +2944,17 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 			if err != nil {
 				return nil, err
 			}
-			encDatum := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
+
+			// TODO(rytaft): Remove this code. This is a hack to make zig zag joins
+			// work with the new code that correctly types inverted columns.
+			typ := resultTypes[colIdx]
+			dTyp := datum.ResolvedType()
+			if datum != tree.DNull && !typ.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
+				typ = dTyp
+			}
+			// End of hack.
+
+			encDatum := rowenc.DatumToEncDatum(typ, datum)
 			buf, err = encDatum.Encode(resultTypes[colIdx], &a, descpb.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return nil, err

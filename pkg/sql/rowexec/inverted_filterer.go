@@ -221,7 +221,21 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
 	// Add to the evaluator.
-	if _, err = ifr.invertedEval.prepareAddIndexRow(row[ifr.invertedColIdx].EncodedBytes()); err != nil {
+	enc := row[ifr.invertedColIdx].EncodedBytes()
+	if len(enc) == 0 {
+		// If the input is from the vectorized engine, the encoded bytes may be
+		// empty.
+		if row[ifr.invertedColIdx].Datum == nil {
+			ifr.MoveToDraining(errors.New("no datum found"))
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.BytesFamily {
+			ifr.MoveToDraining(errors.New("virtual inverted column should have type bytes"))
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
+	}
+	if _, err = ifr.invertedEval.prepareAddIndexRow(enc); err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}

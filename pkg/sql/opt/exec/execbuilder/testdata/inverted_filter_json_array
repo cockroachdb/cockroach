@@ -40,7 +40,7 @@ query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[1, 2]' OR b @> '[3, 4]' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -59,7 +59,7 @@ query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": {}}' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -78,7 +78,7 @@ query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '{"a": []}' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -97,7 +97,7 @@ query T
 EXPLAIN SELECT a FROM json_tab WHERE b @> '[[1, 2]]' OR b @> '[[3, 4]]' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: (b @> '[[1, 2]]') OR (b @> '[[3, 4]]')
@@ -122,7 +122,7 @@ query T
 EXPLAIN SELECT a FROM json_tab@foo_inv WHERE b @> '[1]' OR b @> '[2]' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -141,7 +141,7 @@ query T
 EXPLAIN SELECT * FROM json_tab@foo_inv WHERE b @> '[3]' OR b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • filter
 │ filter: (b @> '[3]') OR (b @> '[[1, 2]]')
@@ -168,7 +168,7 @@ WHERE (b @> '[1]'::json OR b @> '[2]'::json) AND (b @> '3'::json OR b @> '"bar"'
 ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -252,7 +252,7 @@ query T
 EXPLAIN SELECT a FROM array_tab@foo_inv WHERE b @> '{}' ORDER BY a
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a

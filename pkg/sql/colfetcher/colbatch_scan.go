@@ -175,7 +175,7 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutations(returnMutations)
+	typs := table.ColumnTypesWithMutationsAndVirtualCols(returnMutations, spec.VirtualColumns)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 
 	// Add all requested system columns to the output.
@@ -252,9 +252,25 @@ func initCRowFetcher(
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns()
 	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
+	if spec.VirtualColumns != nil {
+		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumnDescs))
+		copy(tempCols, cols)
+		for i := range tempCols {
+			for j := range spec.VirtualColumns {
+				if tempCols[i].ID == spec.VirtualColumns[j].ID {
+					tempCols[i] = *spec.VirtualColumns[j]
+					break
+				}
+			}
+		}
+		cols = tempCols
+		// Add on any requested system columns.
+		cols = append(cols, systemColumnDescs...)
+	} else {
+		// Add on any requested system columns. We slice cols to avoid modifying
+		// the underlying table descriptor.
+		cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
+	}
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
