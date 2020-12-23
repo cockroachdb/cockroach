@@ -17,7 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/encoding",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -29,6 +29,7 @@ go_test(
     ],
     embed = [":keys"],
     deps = [
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/bitarray",
@@ -37,8 +38,8 @@ go_test(
         "//pkg/util/keysutil",
         "//pkg/util/leaktest",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

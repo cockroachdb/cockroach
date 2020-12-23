@@ -5,5 +5,5 @@ go_library(
     srcs = ["errors.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/errors",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )

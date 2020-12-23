@@ -21,8 +21,8 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/log",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

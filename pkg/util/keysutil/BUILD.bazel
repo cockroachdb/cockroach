@@ -8,6 +8,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

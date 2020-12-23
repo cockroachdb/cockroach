@@ -60,8 +60,8 @@ go_library(
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/gostdlib/x/tools/imports",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_gostdlib//x/tools/imports",
     ],
 )
 

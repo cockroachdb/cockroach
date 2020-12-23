@@ -21,8 +21,8 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/prometheus/client_model/go",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
@@ -33,13 +33,13 @@ go_test(
         "reconciler_test.go",
     ],
     deps = [
-        ":ptreconcile",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -53,7 +53,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

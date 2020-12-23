@@ -14,7 +14,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/codahale/hdrhistogram",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
     ],
 )

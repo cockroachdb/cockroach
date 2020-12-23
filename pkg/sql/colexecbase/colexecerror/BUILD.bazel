@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
     ],
 )

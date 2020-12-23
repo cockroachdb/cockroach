@@ -9,7 +9,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/exit",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/redact"],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )
 
 go_test(

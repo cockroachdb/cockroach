@@ -13,7 +13,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -24,10 +24,10 @@ go_test(
         "main_test.go",
     ],
     deps = [
-        ":jobsprotectedts",
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
@@ -45,7 +45,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

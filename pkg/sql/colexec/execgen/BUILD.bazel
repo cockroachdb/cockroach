@@ -16,11 +16,11 @@ go_library(
     deps = [
         "//pkg/sql/colexecbase/colexecerror",
         "//pkg/sql/sem/tree",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/dave/dst",
-        "//vendor/github.com/dave/dst/decorator",
-        "//vendor/github.com/dave/dst/dstutil",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dave_dst//:dst",
+        "@com_github_dave_dst//decorator",
+        "@com_github_dave_dst//dstutil",
     ],
 )
 
@@ -35,9 +35,9 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":execgen"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/dave/dst",
-        "//vendor/github.com/dave/dst/decorator",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_dave_dst//:dst",
+        "@com_github_dave_dst//decorator",
+        "@com_github_stretchr_testify//assert",
     ],
 )

@@ -43,9 +43,9 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -86,6 +86,7 @@ go_test(
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
@@ -102,6 +103,6 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

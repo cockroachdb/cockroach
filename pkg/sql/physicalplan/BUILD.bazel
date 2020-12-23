@@ -29,7 +29,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -60,6 +60,7 @@ go_test(
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/physicalplan",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
@@ -74,6 +75,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

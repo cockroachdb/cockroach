@@ -15,8 +15,8 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/olekukonko/tablewriter",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )
 
@@ -29,7 +29,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":hba"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/kr/pretty",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_kr_pretty//:pretty",
     ],
 )

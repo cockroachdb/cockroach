@@ -59,7 +59,7 @@ go_library(
     deps = [
         "//pkg/docs",
         "//pkg/geo/geopb",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -68,7 +68,7 @@ go_test(
     srcs = ["geos_test.go"],
     embed = [":geos"],
     deps = [
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

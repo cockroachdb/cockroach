@@ -17,9 +17,9 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/google.golang.org/protobuf/proto",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_google_protobuf//proto",
     ],
 )
 
@@ -34,7 +34,7 @@ go_test(
         "//pkg/cli/exit",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
     ],
 )

@@ -19,7 +19,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -32,6 +32,6 @@ go_test(
     embed = [":heapprofiler"],
     deps = [
         "//pkg/server/dumpstore",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

@@ -18,7 +18,7 @@ go_library(
         "//pkg/sql/opt",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

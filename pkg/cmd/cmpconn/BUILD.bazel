@@ -13,13 +13,13 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/util/duration",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/google/go-cmp/cmp",
-        "//vendor/github.com/google/go-cmp/cmp/cmpopts",
-        "//vendor/github.com/jackc/pgx",
-        "//vendor/github.com/jackc/pgx/pgtype",
-        "//vendor/github.com/lib/pq",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_cmp//cmp",
+        "@com_github_google_go_cmp//cmp/cmpopts",
+        "@com_github_jackc_pgx//:pgx",
+        "@com_github_jackc_pgx//pgtype",
+        "@com_github_lib_pq//:pq",
     ],
 )
 
@@ -27,5 +27,5 @@ go_test(
     name = "cmpconn_test",
     srcs = ["compare_test.go"],
     embed = [":cmpconn"],
-    deps = ["//vendor/github.com/cockroachdb/apd/v2:apd"],
+    deps = ["@com_github_cockroachdb_apd_v2//:apd"],
 )

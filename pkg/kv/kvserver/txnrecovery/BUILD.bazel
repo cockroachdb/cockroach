@@ -16,7 +16,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil/singleflight",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -33,6 +33,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/tracing",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

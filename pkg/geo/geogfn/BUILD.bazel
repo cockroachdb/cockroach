@@ -24,11 +24,11 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geosegmentize",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/golang/geo/r3",
-        "//vendor/github.com/golang/geo/s1",
-        "//vendor/github.com/golang/geo/s2",
-        "//vendor/github.com/twpayne/go-geom",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_geo//r3",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
+        "@com_github_twpayne_go_geom//:go-geom",
     ],
 )
 
@@ -50,9 +50,9 @@ go_test(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",
-        "//vendor/github.com/golang/geo/s1",
-        "//vendor/github.com/golang/geo/s2",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/github.com/twpayne/go-geom",
+        "@com_github_golang_geo//s1",
+        "@com_github_golang_geo//s2",
+        "@com_github_stretchr_testify//require",
+        "@com_github_twpayne_go_geom//:go-geom",
     ],
 )

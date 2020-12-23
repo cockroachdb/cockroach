@@ -16,11 +16,11 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
-        "//vendor/github.com/google/pprof/driver",
-        "//vendor/github.com/google/pprof/profile",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_google_pprof//driver",
+        "@com_github_google_pprof//profile",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 

@@ -15,7 +15,7 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -26,14 +26,14 @@ go_test(
         "stopper_test.go",
     ],
     deps = [
-        ":stop",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

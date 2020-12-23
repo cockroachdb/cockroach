@@ -11,7 +11,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/util/cache",
         "//pkg/util/uuid",
-        "//vendor/github.com/biogo/store/llrb",
+        "@com_github_biogo_store//llrb",
     ],
 )
 
@@ -26,6 +26,6 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/util/encoding",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

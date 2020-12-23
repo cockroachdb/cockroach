@@ -14,6 +14,6 @@ go_library(
     deps = [
         "//pkg/util/envutil",
         "//pkg/util/version",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_gogo_protobuf//proto",
     ],
 )

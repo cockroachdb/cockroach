@@ -60,9 +60,9 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/marusama/semaphore",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_marusama_semaphore//:semaphore",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 

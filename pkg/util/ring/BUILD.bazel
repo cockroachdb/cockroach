@@ -11,5 +11,5 @@ go_test(
     name = "ring_test",
     srcs = ["ring_buffer_test.go"],
     embed = [":ring"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

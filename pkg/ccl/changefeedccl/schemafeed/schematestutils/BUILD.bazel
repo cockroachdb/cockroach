@@ -10,6 +10,6 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/types",
         "//pkg/util/hlc",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_gogo_protobuf//proto",
     ],
 )

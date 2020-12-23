@@ -37,9 +37,9 @@ go_library(
         "//pkg/sql/vtable",
         "//pkg/util",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/lib/pq/oid",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
@@ -48,9 +48,9 @@ go_test(
     srcs = ["test_catalog_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":testcat",
         "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

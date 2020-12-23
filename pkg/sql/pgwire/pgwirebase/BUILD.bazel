@@ -33,9 +33,9 @@ go_library(
         "//pkg/util/timeofday",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uint128",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/github.com/jackc/pgx/pgtype",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_jackc_pgx//pgtype",
+        "@com_github_lib_pq//oid",
     ],
 )

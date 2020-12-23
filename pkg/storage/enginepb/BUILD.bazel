@@ -18,10 +18,10 @@ go_library(
     deps = [
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/sortkeys",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//sortkeys",
     ],
 )
 
@@ -32,11 +32,11 @@ go_test(
         "mvcc_test.go",
     ],
     deps = [
-        ":enginepb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

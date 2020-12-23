@@ -5,12 +5,12 @@ go_library(
     srcs = ["no_zero_field.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/zerofields",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
     name = "zerofields_test",
     srcs = ["no_zero_field_test.go"],
     embed = [":zerofields"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )

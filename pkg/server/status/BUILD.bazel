@@ -59,56 +59,56 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/github.com/elastic/gosigar",
-        "//vendor/github.com/shirou/gopsutil/net",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_elastic_gosigar//:gosigar",
+        "@com_github_shirou_gopsutil//net",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:android": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:darwin": [
-            "//vendor/github.com/lufia/iostat",
+            "@com_github_lufia_iostat//:iostat",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:illumos": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:ios": [
-            "//vendor/github.com/lufia/iostat",
+            "@com_github_lufia_iostat//:iostat",
         ],
         "@io_bazel_rules_go//go/platform:js": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:nacl": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:plan9": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
-            "//vendor/github.com/shirou/gopsutil/disk",
+            "@com_github_shirou_gopsutil//disk",
         ],
         "//conditions:default": [],
     }),
@@ -137,7 +137,7 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/timeutil",
-        "//vendor/github.com/kr/pretty",
-        "//vendor/github.com/shirou/gopsutil/net",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_shirou_gopsutil//net",
     ],
 )

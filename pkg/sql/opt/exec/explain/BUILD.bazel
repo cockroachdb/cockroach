@@ -28,8 +28,8 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/dustin/go-humanize",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 
@@ -44,14 +44,15 @@ go_test(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/exec/explain",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 

@@ -22,5 +22,5 @@ go_test(
         "mutex_sync_race_test.go",
     ],
     embed = [":syncutil"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

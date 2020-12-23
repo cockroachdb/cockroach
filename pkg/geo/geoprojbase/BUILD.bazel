@@ -18,5 +18,5 @@ go_test(
     name = "geoprojbase_test",
     srcs = ["projections_test.go"],
     embed = [":geoprojbase"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

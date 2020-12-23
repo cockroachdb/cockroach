@@ -15,9 +15,9 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/version",
         "//pkg/workload",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/sync/errgroup",
-        "//vendor/golang.org/x/time/rate",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_time//rate",
     ],
 )
 

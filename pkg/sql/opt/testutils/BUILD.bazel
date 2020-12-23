@@ -18,7 +18,7 @@ go_library(
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -28,6 +28,6 @@ go_test(
     embed = [":testutils"],
     deps = [
         "//pkg/sql/opt",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_stretchr_testify//assert",
     ],
 )

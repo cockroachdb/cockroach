@@ -11,6 +11,6 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/metric",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

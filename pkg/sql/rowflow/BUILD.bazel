@@ -24,7 +24,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -56,6 +56,6 @@ go_test(
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

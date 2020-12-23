@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/optional",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/types",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//types",
     ],
 )
 
@@ -22,7 +22,7 @@ go_test(
         "uint_test.go",
     ],
     deps = [
-        ":optional",
-        "//vendor/github.com/stretchr/testify/require",
+        "//pkg/util/optional",
+        "@com_github_stretchr_testify//require",
     ],
 )
