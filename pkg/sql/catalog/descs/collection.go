@@ -269,7 +269,7 @@ func (tc *Collection) getDescriptorFromStore(
 	parentSchemaID descpb.ID,
 	name string,
 	mutable bool,
-) (desc catalog.Descriptor, found bool, err error) {
+) (found bool, desc catalog.Descriptor, err error) {
 	// Bypass the namespace lookup from the store for system tables.
 	descID := bootstrap.LookupSystemTableDescriptorID(ctx, tc.settings, tc.codec(), parentID, name)
 	if descID == descpb.InvalidID {
@@ -277,16 +277,16 @@ func (tc *Collection) getDescriptorFromStore(
 		var err error
 		found, descID, err = catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
 		if err != nil || !found {
-			return nil, found, err
+			return found, nil, err
 		}
 	}
 	// Always pick up a mutable copy so it can be cached.
 	desc, err = catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutable)
 	if err != nil {
-		return nil, false, err
+		return false, nil, err
 	} else if desc == nil {
 		// Having done the namespace lookup, the descriptor must exist.
-		return nil, false, errors.AssertionFailedf("descriptor %d not found", descID)
+		return false, nil, errors.AssertionFailedf("descriptor %d not found", descID)
 	}
 	isNamespace2 := parentID == keys.SystemDatabaseID && name == systemschema.NamespaceTableName
 	// Immediately after a RENAME an old name still points to the descriptor
@@ -295,16 +295,16 @@ func (tc *Collection) getDescriptorFromStore(
 	if desc.GetName() != name && !isNamespace2 {
 		// Special case for the namespace table, whose name is namespace2 in its
 		// descriptor and namespace entry.
-		return nil, false, nil
+		return false, nil, nil
 	}
 	ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
 	if err != nil {
-		return nil, false, err
+		return false, nil, err
 	}
 	if !mutable {
 		desc = ud.immutable
 	}
-	return desc, true, nil
+	return true, desc, nil
 }
 
 // GetDatabaseByName returns a database descriptor with properties according to
@@ -324,17 +324,17 @@ func (tc *Collection) GetDatabaseByName(
 		return systemschema.MakeSystemDatabaseDesc(), nil
 	}
 
-	getDatabaseByName := func() (_ catalog.Descriptor, found bool, err error) {
+	getDatabaseByName := func() (found bool, _ catalog.Descriptor, err error) {
 		if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 			keys.RootNamespaceID, keys.RootNamespaceID, name,
 		); refuseFurtherLookup {
-			return nil, false, nil
+			return false, nil, nil
 		} else if desc != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", desc.immutable.GetID())
 			if flags.RequireMutable {
-				return desc.mutable, true, nil
+				return true, desc.mutable, nil
 			}
-			return desc.immutable, true, nil
+			return true, desc.immutable, nil
 		}
 
 		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
@@ -345,16 +345,16 @@ func (tc *Collection) GetDatabaseByName(
 		desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
 			ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 		if err != nil {
-			return nil, false, err
+			return false, nil, err
 		}
 		if shouldReadFromStore {
 			return tc.getDescriptorFromStore(
 				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable)
 		}
-		return desc, true, nil
+		return true, desc, nil
 	}
 
-	desc, found, err := getDatabaseByName()
+	found, desc, err := getDatabaseByName()
 	if err != nil {
 		return nil, err
 	} else if !found {
@@ -381,7 +381,7 @@ func (tc *Collection) getObjectByName(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
-) (_ catalog.Descriptor, found bool, err error) {
+) (found bool, _ catalog.Descriptor, err error) {
 
 	// If we're reading the object descriptor from the store,
 	// we should read its parents from the store too to ensure
@@ -397,7 +397,7 @@ func (tc *Collection) getObjectByName(
 			IncludeOffline: flags.IncludeOffline,
 		})
 	if err != nil || db == nil {
-		return nil, db != nil, err
+		return db != nil, nil, err
 	}
 	dbID := db.GetID()
 
@@ -410,20 +410,20 @@ func (tc *Collection) getObjectByName(
 			IncludeOffline: flags.IncludeOffline,
 		})
 	if err != nil || !foundSchema {
-		return nil, foundSchema, err
+		return foundSchema, nil, err
 	}
 	schemaID := resolvedSchema.ID
 
 	if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 		dbID, schemaID, objectName,
 	); refuseFurtherLookup {
-		return nil, false, nil
+		return false, nil, nil
 	} else if desc != nil {
 		log.VEventf(ctx, 2, "found uncommitted descriptor %d", desc.immutable.GetID())
 		if flags.RequireMutable {
-			return desc.mutable, true, nil
+			return true, desc.mutable, nil
 		}
-		return desc.immutable, true, nil
+		return true, desc.immutable, nil
 	}
 
 	// TODO(vivek): Ideally we'd avoid caching for only the
@@ -445,13 +445,13 @@ func (tc *Collection) getObjectByName(
 	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
 		ctx, txn, dbID, schemaID, objectName)
 	if err != nil {
-		return nil, false, err
+		return false, nil, err
 	}
 	if shouldReadFromStore {
 		return tc.getDescriptorFromStore(
 			ctx, txn, tc.codec(), dbID, schemaID, objectName, flags.RequireMutable)
 	}
-	return desc, true, nil
+	return true, desc, nil
 }
 
 // GetTableByName returns a table descriptor with properties according to the
@@ -459,7 +459,7 @@ func (tc *Collection) getObjectByName(
 func (tc *Collection) GetTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (_ catalog.TableDescriptor, err error) {
-	desc, found, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
+	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil {
 		return nil, err
 	} else if !found {
@@ -502,7 +502,7 @@ func (tc *Collection) GetTableByName(
 func (tc *Collection) GetTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (_ catalog.TypeDescriptor, err error) {
-	desc, found, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
+	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil {
 		return nil, err
 	} else if !found {
@@ -532,17 +532,17 @@ func (tc *Collection) GetTypeByName(
 func (tc *Collection) getUserDefinedSchemaByName(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
-	getSchemaByName := func() (_ catalog.Descriptor, found bool, err error) {
+	getSchemaByName := func() (found bool, _ catalog.Descriptor, err error) {
 		if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 			dbID, keys.RootNamespaceID, schemaName,
 		); refuseFurtherLookup {
-			return nil, false, nil
+			return false, nil, nil
 		} else if desc != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", desc.immutable.GetID())
 			if flags.RequireMutable {
-				return desc.mutable, true, nil
+				return true, desc.mutable, nil
 			}
-			return desc.immutable, true, nil
+			return true, desc.immutable, nil
 		}
 
 		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
@@ -554,27 +554,27 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		// if it's not.
 		dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
-			return nil, false, err
+			return false, nil, err
 		}
 		schemaInfo, found := dbDesc.LookupSchema(schemaName)
 		if !found {
-			return nil, false, nil
+			return false, nil, nil
 		} else if schemaInfo.Dropped {
 			// If there's another schema name entry with the same ID as this one, then
 			// the schema has been renamed, so don't return anything.
 			for name, info := range dbDesc.GetSchemas() {
 				if name != schemaName && info.ID == schemaInfo.ID {
-					return nil, false, nil
+					return false, nil, nil
 				}
 			}
 			// Otherwise, the schema has been dropped. Return early, except in the
 			// specific case where flags.Required and flags.IncludeDropped are both
 			// true, which forces us to look up the dropped descriptor and return it.
 			if !flags.Required {
-				return nil, false, nil
+				return false, nil, nil
 			}
 			if !flags.IncludeDropped {
-				return nil, false, catalog.NewInactiveDescriptorError(catalog.ErrDescriptorDropped)
+				return false, nil, catalog.NewInactiveDescriptorError(catalog.ErrDescriptorDropped)
 			}
 		}
 
@@ -591,14 +591,14 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags, true /* setTxnDeadline */)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				return nil, false, nil
+				return false, nil, nil
 			}
-			return nil, false, err
+			return false, nil, err
 		}
-		return desc, true, nil
+		return true, desc, nil
 	}
 
-	desc, found, err := getSchemaByName()
+	found, desc, err := getSchemaByName()
 	if err != nil {
 		return nil, err
 	} else if !found {
