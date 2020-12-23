@@ -39,7 +39,6 @@ go_test(
     ],
     embed = [":catalog"],
     deps = [
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",

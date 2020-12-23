@@ -22,7 +22,7 @@ go_test(
         "task_test.go",
     ],
     deps = [
-        "//pkg/kv/kvserver/apply",
+        ":apply",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
         "@io_etcd_go_etcd_raft_v3//raftpb",

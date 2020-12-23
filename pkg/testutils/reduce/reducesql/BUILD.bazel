@@ -18,11 +18,11 @@ go_test(
     srcs = ["reducesql_test.go"],
     data = glob(["testdata/**"]),
     deps = [
+        ":reducesql",
         "//pkg/base",
         "//pkg/security",
         "//pkg/server",
         "//pkg/testutils/reduce",
-        "//pkg/testutils/reduce/reducesql",
         "//pkg/testutils/skip",
         "@com_github_jackc_pgx//:pgx",
     ],
