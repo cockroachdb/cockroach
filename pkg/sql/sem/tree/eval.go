@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3072,6 +3073,14 @@ type EvalPlanner interface {
 	CompactEngineSpan(
 		ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
 	) error
+
+	// MemberOfWithAdminOption is used to collect a list of roles (direct and
+	// indirect) that the member is part of. See the comment on the planner
+	// implementation in authorization.go
+	MemberOfWithAdminOption(
+		ctx context.Context,
+		member security.SQLUsername,
+	) (map[security.SQLUsername]bool, error)
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.
