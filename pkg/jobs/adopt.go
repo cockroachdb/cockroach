@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const claimableStatusTupleString = `(` +
+// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
+// non-terminal jobs.
+const NonTerminalStatusTupleString = `(` +
 	`'` + string(StatusRunning) + `', ` +
 	`'` + string(StatusPending) + `', ` +
 	`'` + string(StatusCancelRequested) + `', ` +
@@ -42,7 +44,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
     WHERE claim_session_id IS NULL
-      AND status IN `+claimableStatusTupleString+`
+      AND status IN `+NonTerminalStatusTupleString+`
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`,

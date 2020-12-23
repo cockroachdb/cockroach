@@ -648,7 +648,7 @@ func (r *Registry) Start(
 UPDATE system.jobs
    SET claim_session_id = NULL
  WHERE claim_session_id <> $1
-   AND status IN `+claimableStatusTupleString+`
+   AND status IN `+NonTerminalStatusTupleString+`
    AND NOT crdb_internal.sql_liveness_is_alive(claim_session_id)`,
 			s.ID().UnsafeBytes(),
 		); err != nil {

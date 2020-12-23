@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -471,6 +472,11 @@ func (p *planner) TemporarySchemaName() string {
 // DistSQLPlanner returns the DistSQLPlanner
 func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
+}
+
+// MigrationCluster returns the migration.Cluster if there is one.
+func (p *planner) MigrationCluster() migration.Cluster {
+	return p.execCfg.MigrationCluster
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

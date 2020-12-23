@@ -53,7 +53,7 @@ type setClusterSettingNode struct {
 	// versionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
-	versionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
+	versionUpgradeHook func(ctx context.Context, username security.SQLUsername, from, to clusterversion.ClusterVersion) error
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
@@ -259,7 +259,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				// toSettingString already validated the input, and checked to
 				// see that we are allowed to transition. Let's call into our
 				// upgrade hook to run migrations, if any.
-				if err := n.versionUpgradeHook(ctx, from, to); err != nil {
+				if err := n.versionUpgradeHook(ctx, params.p.User(), from, to); err != nil {
 					return err
 				}
 			}
