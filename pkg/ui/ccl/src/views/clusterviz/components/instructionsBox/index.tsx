@@ -46,6 +46,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
             <a
               href={docsURL.enableNodeMap}
               target="_blank"
+              rel="noreferrer"
               className="instructions-box-top-bar__setup_link"
             >
               Follow our configuration guide
