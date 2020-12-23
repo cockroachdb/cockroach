@@ -140,6 +140,7 @@ export function DropdownItem(props: DropdownItemProps) {
   const onClickHandler = React.useCallback(() => !disabled && onClick(value), [
     disabled,
     onClick,
+    value,
   ]);
   return (
     <div

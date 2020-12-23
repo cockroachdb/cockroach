@@ -40,7 +40,7 @@ const TerminateQueryModal = (
     cancel(req);
     trackTerminateQuery();
     setVisible(false);
-  }, [req]);
+  }, [cancel, req]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
 
