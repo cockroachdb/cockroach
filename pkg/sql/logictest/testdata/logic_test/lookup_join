@@ -378,7 +378,7 @@ SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND larg
 27  NULL
 30  NULL
 
-## Left join with ON filter on non-covering index
+## Left join with ON filter on non-covering index. Will execute as paired-joins.
 query II rowsort
 SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
@@ -392,6 +392,26 @@ SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND larg
 24  NULL
 27  NULL
 30  NULL
+
+## Left semi join with ON filter on non-covering index. Will execute as paired-joins.
+query I rowsort
+SELECT small.c FROM small WHERE EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+6
+12
+
+## Left anti join with ON filter on non-covering index. Will execute as paired-joins.
+query I rowsort
+SELECT small.c FROM small WHERE NOT EXISTS(SELECT 1 FROM large WHERE small.c = large.b AND large.d < 30)
+----
+3
+9
+15
+18
+21
+24
+27
+30
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
