@@ -177,7 +177,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	if err != nil {
 		return err
 	}
-	arrayDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+	arrayDesc, err := params.p.Descriptors().GetMutableTypeByID(
 		params.ctx, params.p.txn, typDesc.ArrayTypeID)
 	if err != nil {
 		return err

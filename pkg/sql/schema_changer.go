@@ -377,7 +377,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.ID, txn)
+		mut, err := descsCol.GetMutableTableByID(ctx, table.ID, txn)
 		if err != nil {
 			return err
 		}
@@ -837,7 +837,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// clean up the descriptor.
 	var cleanupJob *jobs.StartableJob
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -906,7 +906,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1037,13 +1037,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		interleaveParents = make(map[descpb.ID]struct{})
 
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
 
 		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			desc, err := descsCol.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
 				return nil, err
 			}
@@ -1137,7 +1137,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				mutation.Direction == descpb.DescriptorMutation_ADD &&
 				constraint.ForeignKey.Validity == descpb.ConstraintValidity_Unvalidated {
 				// Add backreference on the referenced table (which could be the same table)
-				backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
+				backrefTable, err := descsCol.GetMutableTableByID(ctx,
 					constraint.ForeignKey.ReferencedTableID, txn)
 				if err != nil {
 					return err
@@ -1228,7 +1228,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 					if len(oldIndex.Interleave.Ancestors) != 0 {
 						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
+						ancestor, err := descsCol.GetMutableTableByID(ctx, ancestorInfo.TableID, txn)
 						if err != nil {
 							return err
 						}
@@ -1296,7 +1296,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// don't install any backreferences.
 		if !scTable.Dropped() {
 			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByID(ctx, txn, id)
 				if err != nil {
 					return nil, err
 				}
@@ -1308,7 +1308,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for _, id := range referencedTypeIDs {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByID(ctx, txn, id)
 				if err != nil {
 					return err
 				}
@@ -1318,7 +1318,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 			for _, id := range newReferencedTypeIDs {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.GetMutableTypeByID(ctx, txn, id)
 				if err != nil {
 					return err
 				}
@@ -1485,7 +1485,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	const kvTrace = true // TODO(ajwerner): figure this out
 	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1573,7 +1573,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Get the foreign key backreferences to remove.
 				if constraint.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
 					fk := &constraint.ForeignKey
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableByID(ctx, fk.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}

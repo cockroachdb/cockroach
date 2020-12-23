@@ -353,7 +353,7 @@ func (sc *SchemaChanger) dropConstraints(
 
 	// Create update closure for the table and all other tables with backreferences.
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -385,7 +385,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name != constraint.Name {
 						continue
 					}
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
+					backrefTable, err := descsCol.GetMutableTableByID(ctx,
 						constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
@@ -438,13 +438,13 @@ func (sc *SchemaChanger) dropConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
-		if tableDescs[sc.descID], err = descsCol.GetTableVersionByID(
+		if tableDescs[sc.descID], err = descsCol.GetImmutableTableByID(
 			ctx, txn, sc.descID, tree.ObjectLookupFlagsWithRequired(),
 		); err != nil {
 			return err
 		}
 		for id := range fksByBackrefTable {
-			if tableDescs[id], err = descsCol.GetTableVersionByID(
+			if tableDescs[id], err = descsCol.GetImmutableTableByID(
 				ctx, txn, id, tree.ObjectLookupFlagsWithRequired(),
 			); err != nil {
 				return err
@@ -478,7 +478,7 @@ func (sc *SchemaChanger) addConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.GetMutableTableByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -529,7 +529,7 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey.ReferencedTableID, txn)
+					backrefTable, err := descsCol.GetMutableTableByID(ctx, constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
@@ -685,7 +685,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (*tabledesc.Immutable, error) {
-	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -1654,7 +1654,7 @@ func runSchemaChangesInTxn(
 				}
 				if len(oldIndex.Interleave.Ancestors) != 0 {
 					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					ancestor, err := planner.Descriptors().GetMutableTableByID(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
@@ -1739,7 +1739,7 @@ func runSchemaChangesInTxn(
 			if selfReference {
 				referencedTableDesc = tableDesc
 			} else {
-				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+				lookup, err := planner.Descriptors().GetMutableTableByID(ctx, fk.ReferencedTableID, planner.Txn())
 				if err != nil {
 					return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
 				}

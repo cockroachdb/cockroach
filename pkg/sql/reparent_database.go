@@ -189,7 +189,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 					return errors.Wrapf(err, errStr, n.db.Name, tbl.Name)
 				}
 				for _, ref := range tbl.GetDependedOnBy() {
-					dep, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
+					dep, err := p.Descriptors().GetMutableTableByID(ctx, ref.ID, p.txn)
 					if err != nil {
 						return errors.Wrapf(err, errStr, n.db.Name, tblName.String())
 					}

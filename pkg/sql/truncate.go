@@ -105,7 +105,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if _, ok := toTruncate[tableID]; ok {
 				return nil
 			}
-			other, err := p.Descriptors().GetMutableTableVersionByID(ctx, tableID, p.txn)
+			other, err := p.Descriptors().GetMutableTableByID(ctx, tableID, p.txn)
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func (p *planner) truncateTable(
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
-	tableDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+	tableDesc, err := p.Descriptors().GetMutableTableByID(ctx, id, p.txn)
 	if err != nil {
 		return err
 	}
@@ -361,7 +361,7 @@ func (p *planner) findAllReferencingInterleaves(
 		if id == table.ID {
 			continue
 		}
-		t, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+		t, err := p.Descriptors().GetMutableTableByID(ctx, id, p.txn)
 		if err != nil {
 			return nil, err
 		}

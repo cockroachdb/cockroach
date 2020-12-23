@@ -916,7 +916,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
-	return r.p.Descriptors().GetDatabaseVersionByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
+	return r.p.Descriptors().GetImmutableDatabaseByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
@@ -2403,7 +2403,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Check if it is a user defined type.
 				id := typedesc.UserDefinedTypeOIDToID(ooid)
-				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						return false, nil

@@ -640,7 +640,7 @@ func (tc *Collection) getUserDefinedSchemaByName(
 
 		// Look up whether the schema is on the database descriptor and return early
 		// if it's not.
-		dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return false, nil, err
 		}
@@ -804,9 +804,9 @@ func (tc *Collection) getSchemaByName(
 	}, nil
 }
 
-// GetDatabaseVersionByID returns a database descriptor valid for the
+// GetImmutableDatabaseByID returns a database descriptor valid for the
 // transaction. See GetDatabaseVersion.
-func (tc *Collection) GetDatabaseVersionByID(
+func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags, true /* setTxnDeadline */)
@@ -823,8 +823,8 @@ func (tc *Collection) GetDatabaseVersionByID(
 	return db, nil
 }
 
-// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
-func (tc *Collection) GetTableVersionByID(
+// GetImmutableTableByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
+func (tc *Collection) GetImmutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Immutable, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
@@ -905,9 +905,9 @@ func (tc *Collection) getDescriptorVersionByID(
 	return desc, nil
 }
 
-// GetMutableTableVersionByID is a variant of sqlbase.getTableDescFromID which returns a mutable
+// GetMutableTableByID is a variant of sqlbase.getTableDescFromID which returns a mutable
 // table descriptor of the table modified in the same transaction.
-func (tc *Collection) GetMutableTableVersionByID(
+func (tc *Collection) GetMutableTableByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
 ) (*tabledesc.Mutable, error) {
 	desc, err := tc.GetMutableDescriptorByID(ctx, tableID, txn)
@@ -1044,7 +1044,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
 		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+			desc, err := tc.GetMutableTypeByID(ctx, txn, id)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -1073,11 +1073,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		getType := typedesc.TypeLookupFunc(func(
 			ctx context.Context, id descpb.ID,
 		) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
+			dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
 				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -1271,9 +1271,9 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 
 // User defined type accessors.
 
-// GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID
+// GetMutableTypeByID is the equivalent of GetMutableTableDescriptorByID
 // but for accessing types.
-func (tc *Collection) GetMutableTypeVersionByID(
+func (tc *Collection) GetMutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
 ) (*typedesc.Mutable, error) {
 	desc, err := tc.GetMutableDescriptorByID(ctx, typeID, txn)
@@ -1283,9 +1283,9 @@ func (tc *Collection) GetMutableTypeVersionByID(
 	return desc.(*typedesc.Mutable), nil
 }
 
-// GetTypeVersionByID is the equivalent of GetTableVersionByID but for accessing
+// GetImmutableTypeByID is the equivalent of GetImmutableTableByID but for accessing
 // types.
-func (tc *Collection) GetTypeVersionByID(
+func (tc *Collection) GetImmutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*typedesc.Immutable, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)

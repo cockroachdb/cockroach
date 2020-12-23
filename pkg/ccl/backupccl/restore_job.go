@@ -1078,7 +1078,7 @@ func createImportingDescriptors(
 							continue
 						}
 						// Otherwise, add a backreference to this table.
-						typDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+						typDesc, err := descsCol.GetMutableTypeByID(ctx, txn, id)
 						if err != nil {
 							return err
 						}
@@ -1404,7 +1404,7 @@ func (r *restoreResumer) publishDescriptors(
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for _, tbl := range details.TableDescs {
-		mutTable, err := descsCol.GetMutableTableVersionByID(ctx, tbl.GetID(), txn)
+		mutTable, err := descsCol.GetMutableTableByID(ctx, tbl.GetID(), txn)
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1430,7 +1430,7 @@ func (r *restoreResumer) publishDescriptors(
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
 	for _, typDesc := range details.TypeDescs {
-		typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typDesc.GetID())
+		typ, err := descsCol.GetMutableTypeByID(ctx, txn, typDesc.GetID())
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1563,7 +1563,7 @@ func (r *restoreResumer) dropDescriptors(
 	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
 	for i := range details.TableDescs {
 		var err error
-		mutableTables[i], err = descsCol.GetMutableTableVersionByID(ctx, details.TableDescs[i].ID, txn)
+		mutableTables[i], err = descsCol.GetMutableTableByID(ctx, details.TableDescs[i].ID, txn)
 		if err != nil {
 			return err
 		}
@@ -1774,7 +1774,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				return restored, nil
 			}
 			// Finally, look it up using the transaction.
-			typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+			typ, err := descsCol.GetMutableTypeByID(ctx, txn, id)
 			if err != nil {
 				return nil, err
 			}

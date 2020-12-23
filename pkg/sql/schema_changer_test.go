@@ -1406,7 +1406,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		if err := descs.Txn(ctx, s.ClusterSettings(), leaseMgr, ie, kvDB, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
-			table, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+			table, err := descsCol.GetMutableTableByID(ctx, id, txn)
 			if err != nil {
 				return err
 			}

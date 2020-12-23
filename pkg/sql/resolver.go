@@ -210,11 +210,11 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 func (p *planner) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	desc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
+	desc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}

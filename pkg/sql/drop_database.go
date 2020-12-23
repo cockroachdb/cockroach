@@ -266,7 +266,7 @@ func (p *planner) accumulateOwnedSequences(
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
-			ownedSeqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, seqID, p.txn)
+			ownedSeqDesc, err := p.Descriptors().GetMutableTableByID(ctx, seqID, p.txn)
 			if err != nil {
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
@@ -292,7 +292,7 @@ func (p *planner) accumulateCascadingViews(
 	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
-		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
+		dependentDesc, err := p.Descriptors().GetMutableTableByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err
 		}

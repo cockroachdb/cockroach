@@ -366,7 +366,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// TODO(otan): for MR databases with no locality set, set a default locality
 	// and add a notice.
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().GetDatabaseVersionByID(
+		dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
@@ -1113,7 +1113,7 @@ func (p *planner) finalizeInterleave(
 		ancestorTable = desc
 	} else {
 		var err error
-		ancestorTable, err = p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
+		ancestorTable, err = p.Descriptors().GetMutableTableByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return err
 		}
