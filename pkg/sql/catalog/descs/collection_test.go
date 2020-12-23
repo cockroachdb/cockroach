@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -189,11 +188,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			db, err := descriptors.GetDatabaseByName(ctx, txn, "db", flags)
+			_, db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			dbID = db.GetID()
 
-			resolved, err := descriptors.GetDatabaseByName(ctx, txn, "db", flags)
+			_, resolved, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 
 			require.Same(t, db, resolved)
@@ -202,13 +201,13 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 			require.Same(t, db, byID)
 
-			mut := db.(*dbdesc.Mutable)
+			mut := db
 			mut.MaybeIncrementVersion()
 			mut.Schemas["foo"] = descpb.DatabaseDescriptor_SchemaInfo{ID: 2}
 
 			flags.RequireMutable = false
 
-			immByName, err := descriptors.GetDatabaseByName(ctx, txn, "db", flags)
+			_, immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.NoError(t, err)
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
@@ -222,20 +221,20 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			}})
 
 			// Try to get the database descriptor by the old name and fail.
-			failedToResolve, err := descriptors.GetDatabaseByName(ctx, txn, "db", flags)
+			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.Regexp(t, `database "db" does not exist`, err)
 			require.Nil(t, failedToResolve)
 
 			// Try to get the database descriptor by the new name and succeed but get
 			// the old version with the old name (this is bizarre but is the
 			// contract now).
-			immResolvedWithNewNameButHasOldName, err := descriptors.GetDatabaseByName(ctx, txn, "new_name", flags)
+			_, immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
 			require.NoError(t, descriptors.AddUncommittedDescriptor(mut))
 
-			immByNameAfter, err := descriptors.GetDatabaseByName(ctx, txn, "new_name", flags)
+			_, immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
