@@ -175,7 +175,7 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutations(returnMutations)
+	typs := table.ColumnTypesWithMutationsAndVirtualCols(returnMutations, spec.VirtualColumns)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 
 	// Add all requested system columns to the output.
@@ -248,21 +248,15 @@ func initCRowFetcher(
 		return nil, false, err
 	}
 
-	cols := desc.Columns
-	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
-	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+	tableArgs.InitCols(desc, spec.Visibility, systemColumnDescs, spec.VirtualColumns)
+
 	if err := fetcher.Init(
 		codec, allocator, spec.Reverse, spec.LockingStrength, spec.LockingWaitPolicy, tableArgs,
 	); err != nil {

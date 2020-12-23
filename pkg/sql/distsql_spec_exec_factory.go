@@ -236,7 +236,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		Spans:            trSpec.Spans[:0],
 		HasSystemColumns: scanContainsSystemColumns(&colCfg),
 		NeededColumns:    colCfg.wantedColumnsOrdinals,
+		VirtualColumns:   getVirtualColumns(colCfg.virtualColumns, cols),
 	}
+
 	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
 	if err != nil {
 		return nil, err
