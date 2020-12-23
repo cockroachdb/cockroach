@@ -29,12 +29,12 @@ go_test(
         "main_test.go",
     ],
     deps = [
+        ":ptcache",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptcache",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/roachpb",

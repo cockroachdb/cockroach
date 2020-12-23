@@ -56,7 +56,6 @@ go_test(
         "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "//pkg/workload",
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",

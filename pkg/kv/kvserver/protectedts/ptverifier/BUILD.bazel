@@ -23,6 +23,7 @@ go_test(
         "verifier_test.go",
     ],
     deps = [
+        ":ptverifier",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
@@ -30,7 +31,6 @@ go_test(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
-        "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

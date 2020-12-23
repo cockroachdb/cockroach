@@ -45,7 +45,6 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/migration",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

@@ -61,7 +61,6 @@ go_test(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/types",
         "//pkg/testutils",

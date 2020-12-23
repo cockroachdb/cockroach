@@ -18,7 +18,7 @@ go_test(
     name = "returnerrcheck_test",
     srcs = ["returnerrcheck_test.go"],
     deps = [
-        "//pkg/testutils/lint/passes/returnerrcheck",
+        ":returnerrcheck",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

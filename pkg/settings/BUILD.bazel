@@ -30,7 +30,7 @@ go_test(
     name = "settings_test",
     srcs = ["settings_test.go"],
     deps = [
-        "//pkg/settings",
+        ":settings",
         "//pkg/testutils",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
