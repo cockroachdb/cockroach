@@ -250,6 +250,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/migration",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
