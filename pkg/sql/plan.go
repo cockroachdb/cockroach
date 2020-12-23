@@ -356,14 +356,6 @@ func (p *planTop) close(ctx context.Context) {
 	}
 }
 
-// formatOptPlan returns a visual representation of the optimizer plan that was
-// used.
-func (p *planTop) formatOptPlan(flags memo.ExprFmtFlags) string {
-	f := memo.MakeExprFmtCtx(flags, p.mem, p.catalog)
-	f.FormatExpr(p.mem.RootExpr())
-	return f.Buffer.String()
-}
-
 // startExec calls startExec() on each planNode using a depth-first, post-order
 // traversal.  The subqueries, if any, are also started.
 //
