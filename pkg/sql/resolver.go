@@ -39,33 +39,14 @@ import (
 var _ resolver.SchemaResolver = &planner{}
 
 // ResolveUncachedDatabaseByName looks up a database name from the store.
+// TODO (lucy): See if we can rework the PlanHookState interface to just use
+// the desc.Collection methods directly.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
 ) (res *dbdesc.Immutable, err error) {
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		var desc catalog.DatabaseDescriptor
-		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
-			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
-		)
-		if desc != nil {
-			res = desc.(*dbdesc.Immutable)
-		}
-	})
+	_, res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
 	return res, err
-}
-
-func (p *planner) ResolveMutableDatabaseDescriptor(
-	ctx context.Context, name string, required bool,
-) (*dbdesc.Mutable, error) {
-	desc, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
-		ctx, p.txn, p.ExecCfg().Codec, name, tree.DatabaseLookupFlags{
-			Required:       required,
-			RequireMutable: true,
-		})
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	return desc.(*dbdesc.Mutable), nil
 }
 
 // ResolveUncachedSchemaDescriptor looks up a schema from the store.
@@ -187,11 +168,12 @@ func (p *planner) ResolveTargetObject(
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
-	sc := p.LogicalSchemaAccessor()
-	dbDesc, err := sc.GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(false /* required */))
-	if err != nil || dbDesc == nil {
+	found, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
+		tree.DatabaseLookupFlags{AvoidCached: p.avoidCachedDescriptors})
+	if err != nil || !found {
 		return false, nil, err
 	}
+	sc := p.LogicalSchemaAccessor()
 	var resolvedSchema catalog.ResolvedSchema
 	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName,
 		p.CommonLookupFlags(false /* required */))
@@ -306,7 +288,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 		descs := make([]catalog.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.ResolveMutableDatabaseDescriptor(ctx, string(database), true /*required*/)
+			_, descriptor, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn,
+				string(database), tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
 			}
@@ -355,7 +338,8 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if sc.ExplicitCatalog {
 				dbName = sc.Catalog()
 			}
-			db, err := p.ResolveMutableDatabaseDescriptor(ctx, dbName, true /* required */)
+			_, db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
+				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return nil, err
 			}

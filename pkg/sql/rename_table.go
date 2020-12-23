@@ -114,7 +114,8 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
-		targetDbDesc, err = p.ResolveUncachedDatabaseByName(ctx, string(oldTn.CatalogName), true /* required */)
+		_, targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+			string(oldTn.CatalogName), tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return err
 		}
