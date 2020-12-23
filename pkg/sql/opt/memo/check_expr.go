@@ -235,14 +235,19 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("lookup join with columns that are not required"))
 		}
 		if t.IsSecondJoinInPairedJoiner {
-			ij, ok := t.Input.(*InvertedJoinExpr)
-			if !ok {
-				panic(errors.AssertionFailedf(
-					"lookup paired-join is paired with %T instead of inverted join", t.Input))
-			}
-			if !ij.IsFirstJoinInPairedJoiner {
-				panic(errors.AssertionFailedf(
-					"lookup paired-join is paired with inverted join that thinks it is unpaired"))
+			switch firstJoin := t.Input.(type) {
+			case *InvertedJoinExpr:
+				if !firstJoin.IsFirstJoinInPairedJoiner {
+					panic(errors.AssertionFailedf(
+						"lookup paired-join is paired with inverted join that thinks it is unpaired"))
+				}
+			case *LookupJoinExpr:
+				if !firstJoin.IsFirstJoinInPairedJoiner {
+					panic(errors.AssertionFailedf(
+						"lookup paired-join is paired with lookup join that thinks it is unpaired"))
+				}
+			default:
+				panic(errors.AssertionFailedf("lookup paired-join is paired with %T", t.Input))
 			}
 		}
 

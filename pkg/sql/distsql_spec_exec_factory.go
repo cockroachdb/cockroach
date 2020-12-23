@@ -658,6 +658,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	remoteLookupExpr tree.TypedExpr,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isFirstJoinInPairedJoiner bool,
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,

@@ -214,6 +214,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	if jr.LeftJoinWithPairedJoiner {
 		details = append(details, "second join in paired-join")
 	}
+	if jr.OutputGroupContinuationForLeftRow {
+		details = append(details, "first join in paired-join")
+	}
 	return "JoinReader", details
 }
 
