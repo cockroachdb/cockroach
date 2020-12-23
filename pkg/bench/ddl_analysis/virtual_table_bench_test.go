@@ -25,12 +25,8 @@ CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 			stmt: `SELECT * FROM "".crdb_internal.tables`,
 		},
 		{
-			// We expect this to perform, somewhat surprisingly, 8 kv operations.
-			// It performs one to fetch all of the descriptors initially. Then it
-			// gets all of the databases which is 3 reads, one for each namespace
-			// table and one to fetch all of the descriptors. Then it checks to see
-			// if any of the databases have descriptors (system, defaultdb, postgres,
-			// and test) schemas which is another 4, leaving 8.
+			// We expect this to perform exactly one kv operation to fetch all of
+			// the descriptors.
 			name: "select crdb_internal.invalid_objects with 1 fk",
 			setup: `
 CREATE TABLE t1 (i INT PRIMARY KEY);

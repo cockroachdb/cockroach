@@ -287,8 +287,7 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 	case catalog.DatabaseDescriptor:
 		return desc.Validate()
 	case catalog.TypeDescriptor:
-		// TODO(ajwerner): Validate type descriptor.
-		return nil
+		return desc.Validate(ctx, dg)
 	case catalog.SchemaDescriptor:
 		return nil
 	default:
@@ -373,7 +372,7 @@ func unwrapDescriptorMutable(
 // CountUserDescriptors returns the number of descriptors present that were
 // created by the user (i.e. not present when the cluster started).
 func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) (int, error) {
-	allDescs, err := GetAllDescriptors(ctx, txn, codec, true /* validate */)
+	allDescs, err := GetAllDescriptors(ctx, txn, codec)
 	if err != nil {
 		return 0, err
 	}
@@ -388,7 +387,10 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 	return count, nil
 }
 
-func getAllDescriptorsUnvalidated(
+// GetAllDescriptorsUnvalidated looks up and returns all available descriptors
+// but does not validate them. It is exported solely to be used by functions
+// which want to perform explicit validation to detect corruption.
+func GetAllDescriptorsUnvalidated(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]catalog.Descriptor, error) {
 	log.Eventf(ctx, "fetching all descriptors")
@@ -419,21 +421,19 @@ func getAllDescriptorsUnvalidated(
 // GetAllDescriptors looks up and returns all available descriptors. If validate
 // is set to true, it will also validate them.
 func GetAllDescriptors(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, validate bool,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]catalog.Descriptor, error) {
-	descs, err := getAllDescriptorsUnvalidated(ctx, txn, codec)
+	descs, err := GetAllDescriptorsUnvalidated(ctx, txn, codec)
 	if err != nil {
 		return nil, err
 	}
-	if validate {
-		dg := make(catalog.MapDescGetter, len(descs))
-		for _, desc := range descs {
-			dg[desc.GetID()] = desc
-		}
-		for _, desc := range descs {
-			if err := validateDescriptor(ctx, dg, desc); err != nil {
-				return nil, err
-			}
+	dg := make(catalog.MapDescGetter, len(descs))
+	for _, desc := range descs {
+		dg[desc.GetID()] = desc
+	}
+	for _, desc := range descs {
+		if err := validateDescriptor(ctx, dg, desc); err != nil {
+			return nil, err
 		}
 	}
 	return descs, nil
@@ -593,7 +593,7 @@ func MustGetSchemaDescByID(
 }
 
 func getDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID, allowMissingDesc bool,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
@@ -630,7 +630,7 @@ func getDescriptorsFromIDs(
 			}
 		}
 
-		if catalogDesc == nil && !allowMissingDesc {
+		if catalogDesc == nil {
 			return nil, catalog.ErrDescriptorNotFound
 		}
 		results = append(results, catalogDesc)
@@ -645,9 +645,9 @@ func getDescriptorsFromIDs(
 // If the argument allowMissingDesc is true the function will tolerate nil
 // descriptors otherwise it will throw an error.
 func GetDatabaseDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID, allowMissingDesc bool,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*dbdesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, allowMissingDesc)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -655,9 +655,6 @@ func GetDatabaseDescriptorsFromIDs(
 	for i := range descs {
 		desc := descs[i]
 		if desc == nil {
-			if allowMissingDesc {
-				continue
-			}
 			return nil, catalog.ErrDescriptorNotFound
 		}
 		db, ok := desc.(*dbdesc.Immutable)
@@ -675,7 +672,7 @@ func GetDatabaseDescriptorsFromIDs(
 func GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*schemadesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, false /* allowMissingDesc */)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
 	if err != nil {
 		return nil, err
 	}

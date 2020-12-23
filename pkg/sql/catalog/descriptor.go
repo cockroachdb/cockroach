@@ -198,6 +198,7 @@ type TypeDescriptor interface {
 	GetIDClosure() map[descpb.ID]struct{}
 
 	PrimaryRegion() (descpb.Region, error)
+	Validate(ctx context.Context, dg DescGetter) error
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
