@@ -116,6 +116,11 @@ func registerSQLSmith(r *testRegistry) {
 		}
 		logStmt(setStmtTimeout)
 
+		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
 		if err != nil {
 			t.Fatal(err)
@@ -130,16 +135,14 @@ func registerSQLSmith(r *testRegistry) {
 			// to test that the panic-catching mechanism of error propagation
 			// works as expected.
 			// Note: it is important to enable this testing knob only after all
-			// other setup queries have already completed (otherwise, the setup
-			// might fail because of the injected panics).
-			if _, err := conn.Exec("SET testing_vectorize_inject_panics=true;"); err != nil {
+			// other setup queries have already completed, including the smither
+			// instantiation (otherwise, the setup might fail because of the
+			// injected panics).
+			injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+			if _, err := conn.Exec(injectPanicsStmt); err != nil {
 				t.Fatal(err)
 			}
-		}
-
-		smither, err := sqlsmith.NewSmither(conn, rng, setting.Options...)
-		if err != nil {
-			t.Fatal(err)
+			logStmt(injectPanicsStmt)
 		}
 
 		t.Status("smithing")
