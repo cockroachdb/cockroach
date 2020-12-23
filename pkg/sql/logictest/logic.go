@@ -597,6 +597,11 @@ var logicTestConfigs = []testClusterConfig{
 		useTenant:         true,
 		isCCLConfig:       true,
 	},
+	// Regions and zones below are named deliberately, and contain "-"'s to be reflective
+	// of the naming convention in public clouds.  "-"'s are handled differently in SQL
+	// (they're double double quoted) so we explicitly test them here to ensure that
+	// the multi-region code handles them correctly.
+
 	{
 		name:              "multiregion-invalid-locality",
 		numNodes:          3,
@@ -626,56 +631,56 @@ var logicTestConfigs = []testClusterConfig{
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az1"},
+					{Key: "region", Value: "ap-southeast-2"},
+					{Key: "availability-zone", Value: "ap-az1"},
 				},
 			},
 			2: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az2"},
+					{Key: "region", Value: "ap-southeast-2"},
+					{Key: "availability-zone", Value: "ap-az2"},
 				},
 			},
 			3: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az3"},
+					{Key: "region", Value: "ap-southeast-2"},
+					{Key: "availability-zone", Value: "ap-az3"},
 				},
 			},
 			4: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az1"},
+					{Key: "region", Value: "ca-central-1"},
+					{Key: "availability-zone", Value: "ca-az1"},
 				},
 			},
 			5: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az2"},
+					{Key: "region", Value: "ca-central-1"},
+					{Key: "availability-zone", Value: "ca-az2"},
 				},
 			},
 			6: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az3"},
+					{Key: "region", Value: "ca-central-1"},
+					{Key: "availability-zone", Value: "ca-az3"},
 				},
 			},
 			7: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az1"},
+					{Key: "region", Value: "us-east-1"},
+					{Key: "availability-zone", Value: "us-az1"},
 				},
 			},
 			8: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az2"},
+					{Key: "region", Value: "us-east-1"},
+					{Key: "availability-zone", Value: "us-az2"},
 				},
 			},
 			9: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az3"},
+					{Key: "region", Value: "us-east-1"},
+					{Key: "availability-zone", Value: "us-az3"},
 				},
 			},
 		},

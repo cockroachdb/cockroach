@@ -50,6 +50,16 @@ message DropDatabase {
   repeated string dropped_schema_objects = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// AlterDatabaseAddRegion is recorded when a region is added to a database.
+message AlterDatabaseAddRegion {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the database.
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The region being added.
+  string region_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // RenameDatabase is recorded when a database is renamed.
 message RenameDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

@@ -90,7 +90,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params.ctx, n, t)
+		err = params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann()))
 	case *tree.AlterTypeRenameValue:
 		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
 	case *tree.AlterTypeRename:
@@ -138,13 +138,14 @@ func (n *alterTypeNode) startExec(params runParams) error {
 }
 
 func (p *planner) addEnumValue(
-	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeAddValue,
+	ctx context.Context, desc *typedesc.Mutable, node *tree.AlterTypeAddValue, jobDesc string,
 ) error {
-	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
-		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	if desc.Kind != descpb.TypeDescriptor_ENUM &&
+		desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 	// See if the value already exists in the enum or not.
-	for _, member := range n.desc.EnumMembers {
+	for _, member := range desc.EnumMembers {
 		if member.LogicalRepresentation == string(node.NewVal) {
 			if node.IfNotExists {
 				p.BufferClientNotice(
@@ -153,18 +154,15 @@ func (p *planner) addEnumValue(
 				)
 				return nil
 			}
-			return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"enum label %q already exists in %q", node.NewVal, desc.Name)
 		}
 	}
 
-	if err := n.desc.AddEnumValue(node); err != nil {
+	if err := desc.AddEnumValue(node); err != nil {
 		return err
 	}
-	return p.writeTypeSchemaChange(
-		ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
+	return p.writeTypeSchemaChange(ctx, desc, jobDesc)
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
