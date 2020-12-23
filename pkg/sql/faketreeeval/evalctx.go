@@ -114,6 +114,13 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// MemberOfWithAdminOption is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
+	ctx context.Context, member string,
+) (map[string]bool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

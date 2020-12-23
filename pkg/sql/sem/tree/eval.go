@@ -3017,6 +3017,14 @@ type EvalPlanner interface {
 		descID int64,
 		force bool,
 	) error
+
+	// MemberOfWithAdminOption is used to collect a list of roles (direct and
+	// indirect) that the member is part of. See the comment on the planner
+	// implementation in authorization.go
+	MemberOfWithAdminOption(
+		ctx context.Context,
+		member string,
+	) (map[string]bool, error)
 }
 
 // EvalSessionAccessor is a limited interface to access session variables.
