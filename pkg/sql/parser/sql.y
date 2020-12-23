@@ -6837,7 +6837,7 @@ opt_view_recursive:
 
 // %Help: CREATE TYPE -- create a type
 // %Category: DDL
-// %Text: CREATE TYPE <type_name> AS ENUM (...)
+// %Text: CREATE TYPE [IF NOT EXISTS] <type_name> AS ENUM (...)
 create_type_stmt:
   // Enum types.
   CREATE TYPE type_name AS ENUM '(' opt_enum_val_list ')'
@@ -6846,6 +6846,15 @@ create_type_stmt:
       TypeName: $3.unresolvedObjectName(),
       Variety: tree.Enum,
       EnumLabels: $7.enumValueList(),
+    }
+  }
+| CREATE TYPE IF NOT EXISTS type_name AS ENUM '(' opt_enum_val_list ')'
+  {
+    $$.val = &tree.CreateType{
+      TypeName: $6.unresolvedObjectName(),
+      Variety: tree.Enum,
+      EnumLabels: $10.enumValueList(),
+      IfNotExists: true,
     }
   }
 | CREATE TYPE error // SHOW HELP: CREATE TYPE
