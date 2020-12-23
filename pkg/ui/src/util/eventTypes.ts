@@ -101,15 +101,39 @@ export const DROP_ROLE = "drop_role";
 export const ALTER_ROLE = "alter_role";
 
 // Node Event Types
-export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONING, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
+export const nodeEvents = [
+  NODE_JOIN,
+  NODE_RESTART,
+  NODE_DECOMMISSIONING,
+  NODE_DECOMMISSIONED,
+  NODE_RECOMMISSIONED,
+];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [
-  CREATE_TABLE, DROP_TABLE, TRUNCATE_TABLE, ALTER_TABLE, CREATE_INDEX,
-  ALTER_INDEX, DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE,
-  FINISH_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE_ROLLBACK,
+  CREATE_TABLE,
+  DROP_TABLE,
+  TRUNCATE_TABLE,
+  ALTER_TABLE,
+  CREATE_INDEX,
+  ALTER_INDEX,
+  DROP_INDEX,
+  CREATE_VIEW,
+  DROP_VIEW,
+  REVERSE_SCHEMA_CHANGE,
+  FINISH_SCHEMA_CHANGE,
+  FINISH_SCHEMA_CHANGE_ROLLBACK,
 ];
-export const settingsEvents = [SET_CLUSTER_SETTING, SET_ZONE_CONFIG, REMOVE_ZONE_CONFIG];
-export const allEvents = [...nodeEvents, ...databaseEvents, ...tableEvents, ...settingsEvents];
+export const settingsEvents = [
+  SET_CLUSTER_SETTING,
+  SET_ZONE_CONFIG,
+  REMOVE_ZONE_CONFIG,
+];
+export const allEvents = [
+  ...nodeEvents,
+  ...databaseEvents,
+  ...tableEvents,
+  ...settingsEvents,
+];
 
 const nodeEventSet = _.invert(nodeEvents);
 const databaseEventSet = _.invert(databaseEvents);

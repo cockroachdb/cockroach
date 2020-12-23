@@ -13,33 +13,34 @@ import { Tooltip } from "src/components";
 import { TooltipProps } from "src/components/tooltip/tooltip";
 
 export const TimeSeriesTooltip: React.FC<TooltipProps> = (props) => (
-    <Tooltip
-        {...props}
-        placement="bottom"
-        title={
-            <div className="tooltip__table--title">
-                <p>
-                    Total disk size of Admin UI metrics.
-                </p>
-            </div>
-        }
-    >
-        {props.children}
-    </Tooltip>
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>Total disk size of Admin UI metrics.</p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
 );
 
-export const ReplicatedSizeTooltip: React.FC<TooltipProps & { tableName: string }> = (props) => (
-    <Tooltip
-        {...props}
-        placement="bottom"
-        title={
-            <div className="tooltip__table--title">
-                <p>
-                    Approximate disk size of all replicas of table {props.tableName || "<table name>"} on the cluster.
-                </p>
-            </div>
-        }
-    >
-        {props.children}
-    </Tooltip>
+export const ReplicatedSizeTooltip: React.FC<
+  TooltipProps & { tableName: string }
+> = (props) => (
+  <Tooltip
+    {...props}
+    placement="bottom"
+    title={
+      <div className="tooltip__table--title">
+        <p>
+          Approximate disk size of all replicas of table{" "}
+          {props.tableName || "<table name>"} on the cluster.
+        </p>
+      </div>
+    }
+  >
+    {props.children}
+  </Tooltip>
 );
