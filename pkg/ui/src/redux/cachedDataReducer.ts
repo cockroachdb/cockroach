@@ -117,7 +117,7 @@ export class CachedDataReducer<
         state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
-      case this.RECEIVE:
+      case this.RECEIVE: {
         // The results of a request have been received.
         const { payload } = action as PayloadAction<
           WithRequest<TResponseMessage, TRequest>
@@ -129,7 +129,8 @@ export class CachedDataReducer<
         state.valid = true;
         state.lastError = null;
         return state;
-      case this.ERROR:
+      }
+      case this.ERROR: {
         // A request failed.
         const { payload: error } = action as PayloadAction<
           WithRequest<Error, TRequest>
@@ -139,6 +140,7 @@ export class CachedDataReducer<
         state.lastError = error.data;
         state.valid = false;
         return state;
+      }
       case this.INVALIDATE:
         // The data is invalidated.
         state = _.clone(state);
@@ -351,7 +353,7 @@ export class KeyedCachedDataReducer<
       case this.cachedDataReducer.REQUEST:
       case this.cachedDataReducer.RECEIVE:
       case this.cachedDataReducer.ERROR:
-      case this.cachedDataReducer.INVALIDATE:
+      case this.cachedDataReducer.INVALIDATE: {
         const { request } = (action as PayloadAction<
           WithRequest<TResponseMessage | Error | void, TRequest>
         >).payload;
@@ -359,6 +361,7 @@ export class KeyedCachedDataReducer<
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
         return state;
+      }
       default:
         return state;
     }
