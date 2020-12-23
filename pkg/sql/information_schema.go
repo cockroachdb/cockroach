@@ -143,6 +143,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaRoutineTableID:                     informationSchemaRoutineTable,
 		catconstants.InformationSchemaSchemataTableID:                    informationSchemaSchemataTable,
 		catconstants.InformationSchemaSchemataTablePrivilegesID:          informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSessionVariables:                   informationSchemaSessionVariables,
 		catconstants.InformationSchemaSequencesID:                        informationSchemaSequences,
 		catconstants.InformationSchemaStatisticsTableID:                  informationSchemaStatisticsTable,
 		catconstants.InformationSchemaTableConstraintTableID:             informationSchemaTableConstraintTable,
@@ -1684,6 +1685,24 @@ https://www.postgresql.org/docs/current/infoschema-collation-character-set-appli
 		for _, tag := range collate.Supported() {
 			collName := tag.String()
 			if err := add(collName); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var informationSchemaSessionVariables = virtualSchemaTable{
+	comment: `exposes the session variables.`,
+	schema:  vtable.InformationSchemaSessionVariables,
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		for _, vName := range varNames {
+			gen := varGen[vName]
+			value := gen.Get(&p.extendedEvalCtx)
+			if err := addRow(
+				tree.NewDString(vName),
+				tree.NewDString(value),
+			); err != nil {
 				return err
 			}
 		}

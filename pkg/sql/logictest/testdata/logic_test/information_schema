@@ -35,6 +35,7 @@ information_schema  routines                               table  NULL  NULL  NU
 information_schema  schema_privileges                      table  NULL  NULL  NULL
 information_schema  schemata                               table  NULL  NULL  NULL
 information_schema  sequences                              table  NULL  NULL  NULL
+information_schema  session_variables                      table  NULL  NULL  NULL
 information_schema  statistics                             table  NULL  NULL  NULL
 information_schema  table_constraints                      table  NULL  NULL  NULL
 information_schema  table_privileges                       table  NULL  NULL  NULL
@@ -105,6 +106,8 @@ GRANT CREATE ON information_schema.tables TO root
 statement error tables is a virtual object and cannot be modified
 REVOKE CREATE ON information_schema.tables FROM root
 
+statement error session_variables is a virtual object and cannot be modified
+ALTER TABLE information_schema.session_variables ALTER x DROP NOT NULL
 
 # Verify information_schema tables handles read-only property correctly.
 
@@ -148,6 +151,20 @@ UPDATE information_schema.collations SET a = 'abc'
 statement error collations is a virtual object and cannot be modified
 TRUNCATE TABLE information_schema.collations
 
+# Verify information_schema session_variables handles read-only property correctly.
+
+query error user root does not have DELETE privilege on relation session_variables
+DELETE FROM information_schema.session_variables
+
+query error user root does not have INSERT privilege on relation session_variables
+INSERT INTO information_schema.session_variables VALUES ('abc')
+
+statement error user root does not have UPDATE privilege on relation session_variables
+UPDATE information_schema.session_variables SET a = 'abc'
+
+statement error session_variables is a virtual object and cannot be modified
+TRUNCATE TABLE information_schema.session_variables
+
 # Verify information_schema handles reflection correctly.
 
 query TTTTT
@@ -180,6 +197,7 @@ information_schema  routines                               table  NULL  NULL  NU
 information_schema  schema_privileges                      table  NULL  NULL  NULL
 information_schema  schemata                               table  NULL  NULL  NULL
 information_schema  sequences                              table  NULL  NULL  NULL
+information_schema  session_variables                      table  NULL  NULL  NULL
 information_schema  statistics                             table  NULL  NULL  NULL
 information_schema  table_constraints                      table  NULL  NULL  NULL
 information_schema  table_privileges                       table  NULL  NULL  NULL
@@ -322,6 +340,7 @@ information_schema  routines
 information_schema  schema_privileges
 information_schema  schemata
 information_schema  sequences
+information_schema  session_variables
 information_schema  statistics
 information_schema  table_constraints
 information_schema  table_privileges
@@ -481,6 +500,7 @@ routines
 schema_privileges
 schemata
 sequences
+session_variables
 statistics
 table_constraints
 table_privileges
@@ -659,6 +679,7 @@ system         information_schema  routines                               SYSTEM
 system         information_schema  schema_privileges                      SYSTEM VIEW  NO                  1
 system         information_schema  schemata                               SYSTEM VIEW  NO                  1
 system         information_schema  sequences                              SYSTEM VIEW  NO                  1
+system         information_schema  session_variables                      SYSTEM VIEW  NO                  1
 system         information_schema  statistics                             SYSTEM VIEW  NO                  1
 system         information_schema  table_constraints                      SYSTEM VIEW  NO                  1
 system         information_schema  table_privileges                       SYSTEM VIEW  NO                  1
@@ -1823,6 +1844,7 @@ NULL     public   system         information_schema  routines                   
 NULL     public   system         information_schema  schema_privileges                      SELECT          NULL          YES
 NULL     public   system         information_schema  schemata                               SELECT          NULL          YES
 NULL     public   system         information_schema  sequences                              SELECT          NULL          YES
+NULL     public   system         information_schema  session_variables                      SELECT          NULL          YES
 NULL     public   system         information_schema  statistics                             SELECT          NULL          YES
 NULL     public   system         information_schema  table_constraints                      SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                       SELECT          NULL          YES
@@ -2207,6 +2229,7 @@ NULL     public   system         information_schema  routines                   
 NULL     public   system         information_schema  schema_privileges                      SELECT          NULL          YES
 NULL     public   system         information_schema  schemata                               SELECT          NULL          YES
 NULL     public   system         information_schema  sequences                              SELECT          NULL          YES
+NULL     public   system         information_schema  session_variables                      SELECT          NULL          YES
 NULL     public   system         information_schema  statistics                             SELECT          NULL          YES
 NULL     public   system         information_schema  table_constraints                      SELECT          NULL          YES
 NULL     public   system         information_schema  table_privileges                       SELECT          NULL          YES
@@ -3064,6 +3087,7 @@ test         public      typ2      test           public        tb_enum_cols  z
 test         public      typ2      test           public        tb_enum_cols  w
 
 ## information_schema.collations
+subtest collations
 
 query TTTT colnames
 SELECT * FROM information_schema.collations
@@ -3168,6 +3192,7 @@ test               pg_catalog        zh-Hant              NO PAD
 
 
 ## information_schema.collation_character_set_applicability
+subtest collation_character_set_applicability
 
 query TTTTTT colnames
 SELECT * FROM information_schema.collation_character_set_applicability
@@ -3269,3 +3294,82 @@ test               pg_catalog        zh                   NULL                  
 test               pg_catalog        zh-u-co-stroke       NULL                   NULL                  UTF8
 test               pg_catalog        zh-Hant-u-co-pinyin  NULL                   NULL                  UTF8
 test               pg_catalog        zh-Hant              NULL                   NULL                  UTF8
+
+
+## information_schema.session_variables
+subtest variables
+
+## excluding crdb_version and session_id variables as they are generated on each
+## commit/session; distsql, experimental_distsql_planning and vectorize as they
+## depend on distsql and vectorization turned on/off.
+query TT colnames
+SELECT * FROM information_schema.session_variables where variable not in ('crdb_version', 'session_id', 'distsql', 'vectorize', 'experimental_distsql_planning')
+----
+variable                                              value
+allow_prepare_as_opt_plan                             off
+application_name                                      ·
+bytea_output                                          hex
+client_encoding                                       UTF8
+client_min_messages                                   notice
+database                                              test
+datestyle                                             ISO, MDY
+default_int_size                                      8
+default_tablespace                                    ·
+default_transaction_isolation                         serializable
+default_transaction_priority                          normal
+default_transaction_read_only                         off
+default_transaction_use_follower_reads                off
+disable_partially_distributed_plans                   off
+disallow_full_table_scans                             off
+enable_experimental_alter_column_type_general         off
+enable_implicit_select_for_update                     on
+enable_insert_fast_path                               on
+enable_seqscan                                        on
+enable_zigzag_join                                    on
+experimental_enable_hash_sharded_indexes              off
+experimental_enable_multi_column_inverted_indexes     off
+experimental_enable_temp_tables                       off
+experimental_enable_unique_without_index_constraints  off
+experimental_enable_virtual_columns                   off
+extra_float_digits                                    0
+force_savepoint_restart                               off
+foreign_key_cascades_limit                            10000
+idle_in_session_timeout                               0
+idle_in_transaction_session_timeout                   0
+integer_datetimes                                     on
+intervalstyle                                         postgres
+locality                                              region=test,dc=dc1
+lock_timeout                                          0
+max_identifier_length                                 128
+max_index_keys                                        32
+node_id                                               1
+optimizer                                             on
+optimizer_use_histograms                              on
+optimizer_use_multicol_stats                          on
+prefer_lookup_joins_for_fks                           off
+reorder_joins_limit                                   8
+require_explicit_primary_keys                         off
+results_buffer_size                                   16384
+row_security                                          off
+save_tables_prefix                                    ·
+search_path                                           $user,public
+serial_normalization                                  rowid
+server_encoding                                       UTF8
+server_version                                        13.0.0
+server_version_num                                    130000
+session_authorization                                 root
+session_user                                          root
+sql_safe_updates                                      off
+ssl_renegotiation_limit                               0
+standard_conforming_strings                           on
+statement_timeout                                     0
+synchronize_seqscans                                  on
+synchronous_commit                                    on
+testing_vectorize_inject_panics                       off
+timezone                                              UTC
+tracing                                               off
+transaction_isolation                                 serializable
+transaction_priority                                  normal
+transaction_read_only                                 off
+transaction_status                                    NoTxn
+vectorize_row_count_threshold                         0
