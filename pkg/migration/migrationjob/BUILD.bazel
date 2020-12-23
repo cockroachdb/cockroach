@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "migrationjob",
+    srcs = ["migration_job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrationjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/migration",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+    ],
+)

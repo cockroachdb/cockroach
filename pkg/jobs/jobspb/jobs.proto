@@ -20,6 +20,7 @@ import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
 import "sql/schemachanger/scpb/scpb.proto";
+import "clusterversion/cluster_version.proto";
 
 message Lease {
   option (gogoproto.equal) = true;
@@ -313,6 +314,7 @@ message NewSchemaChangeProgress {
   repeated cockroach.sql.schemachanger.scpb.State states = 1;
 }
 
+
 message ResumeSpanList {
   repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
 }
@@ -568,6 +570,14 @@ message CreateStatsProgress {
 
 }
 
+message LongRunningMigrationDetails {
+  clusterversion.ClusterVersion cluster_version = 1;
+}
+
+message LongRunningMigrationProgress {
+
+}
+
 message Payload {
   string description = 1;
   // If empty, the description is assumed to be the statement.
@@ -610,6 +620,7 @@ message Payload {
     TypeSchemaChangeDetails typeSchemaChange = 22;
     StreamIngestionDetails streamIngestion = 23;
     NewSchemaChangeDetails newSchemaChange = 24;
+    LongRunningMigrationDetails longRunningMigration = 25;
   }
 }
 
@@ -632,6 +643,7 @@ message Progress {
     TypeSchemaChangeProgress typeSchemaChange = 17;
     StreamIngestionProgress streamIngest = 18;
     NewSchemaChangeProgress newSchemaChange = 19;
+    LongRunningMigrationProgress longRunningMigration = 20;
   }
 }
 
@@ -653,6 +665,7 @@ enum Type {
   TYPEDESC_SCHEMA_CHANGE = 9 [(gogoproto.enumvalue_customname) = "TypeTypeSchemaChange"];
   STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeStreamIngestion"];
   NEW_SCHEMA_CHANGE = 11 [(gogoproto.enumvalue_customname) = "TypeNewSchemaChange"];
+  LONG_RUNNING_MIGRATION = 12 [(gogoproto.enumvalue_customname) = "TypeLongRunningMigration"];
 }
 
 message Job {
