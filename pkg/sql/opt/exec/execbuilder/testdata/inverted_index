@@ -279,7 +279,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • index join
 │ columns: (a, b)
@@ -309,7 +309,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • index join
 │ columns: (a, b)
@@ -425,7 +425,7 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -446,7 +446,7 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • sort
 │ order: +a
@@ -619,7 +619,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • index join
 │ columns: (a, b)
@@ -646,7 +646,7 @@ query T
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • index join
 │ columns: (a, b)
@@ -899,7 +899,7 @@ query T
 EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 distribution: local
-vectorized: false
+vectorized: true
 ·
 • project
 │ columns: (k)

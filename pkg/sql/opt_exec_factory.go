@@ -835,7 +835,12 @@ func (ef *execFactory) ConstructZigzagJoin(
 		for i := range cols {
 			col := index.Column(i)
 			cols[i].Name = string(col.ColName())
-			cols[i].Typ = col.DatumType()
+			// TODO(rytaft): Remove this once the optimizer encodes the fixed values.
+			if col.Kind() == cat.VirtualInverted {
+				cols[i].Typ = index.Table().Column(col.InvertedSourceColumnOrdinal()).DatumType()
+			} else {
+				cols[i].Typ = col.DatumType()
+			}
 		}
 		return &valuesNode{
 			columns:          cols,
