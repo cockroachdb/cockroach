@@ -126,7 +126,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	codec keys.SQLCodec,
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
-) (catalog.Descriptor, error) {
+) (desc catalog.Descriptor, err error) {
 	if scEntry, ok := l.vs.GetVirtualSchema(schema); ok {
 		desc, err := scEntry.GetObjectByName(object, flags)
 		if err != nil {
@@ -157,16 +157,29 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	}
 
 	// Fall back to physical descriptor access.
+	var found bool
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
 		typeName := tree.MakeNewQualifiedTypeName(db, schema, object)
-		return l.tc.GetTypeByName(ctx, txn, &typeName, flags)
+		if flags.RequireMutable {
+			found, desc, err = l.tc.GetMutableTypeByName(ctx, txn, &typeName, flags)
+		} else {
+			found, desc, err = l.tc.GetImmutableTypeByName(ctx, txn, &typeName, flags)
+		}
 	case tree.TableObject:
 		tableName := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
-		return l.tc.GetTableByName(ctx, txn, &tableName, flags)
+		if flags.RequireMutable {
+			found, desc, err = l.tc.GetMutableTableByName(ctx, txn, &tableName, flags)
+		} else {
+			found, desc, err = l.tc.GetImmutableTableByName(ctx, txn, &tableName, flags)
+		}
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
+	if err != nil || !found {
+		return nil, err
+	}
+	return desc, nil
 }
 
 func newMutableAccessToVirtualSchemaError(entry catalog.VirtualSchema, object string) error {

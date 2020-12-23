@@ -405,13 +405,14 @@ func (tc *Collection) getObjectByName(
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
+	mutable bool,
 ) (found bool, _ catalog.Descriptor, err error) {
 
 	// If we're reading the object descriptor from the store,
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
 	// in the face of a concurrent rename.
-	avoidCachedForParent := flags.AvoidCached || flags.RequireMutable
+	avoidCachedForParent := flags.AvoidCached || mutable
 	// Resolve the database.
 	found, db, err := tc.GetImmutableDatabaseByName(ctx, txn, catalogName,
 		tree.DatabaseLookupFlags{
@@ -444,7 +445,7 @@ func (tc *Collection) getObjectByName(
 		return false, nil, nil
 	} else if desc != nil {
 		log.VEventf(ctx, 2, "found uncommitted descriptor %d", desc.immutable.GetID())
-		if flags.RequireMutable {
+		if mutable {
 			return true, desc.mutable, nil
 		}
 		return true, desc.immutable, nil
@@ -459,11 +460,11 @@ func (tc *Collection) getObjectByName(
 	// all system descriptors except the role-members-desc.
 	// TODO (lucy): Reevaluate the above. We have many more system tables now and
 	// should be able to lease most of them.
-	avoidCache := flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() ||
+	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && objectName != systemschema.RoleMembersTable.Name)
 	if avoidCache {
 		return tc.getDescriptorFromStore(
-			ctx, txn, tc.codec(), dbID, schemaID, objectName, flags.RequireMutable)
+			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
 	}
 
 	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
@@ -473,34 +474,63 @@ func (tc *Collection) getObjectByName(
 	}
 	if shouldReadFromStore {
 		return tc.getDescriptorFromStore(
-			ctx, txn, tc.codec(), dbID, schemaID, objectName, flags.RequireMutable)
+			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
 	}
 	return true, desc, nil
 }
 
-// GetTableByName returns a table descriptor with properties according to the
-// provided lookup flags.
-func (tc *Collection) GetTableByName(
+// GetMutableTableByName returns a mutable table descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (_ catalog.TableDescriptor, err error) {
-	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
+) (found bool, _ *tabledesc.Mutable, _ error) {
+	found, desc, err := tc.getTableByName(ctx, txn, name, flags, true /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*tabledesc.Mutable), nil
+}
+
+// GetImmutableTableByName returns a mutable table descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetImmutableTableByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (found bool, _ *tabledesc.Immutable, _ error) {
+	found, desc, err := tc.getTableByName(ctx, txn, name, flags, false /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*tabledesc.Immutable), nil
+}
+
+// getTableByName returns a table descriptor with properties according to the
+// provided lookup flags.
+func (tc *Collection) getTableByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	name tree.ObjectName,
+	flags tree.ObjectLookupFlags,
+	mutable bool,
+) (found bool, _ catalog.TableDescriptor, err error) {
+	found, desc, err := tc.getObjectByName(
+		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags, mutable)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	} else if !found {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedRelationError(name)
+			return false, nil, sqlerrors.NewUndefinedRelationError(name)
 		}
-		return nil, nil
+		return false, nil, nil
 	}
 	table, ok := desc.(catalog.TableDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedRelationError(name)
+			return false, nil, sqlerrors.NewUndefinedRelationError(name)
 		}
-		return nil, nil
+		return false, nil, nil
 	}
 	if table.Adding() && table.IsUncommittedVersion() &&
-		(flags.CommonLookupFlags.RequireMutable || flags.CommonLookupFlags.AvoidCached) {
+		(mutable || flags.CommonLookupFlags.AvoidCached) {
 		// Special case: We always return tables in the adding state if they were
 		// created in the same transaction and a descriptor (effectively) read in
 		// the same transaction is requested. What this basically amounts to is
@@ -509,45 +539,74 @@ func (tc *Collection) GetTableByName(
 		// IncludeAdding flag and pull the special case handling up into the
 		// callers. Figure that out after we clean up the name resolution layers
 		// and it becomes more clear what the callers should be.
-		return table, nil
+		return true, table, nil
 	}
 	if dropped, err := filterDescriptorState(table, flags.CommonLookupFlags); err != nil || dropped {
-		return nil, err
+		return false, nil, err
 	}
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
-	return hydrated, nil
+	return true, hydrated, nil
 }
 
-// GetTypeByName returns a type descriptor with properties according to the
-// provided lookup flags.
-func (tc *Collection) GetTypeByName(
+// GetMutableTypeByName returns a mutable type descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (_ catalog.TypeDescriptor, err error) {
-	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
+) (found bool, _ *typedesc.Mutable, _ error) {
+	found, desc, err := tc.getTypeByName(ctx, txn, name, flags, true /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*typedesc.Mutable), nil
+}
+
+// GetImmutableTypeByName returns a mutable type descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetImmutableTypeByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (found bool, _ *typedesc.Immutable, _ error) {
+	found, desc, err := tc.getTypeByName(ctx, txn, name, flags, false /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*typedesc.Immutable), nil
+}
+
+// getTypeByName returns a type descriptor with properties according to the
+// provided lookup flags.
+func (tc *Collection) getTypeByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	name tree.ObjectName,
+	flags tree.ObjectLookupFlags,
+	mutable bool,
+) (found bool, _ catalog.TypeDescriptor, err error) {
+	found, desc, err := tc.getObjectByName(
+		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags, mutable)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	} else if !found {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedTypeError(name)
+			return false, nil, sqlerrors.NewUndefinedTypeError(name)
 		}
-		return nil, nil
+		return false, nil, nil
 	}
 	typ, ok := desc.(catalog.TypeDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlerrors.NewUndefinedTypeError(name)
+			return false, nil, sqlerrors.NewUndefinedTypeError(name)
 		}
-		return nil, nil
+		return false, nil, nil
 	}
 	if dropped, err := filterDescriptorState(
 		typ, flags.CommonLookupFlags,
 	); err != nil || dropped {
-		return nil, err
+		return false, nil, err
 	}
-	return typ, nil
+	return true, typ, nil
 }
 
 // TODO (lucy): Should this just take a database name? We're separately

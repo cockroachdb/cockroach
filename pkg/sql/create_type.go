@@ -80,7 +80,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 		Required:    false,
 		AvoidCached: true,
 	}}
-	existing, err := params.p.Descriptors().GetTypeByName(params.ctx, params.p.Txn(), n.typeName, flags)
+	found, _, err := params.p.Descriptors().GetImmutableTypeByName(params.ctx, params.p.Txn(), n.typeName, flags)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 	// CREATE TABLE IF NOT EXISTS by checking the return code
 	// (pgcode.DuplicateRelation) of getCreateTableParams. However, there isn't
 	// a pgcode for duplicate types, only the more general pgcode.DuplicateObject.
-	if existing != nil && n.n.IfNotExists {
+	if found && n.n.IfNotExists {
 		return nil
 	}
 
