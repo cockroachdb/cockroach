@@ -39,7 +39,8 @@ func (p *planner) AlterDatabaseOwner(
 		return nil, err
 	}
 
-	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true /* required */)
+	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
+		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
