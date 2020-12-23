@@ -83,14 +83,14 @@ export class MetricsQuery {
 function metricsQueryReducer(state: MetricsQuery, action: Action) {
   switch (action.type) {
     // This component has requested a new set of metrics from the server.
-    case REQUEST:
+    case REQUEST: {
       const { payload: request } = action as PayloadAction<WithID<TSRequest>>;
       state = _.clone(state);
       state.nextRequest = request.data;
       return state;
-
+    }
     // Results for a previous request have been received from the server.
-    case RECEIVE:
+    case RECEIVE: {
       const { payload: response } = action as PayloadAction<
         WithID<RequestWithResponse>
       >;
@@ -101,14 +101,14 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
         state.error = undefined;
       }
       return state;
-
+    }
     // The previous query for metrics for this component encountered an error.
-    case ERROR:
+    case ERROR: {
       const { payload: error } = action as PayloadAction<WithID<Error>>;
       state = _.clone(state);
       state.error = error.data;
       return state;
-
+    }
     default:
       return state;
   }
@@ -133,7 +133,7 @@ export function metricQuerySetReducer(
   switch (action.type) {
     case REQUEST:
     case RECEIVE:
-    case ERROR:
+    case ERROR: {
       // All of these requests should be dispatched to a MetricQuery in the
       // collection. If a MetricQuery with that ID does not yet exist, create it.
       const { id } = (action as PayloadAction<WithID<any>>).payload;
@@ -143,7 +143,7 @@ export function metricQuerySetReducer(
         action,
       );
       return state;
-
+    }
     default:
       return state;
   }
