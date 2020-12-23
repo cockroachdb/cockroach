@@ -195,3 +195,11 @@ CREATE TABLE information_schema.collations (
 	COLLATION_NAME    STRING NOT NULL,
 	PAD_ATTRIBUTE     STRING NOT NULL
 )`
+
+// InformationSchemaSessionVariables describes the schema of the
+// information_schema.session_variables table.
+const InformationSchemaSessionVariables = `
+CREATE TABLE information_schema.session_variables (
+	VARIABLE STRING NOT NULL,
+	VALUE STRING NOT NULL
+)`
