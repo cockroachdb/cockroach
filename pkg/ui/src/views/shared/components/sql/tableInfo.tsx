@@ -94,7 +94,6 @@ const mapDispatchToProps = {
   refreshTableStats,
 };
 
-// tslint:disable-next-line:variable-name
 const TableInfoConnected = connect(
   mapStateToProps,
   mapDispatchToProps,

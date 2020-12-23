@@ -203,7 +203,6 @@ export class LoginPage extends React.Component<Props> {
   }
 }
 
-// tslint:disable-next-line:variable-name
 const LoginPageConnected = withRouter(
   connect(
     (state: AdminUIState) => {

@@ -46,7 +46,6 @@ class AlertBanner extends React.Component<AlertBannerProps, {}> {
     // Display only the first visible component.
     const { dismiss, ...alertProps } = alerts[0];
     const boundDismiss = bindActionCreators(() => dismiss, dispatch);
-    // tslint:disable-next-line:variable-name
     const AlertComponent = alertProps.showAsAlert ? AlertMessage : AlertBox;
 
     return (

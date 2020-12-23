@@ -55,7 +55,6 @@ export interface DownloadFileRef {
  * <button onClick={fetchData}>Download</button>
  * ```
  * */
-// tslint:disable-next-line:variable-name
 export const DownloadFile = forwardRef<DownloadFileRef, DownloadAsFileProps>(
   (props, ref) => {
     const { children, fileName, fileType, content } = props;

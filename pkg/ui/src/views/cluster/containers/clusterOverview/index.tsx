@@ -36,7 +36,6 @@ import {
   UnavailableRangesTooltip,
 } from "./tooltips";
 
-// tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
 
 interface CapacityUsageProps {
@@ -298,7 +297,6 @@ const actions = {
   refreshNodes: refreshNodes,
 };
 
-// tslint:disable-next-line:variable-name
 const ClusterSummaryConnected = connect(
   mapStateToClusterSummaryProps,
   actions,

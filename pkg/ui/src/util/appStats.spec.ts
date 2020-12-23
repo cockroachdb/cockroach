@@ -158,10 +158,8 @@ function randomStat(scale: number = 1): NumericStat {
 
 function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
   const count = randomInt(1000);
-  // tslint:disable:variable-name
   const first_attempt_count = randomInt(count);
   const max_retries = randomInt(count - first_attempt_count);
-  // tslint:enable:variable-name
 
   return {
     count: Long.fromNumber(count),
@@ -221,11 +219,9 @@ describe("combineStatementStats", () => {
     const ac = combineStatementStats([a, c]);
     const bc = combineStatementStats([b, c]);
 
-    // tslint:disable:variable-name
     const ab_c = combineStatementStats([ab, c]);
     const ac_b = combineStatementStats([ac, b]);
     const bc_a = combineStatementStats([bc, a]);
-    // tslint:enable:variable-name
 
     assert.equal(ab_c.count.toString(), ac_b.count.toString());
     assert.equal(ab_c.count.toString(), bc_a.count.toString());

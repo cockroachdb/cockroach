@@ -23,7 +23,6 @@ import { selectEnterpriseEnabled } from "src/redux/license";
 import { Dropdown } from "src/components/dropdown";
 import { parseSplatParams } from "src/util/parseSplatParams";
 
-// tslint:disable-next-line:variable-name
 const NodeCanvasContent = swapByLicense(
   NeedEnterpriseLicense,
   NodeCanvasContainer,

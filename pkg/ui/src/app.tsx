@@ -83,7 +83,6 @@ export interface AppProps {
   store: Store<AdminUIState, Action>;
 }
 
-// tslint:disable-next-line:variable-name
 export const App: React.FC<AppProps> = (props: AppProps) => {
   const { store, history } = props;
 
