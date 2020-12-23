@@ -250,6 +250,11 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 	if !ok {
 		return key, true, nil
 	}
+	if len(k) == 0 {
+		// We have seen some span keys end in an interleaved sentinel.
+		// Check if we ran out of key before getting to an interleave child?
+		return key, true, nil
+	}
 	prefix := key[:len(key)-len(k)]
 	k, ok, err = kr.RewriteKey(k, isFromSpan)
 	if err != nil {
