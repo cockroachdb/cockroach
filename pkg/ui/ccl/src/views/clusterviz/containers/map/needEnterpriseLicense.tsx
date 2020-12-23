@@ -43,11 +43,15 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
               The Node Map shows the geographical layout of your cluster, along
               with metrics and health indicators. To enable the Node Map,
               request an{" "}
-              <a href={docsURL.enterpriseLicensing} target="_blank">
+              <a
+                href={docsURL.enterpriseLicensing}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Enterprise trial license
               </a>{" "}
               and refer to this{" "}
-              <a href={docsURL.enableNodeMap} target="_blank">
+              <a href={docsURL.enableNodeMap} target="_blank" rel="noreferrer">
                 configuration guide
               </a>
               .
@@ -57,13 +61,14 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
             href={docsURL.startTrial}
             className="need-license-blurb__trial-link"
             target="_blank"
+            rel="noreferrer"
           >
             GET A 30-DAY ENTERPRISE TRIAL
           </a>
         </div>
         <div className="need-license-steps">
           <Step num={1} img={step1Img}>
-            <a href={docsURL.startTrial} target="_blank">
+            <a href={docsURL.startTrial} target="_blank" rel="noreferrer">
               Get a trial license
             </a>{" "}
             delivered straight to your inbox.
@@ -73,7 +78,7 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
           </Step>
           <Step num={3} img={step3Img}>
             Follow{" "}
-            <a href={docsURL.enableNodeMap} target="_blank">
+            <a href={docsURL.enableNodeMap} target="_blank" rel="noreferrer">
               this guide
             </a>{" "}
             to configure localities and locations.
