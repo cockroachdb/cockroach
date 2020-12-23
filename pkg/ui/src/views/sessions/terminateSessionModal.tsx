@@ -39,7 +39,7 @@ const TerminateSessionModal = (
     cancel(req);
     trackTerminateSession();
     setVisible(false);
-  }, [req]);
+  }, [cancel, req]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
 
