@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
 // explainPlanNode implements EXPLAIN (PLAN); it produces the output of
@@ -67,19 +66,31 @@ func emitExplain(
 	explainPlan *explain.Plan,
 	distribution physicalplan.PlanDistribution,
 	vectorized bool,
-) error {
+) (err error) {
+	// Guard against bugs in the explain code.
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal and runtime errors without
+			// having to add error checks everywhere throughout the code. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
 	ob.AddField("distribution", distribution.String())
 	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
-		var tabDesc *tabledesc.Immutable
-		var idxDesc *descpb.IndexDescriptor
 		if table.IsVirtualTable() {
-			tabDesc = table.(*optVirtualTable).desc
-			idxDesc = index.(*optVirtualIndex).desc
-		} else {
-			tabDesc = table.(*optTable).desc
-			idxDesc = index.(*optIndex).desc
+			return "<virtual table spans>"
 		}
+		tabDesc := table.(*optTable).desc
+		idxDesc := index.(*optIndex).desc
 		spans, err := generateScanSpans(codec, tabDesc, idxDesc, scanParams)
 		if err != nil {
 			return err.Error()
