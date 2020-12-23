@@ -52,8 +52,8 @@ type LogicalSchemaAccessor struct {
 
 // GetDatabaseDesc implements the Accessor interface.
 //
-// Warning: This method uses no "logical" schema information and only exists
-// to accommodate the existing resolver.SchemaResolver interface (see #58228).
+// Warning: This method uses no virtual schema information and only exists to
+// accommodate the existing resolver.SchemaResolver interface (see #58228).
 // Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 // descs.Collection instead when possible.
 func (l *LogicalSchemaAccessor) GetDatabaseDesc(

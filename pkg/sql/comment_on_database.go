@@ -41,7 +41,8 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true)
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
+		string(n.Name), tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
