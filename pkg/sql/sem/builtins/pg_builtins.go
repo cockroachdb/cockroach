@@ -521,13 +521,25 @@ func evalPrivilegeCheck(
 	if withGrantOpt {
 		privChecks = append(privChecks, privilege.GRANT)
 	}
+
+	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Slice containing all roles user is a direct and indirect member of.
+	allRoles := []string{security.PublicRole, user}
+	for role := range allRoleMemberships {
+		allRoles = append(allRoles, role)
+	}
+
 	for _, p := range privChecks {
 		query := fmt.Sprintf(`
 			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
-			FROM information_schema.%s WHERE grantee IN ($1, $2) AND %s`,
+			FROM information_schema.%s WHERE grantee = ANY ($1) AND %s`,
 			privilege.ALL, p, infoTable, pred)
 		r, err := ctx.InternalExecutor.QueryRow(
-			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, security.PublicRole, user,
+			ctx.Ctx(), "eval-privilege-check", ctx.Txn, query, allRoles,
 		)
 		if err != nil {
 			return nil, err
