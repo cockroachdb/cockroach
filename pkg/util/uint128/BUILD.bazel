@@ -5,7 +5,7 @@ go_library(
     srcs = ["uint128.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/uint128",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(

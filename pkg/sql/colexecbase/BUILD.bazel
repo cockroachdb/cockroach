@@ -16,7 +16,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/types",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

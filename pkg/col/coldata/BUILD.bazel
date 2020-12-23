@@ -21,9 +21,9 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/duration",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
@@ -39,13 +39,14 @@ go_test(
     ],
     embed = [":coldata"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/col/coldatatestutils",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

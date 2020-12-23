@@ -17,7 +17,7 @@ go_test(
     srcs = ["dumpstore_test.go"],
     embed = [":dumpstore"],
     deps = [
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

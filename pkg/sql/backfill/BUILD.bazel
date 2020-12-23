@@ -23,6 +23,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/log",
         "//pkg/util/mon",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

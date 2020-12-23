@@ -37,7 +37,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/sql/opt/optgen/lang:bootstrap",  # keep
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

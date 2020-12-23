@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/skipped-tests",
     visibility = ["//visibility:private"],
     deps = [
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/ghemawat/stream",
-        "//vendor/github.com/nlopes/slack",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_ghemawat_stream//:stream",
+        "@com_github_nlopes_slack//:slack",
     ],
 )
 

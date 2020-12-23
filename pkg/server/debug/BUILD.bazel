@@ -23,13 +23,13 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/pebble/tool",
-        "//vendor/github.com/rcrowley/go-metrics",
-        "//vendor/github.com/rcrowley/go-metrics/exp",
-        "//vendor/github.com/spf13/cobra",
-        "//vendor/golang.org/x/net/trace",
-        "//vendor/google.golang.org/grpc/metadata",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//tool",
+        "@com_github_rcrowley_go_metrics//:go-metrics",
+        "@com_github_rcrowley_go_metrics//exp",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_x_net//trace",
     ],
 )
 
@@ -43,6 +43,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

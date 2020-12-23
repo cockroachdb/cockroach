@@ -14,7 +14,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/privilege",
         "//pkg/sql/types",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -31,6 +31,6 @@ go_test(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

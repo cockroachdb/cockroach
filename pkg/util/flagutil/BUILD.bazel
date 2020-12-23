@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 
@@ -19,6 +19,6 @@ go_test(
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )

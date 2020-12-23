@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/petermattis/goid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_petermattis_goid//:goid",
     ],
 )

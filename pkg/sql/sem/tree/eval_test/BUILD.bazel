@@ -28,7 +28,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

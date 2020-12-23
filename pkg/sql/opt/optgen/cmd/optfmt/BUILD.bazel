@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/sql/opt/optgen/lang",
         "//pkg/util/pretty",
-        "//vendor/github.com/pmezard/go-difflib/difflib",
+        "@com_github_pmezard_go_difflib//difflib",
     ],
 )
 
@@ -23,5 +23,5 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     embed = [":optfmt_lib"],
-    deps = ["//vendor/github.com/cockroachdb/datadriven"],
+    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
 )

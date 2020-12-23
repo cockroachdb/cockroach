@@ -22,7 +22,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
@@ -34,7 +34,7 @@ go_test(
         "system_test.go",
     ],
     deps = [
-        ":config",
+        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/roachpb",
@@ -45,6 +45,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

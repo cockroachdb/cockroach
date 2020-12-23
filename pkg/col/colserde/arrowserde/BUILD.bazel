@@ -11,5 +11,5 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/col/colserde/arrowserde",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/google/flatbuffers/go"],
+    deps = ["@com_github_google_flatbuffers//go"],
 )

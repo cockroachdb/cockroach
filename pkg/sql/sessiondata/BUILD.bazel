@@ -25,5 +25,5 @@ go_test(
     name = "sessiondata_test",
     srcs = ["search_path_test.go"],
     embed = [":sessiondata"],
-    deps = ["//vendor/github.com/stretchr/testify/assert"],
+    deps = ["@com_github_stretchr_testify//assert"],
 )

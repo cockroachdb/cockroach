@@ -32,9 +32,9 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/kr/pretty",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_x_sync//errgroup",
     ],
 )

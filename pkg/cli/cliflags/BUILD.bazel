@@ -11,6 +11,6 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/docs",
-        "//vendor/github.com/kr/text",
+        "@com_github_kr_text//:text",
     ],
 )

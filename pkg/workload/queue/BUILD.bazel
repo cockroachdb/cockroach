@@ -9,6 +9,6 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )

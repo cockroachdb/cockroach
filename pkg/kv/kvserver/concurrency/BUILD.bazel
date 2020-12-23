@@ -32,7 +32,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -50,6 +50,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",
@@ -68,12 +69,12 @@ go_test(
         "//pkg/util/tracing",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/maruel/panicparse/stack",
-        "//vendor/github.com/petermattis/goid",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/golang.org/x/exp/rand",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_maruel_panicparse//stack",
+        "@com_github_petermattis_goid//:goid",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//rand",
+        "@org_golang_x_sync//errgroup",
     ],
 )

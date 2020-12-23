@@ -17,9 +17,9 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/log",
         "//pkg/util/stop",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/docker/docker/api/types",
-        "//vendor/github.com/docker/docker/api/types/container",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_docker_docker//api/types",
+        "@com_github_docker_docker//api/types/container",
     ],
 )
 

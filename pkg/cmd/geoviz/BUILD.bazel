@@ -12,7 +12,7 @@ go_library(
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geos",
-        "//vendor/github.com/golang/geo/s2",
+        "@com_github_golang_geo//s2",
     ],
 )
 

@@ -16,9 +16,9 @@ go_library(
         "//pkg/storage/fs",
         "//pkg/util/mon",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/golang/snappy",
-        "//vendor/github.com/marusama/semaphore",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_snappy//:snappy",
+        "@com_github_marusama_semaphore//:semaphore",
     ],
 )
 
@@ -30,11 +30,11 @@ go_test(
         "partitionedqueue_test.go",
     ],
     deps = [
-        ":colcontainer",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
+        "//pkg/sql/colcontainer",
         "//pkg/sql/colexecbase",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
@@ -46,7 +46,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/mon",
         "//pkg/util/randutil",
-        "//vendor/github.com/marusama/semaphore",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_marusama_semaphore//:semaphore",
+        "@com_github_stretchr_testify//require",
     ],
 )

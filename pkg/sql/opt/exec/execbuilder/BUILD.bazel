@@ -17,7 +17,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lexbase:lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/mutations",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
@@ -41,7 +41,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

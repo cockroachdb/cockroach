@@ -33,8 +33,8 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -54,6 +54,7 @@ go_test(
         "//pkg/base",
         "//pkg/config/zonepb",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
@@ -73,8 +74,8 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
     ],
 )

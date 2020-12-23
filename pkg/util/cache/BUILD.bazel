@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/util/interval",
         "//pkg/util/log",
-        "//vendor/github.com/biogo/store/llrb",
+        "@com_github_biogo_store//llrb",
     ],
 )
 
@@ -18,6 +18,6 @@ go_test(
     embed = [":cache"],
     deps = [
         "//pkg/util/log",
-        "//vendor/github.com/biogo/store/llrb",
+        "@com_github_biogo_store//llrb",
     ],
 )

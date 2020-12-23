@@ -22,6 +22,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

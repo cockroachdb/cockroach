@@ -19,10 +19,10 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
-        "//vendor/github.com/cockroachdb/cockroach-go/crdb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/spf13/pflag",
-        "//vendor/golang.org/x/exp/rand",
+        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_golang_x_exp//rand",
     ],
 )
 
@@ -37,6 +37,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
-        "//vendor/golang.org/x/exp/rand",
+        "@org_golang_x_exp//rand",
     ],
 )

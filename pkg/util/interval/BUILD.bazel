@@ -14,8 +14,8 @@ go_library(
     deps = [
         "//pkg/util/envutil",
         "//pkg/util/syncutil",
-        "//vendor/github.com/biogo/store/llrb",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -29,7 +29,7 @@ go_test(
     deps = [
         "//pkg/util/log",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
     ],
 )

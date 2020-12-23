@@ -21,10 +21,10 @@ go_library(
         "//pkg/cmd/roachprod/vm/gce",
         "//pkg/cmd/roachprod/vm/local",
         "//pkg/util/flagutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/spf13/cobra",
-        "//vendor/golang.org/x/crypto/ssh/terminal",
-        "//vendor/golang.org/x/sys/unix",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_crypto//ssh/terminal",
+        "@org_golang_x_sys//unix",
     ],
 )
 

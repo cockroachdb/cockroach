@@ -14,7 +14,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log/logcrash",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

@@ -19,7 +19,7 @@ go_library(
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

@@ -19,8 +19,8 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/stop",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -28,8 +28,8 @@ go_test(
     name = "container_test",
     srcs = ["container_test.go"],
     deps = [
-        ":container",
         "//pkg/kv/kvserver/closedts",
+        "//pkg/kv/kvserver/closedts/container",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/provider/testutils",
         "//pkg/kv/kvserver/closedts/transport/testutils",
@@ -40,8 +40,8 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/kr/pretty",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
     ],
 )
