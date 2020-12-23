@@ -310,7 +310,77 @@ USE new_db
 statement error database new_db is not multi-region enabled, but table cannot_create_table_no_multiregion has locality GLOBAL set
 CREATE TABLE cannot_create_table_no_multiregion (a int) LOCALITY GLOBAL
 
-statement error implementation pending
+query TTTT colnames
+SHOW ENUMS FROM region_test_db.public
+----
+schema  name                  values   owner
+public  crdb_internal_region  {test1}  root
+
+# Test adding regions.
+statement ok
+ALTER DATABASE region_test_db ADD REGION "test3"
+
+query TTBBT colnames
+show regions from database region_test_db
+----
+database        region  primary  is_region_active  zones
+region_test_db  test1   true     true              {test1-az1,test1-az2,test1-az3}
+region_test_db  test3   false    true              {test3-az1,test3-az2,test3-az3}
+
+query TTTT colnames
+SHOW ENUMS FROM region_test_db.public
+----
+schema  name                  values         owner
+public  crdb_internal_region  {test1,test3}  root
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE region_test_db
+----
+DATABASE region_test_db  ALTER DATABASE region_test_db CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 90000,
+                         num_replicas = 3,
+                         constraints = '{+region=test1: 1, +region=test3: 1}',
+                         lease_preferences = '[[+region=test1]]'
+
+# Test adding a region out of order.
+statement ok
+ALTER DATABASE region_test_db ADD REGION "test2"
+
+query TTBBT colnames
+show regions from database region_test_db
+----
+database        region  primary  is_region_active  zones
+region_test_db  test1   true     true              {test1-az1,test1-az2,test1-az3}
+region_test_db  test2   false    true              {test2-az1,test2-az2,test2-az3}
+region_test_db  test3   false    true              {test3-az1,test3-az2,test3-az3}
+
+query TTTT colnames
+SHOW ENUMS FROM region_test_db.public
+----
+schema  name                  values         owner
+public  crdb_internal_region  {test1,test3,test2}  root
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE region_test_db
+----
+DATABASE region_test_db  ALTER DATABASE region_test_db CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 90000,
+                         num_replicas = 3,
+                         constraints = '{+region=test1: 1, +region=test2: 1, +region=test3: 1}',
+                         lease_preferences = '[[+region=test1]]'
+
+# Failure testing for ADD REGION.
+statement error region "test" does not exist
+ALTER DATABASE region_test_db ADD REGION "test"
+
+statement error region "test1" already added to database
+ALTER DATABASE region_test_db ADD REGION "test1"
+
+statement error cannot add region
 ALTER DATABASE new_db ADD REGION "us-west-1"
 
 statement error implementation pending
