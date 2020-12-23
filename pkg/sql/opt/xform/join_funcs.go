@@ -135,10 +135,12 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //      Input  Scan(t)                   Input
 //
 //
-//  2. The index is not covering. We have to generate an index join above the
-//     lookup join. Note that this index join is also implemented as a
-//     LookupJoin, because an IndexJoin can only output columns from one table,
-//     whereas we also need to output columns from Input.
+//  2. The index is not covering, but we can fully evaluate the ON condition
+//     using the index, or we are doing an InnerJoin. We have to generate
+//     an index join above the lookup join. Note that this index join is also
+//     implemented as a LookupJoin, because an IndexJoin can only output
+//     columns from one table, whereas we also need to output columns from
+//     Input.
 //
 //         Join                       LookupJoin(t@primary)
 //         /   \                           |
@@ -155,12 +157,29 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //
 //     We want to first join abc with the index on y (which provides columns y, x)
 //     and then use a lookup join to retrieve column z. The "index join" (top
-//     LookupJoin) will produce columns a,b,c,x,y; the lookup columns are just z
-//     (the original index join produced x,y,z).
+//     LookupJoin) will produce columns a,b,c,x,y,z; the lookup columns are just x
+//     (the original index join produced a,b,c,x,y).
 //
 //     Note that the top LookupJoin "sees" column IDs from the table on both
 //     "sides" (in this example x,y on the left and z on the right) but there is
 //     no overlap.
+//
+//  3. The index is not covering and we cannot fully evaluate the ON condition
+//     using the index, and we are doing a LeftJoin/SemiJoin/AntiJoin. This is
+//     handled using a lower-upper pair of joins that are further specialized
+//     as paired-joins. The first (lower) join outputs a continuation column
+//     that is used by the second (upper) join. Like case 2, both are lookup
+//     joins, but paired-joins explicitly know their role in the pair and
+//     behave accordingly.
+//     For example, using the same tables in the example for case 2:
+//      SELECT * FROM abc JOIN xyz ON a=y AND b=z
+//
+//     The first join will evaluate a=y and produce columns a,b,c,x,y,cont
+//     where cont is the continuation column used to group together rows that
+//     correspond to the same original a,b,c. The second join will evaluate
+//     b=z and produce columns a,b,c,x,y,z. A similar approach works for
+//     anti-joins and semi-joins.
+//
 //
 // A lookup join can be created when the ON condition or implicit filters from
 // CHECK constraints and computed columns constrain a prefix of the index
@@ -356,21 +375,27 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			}
 		}
 
-		// All code that follows is for case 2 (see function comment).
+		// All code that follows is for cases 2 and 3 (see function comment).
+		// We need to generate two joins: a lower join followed by an upper join.
+		// In case 3, this lower-upper pair of joins is further specialized into
+		// paired-joins where we refer to the lower as first and upper as second.
 
 		if scanPrivate.Flags.NoIndexJoin {
 			return
 		}
-		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
-			// We cannot use a non-covering index for semi and anti join. Note that
-			// since the semi/anti join doesn't pass through any columns, "non
-			// covering" here means that not all columns in the ON condition are
-			// available.
-			//
-			// TODO(radu): We could create a semi/anti join on top of an inner join if
-			// the lookup columns form a key (to guarantee that input rows are not
-			// duplicated by the inner join).
-			return
+		pairedJoins := false
+		continuationCol := opt.ColumnID(0)
+		lowerJoinType := joinType
+		if joinType == opt.SemiJoinOp {
+			// Case 3: Semi joins are converted to a pair consisting of an inner
+			// lookup join and semi lookup join.
+			pairedJoins = true
+			lowerJoinType = opt.InnerJoinOp
+		} else if joinType == opt.AntiJoinOp {
+			// Case 3: Anti joins are converted to a pair consisting of a left
+			// lookup join and anti lookup join.
+			pairedJoins = true
+			lowerJoinType = opt.LeftJoinOp
 		}
 
 		if pkCols == nil {
@@ -395,6 +420,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// can refer to: input columns, or columns available in the index.
 		onCols := indexCols.Union(inputProps.OutputCols)
 		if c.FiltersBoundBy(lookupJoin.On, onCols) {
+			// Case 2.
 			// The ON condition refers only to the columns available in the index.
 			//
 			// For LeftJoin, both LookupJoins perform a LeftJoin. A null-extended row
@@ -408,20 +434,32 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// conditions that refer to other columns. We can put the former in the
 			// lower LookupJoin and the latter in the index join.
 			//
-			// This works for InnerJoin but not for LeftJoin because of a
-			// technicality: if an input (left) row has matches in the lower
-			// LookupJoin but has no matches in the index join, only the columns
-			// looked up by the top index join get NULL-extended.
+			// This works in a straightforward manner for InnerJoin but not for
+			// LeftJoin because of a technicality: if an input (left) row has
+			// matches in the lower LookupJoin but has no matches in the index join,
+			// only the columns looked up by the top index join get NULL-extended.
+			// Additionally if none of the lower matches are matches in the index
+			// join, we want to output only one NULL-extended row. To accomplish
+			// this, we need to use paired-joins.
 			if joinType == opt.LeftJoinOp {
-				// TODO(radu): support LeftJoin, perhaps by looking up all columns and
-				// discarding columns that are already available from the lower
-				// LookupJoin. This requires a projection to avoid having the same
-				// ColumnIDs on both sides of the index join.
-				return
+				// Case 3.
+				pairedJoins = true
+				// The lowerJoinType continues to be LeftJoinOp.
 			}
+			// We have already set pairedJoins=true for SemiJoin,AntiJoin earlier,
+			// and we don't need to do that for InnerJoin. The following sets up the
+			// ON conditions for both Case 2 and Case 3, when doing 2 joins that
+			// will each evaluate part of the ON condition.
 			conditions := lookupJoin.On
 			lookupJoin.On = c.ExtractBoundConditions(conditions, onCols)
 			indexJoin.On = c.ExtractUnboundConditions(conditions, onCols)
+		}
+		if pairedJoins {
+			lookupJoin.JoinType = lowerJoinType
+			continuationCol = c.constructContinuationColumnForPairedJoin()
+			lookupJoin.IsFirstJoinInPairedJoiner = true
+			lookupJoin.ContinuationCol = continuationCol
+			lookupJoin.Cols.Add(continuationCol)
 		}
 
 		indexJoin.Input = c.e.f.ConstructLookupJoin(
@@ -435,10 +473,53 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		indexJoin.KeyCols = pkCols
 		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
 		indexJoin.LookupColsAreTableKey = true
+		if pairedJoins {
+			indexJoin.IsSecondJoinInPairedJoiner = true
+		}
 
-		// Create the LookupJoin for the index join in the same group.
-		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
+		c.addIndexJoinAsSecondJoinToMemo(grp, inputProps.OutputCols, &indexJoin)
 	})
+}
+
+// addIndexJoinAsSecondJoin is a helper function used when constructing two
+// joins to accomplish a join in the query. The second join is over the
+// primary index, and is added here.
+func (c *CustomFuncs) addIndexJoinAsSecondJoinToMemo(
+	grp memo.RelExpr, inputColsOfFirstJoin opt.ColSet, indexJoin *memo.LookupJoinExpr,
+) {
+	joinType := indexJoin.JoinType
+
+	// If this is not a semi- or anti-join, create the LookupJoin for the index
+	// join in the same group.
+	if joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp {
+		c.e.mem.AddLookupJoinToGroup(indexJoin, grp)
+		return
+	}
+
+	// Semi and anti joins here are always using paired-joins. Some of these
+	// require a project on top (see below). Avoid adding that projection if it
+	// will be a no-op (i.e., we already have the correct output columns from
+	// the lookup join).
+	outputCols := indexJoin.Cols.Intersection(indexJoin.Input.Relational().OutputCols)
+	if outputCols.SubsetOf(inputColsOfFirstJoin) {
+		c.e.mem.AddLookupJoinToGroup(indexJoin, grp)
+		return
+	}
+
+	// For some semi and anti joins, we need to add a project on top to ensure
+	// that only the original left-side columns are output. Normally, the
+	// LookupJoin would be able to perform the necessary projection for semi
+	// and anti joins by intersecting Cols with the OutputCols of its input,
+	// but that doesn't work for paired joins since the input to the second
+	// join may include more columns than the original input.
+	var project memo.ProjectExpr
+	project.Input = c.e.f.ConstructLookupJoin(
+		indexJoin.Input,
+		indexJoin.On,
+		&indexJoin.LookupJoinPrivate,
+	)
+	project.Passthrough = grp.Relational().OutputCols
+	c.e.mem.AddProjectToGroup(&project, grp)
 }
 
 // constructContinuationColumnForPairedJoin constructs a continuation column
@@ -610,36 +691,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
 
-		// If this is not a semi- or anti-join, create the LookupJoin for the index
-		// join in the same group.
-		if joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp {
-			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
-			return
-		}
-
-		// Some semi and anti joins require a project on top (see below). Avoid
-		// adding that projection if it will be a no-op (i.e., we already have
-		// the correct output columns from the lookup join).
-		outputCols := indexJoin.Cols.Intersection(indexJoin.Input.Relational().OutputCols)
-		if outputCols.SubsetOf(inputCols) {
-			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
-			return
-		}
-
-		// For some semi and anti joins, we need to add a project on top to ensure
-		// that only the original left-side columns are output. Normally, the
-		// LookupJoin would be able to perform the necessary projection for semi
-		// and anti joins by intersecting Cols with the OutputCols of its input,
-		// but that doesn't work for paired joins since the input to the second
-		// join may include more columns than the original input.
-		var project memo.ProjectExpr
-		project.Input = c.e.f.ConstructLookupJoin(
-			indexJoin.Input,
-			indexJoin.On,
-			&indexJoin.LookupJoinPrivate,
-		)
-		project.Passthrough = grp.Relational().OutputCols
-		c.e.mem.AddProjectToGroup(&project, grp)
+		c.addIndexJoinAsSecondJoinToMemo(grp, inputCols, &indexJoin)
 	})
 }
 

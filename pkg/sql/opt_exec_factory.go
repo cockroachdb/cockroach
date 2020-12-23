@@ -577,6 +577,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	eqColsAreKey bool,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
+	isFirstJoinInPairedJoiner bool,
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
@@ -604,6 +605,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		table:                      tableScan,
 		joinType:                   joinType,
 		eqColsAreKey:               eqColsAreKey,
+		isFirstJoinInPairedJoiner:  isFirstJoinInPairedJoiner,
 		isSecondJoinInPairedJoiner: isSecondJoinInPairedJoiner,
 		reqOrdering:                ReqOrdering(reqOrdering),
 	}
@@ -616,6 +618,9 @@ func (ef *execFactory) ConstructLookupJoin(
 		n.onCond = pred.iVarHelper.Rebind(onCond)
 	}
 	n.columns = pred.cols
+	if isFirstJoinInPairedJoiner {
+		n.columns = append(n.columns, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+	}
 
 	return n, nil
 }
