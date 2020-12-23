@@ -1057,6 +1057,17 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 				switch {
 				case val.IsNil():
 					d = tree.DNull
+				case val.Type().Elem().Kind() == reflect.String:
+					a := tree.NewDArray(types.String)
+					// TODO(angelaw): Ranging through val seems to require pointer arithmetic so did it this way
+					for s := range args {
+						// It is a bit hacky though...
+						if err := a.Append(tree.NewDString(reflect.ValueOf(s).String())); err != nil {
+							return nil, err
+						}
+					}
+					res[i] = a
+					return res, nil
 				case val.Type().Elem().Kind() == reflect.Uint8:
 					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}
