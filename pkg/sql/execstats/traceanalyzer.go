@@ -11,7 +11,6 @@
 package execstats
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
 )
 
 // processorStats contains stats for a specific processor extracted from a trace.
@@ -132,55 +130,34 @@ func MakeTraceAnalyzer(flowMetadata *FlowMetadata) *TraceAnalyzer {
 // If makeDeterministic is set, statistics that can vary from run to run are set
 // to fixed values; see ComponentStats.MakeDeterministic.
 func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
+	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
 	// Annotate the maps with stats extracted from the trace.
-	for _, span := range trace {
-		if span.Stats == nil {
-			// No stats to unmarshal (e.g. noop processors at time of writing).
-			continue
-		}
-
-		var stats execinfrapb.ComponentStats
-		if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
-			return errors.Wrap(err, "unable to unmarshal in TraceAnalyzer")
-		}
-		if makeDeterministic {
-			stats.MakeDeterministic()
-		}
-
-		// Get the processor or stream id for this span. If neither exists, this
-		// span doesn't belong to a processor or stream.
-		if pid, ok := span.Tags[execinfrapb.ProcessorIDTagKey]; ok {
-			stringID := pid
-			id, err := strconv.Atoi(stringID)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span processor ID tag in TraceAnalyzer")
-			}
+	for component, componentStats := range m {
+		switch component.Type {
+		case execinfrapb.ComponentID_PROCESSOR:
+			id := component.ID
 			processorStats := a.processorStats[execinfrapb.ProcessorID(id)]
 			if processorStats == nil {
 				return errors.Errorf("trace has span for processor %d but the processor does not exist in the physical plan", id)
 			}
-			processorStats.stats = &stats
-		} else if sid, ok := span.Tags[execinfrapb.StreamIDTagKey]; ok {
-			stringID := sid
-			id, err := strconv.Atoi(stringID)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span processor ID tag in TraceAnalyzer")
-			}
+			processorStats.stats = componentStats
+
+		case execinfrapb.ComponentID_STREAM:
+			id := component.ID
 			streamStats := a.streamStats[execinfrapb.StreamID(id)]
 			if streamStats == nil {
 				return errors.Errorf("trace has span for stream %d but the stream does not exist in the physical plan", id)
 			}
-			streamStats.stats = &stats
-		} else if fid, ok := span.Tags[execinfrapb.FlowIDTagKey]; ok {
-			uuid, err := uuid.FromString(fid)
-			if err != nil {
-				return errors.Wrap(err, "unable to convert span flow ID tag in TraceAnalyzer")
+			streamStats.stats = componentStats
+
+		case execinfrapb.ComponentID_FLOW:
+			if id := component.FlowID.UUID; id != (uuid.UUID{}) {
+				flowStats := a.flowStats[execinfrapb.FlowID{UUID: id}]
+				if flowStats == nil {
+					return errors.Errorf("trace has span for flow %s but the flow does not exist in the physical plan", id)
+				}
+				flowStats.stats = append(flowStats.stats, componentStats)
 			}
-			flowStats := a.flowStats[execinfrapb.FlowID{UUID: uuid}]
-			if flowStats == nil {
-				return errors.Errorf("trace has span for flow %s but the flow does not exist in the physical plan", fid)
-			}
-			flowStats.stats = append(flowStats.stats, &stats)
 		}
 	}
 

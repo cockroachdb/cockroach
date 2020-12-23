@@ -263,16 +263,22 @@ func (b *stmtBundleBuilder) addStatement() {
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans() {
-	if b.plan.mem == nil {
+	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		return
 	}
 
-	b.z.AddFile("opt.txt", b.plan.formatOptPlan(memo.ExprFmtHideAll))
-	b.z.AddFile("opt-v.txt", b.plan.formatOptPlan(
+	formatOptPlan := func(flags memo.ExprFmtFlags) string {
+		f := memo.MakeExprFmtCtx(flags, b.plan.mem, b.plan.catalog)
+		f.FormatExpr(b.plan.mem.RootExpr())
+		return f.Buffer.String()
+	}
+
+	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
+	b.z.AddFile("opt-v.txt", formatOptPlan(
 		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	))
-	b.z.AddFile("opt-vv.txt", b.plan.formatOptPlan(memo.ExprFmtHideQualifications))
+	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications))
 }
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.

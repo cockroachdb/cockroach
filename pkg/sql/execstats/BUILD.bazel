@@ -11,7 +11,6 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/types",
     ],
 )
 
