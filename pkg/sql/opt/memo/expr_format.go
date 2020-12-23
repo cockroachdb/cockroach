@@ -525,6 +525,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.LookupColsAreTableKey {
 			tp.Childf("lookup columns are key")
 		}
+		if t.IsFirstJoinInPairedJoiner {
+			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
+		}
 		if t.IsSecondJoinInPairedJoiner {
 			tp.Childf("second join in paired joiner")
 		}

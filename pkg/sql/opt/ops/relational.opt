@@ -402,9 +402,21 @@ define LookupJoinPrivate {
     # table (and thus each left row matches with at most one table row).
     LookupColsAreTableKey bool
 
-    # IsSecondJoinInPairedJoiner is true if this is the second join of a
-    # paired-joiner used for left joins.
+    # At most one of Is{First,Second}JoinInPairedJoiner can be true.
+    #
+    # IsFirstJoinInPairedJoiner is true if this is the first (i.e., lower in the
+    # plan tree) join of a paired-joiner used for left joins.
+    IsFirstJoinInPairedJoiner bool
+
+    # IsSecondJoinInPairedJoiner is true if this is the second (i.e., higher in
+    # the plan tree) join of a paired-joiner used for left joins.
     IsSecondJoinInPairedJoiner bool
+
+    # ContinuationCol is the column ID of the continuation column when
+    # IsFirstJoinInPairedJoiner is true. The continuation column is a boolean
+    # column that indicates whether an output row is a continuation of a group
+    # corresponding to a single left input row.
+    ContinuationCol ColumnID
 
     # LocalityOptimized is true if this lookup join is part of a locality
     # optimized search strategy. For semi, inner, and left joins, this means
