@@ -46,6 +46,15 @@ interface RcTimePickerProps {
 
 export type RangeCalendarProps = OwnProps;
 
+function isBelowMinDateRange(
+  minTimeRange: [DurationInputArg1, DurationInputArg2],
+  from: Moment,
+  to: Moment,
+): boolean {
+  const minutesInRange = Math.abs(from.diff(to, minTimeRange[1], true));
+  return minutesInRange < minTimeRange[0];
+}
+
 export const RangeCalendar: React.FC<RangeCalendarProps> = ({
   timeFormat = "h:mm A",
   minTimeRange = [10, "minute"],
@@ -59,11 +68,6 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
   const [endDate, setEndDate] = useState<Moment>(
     moment.utc(currentDate).endOf("day"),
   );
-
-  const isBelowMinDateRange = (from: Moment, to: Moment) => {
-    const minutesInRange = Math.abs(from.diff(to, minTimeRange[1], true));
-    return minutesInRange < minTimeRange[0];
-  };
 
   const onDateRangeSelected = useCallback(
     ([selectedStartDate, selectedEndDate]: [Moment | null, Moment | null]) => {
@@ -86,12 +90,14 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
 
       // If date range is lower than allowed, update end date to be
       // equal startDate + min allowed date range
-      if (isBelowMinDateRange(selectedStartDate, selectedEndDate)) {
+      if (
+        isBelowMinDateRange(minTimeRange, selectedStartDate, selectedEndDate)
+      ) {
         setEndDate(moment.utc(selectedStartDate).add(...minTimeRange));
         onInvalidRangeSelect(minTimeRange);
       }
     },
-    [startDate, endDate, isBelowMinDateRange, setStartDate, setEndDate],
+    [minTimeRange, onInvalidRangeSelect],
   );
 
   const onTimeChange = useCallback(
@@ -113,7 +119,7 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
       // if `endTime` < `startTime` then startTime = endTime - 10min
       // Keep new value for changed time part and update opposite part
       // automatically to keep at least 10min range.
-      if (isBelowMinDateRange(nextTime, otherDate)) {
+      if (isBelowMinDateRange(minTimeRange, nextTime, otherDate)) {
         const date =
           rangePart === "from"
             ? nextTime.add(...minTimeRange)
@@ -123,10 +129,11 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
         onInvalidRangeSelect(minTimeRange);
       }
     },
-    [startDate, endDate, isBelowMinDateRange, setStartDate, setEndDate],
+    [endDate, startDate, minTimeRange, onInvalidRangeSelect],
   );
 
   const onSubmitClick = useCallback(() => onSubmit([startDate, endDate]), [
+    onSubmit,
     startDate,
     endDate,
   ]);
