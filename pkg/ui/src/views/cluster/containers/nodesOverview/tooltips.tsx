@@ -250,7 +250,6 @@ export const plainNodeTooltips: PlainTooltip[] = [
   StatusTooltip,
 ];
 
-// tslint:disable-next-line:variable-name
 export const NodeLocalityColumn: React.FC<{
   record: NodeStatusRow;
   visible?: boolean;

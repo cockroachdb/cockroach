@@ -16,7 +16,6 @@ import { ArrowDirection } from "src/views/shared/components/dropdown";
 import React from "react";
 import "./controls.styl";
 
-// tslint:disable-next-line: variable-name
 const ButtonGroup = Button.Group;
 
 export interface RangeSelectProps {

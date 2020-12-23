@@ -22,7 +22,6 @@ export interface ModalProps {
   visible: boolean;
 }
 
-// tslint:disable-next-line:variable-name
 export const Modal: React.FC<ModalProps> = (props) => {
   const {
     children,

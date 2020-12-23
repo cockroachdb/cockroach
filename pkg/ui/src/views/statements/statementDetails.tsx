@@ -974,7 +974,6 @@ const mapDispatchToProps = {
   refreshStatementDiagnosticsRequests,
 };
 
-// tslint:disable-next-line:variable-name
 const StatementDetailsConnected = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
 );

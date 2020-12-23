@@ -35,7 +35,6 @@ export interface ActivateDiagnosticsModalRef {
   showModalFor: (statement: string) => void;
 }
 
-// tslint:disable-next-line:variable-name
 const ActivateDiagnosticsModal = (
   props: ActivateDiagnosticsModalProps,
   ref: React.RefObject<ActivateDiagnosticsModalRef>,

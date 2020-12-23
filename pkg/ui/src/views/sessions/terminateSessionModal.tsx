@@ -27,7 +27,6 @@ export interface TerminateSessionModalRef {
   showModalFor: (req: ICancelSessionRequest) => void;
 }
 
-// tslint:disable-next-line:variable-name
 const TerminateSessionModal = (
   props: TerminateSessionModalProps,
   ref: React.RefObject<TerminateSessionModalRef>,

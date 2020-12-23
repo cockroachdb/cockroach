@@ -223,7 +223,6 @@ const localityTreeErrors = createSelector(
   (nodes, liveness) => [nodes.lastError, liveness.lastError],
 );
 
-// tslint:disable-next-line:variable-name
 const DataDistributionPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({

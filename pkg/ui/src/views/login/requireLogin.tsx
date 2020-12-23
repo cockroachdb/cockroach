@@ -51,7 +51,6 @@ class RequireLogin extends React.Component<
   }
 }
 
-// tslint:disable-next-line:variable-name
 const RequireLoginConnected = withRouter(
   connect((state: AdminUIState) => {
     return {

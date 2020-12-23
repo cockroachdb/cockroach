@@ -27,7 +27,6 @@ export interface TerminateQueryModalRef {
   showModalFor: (req: ICancelQueryRequest) => void;
 }
 
-// tslint:disable-next-line:variable-name
 const TerminateQueryModal = (
   props: TerminateQueryModalProps,
   ref: React.RefObject<TerminateQueryModalRef>,

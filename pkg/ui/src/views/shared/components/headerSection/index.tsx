@@ -24,7 +24,6 @@ export interface HeaderSectionProps {
   };
 }
 
-// tslint:disable-next-line:variable-name
 const HeaderSection: React.FC<HeaderSectionProps & RouteComponentProps> = (
   props,
 ) => {

@@ -187,7 +187,6 @@ export const selectLastReset = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
 const StatementsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({

@@ -122,9 +122,6 @@ export function uiDataReducer(
       return state;
     }
     case SAVE_ERROR: {
-      // TODO(tamird): https://github.com/palantir/tslint/issues/2551
-      //
-      // tslint:disable-next-line:no-use-before-declare
       const {
         key: saveErrorKey,
         error: saveError,
@@ -145,9 +142,6 @@ export function uiDataReducer(
       return state;
     }
     case LOAD_ERROR: {
-      // TODO(tamird): https://github.com/palantir/tslint/issues/2551
-      //
-      // tslint:disable-next-line:no-use-before-declare
       const {
         key: loadErrorKey,
         error: loadError,

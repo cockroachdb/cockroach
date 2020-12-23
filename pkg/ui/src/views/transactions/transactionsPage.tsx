@@ -48,7 +48,6 @@ const selectLastError = createSelector(
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
-// tslint:disable-next-line:variable-name
 const TransactionsPageConnected = withRouter(
   connect(
     (state: AdminUIState) => ({

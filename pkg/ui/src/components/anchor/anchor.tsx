@@ -23,8 +23,6 @@ export function Anchor({
   target = "_blank",
   className,
   children,
-  // conflicting rule with TS. TS1013: A rest parameter or binding pattern may not have a trailing comma
-  // tslint:disable-next-line:trailing-comma
   ...props
 }: AnchorProps) {
   return (

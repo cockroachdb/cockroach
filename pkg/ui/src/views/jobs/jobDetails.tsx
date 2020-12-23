@@ -135,7 +135,6 @@ const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => {
   const type = typeSetting.selector(state);
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobs = state.cachedData.jobs[key];
-  // tslint:disable-next-line: no-shadowed-variable
   const job = _.filter(
     jobs ? jobs.data.jobs : [],
     (job) => String(job.id) === getMatchParamByName(props.match, "id"),

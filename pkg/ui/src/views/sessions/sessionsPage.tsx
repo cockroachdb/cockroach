@@ -248,7 +248,6 @@ export const selectSessions = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
 const SessionsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({

@@ -33,7 +33,6 @@ const cx = classNames.bind(styles);
  * contents.
  */
 
-// tslint:disable-next-line: variable-name
 export const ToolTipWrapper = (props: ToolTipWrapperProps) => {
   const { text, children, placement = "bottom" } = props;
   const overlayClassName = cx("tooltip-wrapper", "tooltip__preset--white");

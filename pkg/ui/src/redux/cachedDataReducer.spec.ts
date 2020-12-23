@@ -163,13 +163,11 @@ describe("basic cachedDataReducer", function () {
 
   describe("multiple reducer objects", function () {
     it("should throw an error if the same actionNamespace is used twice", function () {
-      // tslint:disable-next-line:no-unused-expression
       new CachedDataReducer<Request, Response>(
         apiEndpointMock,
         "duplicatenamespace",
       );
       try {
-        // tslint:disable-next-line:no-unused-expression
         new CachedDataReducer<Request, Response>(
           apiEndpointMock,
           "duplicatenamespace",
