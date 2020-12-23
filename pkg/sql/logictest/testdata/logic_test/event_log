@@ -854,3 +854,58 @@ statement ok
 DROP DATABASE atest CASCADE;
  DROP USER v;
  DROP USER u
+
+# Regression for #57734. Ensure that type names are fully qualified in the
+# event log.
+subtest regression_57734
+
+statement ok
+CREATE TYPE eventlog AS ENUM ('event', 'log')
+
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+  FROM system.eventlog
+ WHERE "eventType" = 'create_type' AND info::JSONB->>'TypeName' LIKE '%eventlog'
+ORDER BY "timestamp", info
+----
+1  create_type  {"EventType": "create_type", "Statement": "CREATE TYPE defaultdb.public.eventlog AS ENUM ('event', 'log')", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+
+statement ok
+ALTER TYPE eventlog ADD VALUE 'test'
+
+statement ok
+ALTER TYPE eventlog RENAME VALUE 'test' TO 'testing'
+
+statement ok
+CREATE SCHEMA testing
+
+statement ok
+ALTER TYPE eventlog SET SCHEMA testing;
+ALTER TYPE testing.eventlog SET SCHEMA public
+
+statement ok
+ALTER TYPE eventlog RENAME TO eventlog_renamed
+
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+  FROM system.eventlog
+ WHERE ("eventType" = 'alter_type' OR "eventType" = 'rename_type') AND info::JSONB->>'TypeName' LIKE '%eventlog%'
+ORDER BY "timestamp", info
+----
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog ADD VALUE 'test'", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME VALUE 'test' TO 'testing'", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.public.eventlog SET SCHEMA testing", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+1  alter_type   {"EventType": "alter_type", "Statement": "ALTER TYPE defaultdb.testing.eventlog SET SCHEMA public", "TypeName": "defaultdb.testing.eventlog", "User": "root"}
+1  rename_type  {"EventType": "rename_type", "NewTypeName": "eventlog_renamed", "Statement": "ALTER TYPE defaultdb.public.eventlog RENAME TO eventlog_renamed", "TypeName": "defaultdb.public.eventlog", "User": "root"}
+
+statement ok
+DROP TYPE eventlog_renamed
+
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
+  FROM system.eventlog
+ WHERE "eventType" = 'drop_type' AND info::JSONB->>'TypeName' LIKE '%eventlog%'
+ORDER BY "timestamp", info
+----
+1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "TypeName": "defaultdb.public.eventlog_renamed", "User": "root"}
+1  drop_type  {"EventType": "drop_type", "Statement": "DROP TYPE defaultdb.public.eventlog_renamed", "TypeName": "defaultdb.public._eventlog_renamed", "User": "root"}
