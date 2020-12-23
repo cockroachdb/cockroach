@@ -235,7 +235,10 @@ func TestPebbleMapClose(t *testing.T) {
 
 	// Force it to a lower-level. This is done so as to avoid the automatic
 	// compactions out of L0 that would normally occur.
-	if err := e.db.Compact(diskMap.makeKey([]byte{'a'}), diskMap.makeKey([]byte{'z'})); err != nil {
+	startKey := diskMap.makeKey([]byte{'a'})
+	startKeyCopy := make([]byte, len(startKey))
+	copy(startKeyCopy, startKey)
+	if err := e.db.Compact(startKeyCopy, diskMap.makeKey([]byte{'z'})); err != nil {
 		t.Fatal(err)
 	}
 
