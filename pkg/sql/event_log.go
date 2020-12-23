@@ -33,6 +33,8 @@ const (
 	EventLogRenameDatabase EventLogType = "rename_database"
 	// EventLogAlterDatabaseOwner is recorded when a database's owner is changed.
 	EventLogAlterDatabaseOwner EventLogType = "alter_database_owner"
+	// EventLogAlterDatabaseOwner is recorded when a database's owner is changed.
+	EventLogAlterDatabaseAddRegion EventLogType = "alter_database_add_region"
 
 	// EventLogCreateSchema is recorded when a schema is created.
 	EventLogCreateSchema EventLogType = "create_schema"
