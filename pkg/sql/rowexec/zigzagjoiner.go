@@ -475,6 +475,7 @@ func (z *zigzagJoiner) setupInfo(
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		nil, /* systemColumns */
+		nil, /* virtualColumns */
 	)
 	if err != nil {
 		return err

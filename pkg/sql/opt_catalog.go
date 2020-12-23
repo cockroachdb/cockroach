@@ -747,12 +747,8 @@ func newOptTable(
 			// Add a virtual column that refers to the inverted index key.
 			virtualCol, virtualColOrd := newColumn()
 
-			// TODO(radu, mjibson): figure out what the type should be here. Geo is
-			// Int, but JSON isn't anything decodable (including Bytes). The disk
-			// fetecher will need to be taught about inverted indexes and dump the
-			// read data directly into a DBytes (i.e., don't call
-			// encoding.DecodeBytesAscending).
-			typ := ot.Column(invertedSourceColOrdinal).DatumType()
+			// All virtual inverted columns have type bytes.
+			typ := types.Bytes
 			virtualCol.InitVirtualInverted(
 				virtualColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
