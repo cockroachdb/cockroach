@@ -604,56 +604,56 @@ var logicTestConfigs = []testClusterConfig{
 		localities: map[int]roachpb.Locality{
 			1: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az1"},
+					{Key: "region", Value: "ca-central1"},
+					{Key: "availability-zone", Value: "az1"},
 				},
 			},
 			2: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az2"},
+					{Key: "region", Value: "ca-central1"},
+					{Key: "availability-zone", Value: "az2"},
 				},
 			},
 			3: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test1"},
-					{Key: "availability-zone", Value: "test1-az3"},
+					{Key: "region", Value: "ca-central1"},
+					{Key: "availability-zone", Value: "az3"},
 				},
 			},
 			4: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az1"},
+					{Key: "region", Value: "europe-west1"},
+					{Key: "availability-zone", Value: "az1"},
 				},
 			},
 			5: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az2"},
+					{Key: "region", Value: "europe-west1"},
+					{Key: "availability-zone", Value: "az2"},
 				},
 			},
 			6: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test2"},
-					{Key: "availability-zone", Value: "test2-az3"},
+					{Key: "region", Value: "europe-west1"},
+					{Key: "availability-zone", Value: "az3"},
 				},
 			},
 			7: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az1"},
+					{Key: "region", Value: "us-east1"},
+					{Key: "availability-zone", Value: "az1"},
 				},
 			},
 			8: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az2"},
+					{Key: "region", Value: "us-east1"},
+					{Key: "availability-zone", Value: "az2"},
 				},
 			},
 			9: {
 				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "test3"},
-					{Key: "availability-zone", Value: "test3-az3"},
+					{Key: "region", Value: "us-east1"},
+					{Key: "availability-zone", Value: "az3"},
 				},
 			},
 		},
