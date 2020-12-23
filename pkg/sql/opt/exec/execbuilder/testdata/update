@@ -663,3 +663,36 @@ vectorized: true
 # Reset for rest of test.
 statement ok
 SET enable_implicit_select_for_update = true
+
+statement ok
+CREATE TABLE computed (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT AS (c+1) STORED,
+  INDEX (b),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+# Verify that we don't do an index join to recalculate d (#42482).
+query T
+EXPLAIN UPDATE computed SET b=b*2 WHERE b BETWEEN 1 and 10
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: computed
+│ set: b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: computed@computed_b_idx
+          spans: [/1 - /10]
+          locking strength: for update

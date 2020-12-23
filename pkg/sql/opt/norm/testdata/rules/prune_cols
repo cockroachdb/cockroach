@@ -82,6 +82,20 @@ CREATE TABLE uniq (
 ----
 
 exec-ddl
+CREATE TABLE computed (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT AS (c+1) STORED,
+    "x:write-only" INT AS (c+10) STORED,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (d)
+)
+----
+
+exec-ddl
 CREATE TABLE virt (
   a INT PRIMARY KEY,
   b INT,
@@ -1965,6 +1979,84 @@ delete a
       ├── columns: k:6!null s:9
       ├── key: (6)
       └── fd: (6)-->(9)
+
+# We should not be producing a value for the computed column d, which is not
+# being changed. We should, however, produce a value for the write-only column
+# x even if the column it depends on hasn't changed.
+norm expect=PruneMutationInputCols
+UPDATE computed SET b = b*2 WHERE b = 1
+----
+update computed
+ ├── columns: <none>
+ ├── fetch columns: a:7 b:8 x:11
+ ├── update-mapping:
+ │    ├── b_new:13 => b:2
+ │    └── column15:15 => x:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: column15:15 b_new:13!null a:7!null b:8!null x:11
+      ├── immutable
+      ├── key: (7)
+      ├── fd: ()-->(8,13), (7)-->(11,15)
+      ├── select
+      │    ├── columns: a:7!null b:8!null c:9 x:11
+      │    ├── key: (7)
+      │    ├── fd: ()-->(8), (7)-->(9,11)
+      │    ├── scan computed
+      │    │    ├── columns: a:7!null b:8 c:9 x:11
+      │    │    ├── computed column expressions
+      │    │    │    └── d:10
+      │    │    │         └── c:9 + 1
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8,9,11)
+      │    └── filters
+      │         └── b:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      └── projections
+           ├── c:9 + 10 [as=column15:15, outer=(9), immutable]
+           └── b:8 * 2 [as=b_new:13, outer=(8), immutable]
+
+# We should produce a value for the computed column d.
+norm expect=PruneMutationInputCols
+UPDATE computed SET c = c*2 WHERE b = 1
+----
+update computed
+ ├── columns: <none>
+ ├── fetch columns: a:7 c:9 d:10 x:11
+ ├── update-mapping:
+ │    ├── c_new:13 => c:3
+ │    ├── column14:14 => d:4
+ │    └── column15:15 => x:5
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: column14:14 column15:15 a:7!null c:9 d:10 x:11 c_new:13
+      ├── immutable
+      ├── key: (7)
+      ├── fd: (7)-->(9-11), (9)-->(13), (13)-->(14,15)
+      ├── project
+      │    ├── columns: c_new:13 a:7!null c:9 d:10 x:11
+      │    ├── immutable
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(9-11), (9)-->(13)
+      │    ├── select
+      │    │    ├── columns: a:7!null b:8!null c:9 d:10 x:11
+      │    │    ├── key: (7)
+      │    │    ├── fd: ()-->(8), (7)-->(9-11)
+      │    │    ├── scan computed
+      │    │    │    ├── columns: a:7!null b:8 c:9 d:10 x:11
+      │    │    │    ├── computed column expressions
+      │    │    │    │    └── d:10
+      │    │    │    │         └── c:9 + 1
+      │    │    │    ├── key: (7)
+      │    │    │    └── fd: (7)-->(8-11)
+      │    │    └── filters
+      │    │         └── b:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+      │    └── projections
+      │         └── c:9 * 2 [as=c_new:13, outer=(9), immutable]
+      └── projections
+           ├── c_new:13 + 1 [as=column14:14, outer=(13), immutable]
+           └── c_new:13 + 10 [as=column15:15, outer=(13), immutable]
 
 # Do not prune columns that are required for evaluating partial index
 # predicates.
