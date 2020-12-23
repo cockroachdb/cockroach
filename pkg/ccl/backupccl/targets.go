@@ -701,7 +701,7 @@ func loadAllDescs(
 		ctx,
 		func(ctx context.Context, txn *kv.Txn) (err error) {
 			txn.SetFixedTimestamp(ctx, asOf)
-			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, codec, true /* validate */)
+			allDescs, err = catalogkv.GetAllDescriptors(ctx, txn, codec)
 			return err
 		}); err != nil {
 		return nil, err

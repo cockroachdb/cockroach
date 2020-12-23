@@ -657,6 +657,7 @@ type internalLookupCtx struct {
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.Immutable
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
+	schemaNames map[descpb.ID]string
 	schemaIDs   []descpb.ID
 	tbDescs     map[descpb.ID]*tabledesc.Immutable
 	tbIDs       []descpb.ID
@@ -743,6 +744,9 @@ func newInternalLookupCtx(
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	schemaNames := map[descpb.ID]string{
+		keys.PublicSchemaID: tree.PublicSchema,
+	}
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
@@ -773,6 +777,7 @@ func newInternalLookupCtx(
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the schema visible for iteration if the prefix was included.
 				schemaIDs = append(schemaIDs, desc.GetID())
+				schemaNames[desc.GetID()] = desc.GetName()
 			}
 		}
 	}
@@ -781,6 +786,7 @@ func newInternalLookupCtx(
 		dbNames:     dbNames,
 		dbDescs:     dbDescs,
 		schemaDescs: schemaDescs,
+		schemaNames: schemaNames,
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,

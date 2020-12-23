@@ -56,7 +56,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 func (n *reassignOwnedByNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.CreateReassignOwnedByCounter())
 
-	allDescs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn, true /* validate */)
+	allDescs, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
 	if err != nil {
 		return err
 	}
