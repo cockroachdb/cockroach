@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	fmt "fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -80,7 +81,9 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 
 // DecodeAndSetHistogram decodes a histogram marshaled as a Bytes datum and
 // fills in the HistogramColumnType and HistogramBuckets fields.
-func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
+func (js *JSONStatistic) DecodeAndSetHistogram(
+	ctx context.Context, semaCtx *tree.SemaContext, datum tree.Datum,
+) error {
 	if datum == tree.DNull {
 		return nil
 	}
@@ -94,6 +97,15 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	h := &HistogramData{}
 	if err := protoutil.Unmarshal([]byte(*datum.(*tree.DBytes)), h); err != nil {
 		return err
+	}
+	// If the serialized column type is user defined, then it needs to be
+	// hydrated before use.
+	if resolver := semaCtx.GetTypeResolver(); h.ColumnType.UserDefined() && resolver != nil {
+		typ, err := resolver.ResolveTypeByOID(ctx, h.ColumnType.Oid())
+		if err != nil {
+			return err
+		}
+		h.ColumnType = typ
 	}
 	return js.SetHistogram(h)
 }
