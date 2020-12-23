@@ -116,8 +116,9 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 	return nil
 }
 
-// SpanFormatFn is a function used to format spans for EXPLAIN. Only called when
-// there is an index constraint or an inverted constraint.
+// SpanFormatFn is a function used to format spans for EXPLAIN. Only called on
+// non-virtual tables, when there is an index constraint or an inverted
+// constraint.
 type SpanFormatFn func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string
 
 // omitTrivialProjections returns the given node and its result columns and
@@ -723,8 +724,8 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return "FULL SCAN"
 	}
 
-	// In verbose mode show the physical spans.
-	if e.ob.flags.Verbose {
+	// In verbose mode show the physical spans, unless the table is virtual.
+	if e.ob.flags.Verbose && !table.IsVirtualTable() {
 		return e.spanFormatFn(table, index, scanParams)
 	}
 

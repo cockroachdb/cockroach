@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -150,17 +149,29 @@ func emitExplain(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
-) error {
-	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
-		var tabDesc *tabledesc.Immutable
-		var idxDesc *descpb.IndexDescriptor
-		if table.IsVirtualTable() {
-			tabDesc = table.(*optVirtualTable).desc
-			idxDesc = index.(*optVirtualIndex).desc
-		} else {
-			tabDesc = table.(*optTable).desc
-			idxDesc = index.(*optIndex).desc
+) (err error) {
+	// Guard against bugs in the explain code.
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal and runtime errors without
+			// having to add error checks everywhere throughout the code. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
 		}
+	}()
+	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
+		if table.IsVirtualTable() {
+			return "<virtual table spans>"
+		}
+		tabDesc := table.(*optTable).desc
+		idxDesc := index.(*optIndex).desc
 		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idxDesc, scanParams)
 		if err != nil {
 			return err.Error()
