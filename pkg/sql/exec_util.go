@@ -1057,6 +1057,20 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 				switch {
 				case val.IsNil():
 					d = tree.DNull
+				case val.Type().Elem().Kind() == reflect.String:
+					a := tree.NewDArray(types.String)
+					for i := 0; i < val.Len(); i++ {
+						if !val.Index(i).IsValid() {
+							if err := a.Append(tree.DNull); err != nil {
+								return nil, err
+							}
+						} else {
+							if err := a.Append(tree.NewDString(val.Index(i).String())); err != nil {
+								return nil, err
+							}
+						}
+					}
+					d = a
 				case val.Type().Elem().Kind() == reflect.Uint8:
 					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}
