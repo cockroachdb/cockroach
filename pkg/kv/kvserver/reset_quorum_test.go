@@ -49,9 +49,11 @@ import (
 // 5. A meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 58165)
-	ctx := context.Background()
 
+	skip.UnderStress(t, "too many nodes")
+	skip.UnderRace(t, "takes >1m under race")
+
+	ctx := context.Background()
 	livenessDuration := 3000 * time.Millisecond
 
 	// This function sets up a test cluster with 4 nodes with a scratch
@@ -228,40 +230,6 @@ func TestResetQuorum(t *testing.T) {
 		verifyResult(t, srv, k, store, id)
 	})
 
-	t.Run("with-replicas-elsewhere", func(t *testing.T) {
-		tc, k, id := setup(t)
-		defer tc.Stopper().Stop(ctx)
-		n1, n2, n3 := 0, 1, 2
-		srv := tc.Server(n1)
-		tc.StopServer(n2)
-		tc.StopServer(n3)
-		// Wait for n2 and n3 liveness to expire.
-		time.Sleep(livenessDuration)
-
-		checkUnavailable(srv, k)
-
-		// Get the store on the designated survivor n1.
-		var store *kvserver.Store
-		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-			store = inner
-			return nil
-		}))
-		if store == nil {
-			t.Fatal("no store found on n1")
-		}
-
-		// Call ResetQuorum to reset quorum on the unhealthy range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(id),
-			},
-		)
-		require.NoError(t, err)
-
-		verifyResult(t, srv, k, store, id)
-	})
-
 	t.Run("without-quorum-loss", func(t *testing.T) {
 		tc, _, id := setup(t)
 		defer tc.Stopper().Stop(ctx)
@@ -291,5 +259,4 @@ func TestResetQuorum(t *testing.T) {
 		)
 		testutils.IsError(err, "targeted range to recover is a meta1 or meta2 range.")
 	})
-
 }
