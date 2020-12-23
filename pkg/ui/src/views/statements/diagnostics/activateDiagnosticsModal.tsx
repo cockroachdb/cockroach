@@ -47,7 +47,7 @@ const ActivateDiagnosticsModal = (
     activate(statement);
     trackActivateDiagnostics(statement);
     setVisible(false);
-  }, [statement]);
+  }, [activate, statement]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
 

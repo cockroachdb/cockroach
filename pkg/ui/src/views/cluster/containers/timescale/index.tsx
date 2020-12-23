@@ -142,6 +142,9 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   });
   useEffect(() => {
     getQueryParams();
+    // We want this to just run once like a componentDidMount function but we
+    // still need an empty deps array, can't remove it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [isOpened, setIsOpened] = useState(false);
