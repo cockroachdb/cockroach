@@ -33,19 +33,20 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
         <span
           className="breadcrumbs__icon"
           dangerouslySetInnerHTML={trustIcon(mapPinIcon)}
-          />
+        />
         {intersperse(
           paths.map((path, idx) => (
             <span key={idx}>
-              {idx === paths.length - 1
-                ? getLocalityLabel(path)
-                : <Link
+              {idx === paths.length - 1 ? (
+                getLocalityLabel(path)
+              ) : (
+                <Link
                   to={CLUSTERVIZ_ROOT + generateLocalityRoute(path)}
                   className="breadcrumbs__link"
                 >
-                    {getLocalityLabel(path)}
-                  </Link>
-              }
+                  {getLocalityLabel(path)}
+                </Link>
+              )}
             </span>
           )),
           <span className="breadcrumbs__separator"> &gt; </span>,

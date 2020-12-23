@@ -28,7 +28,10 @@ interface PasswordInputState {
   showPassword?: boolean;
 }
 
-export class PasswordInput extends React.Component<PasswordInputProps, PasswordInputState> {
+export class PasswordInput extends React.Component<
+  PasswordInputProps,
+  PasswordInputState
+> {
   state = {
     showPassword: false,
   };
@@ -36,33 +39,38 @@ export class PasswordInput extends React.Component<PasswordInputProps, PasswordI
   handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     this.props.onChange(value);
-  }
+  };
 
   togglePassword = () => {
     this.setState({
       showPassword: !this.state.showPassword,
     });
-  }
+  };
 
   renderPasswordIcon = (showPassword: boolean) => (
-    <Button tabIndex={-1} type="flat" onClick={this.togglePassword} className="crl-button__show-password">
+    <Button
+      tabIndex={-1}
+      type="flat"
+      onClick={this.togglePassword}
+      className="crl-button__show-password"
+    >
       <img src={showPassword ? EyeOff : Eye} alt="Toggle Password" />
     </Button>
-  )
+  );
 
   render() {
     const { placeholder, className, name, label, value } = this.props;
     const { showPassword } = this.state;
     const inputType = showPassword ? "text" : "password";
 
-    const classes = cn(
-      className,
-      "crl-input",
-      "crl-input__password",
-    );
+    const classes = cn(className, "crl-input", "crl-input__password");
     return (
       <div className="crl-input__wrapper">
-        {label && <label htmlFor={name} className="crl-input__label">{label}</label>}
+        {label && (
+          <label htmlFor={name} className="crl-input__label">
+            {label}
+          </label>
+        )}
         <input
           name={name}
           type={inputType}

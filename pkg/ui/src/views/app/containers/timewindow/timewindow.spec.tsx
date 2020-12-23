@@ -19,21 +19,26 @@ import "src/enzymeInit";
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
 import * as timewindow from "src/redux/timewindow";
 
-describe("<TimeWindowManager>", function() {
+describe("<TimeWindowManager>", function () {
   let spy: sinon.SinonSpy;
   let state: timewindow.TimeWindowState;
   const now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
 
-  beforeEach(function() {
+  beforeEach(function () {
     spy = sinon.spy();
     state = new timewindow.TimeWindowState();
   });
 
-  const getManager = () => shallow(<TimeWindowManager timeWindow={_.clone(state)}
-                                                    setTimeWindow={spy}
-                                                    now={now} />);
+  const getManager = () =>
+    shallow(
+      <TimeWindowManager
+        timeWindow={_.clone(state)}
+        setTimeWindow={spy}
+        now={now}
+      />,
+    );
 
-  it("resets time window immediately it is empty", function() {
+  it("resets time window immediately it is empty", function () {
     getManager();
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.firstCall.args[0], {
@@ -42,7 +47,7 @@ describe("<TimeWindowManager>", function() {
     });
   });
 
-  it("resets time window immediately if expired", function() {
+  it("resets time window immediately if expired", function () {
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       end: now().subtract(state.scale.windowValid).subtract(1),
@@ -56,7 +61,7 @@ describe("<TimeWindowManager>", function() {
     });
   });
 
-  it("resets time window immediately if scale has changed", function() {
+  it("resets time window immediately if scale has changed", function () {
     // valid window.
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),
@@ -72,7 +77,7 @@ describe("<TimeWindowManager>", function() {
     });
   });
 
-  it("resets time window later if current window is valid", function() {
+  it("resets time window later if current window is valid", function () {
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
@@ -84,22 +89,20 @@ describe("<TimeWindowManager>", function() {
 
     // Wait 11 milliseconds, then verify that window was updated.
     return new Promise<void>((resolve, _reject) => {
-      setTimeout(
-        () => {
-          assert.isTrue(spy.calledOnce);
-          assert.deepEqual(spy.firstCall.args[0], {
-            start: now().subtract(state.scale.windowSize),
-            end: now(),
-          });
-          resolve();
-        },
-        6);
+      setTimeout(() => {
+        assert.isTrue(spy.calledOnce);
+        assert.deepEqual(spy.firstCall.args[0], {
+          start: now().subtract(state.scale.windowSize),
+          end: now(),
+        });
+        resolve();
+      }, 6);
     });
   });
 
   // TODO (maxlang): Fix this test to actually change the state to catch the
   // issue that caused #7590. Tracked in #8595.
-  it("has only a single timeout at a time.", function() {
+  it("has only a single timeout at a time.", function () {
     state.currentWindow = {
       start: now().subtract(state.scale.windowSize),
       // 5 milliseconds until expiration.
@@ -122,17 +125,14 @@ describe("<TimeWindowManager>", function() {
 
     // Wait 11 milliseconds, then verify that window was updated a single time.
     return new Promise<void>((resolve, _reject) => {
-      setTimeout(
-        () => {
-          assert.isTrue(spy.calledOnce);
-          assert.deepEqual(spy.firstCall.args[0], {
-            start: now().subtract(state.scale.windowSize),
-            end: now(),
-          });
-          resolve();
-        },
-        11);
+      setTimeout(() => {
+        assert.isTrue(spy.calledOnce);
+        assert.deepEqual(spy.firstCall.args[0], {
+          start: now().subtract(state.scale.windowSize),
+          end: now(),
+        });
+        resolve();
+      }, 11);
     });
-
   });
 });

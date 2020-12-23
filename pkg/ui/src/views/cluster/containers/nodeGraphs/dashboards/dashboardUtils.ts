@@ -52,6 +52,9 @@ export function nodeDisplayName(nodesSummary: NodesSummary, nid: string) {
   return nodesSummary.nodeDisplayNameByID[ns.desc.node_id];
 }
 
-export function storeIDsForNode(nodesSummary: NodesSummary, nid: string): string[] {
+export function storeIDsForNode(
+  nodesSummary: NodesSummary,
+  nid: string,
+): string[] {
   return nodesSummary.storeIDsByNodeID[nid] || [];
 }

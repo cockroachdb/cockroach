@@ -16,7 +16,13 @@ interface IconProps {
 }
 
 export const DatabaseIcon = ({ fill, size, ...props }: IconProps) => (
-  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" {...props}>
+  <svg
+    width={size}
+    height={size}
+    viewBox={`0 0 ${size} ${size}`}
+    fill="none"
+    {...props}
+  >
     <path
       fillRule="evenodd"
       clipRule="evenodd"

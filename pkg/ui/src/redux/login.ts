@@ -130,12 +130,14 @@ function shouldRedirect(location: Location) {
 }
 
 export function getLoginPage(location: Location) {
-  const query = !shouldRedirect(location) ? undefined : {
-    redirectTo: createPath({
-      pathname: location.pathname,
-      search: location.search,
-    }),
-  };
+  const query = !shouldRedirect(location)
+    ? undefined
+    : {
+        redirectTo: createPath({
+          pathname: location.pathname,
+          search: location.search,
+        }),
+      };
   return {
     pathname: LOGIN_PAGE,
     query: query,
@@ -204,7 +206,10 @@ const logoutBeginAction = {
   type: LOGOUT_BEGIN,
 };
 
-export function doLogin(username: string, password: string): ThunkAction<Promise<void>, AdminUIState, void> {
+export function doLogin(
+  username: string,
+  password: string,
+): ThunkAction<Promise<void>, AdminUIState, void> {
   return (dispatch) => {
     dispatch(loginBeginAction);
 
@@ -212,15 +217,14 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
       username,
       password,
     });
-    return userLogin(loginReq)
-      .then(
-        () => {
-          dispatch(loginSuccess(username));
-        },
-        (err) => {
-          dispatch(loginFailure(err));
-        },
-      );
+    return userLogin(loginReq).then(
+      () => {
+        dispatch(loginSuccess(username));
+      },
+      (err) => {
+        dispatch(loginFailure(err));
+      },
+    );
   };
 }
 
@@ -232,21 +236,23 @@ export function doLogout(): ThunkAction<Promise<void>, AdminUIState, void> {
     // If there was a successful log out but the network dropped the response somehow,
     // you'll get the login page on reload. If The logout actually didn't work, you'll
     // be reloaded to the same page and can try to log out again.
-    return userLogout()
-      .then(
-        () => {
-          document.location.reload();
-        },
-        () => {
-          document.location.reload();
-        },
-      );
+    return userLogout().then(
+      () => {
+        document.location.reload();
+      },
+      () => {
+        document.location.reload();
+      },
+    );
   };
 }
 
 // Reducer
 
-export function loginReducer(state = emptyLoginState, action: Action): LoginAPIState {
+export function loginReducer(
+  state = emptyLoginState,
+  action: Action,
+): LoginAPIState {
   switch (action.type) {
     case LOGIN_BEGIN:
       return {

@@ -112,7 +112,9 @@ describe("<TimeScaleDropdown>", function () {
     it("returns custom Title with Time part only for current day", () => {
       const currentScale = { ...state.currentScale, key: "Custom" };
       const title = getTimeRangeTitle(state.currentWindow, currentScale);
-      const timeStart = moment.utc(state.currentWindow.start).format(timeFormat);
+      const timeStart = moment
+        .utc(state.currentWindow.start)
+        .format(timeFormat);
       const timeEnd = moment.utc(state.currentWindow.end).format(timeFormat);
       const wrapper = makeTimeScaleDropdown({ ...state, currentScale });
       assert.equal(

@@ -15,7 +15,10 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
+import {
+  certificatesRequestKey,
+  refreshCertificates,
+} from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
@@ -71,8 +74,12 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     }
     return (
       <tr className="certs-table__row">
-        <th className="certs-table__cell certs-table__cell--header">{header}</th>
-        <td className="certs-table__cell" title={realTitle}>{value}</td>
+        <th className="certs-table__cell certs-table__cell--header">
+          {header}
+        </th>
+        <td className="certs-table__cell" title={realTitle}>
+          {value}
+        </td>
       </tr>
     );
   }
@@ -80,19 +87,15 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
   renderMultilineRow(header: string, values: string[]) {
     return (
       <tr className="certs-table__row">
-        <th className="certs-table__cell certs-table__cell--header">{header}</th>
+        <th className="certs-table__cell certs-table__cell--header">
+          {header}
+        </th>
         <td className="certs-table__cell" title={_.join(values, "\n")}>
           <ul className="certs-entries-list">
-            {
-              _.chain(values)
-                .sort()
-                .map((value, key) => (
-                  <li key={key}>
-                    {value}
-                  </li>
-                ))
-                .value()
-            }
+            {_.chain(values)
+              .sort()
+              .map((value, key) => <li key={key}>{value}</li>)
+              .value()}
           </ul>
         </td>
       </tr>
@@ -105,7 +108,10 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return this.renderSimpleRow(header, timestamp, title);
   }
 
-  renderFields(fields: protos.cockroach.server.serverpb.CertificateDetails.IFields, id: number) {
+  renderFields(
+    fields: protos.cockroach.server.serverpb.CertificateDetails.IFields,
+    id: number,
+  ) {
     return [
       this.renderSimpleRow("Cert ID", id.toString()),
       this.renderSimpleRow("Issuer", fields.issuer),
@@ -120,25 +126,34 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     ];
   }
 
-  renderCert(cert: protos.cockroach.server.serverpb.ICertificateDetails, key: number) {
+  renderCert(
+    cert: protos.cockroach.server.serverpb.ICertificateDetails,
+    key: number,
+  ) {
     let certType: string;
     switch (cert.type) {
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CA:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .CA:
         certType = "Certificate Authority";
         break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.NODE:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .NODE:
         certType = "Node Certificate";
         break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT_CA:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .CLIENT_CA:
         certType = "Client Certificate Authority";
         break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .CLIENT:
         certType = "Client Certificate";
         break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI_CA:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .UI_CA:
         certType = "UI Certificate Authority";
         break;
-      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI:
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType
+        .UI:
         certType = "UI Certificate";
         break;
       default:
@@ -148,15 +163,13 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
       <table key={key} className="certs-table">
         <tbody>
           {this.renderSimpleRow("Type", certType)}
-          {
-            _.map(cert.fields, (fields, id) => {
-              const result = this.renderFields(fields, id);
-              if (id > 0) {
-                result.unshift(emptyRow);
-              }
-              return result;
-            })
-          }
+          {_.map(cert.fields, (fields, id) => {
+            const result = this.renderFields(fields, id);
+            if (id > 0) {
+              result.unshift(emptyRow);
+            }
+            return result;
+          })}
         </tbody>
       </table>
     );
@@ -167,7 +180,11 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     const nodeId = getMatchParamByName(match, nodeIDAttr);
 
     if (_.isEmpty(certificates.certificates)) {
-      return <h2 className="base-heading">No certificates were found on node {nodeId}.</h2>;
+      return (
+        <h2 className="base-heading">
+          No certificates were found on node {nodeId}.
+        </h2>
+      );
     }
 
     let header: string = null;
@@ -180,14 +197,12 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return (
       <Fragment>
         <h2 className="base-heading">{header} certificates</h2>
-        {
-          _.map(certificates.certificates, (cert, key) => (
-            this.renderCert(cert, key)
-          ))
-        }
+        {_.map(certificates.certificates, (cert, key) =>
+          this.renderCert(cert, key),
+        )}
       </Fragment>
     );
-  }
+  };
 
   render() {
     return (
@@ -210,8 +225,12 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
 const mapStateToProps = (state: AdminUIState, props: CertificatesProps) => {
   const nodeIDKey = certificatesRequestKey(certificatesRequestFromProps(props));
   return {
-    certificates: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].data,
-    lastError: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].lastError,
+    certificates:
+      state.cachedData.certificates[nodeIDKey] &&
+      state.cachedData.certificates[nodeIDKey].data,
+    lastError:
+      state.cachedData.certificates[nodeIDKey] &&
+      state.cachedData.certificates[nodeIDKey].lastError,
   };
 };
 
@@ -219,4 +238,6 @@ const mapDispatchToProps = {
   refreshCertificates,
 };
 
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Certificates));
+export default withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(Certificates),
+);

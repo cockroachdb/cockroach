@@ -32,17 +32,24 @@ interface BarChartOptions {
   };
 }
 
-export const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
-const clamp = (i: number) => i < 0 ? 0 : i;
+export const longToInt = (d: number | Long) =>
+  Long.fromValue(FixLong(d)).toInt();
+const clamp = (i: number) => (i < 0 ? 0 : i);
 
 const formatTwoPlaces = d3.format(".2f");
 
 const countBars = [
-  bar("count-first-try", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
+  bar("count-first-try", (d: StatementStatistics) =>
+    longToInt(d.stats.first_attempt_count),
+  ),
 ];
 
 const retryBars = [
-  bar("count-retry", (d: StatementStatistics) => longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count)),
+  bar(
+    "count-retry",
+    (d: StatementStatistics) =>
+      longToInt(d.stats.count) - longToInt(d.stats.first_attempt_count),
+  ),
 ];
 
 const rowsBars = [
@@ -53,33 +60,56 @@ const latencyBars = [
   bar("bar-chart__parse", (d: StatementStatistics) => d.stats.parse_lat.mean),
   bar("bar-chart__plan", (d: StatementStatistics) => d.stats.plan_lat.mean),
   bar("bar-chart__run", (d: StatementStatistics) => d.stats.run_lat.mean),
-  bar("bar-chart__overhead", (d: StatementStatistics) => d.stats.overhead_lat.mean),
+  bar(
+    "bar-chart__overhead",
+    (d: StatementStatistics) => d.stats.overhead_lat.mean,
+  ),
 ];
 
-const latencyStdDev = bar(cx("bar-chart__overall-dev"), (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count));
-const rowsStdDev = bar(cx("rows-dev"), (d: StatementStatistics) => stdDevLong(d.stats.num_rows, d.stats.count));
+const latencyStdDev = bar(
+  cx("bar-chart__overall-dev"),
+  (d: StatementStatistics) => stdDevLong(d.stats.service_lat, d.stats.count),
+);
+const rowsStdDev = bar(cx("rows-dev"), (d: StatementStatistics) =>
+  stdDevLong(d.stats.num_rows, d.stats.count),
+);
 
 function bar(name: string, value: (d: StatementStatistics) => number) {
   return { name, value };
 }
 
-function renderNumericStatLegend(count: number | Long, stat: number, sd: number, formatter: (d: number) => string) {
+function renderNumericStatLegend(
+  count: number | Long,
+  stat: number,
+  sd: number,
+  formatter: (d: number) => string,
+) {
   return (
     <table className={cx("numeric-stat-legend")}>
       <tbody>
         <tr>
           <th>
-            <div className={cx("numeric-stat-legend__bar", "numeric-stat-legend__bar--mean")} />
+            <div
+              className={cx(
+                "numeric-stat-legend__bar",
+                "numeric-stat-legend__bar--mean",
+              )}
+            />
             Mean
           </th>
-          <td>{ formatter(stat) }</td>
+          <td>{formatter(stat)}</td>
         </tr>
         <tr>
           <th>
-            <div className={cx("numeric-stat-legend__bar", "numeric-stat-legend__bar--dev")} />
+            <div
+              className={cx(
+                "numeric-stat-legend__bar",
+                "numeric-stat-legend__bar--dev",
+              )}
+            />
             Standard Deviation
           </th>
-          <td>{ longToInt(count) < 2 ? "-" : sd ? formatter(sd) : "0" }</td>
+          <td>{longToInt(count) < 2 ? "-" : sd ? formatter(sd) : "0"}</td>
         </tr>
       </tbody>
     </table>
@@ -88,9 +118,9 @@ function renderNumericStatLegend(count: number | Long, stat: number, sd: number,
 
 const makeBarChart = (
   type: "grey" | "red",
-  accessors: { name: string, value: (d: StatementStatistics) => number }[],
+  accessors: { name: string; value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
-  stdDevAccessor?: { name: string, value: (d: StatementStatistics) => number },
+  stdDevAccessor?: { name: string; value: (d: StatementStatistics) => number },
   legendFormatter?: (d: number) => string,
 ) => {
   if (!legendFormatter) {
@@ -98,14 +128,17 @@ const makeBarChart = (
   }
 
   return (rows: StatementStatistics[] = [], options: BarChartOptions = {}) => {
-    const getTotal = (d: StatementStatistics) => _.sum(_.map(accessors, ({ value }) => value(d)));
-    const getTotalWithStdDev = (d: StatementStatistics) => getTotal(d) + stdDevAccessor.value(d);
+    const getTotal = (d: StatementStatistics) =>
+      _.sum(_.map(accessors, ({ value }) => value(d)));
+    const getTotalWithStdDev = (d: StatementStatistics) =>
+      getTotal(d) + stdDevAccessor.value(d);
 
-    const extent = d3.extent(rows, stdDevAccessor ? getTotalWithStdDev : getTotal);
+    const extent = d3.extent(
+      rows,
+      stdDevAccessor ? getTotalWithStdDev : getTotal,
+    );
 
-    const scale = d3.scale.linear()
-      .domain([0, extent[1]])
-      .range([0, 100]);
+    const scale = d3.scale.linear().domain([0, extent[1]]).range([0, 100]);
 
     return (d: StatementStatistics) => {
       if (rows.length === 0) {
@@ -118,7 +151,7 @@ const makeBarChart = (
         sum += v;
         return (
           <div
-            key={ name + v }
+            key={name + v}
             className={cx(name, "bar-chart__bar")}
             style={{ width: scale(v) + "%" }}
           />
@@ -140,12 +173,7 @@ const makeBarChart = (
           width: scale(width) + "%",
           left: scale(left) + "%",
         };
-        return (
-          <div
-            className={cn}
-            style={style}
-          />
-        );
+        return <div className={cn} style={style} />;
       };
 
       const className = cx("bar-chart", `bar-chart-${type}`, {
@@ -154,18 +182,25 @@ const makeBarChart = (
       });
       if (stdDevAccessor) {
         const sd = stdDevAccessor.value(d);
-        const titleText = renderNumericStatLegend(rows.length, sum, sd, legendFormatter);
+        const titleText = renderNumericStatLegend(
+          rows.length,
+          sum,
+          sd,
+          legendFormatter,
+        );
         return (
-          <div className={ className}>
-            <ToolTipWrapper text={ titleText } short>
-              <div className={cx("bar-chart__label", options?.classes?.label)}>{ formatter(getTotal(d)) }</div>
+          <div className={className}>
+            <ToolTipWrapper text={titleText} short>
+              <div className={cx("bar-chart__label", options?.classes?.label)}>
+                {formatter(getTotal(d))}
+              </div>
               <div className={cx("bar-chart__multiplebars")}>
                 <div
                   key="bar-chart__parse"
                   className={cx("bar-chart__parse", "bar-chart__bar")}
                   style={{ width: scale(getTotal(d)) + "%" }}
                 />
-                { renderStdDev() }
+                {renderStdDev()}
               </div>
             </ToolTipWrapper>
           </div>
@@ -173,7 +208,9 @@ const makeBarChart = (
       } else {
         return (
           <div className={className}>
-            <div className={cx("bar-chart__label", options?.classes?.label)}>{ formatter(getTotal(d)) }</div>
+            <div className={cx("bar-chart__label", options?.classes?.label)}>
+              {formatter(getTotal(d))}
+            </div>
             <div
               key="bar-chart__parse"
               className={cx("bar-chart__parse", "bar-chart__bar")}
@@ -186,7 +223,7 @@ const makeBarChart = (
   };
 };
 
-const SCALE_FACTORS: { factor: number, key: string }[] = [
+const SCALE_FACTORS: { factor: number; key: string }[] = [
   { factor: 1000000000, key: "b" },
   { factor: 1000000, key: "m" },
   { factor: 1000, key: "k" },
@@ -205,16 +242,28 @@ export function approximify(value: number) {
 
 export const countBarChart = makeBarChart("grey", countBars, approximify);
 export const retryBarChart = makeBarChart("red", retryBars, approximify);
-export const rowsBarChart = makeBarChart("grey", rowsBars, approximify, rowsStdDev, formatTwoPlaces);
-export const latencyBarChart = makeBarChart("grey", latencyBars, v => Duration(v * 1e9), latencyStdDev);
+export const rowsBarChart = makeBarChart(
+  "grey",
+  rowsBars,
+  approximify,
+  rowsStdDev,
+  formatTwoPlaces,
+);
+export const latencyBarChart = makeBarChart(
+  "grey",
+  latencyBars,
+  (v) => Duration(v * 1e9),
+  latencyStdDev,
+);
 
 export function rowsBreakdown(s: StatementStatistics) {
   const mean = s.stats.num_rows.mean;
   const sd = stdDevLong(s.stats.num_rows, s.stats.count);
 
-  const scale = d3.scale.linear()
-      .domain([0, mean + sd])
-      .range([0, 100]);
+  const scale = d3.scale
+    .linear()
+    .domain([0, mean + sd])
+    .range([0, 100]);
 
   return {
     rowsBarChart(meanRow?: boolean) {
@@ -228,45 +277,53 @@ export function rowsBreakdown(s: StatementStatistics) {
   };
 }
 
-export function genericBarChart(s: NumericStat, count: number | Long, format?: (v: number) => string) {
-    if (!s) {
-      return () => (
-        <div/>
-      );
-    }
-    const mean = s.mean;
-    const sd = stdDevLong(s, count);
+export function genericBarChart(
+  s: NumericStat,
+  count: number | Long,
+  format?: (v: number) => string,
+) {
+  if (!s) {
+    return () => <div />;
+  }
+  const mean = s.mean;
+  const sd = stdDevLong(s, count);
 
-    const max = mean + sd;
-    const scale = d3.scale.linear()
-      .domain([0, max])
-      .range([0, 100]);
-    if (!format) {
-      format = d3.format(".2f");
-    }
-    return function MakeGenericBarChart() {
-      const width = scale(clamp(mean - sd));
-      const right = scale(mean);
-      const spread = scale(sd + (sd > mean ? mean : sd));
-      const title = renderNumericStatLegend(count, mean, sd, format);
-      return (
-        <ToolTipWrapper text={ title } short>
-          <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ format(mean) }</div>
-            <div className={cx("bar-chart__multiplebars")}>
-              <div
-                className={cx("bar-chart__parse", "bar-chart__bar")}
-                style={{ width: right + "%", position: "absolute", left: 0 }}
-              />
-              <div
-                className={cx("bar-chart__parse-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + "%" }}
-              />
-            </div>
+  const max = mean + sd;
+  const scale = d3.scale.linear().domain([0, max]).range([0, 100]);
+  if (!format) {
+    format = d3.format(".2f");
+  }
+  return function MakeGenericBarChart() {
+    const width = scale(clamp(mean - sd));
+    const right = scale(mean);
+    const spread = scale(sd + (sd > mean ? mean : sd));
+    const title = renderNumericStatLegend(count, mean, sd, format);
+    return (
+      <ToolTipWrapper text={title} short>
+        <div className={cx("bar-chart", "bar-chart--breakdown")}>
+          <div className={cx("bar-chart__label")}>{format(mean)}</div>
+          <div className={cx("bar-chart__multiplebars")}>
+            <div
+              className={cx("bar-chart__parse", "bar-chart__bar")}
+              style={{ width: right + "%", position: "absolute", left: 0 }}
+            />
+            <div
+              className={cx(
+                "bar-chart__parse-dev",
+                "bar-chart__bar",
+                "bar-chart__bar--dev",
+              )}
+              style={{
+                width: spread + "%",
+                position: "absolute",
+                left: width + "%",
+              }}
+            />
           </div>
-        </ToolTipWrapper>
-      );
-    };
+        </div>
+      </ToolTipWrapper>
+    );
+  };
 }
 
 export function latencyBreakdown(s: StatementStatistics) {
@@ -295,28 +352,43 @@ export function latencyBreakdown(s: StatementStatistics) {
 
   const format = (v: number) => Duration(v * 1e9);
 
-  const scale = d3.scale.linear()
-    .domain([0, max])
-    .range([0, 100]);
+  const scale = d3.scale.linear().domain([0, max]).range([0, 100]);
 
   return {
     parseBarChart() {
       const width = scale(clamp(parseMean - parseSd));
       const right = scale(parseMean);
-      const spread = scale(parseSd + (parseSd > parseMean ? parseMean : parseSd));
-      const title = renderNumericStatLegend(s.stats.count, parseMean, parseSd, format);
+      const spread = scale(
+        parseSd + (parseSd > parseMean ? parseMean : parseSd),
+      );
+      const title = renderNumericStatLegend(
+        s.stats.count,
+        parseMean,
+        parseSd,
+        format,
+      );
       return (
-        <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={title} short>
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ Duration(parseMean * 1e9) }</div>
+            <div className={cx("bar-chart__label")}>
+              {Duration(parseMean * 1e9)}
+            </div>
             <div className={cx("bar-chart__multiplebars")}>
               <div
                 className={cx("bar-chart__parse", "bar-chart__bar")}
                 style={{ width: right + "%", position: "absolute", left: 0 }}
               />
               <div
-                className={cx("bar-chart__parse-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+                className={cx(
+                  "bar-chart__parse-dev",
+                  "bar-chart__bar",
+                  "bar-chart__bar--dev",
+                )}
+                style={{
+                  width: spread + "%",
+                  position: "absolute",
+                  left: width + "%",
+                }}
               />
             </div>
           </div>
@@ -329,19 +401,38 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(planMean - planSd));
       const right = scale(planMean);
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
-      const title = renderNumericStatLegend(s.stats.count, planMean, planSd, format);
+      const title = renderNumericStatLegend(
+        s.stats.count,
+        planMean,
+        planSd,
+        format,
+      );
       return (
-        <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={title} short>
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ Duration(planMean * 1e9) }</div>
+            <div className={cx("bar-chart__label")}>
+              {Duration(planMean * 1e9)}
+            </div>
             <div className={cx("bar-chart__multiplebars")}>
               <div
                 className={cx("bar-chart__plan", "bar-chart__bar")}
-                style={{ width: right + "%", position: "absolute", left: left + "%" }}
+                style={{
+                  width: right + "%",
+                  position: "absolute",
+                  left: left + "%",
+                }}
               />
               <div
-                className={cx("bar-chart__plan-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+                className={cx(
+                  "bar-chart__plan-dev",
+                  "bar-chart__bar",
+                  "bar-chart__bar--dev",
+                )}
+                style={{
+                  width: spread + "%",
+                  position: "absolute",
+                  left: width + left + "%",
+                }}
               />
             </div>
           </div>
@@ -354,19 +445,38 @@ export function latencyBreakdown(s: StatementStatistics) {
       const width = scale(clamp(runMean - runSd));
       const right = scale(runMean);
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
-      const title = renderNumericStatLegend(s.stats.count, runMean, runSd, format);
+      const title = renderNumericStatLegend(
+        s.stats.count,
+        runMean,
+        runSd,
+        format,
+      );
       return (
-        <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={title} short>
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ Duration(runMean * 1e9) }</div>
+            <div className={cx("bar-chart__label")}>
+              {Duration(runMean * 1e9)}
+            </div>
             <div className={cx("bar-chart__multiplebars")}>
               <div
                 className={cx("bar-chart__run", "bar-chart__bar")}
-                style={{ width: right + "%", position: "absolute", left: left + "%" }}
+                style={{
+                  width: right + "%",
+                  position: "absolute",
+                  left: left + "%",
+                }}
               />
               <div
-                className={cx("bar-chart__run-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+                className={cx(
+                  "bar-chart__run-dev",
+                  "bar-chart__bar",
+                  "bar-chart__bar--dev",
+                )}
+                style={{
+                  width: spread + "%",
+                  position: "absolute",
+                  left: width + left + "%",
+                }}
               />
             </div>
           </div>
@@ -378,20 +488,41 @@ export function latencyBreakdown(s: StatementStatistics) {
       const left = scale(parseMean + planMean + runMean);
       const width = scale(clamp(overheadMean - overheadSd));
       const right = scale(overheadMean);
-      const spread = scale(overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd));
-      const title = renderNumericStatLegend(s.stats.count, overheadMean, overheadSd, format);
+      const spread = scale(
+        overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd),
+      );
+      const title = renderNumericStatLegend(
+        s.stats.count,
+        overheadMean,
+        overheadSd,
+        format,
+      );
       return (
-        <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={title} short>
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ Duration(overheadMean * 1e9) }</div>
+            <div className={cx("bar-chart__label")}>
+              {Duration(overheadMean * 1e9)}
+            </div>
             <div className={cx("bar-chart__multiplebars")}>
               <div
                 className={cx("bar-chart__overhead", "bar-chart__bar")}
-                style={{ width: right + "%", position: "absolute", left: left + "%" }}
+                style={{
+                  width: right + "%",
+                  position: "absolute",
+                  left: left + "%",
+                }}
               />
               <div
-                className={cx("bar-chart__overhead-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
+                className={cx(
+                  "bar-chart__overhead-dev",
+                  "bar-chart__bar",
+                  "bar-chart__bar--dev",
+                )}
+                style={{
+                  width: spread + "%",
+                  position: "absolute",
+                  left: width + left + "%",
+                }}
               />
             </div>
           </div>
@@ -405,20 +536,41 @@ export function latencyBreakdown(s: StatementStatistics) {
       const run = scale(runMean);
       const overhead = scale(overheadMean);
       const width = scale(clamp(overallMean - overallSd));
-      const spread = scale(overallSd + (overallSd > overallMean ? overallMean : overallSd));
-      const title = renderNumericStatLegend(s.stats.count, overallMean, overallSd, format);
+      const spread = scale(
+        overallSd + (overallSd > overallMean ? overallMean : overallSd),
+      );
+      const title = renderNumericStatLegend(
+        s.stats.count,
+        overallMean,
+        overallSd,
+        format,
+      );
       return (
-        <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={title} short>
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
-            <div className={cx("bar-chart__label")}>{ Duration(overallMean * 1e9) }</div>
+            <div className={cx("bar-chart__label")}>
+              {Duration(overallMean * 1e9)}
+            </div>
             <div className={cx("bar-chart__multiplebars")}>
               <div
                 className={cx("bar-chart__parse", "bar-chart__bar")}
-                style={{ width: parse + plan + run + overhead + "%", position: "absolute", left: 0 }}
+                style={{
+                  width: parse + plan + run + overhead + "%",
+                  position: "absolute",
+                  left: 0,
+                }}
               />
               <div
-                className={cx("bar-chart__overall-dev", "bar-chart__bar", "bar-chart__bar--dev")}
-                style={{ width: spread + "%", position: "absolute", left: width + "%" }}
+                className={cx(
+                  "bar-chart__overall-dev",
+                  "bar-chart__bar",
+                  "bar-chart__bar--dev",
+                )}
+                style={{
+                  width: spread + "%",
+                  position: "absolute",
+                  left: width + "%",
+                }}
               />
             </div>
           </div>

@@ -27,7 +27,9 @@ export function PrintReplicaID(
   replicaID?: Long,
 ) {
   if (!_.isNil(rep)) {
-    return `n${rep.node_id} s${rep.store_id} r${rangeID.toString()}/${rep.replica_id}`;
+    return `n${rep.node_id} s${rep.store_id} r${rangeID.toString()}/${
+      rep.replica_id
+    }`;
   }
   // Fall back to the passed in node, store and replica IDs. If those are nil,
   // use a question mark instead.
@@ -42,14 +44,17 @@ export function PrintTime(time: moment.Moment) {
 }
 
 export function PrintTimestamp(
-  timestamp: protos.cockroach.util.hlc.ITimestamp |
-    protos.google.protobuf.ITimestamp,
+  timestamp:
+    | protos.cockroach.util.hlc.ITimestamp
+    | protos.google.protobuf.ITimestamp,
 ) {
   let time: moment.Moment = null;
   if (_.has(timestamp, "wall_time")) {
-    time = LongToMoment((timestamp as protos.cockroach.util.hlc.ITimestamp).wall_time);
+    time = LongToMoment(
+      (timestamp as protos.cockroach.util.hlc.ITimestamp).wall_time,
+    );
   } else if (_.has(timestamp, "seconds") || _.has(timestamp, "nanos")) {
-    time = TimestampToMoment((timestamp as protos.google.protobuf.ITimestamp));
+    time = TimestampToMoment(timestamp as protos.google.protobuf.ITimestamp);
   } else {
     return "";
   }

@@ -17,4 +17,6 @@ interface IChipProps {
 }
 
 // tslint:disable-next-line: variable-name
-export const Chip: React.SFC <IChipProps> = ({ title, type }) => <span className={`Chip Chip--${type}`}>{title}</span>;
+export const Chip: React.SFC<IChipProps> = ({ title, type }) => (
+  <span className={`Chip Chip--${type}`}>{title}</span>
+);

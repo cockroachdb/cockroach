@@ -20,21 +20,23 @@ export const LOGIN_PAGE = "/login";
 export const LOGOUT_PAGE = "/logout";
 
 export function createLoginRoute() {
-  return (
-    <Route exact path={LOGIN_PAGE} component={ LoginPage } />
-  );
+  return <Route exact path={LOGIN_PAGE} component={LoginPage} />;
 }
 
 export function createLogoutRoute(store: Store<AdminUIState>): JSX.Element {
   return (
-    <Route exact path={LOGOUT_PAGE} render={() => {
-      const loginState = selectLoginState(store.getState());
+    <Route
+      exact
+      path={LOGOUT_PAGE}
+      render={() => {
+        const loginState = selectLoginState(store.getState());
 
-      if (!loginState.loggedInUser()) {
-        return <Redirect to={LOGIN_PAGE} />;
-      }
+        if (!loginState.loggedInUser()) {
+          return <Redirect to={LOGIN_PAGE} />;
+        }
 
-      store.dispatch(doLogout());
-    }} />
+        store.dispatch(doLogout());
+      }}
+    />
   );
 }

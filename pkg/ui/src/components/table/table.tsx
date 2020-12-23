@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as  React from "react";
+import * as React from "react";
 import { default as AntTable, ColumnProps } from "antd/es/table";
 import ConfigProvider from "antd/es/config-provider";
 import cn from "classnames";
@@ -28,9 +28,7 @@ export interface TableProps<T> {
 }
 
 const customizeRenderEmpty = (node: React.ReactNode) => () => (
-  <div className="empty-table__message">
-    {node}
-  </div>
+  <div className="empty-table__message">{node}</div>
 );
 
 Table.defaultProps = {
@@ -40,22 +38,26 @@ Table.defaultProps = {
 };
 
 export function Table<T>(props: TableProps<T>) {
-  const { columns, dataSource, noDataMessage, tableLayout, pageSize, className } = props;
+  const {
+    columns,
+    dataSource,
+    noDataMessage,
+    tableLayout,
+    pageSize,
+    className,
+  } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
-    <AntTable<T>
-      className={cn(
-        `crl-table-wrapper ${className}`,
-        {
+      <AntTable<T>
+        className={cn(`crl-table-wrapper ${className}`, {
           "crl-table-wrapper__empty": dataSource.length === 0,
-        },
-      )}
-      columns={columns}
-      dataSource={dataSource}
-      expandRowByClick
-      tableLayout={tableLayout}
-      pagination={{hideOnSinglePage: true, pageSize }}
-    />
+        })}
+        columns={columns}
+        dataSource={dataSource}
+        expandRowByClick
+        tableLayout={tableLayout}
+        pagination={{ hideOnSinglePage: true, pageSize }}
+      />
     </ConfigProvider>
   );
 }

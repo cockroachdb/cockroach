@@ -14,9 +14,11 @@ import { storiesOf } from "@storybook/react";
 import { Search } from "./index";
 
 storiesOf("Search", module)
-  .add("empty", () => (
-    <Search defaultValue="" onSubmit={() => {}} value="" />
-  ))
+  .add("empty", () => <Search defaultValue="" onSubmit={() => {}} value="" />)
   .add("with search text", () => (
-    <Search defaultValue="select * from" onSubmit={() => {}} value="select * from" />
+    <Search
+      defaultValue="select * from"
+      onSubmit={() => {}}
+      value="select * from"
+    />
   ));

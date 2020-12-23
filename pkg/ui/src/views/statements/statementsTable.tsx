@@ -14,14 +14,26 @@ import classNames from "classnames/bind";
 import { StatementStatistics } from "src/util/appStats";
 import { FixLong } from "src/util/fixLong";
 import { StatementSummary } from "src/util/sql/summarize";
-import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
-import { countBarChart, latencyBarChart, retryBarChart, rowsBarChart } from "./barCharts";
+import {
+  ColumnDescriptor,
+  SortedTable,
+} from "src/views/shared/components/sortedtable";
+import {
+  countBarChart,
+  latencyBarChart,
+  retryBarChart,
+  rowsBarChart,
+} from "./barCharts";
 import "./statements.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import { ActivateDiagnosticsModalRef } from "./diagnostics/activateDiagnosticsModal";
 import styles from "./statementsTable.module.styl";
-import { StatementTableTitle, StatementTableCell, NodeNames } from "./statementsTableContent";
+import {
+  StatementTableTitle,
+  StatementTableCell,
+  NodeNames,
+} from "./statementsTableContent";
 import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
 
 const cx = classNames.bind(styles);
@@ -41,13 +53,20 @@ export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
 export function shortStatement(summary: StatementSummary, original: string) {
   switch (summary.statement) {
-    case "update": return "UPDATE " + summary.table;
-    case "insert": return "INSERT INTO " + summary.table;
-    case "select": return "SELECT FROM " + summary.table;
-    case "delete": return "DELETE FROM " + summary.table;
-    case "create": return "CREATE TABLE " + summary.table;
-    case "set": return "SET " + summary.table;
-    default: return original;
+    case "update":
+      return "UPDATE " + summary.table;
+    case "insert":
+      return "INSERT INTO " + summary.table;
+    case "select":
+      return "SELECT FROM " + summary.table;
+    case "delete":
+      return "DELETE FROM " + summary.table;
+    case "create":
+      return "CREATE TABLE " + summary.table;
+    case "set":
+      return "SET " + summary.table;
+    default:
+      return original;
   }
 }
 
@@ -56,7 +75,7 @@ export function makeStatementsColumns(
   selectedApp: string,
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
-): ColumnDescriptor<AggregateStatistics>[]  {
+): ColumnDescriptor<AggregateStatistics>[] {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: StatementTableTitle.statements,
@@ -89,8 +108,10 @@ export function makeStatementsColumns(
   return columns;
 }
 
-export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: NodeNames)
-    : ColumnDescriptor<AggregateStatistics>[] {
+export function makeNodesColumns(
+  statements: AggregateStatistics[],
+  nodeNames: NodeNames,
+): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
       title: null,
@@ -102,50 +123,40 @@ export function makeNodesColumns(statements: AggregateStatistics[], nodeNames: N
   return original.concat(makeCommonColumns(statements));
 }
 
-function makeCommonColumns(statements: AggregateStatistics[])
-    : ColumnDescriptor<AggregateStatistics>[] {
-  const countBar = countBarChart(
-    statements,
-    {
-      classes: {
-        root: cx("statements-table__col-count--bar-chart"),
-        label: cx("statements-table__col-count--bar-chart__label"),
-      },
+function makeCommonColumns(
+  statements: AggregateStatistics[],
+): ColumnDescriptor<AggregateStatistics>[] {
+  const countBar = countBarChart(statements, {
+    classes: {
+      root: cx("statements-table__col-count--bar-chart"),
+      label: cx("statements-table__col-count--bar-chart__label"),
     },
-  );
-  const retryBar = retryBarChart(
-    statements,
-    {
-      classes: {
-        root: cx("statements-table__col-retries--bar-chart"),
-        label: cx("statements-table__col-retries--bar-chart__label"),
-      },
+  });
+  const retryBar = retryBarChart(statements, {
+    classes: {
+      root: cx("statements-table__col-retries--bar-chart"),
+      label: cx("statements-table__col-retries--bar-chart__label"),
     },
-  );
-  const rowsBar = rowsBarChart(
-    statements,
-    {
-      classes: {
-        root: cx("statements-table__col-rows--bar-chart"),
-        label: cx("statements-table__col-rows--bar-chart__label"),
-      },
+  });
+  const rowsBar = rowsBarChart(statements, {
+    classes: {
+      root: cx("statements-table__col-rows--bar-chart"),
+      label: cx("statements-table__col-rows--bar-chart__label"),
     },
-  );
-  const latencyBar = latencyBarChart(
-    statements,
-    {
-      classes: {
-        root: cx("statements-table__col-latency--bar-chart"),
-      },
+  });
+  const latencyBar = latencyBarChart(statements, {
+    classes: {
+      root: cx("statements-table__col-latency--bar-chart"),
     },
-  );
+  });
 
   return [
     {
       title: StatementTableTitle.retries,
       className: cx("statements-table__col-retries"),
       cell: retryBar,
-      sort: (stmt) => (longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count)),
+      sort: (stmt) =>
+        longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
     },
     {
       title: StatementTableTitle.executionCount,

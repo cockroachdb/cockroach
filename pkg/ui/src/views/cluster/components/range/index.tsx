@@ -80,23 +80,23 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
     this.setState({
       width: window.innerWidth,
     });
-  }
+  };
 
   onChangeDate = (dateRange: [Moment, Moment]) => {
     const { changeDate } = this.props;
     this.toggleDropDown();
     changeDate(dateRange);
-  }
+  };
 
   onChangeOption = (option: RangeOption) => () => {
     const { onChange } = this.props;
     this.toggleDropDown();
     onChange(option);
-  }
+  };
 
   toggleCustomPicker = (custom: boolean) => () => {
     this.setState({ custom });
-  }
+  };
 
   toggleDropDown = () => {
     this.setState(
@@ -113,57 +113,70 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
         };
       },
       () => {
-      if (this.state.opened) {
-        this.props.onOpened();
-      } else {
-        this.props.onClosed();
-      }
-    });
-  }
+        if (this.state.opened) {
+          this.props.onOpened();
+        } else {
+          this.props.onClosed();
+        }
+      },
+    );
+  };
 
   handleOptionButtonOnClick = (option: RangeOption) => () => {
     trackTimeScaleSelected(option.label);
-    (option.value === "Custom" ? this.toggleCustomPicker(true) : this.onChangeOption(option))();
-  }
+    (option.value === "Custom"
+      ? this.toggleCustomPicker(true)
+      : this.onChangeOption(option))();
+  };
 
   optionButton = (option: RangeOption) => (
     <Button
       type="default"
-      className={`_time-button ${this.props.selected.title === option.value && "active" || ""}`}
+      className={`_time-button ${
+        (this.props.selected.title === option.value && "active") || ""
+      }`}
       onClick={this.handleOptionButtonOnClick(option)}
       ghost
     >
-      <span className="range__range-title">{this.props.selected.title !== "Custom" && option.value === "Custom" ? "--" : option.timeLabel}</span>
-      <span className="__option-label">{option.value === "Custom" ? "Custom date range" : option.value}</span>
+      <span className="range__range-title">
+        {this.props.selected.title !== "Custom" && option.value === "Custom"
+          ? "--"
+          : option.timeLabel}
+      </span>
+      <span className="__option-label">
+        {option.value === "Custom" ? "Custom date range" : option.value}
+      </span>
     </Button>
-  )
+  );
 
   renderOptions = () => {
     const { options } = this.props;
-    return options.map(option => this.optionButton(option));
-  }
+    return options.map((option) => this.optionButton(option));
+  };
 
   findSelectedValue = () => {
     const { options, selected } = this.props;
-    const value = options.find(option => option.value === selected.title);
+    const value = options.find((option) => option.value === selected.title);
     return value && value.label !== "Custom" ? (
       <span className="Select-value-label">{value.label}</span>
     ) : (
       <span className="Select-value-label">
-        {selected.dateStart}{"\u0020"}
-        <span className="_label-time">{selected.timeStart}</span>{"\u0020"}
-        - {selected.dateEnd}{"\u0020"}
-        <span className="_label-time">{selected.timeEnd}</span>{"\u0020"}
+        {selected.dateStart}{" "}
+        <span className="_label-time">{selected.timeStart}</span> -{" "}
+        {selected.dateEnd}{" "}
+        <span className="_label-time">{selected.timeEnd}</span>{" "}
         <span className="Select-value-label__sufix">(UTC)</span>
       </span>
     );
-  }
+  };
 
   headerRender = (item: any) => (
     <div className="calendar-month-picker">
       <Button
         type="default"
-        onClick={() => item.onChange(moment.utc(item.value).subtract(1, "months"))}
+        onClick={() =>
+          item.onChange(moment.utc(item.value).subtract(1, "months"))
+        }
       >
         <Icon type="left" />
       </Button>
@@ -175,7 +188,7 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
         <Icon type="right" />
       </Button>
     </div>
-  )
+  );
 
   renderContent = () => {
     const { custom } = this.state;
@@ -192,30 +205,34 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
         onInvalidRangeSelect={() => {
           notification.info({
             message: "The timeframe has been set to a 10 minute range",
-            description: "An invalid timeframe was entered. The timeframe has been set to a 10 minute range.",
+            description:
+              "An invalid timeframe was entered. The timeframe has been set to a 10 minute range.",
           });
         }}
       />
     );
-  }
+  };
 
   render() {
     const { opened, width, custom } = this.state;
     const selectedValue = this.findSelectedValue();
-    const containerLeft = this.rangeContainer.current ? this.rangeContainer.current.getBoundingClientRect().left : 0;
-    const left = width >= (containerLeft + (custom ? 555 : 453)) ? 0 : width - (containerLeft + (custom ? 555 : 453));
+    const containerLeft = this.rangeContainer.current
+      ? this.rangeContainer.current.getBoundingClientRect().left
+      : 0;
+    const left =
+      width >= containerLeft + (custom ? 555 : 453)
+        ? 0
+        : width - (containerLeft + (custom ? 555 : 453));
 
     return (
       <div ref={this.rangeContainer} className="Range">
-        <div className="click-zone" onClick={this.toggleDropDown}/>
-        {opened && <div className="trigger-container" onClick={this.toggleDropDown} />}
+        <div className="click-zone" onClick={this.toggleDropDown} />
+        {opened && (
+          <div className="trigger-container" onClick={this.toggleDropDown} />
+        )}
         <div className="trigger-wrapper">
-          <div
-            className={`trigger Select ${opened ? "is-open" : ""}`}
-          >
-            <span className="Select-value-label">
-              {selectedValue}
-            </span>
+          <div className={`trigger Select ${opened ? "is-open" : ""}`}>
+            <span className="Select-value-label">{selectedValue}</span>
             <div className="Select-control">
               <div className="Select-arrow-zone">
                 {arrowRenderer({ isOpen: opened })}
@@ -223,7 +240,10 @@ class RangeSelect extends React.Component<RangeSelectProps, RangeSelectState> {
             </div>
           </div>
           {opened && (
-            <div className={`range-selector ${custom ? "__custom" : "__options"}`} style={{ left }}>
+            <div
+              className={`range-selector ${custom ? "__custom" : "__options"}`}
+              style={{ left }}
+            >
               {this.renderContent()}
             </div>
           )}

@@ -16,18 +16,27 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 const OIDC_LOGIN_PATH = "/oidc/v1/login";
 
-const OIDCLoginButton = ({loginState}: {loginState: LoginAPIState}) => {
+const OIDCLoginButton = ({ loginState }: { loginState: LoginAPIState }) => {
   return (
-    <a href={OIDC_LOGIN_PATH} >
-      <Button type="secondary" className="submit-button-oidc" disabled={loginState.inProgress} textAlign={"center"}>
+    <a href={OIDC_LOGIN_PATH}>
+      <Button
+        type="secondary"
+        className="submit-button-oidc"
+        disabled={loginState.inProgress}
+        textAlign={"center"}
+      >
         {loginState.oidcButtonText}
       </Button>
     </a>
   );
 };
 
-const OIDCLogin: React.FC<{loginState: LoginAPIState} & RouteComponentProps> = (props) => {
-  const oidcAutoLoginQuery = new URLSearchParams(props.location.search).get("oidc_auto_login");
+const OIDCLogin: React.FC<
+  { loginState: LoginAPIState } & RouteComponentProps
+> = (props) => {
+  const oidcAutoLoginQuery = new URLSearchParams(props.location.search).get(
+    "oidc_auto_login",
+  );
   if (props.loginState.oidcLoginEnabled) {
     if (props.loginState.oidcAutoLogin && !(oidcAutoLoginQuery === "false")) {
       window.location.replace(OIDC_LOGIN_PATH);

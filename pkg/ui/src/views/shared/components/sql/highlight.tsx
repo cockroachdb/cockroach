@@ -17,7 +17,6 @@ import { SqlBoxProps } from "./box";
 const cx = classNames.bind(styles);
 
 export class Highlight extends React.Component<SqlBoxProps> {
-
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
 
   shouldComponentUpdate(newProps: SqlBoxProps) {
@@ -43,10 +42,14 @@ export class Highlight extends React.Component<SqlBoxProps> {
         <span className="hljs-keyword">CONFIGURE ZONE USING</span>
         <br />
         <span className="hljs-label">range_min_bytes = </span>
-        <span className="hljs-built_in">{`${String(zoneConfig.range_min_bytes)},`}</span>
+        <span className="hljs-built_in">{`${String(
+          zoneConfig.range_min_bytes,
+        )},`}</span>
         <br />
         <span className="hljs-label">range_max_bytes = </span>
-        <span className="hljs-built_in">{`${String(zoneConfig.range_max_bytes)},`}</span>
+        <span className="hljs-built_in">{`${String(
+          zoneConfig.range_max_bytes,
+        )},`}</span>
         <br />
         {zoneConfig.gc?.ttl_seconds && (
           <>
@@ -63,11 +66,13 @@ export class Highlight extends React.Component<SqlBoxProps> {
         '],
         <br />
         <span className="hljs-label">lease_preferences = [['</span>
-        <span className="hljs-built_in">{String(zoneConfig.lease_preferences)}</span>
+        <span className="hljs-built_in">
+          {String(zoneConfig.lease_preferences)}
+        </span>
         ']]
       </span>
     );
-  }
+  };
 
   render() {
     const { value, zone } = this.props;

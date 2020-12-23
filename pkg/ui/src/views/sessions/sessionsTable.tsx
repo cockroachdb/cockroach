@@ -9,21 +9,24 @@
 // licenses/APL.txt.
 
 import classNames from "classnames/bind";
-import {ColumnDescriptor, SortedTable} from "src/views/shared/components/sortedtable";
+import {
+  ColumnDescriptor,
+  SortedTable,
+} from "src/views/shared/components/sortedtable";
 import "./sessions.styl";
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 import styles from "./sessionsTable.module.styl";
-import {SessionTableTitle} from "src/views/sessions/sessionsTableContent";
-import {TimestampToMoment} from "src/util/convert";
-import {BytesWithPrecision, DATE_FORMAT} from "src/util/format";
-import {Link} from "react-router-dom";
+import { SessionTableTitle } from "src/views/sessions/sessionsTableContent";
+import { TimestampToMoment } from "src/util/convert";
+import { BytesWithPrecision, DATE_FORMAT } from "src/util/format";
+import { Link } from "react-router-dom";
 import React from "react";
 import { Button, Tooltip } from "src/components";
-import {Moment} from "moment";
-import {StatementLink} from "src/views/statements/statementsTableContent";
+import { Moment } from "moment";
+import { StatementLink } from "src/views/statements/statementsTableContent";
 import ISession = cockroach.server.serverpb.ISession;
-import {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
-import {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
+import { TerminateSessionModalRef } from "src/views/sessions/terminateSessionModal";
+import { TerminateQueryModalRef } from "src/views/sessions/terminateQueryModal";
 import { Dropdown, Item as DropdownItem } from "src/components/dropdown";
 import { Icon } from "antd";
 
@@ -38,18 +41,18 @@ export class SessionsSortedTable extends SortedTable<SessionInfo> {}
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
-): ColumnDescriptor<SessionInfo>[]  {
+): ColumnDescriptor<SessionInfo>[] {
   return [
     {
       title: SessionTableTitle.sessionAge,
       className: cx("cl-table__col-session-age"),
-      cell: session => SessionLink({session: session.session}),
-      sort: session => TimestampToMoment(session.session.start).valueOf(),
+      cell: (session) => SessionLink({ session: session.session }),
+      sort: (session) => TimestampToMoment(session.session.start).valueOf(),
     },
     {
       title: SessionTableTitle.txnAge,
       className: cx("cl-table__col-session-start"),
-      cell: function(session: SessionInfo) {
+      cell: function (session: SessionInfo) {
         if (session.session.active_txn) {
           return AgeLabel({
             start: TimestampToMoment(session.session.active_txn.start),
@@ -58,12 +61,12 @@ export function makeSessionsColumns(
         }
         return "N/A";
       },
-      sort: session => session.session.active_txn?.start.seconds || 0,
+      sort: (session) => session.session.active_txn?.start.seconds || 0,
     },
     {
       title: SessionTableTitle.statementAge,
       className: cx("cl-table__col-session-start"),
-      cell: function(session: SessionInfo) {
+      cell: function (session: SessionInfo) {
         if (session.session.active_queries?.length > 0) {
           return AgeLabel({
             start: TimestampToMoment(session.session.active_queries[0].start),
@@ -72,7 +75,7 @@ export function makeSessionsColumns(
         }
         return "N/A";
       },
-      sort: function(session: SessionInfo): number {
+      sort: function (session: SessionInfo): number {
         if (session.session.active_queries?.length > 0) {
           return session.session.active_queries[0].start.seconds.toNumber();
         }
@@ -82,9 +85,11 @@ export function makeSessionsColumns(
     {
       title: SessionTableTitle.memUsage,
       className: cx("cl-table__col-session-mem-usage"),
-      cell: session => BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
-        "/" + BytesWithPrecision(session.session.max_alloc_bytes?.toNumber(), 0),
-      sort: session => session.session.alloc_bytes?.toNumber(),
+      cell: (session) =>
+        BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
+        "/" +
+        BytesWithPrecision(session.session.max_alloc_bytes?.toNumber(), 0),
+      sort: (session) => session.session.alloc_bytes?.toNumber(),
     },
     {
       title: SessionTableTitle.statement,
@@ -95,20 +100,22 @@ export function makeSessionsColumns(
         }
         const stmt = session.session.active_queries[0].sql;
         const anonStmt = session.session.active_queries[0].sql_anon;
-        return <StatementLink
-          statement={ stmt }
-          anonStatement={ anonStmt }
-          implicitTxn={ session.session.active_txn?.implicit }
-          search={ "" }
-          app={ "" }
-        />;
+        return (
+          <StatementLink
+            statement={stmt}
+            anonStatement={anonStmt}
+            implicitTxn={session.session.active_txn?.implicit}
+            search={""}
+            app={""}
+          />
+        );
       },
     },
     {
       title: SessionTableTitle.actions,
       className: cx("cl-table__col-session-actions"),
       titleAlign: "right",
-      cell: ({session}) => {
+      cell: ({ session }) => {
         const menuItems: DropdownItem[] = [
           {
             value: "terminateStatement",
@@ -121,7 +128,9 @@ export function makeSessionsColumns(
           },
         ];
 
-        const onMenuItemChange = (value: "terminateStatement" | "terminateSession") => {
+        const onMenuItemChange = (
+          value: "terminateStatement" | "terminateSession",
+        ) => {
           switch (value) {
             case "terminateSession":
               terminateSessionRef?.current?.showModalFor({
@@ -164,12 +173,14 @@ export function makeSessionsColumns(
 
 export function byteArrayToUuid(array: Uint8Array) {
   const hexDigits: string[] = [];
-  array.forEach(t => hexDigits.push(t.toString(16).padStart(2, "0")));
-  return [hexDigits.slice(0, 4).join(""),
-      hexDigits.slice(4, 6).join(""),
-      hexDigits.slice(6, 8).join(""),
-      hexDigits.slice(8, 10).join(""),
-      hexDigits.slice(10, 16).join("")].join("-");
+  array.forEach((t) => hexDigits.push(t.toString(16).padStart(2, "0")));
+  return [
+    hexDigits.slice(0, 4).join(""),
+    hexDigits.slice(4, 6).join(""),
+    hexDigits.slice(6, 8).join(""),
+    hexDigits.slice(8, 10).join(""),
+    hexDigits.slice(10, 16).join(""),
+  ].join("-");
 }
 
 const SessionLink = (props: { session: ISession }) => {
@@ -182,22 +193,18 @@ const SessionLink = (props: { session: ISession }) => {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            Session started at {start.format(DATE_FORMAT)}
-          </p>
+          <p>Session started at {start.format(DATE_FORMAT)}</p>
         </div>
       }
     >
-      <Link to={ `${base}/${encodeURIComponent(sessionID)}` }>
-        <div>
-          { start.fromNow(true) }
-        </div>
+      <Link to={`${base}/${encodeURIComponent(sessionID)}`}>
+        <div>{start.fromNow(true)}</div>
       </Link>
     </Tooltip>
   );
 };
 
-const AgeLabel = (props: { start: Moment, thingName: string }) => {
+const AgeLabel = (props: { start: Moment; thingName: string }) => {
   return (
     <Tooltip
       placement="bottom"
@@ -209,7 +216,7 @@ const AgeLabel = (props: { start: Moment, thingName: string }) => {
         </div>
       }
     >
-    { props.start.fromNow(true) }
+      {props.start.fromNow(true)}
     </Tooltip>
   );
 };

@@ -31,15 +31,15 @@ export function selectLocations(state: LocationState) {
   return state.cachedData.locations.data.locations;
 }
 
-const nestLocations = d3.nest()
+const nestLocations = d3
+  .nest()
   .key((loc: ILocation) => loc.locality_key)
   .key((loc: ILocation) => loc.locality_value)
-  .rollup((locations) => locations[0]) // cannot collide since ^^ is primary key
-  .map;
+  .rollup((locations) => locations[0]).map; // cannot collide since ^^ is primary key
 
 export interface LocationTree {
   [key: string]: {
-    [value: string]: ILocation,
+    [value: string]: ILocation;
   };
 }
 

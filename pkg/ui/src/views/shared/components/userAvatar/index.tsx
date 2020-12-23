@@ -19,10 +19,7 @@ export interface UserAvatarProps {
 }
 
 export default function UserAvatar(props: UserAvatarProps) {
-  const {
-    userName,
-    disabled = false,
-  } = props;
+  const { userName, disabled = false } = props;
 
   const classes = classNames("user-avatar", {
     "user-avatar--disabled": disabled,

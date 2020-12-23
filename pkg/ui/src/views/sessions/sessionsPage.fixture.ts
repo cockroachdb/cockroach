@@ -8,17 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {SessionsPageProps} from "./sessionsPage";
-import {refreshSessions} from "src/redux/apiReducers";
-import {createMemoryHistory} from "history";
-import {SessionInfo} from "src/views/sessions/sessionsTable";
+import { SessionsPageProps } from "./sessionsPage";
+import { refreshSessions } from "src/redux/apiReducers";
+import { createMemoryHistory } from "history";
+import { SessionInfo } from "src/views/sessions/sessionsTable";
 import Long from "long";
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 import Phase = cockroach.server.serverpb.ActiveQuery.Phase;
-import {util} from "protobufjs";
+import { util } from "protobufjs";
 import base64 = util.base64;
 
-const history = createMemoryHistory({ initialEntries: ["/sessions"]});
+const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const toUuid = function (s: string): Uint8Array {
   const buf = util.newBuffer(util.base64.length(s));
@@ -64,7 +64,8 @@ export const idleTransactionSession = {
         seconds: Long.fromNumber(1596816673),
         nanos: 134293000,
       },
-      txn_description: "\"sql txn\" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 wto=false max=1596816673.634285000,0",
+      txn_description:
+        '"sql txn" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 wto=false max=1596816673.634285000,0',
       num_statements_executed: 2,
       deadline: {
         seconds: Long.fromNumber(-62135596800),
@@ -111,7 +112,8 @@ export const activeSession: SessionInfo = {
         seconds: Long.fromNumber(1596816677),
         nanos: 320351000,
       },
-      txn_description: "\"sql txn\" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 wto=false max=1596816677.820344000,0",
+      txn_description:
+        '"sql txn" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 wto=false max=1596816677.820344000,0',
       num_statements_executed: 4,
       deadline: {
         seconds: Long.fromNumber(-62135596800),
@@ -136,37 +138,37 @@ const sessionsList: SessionInfo[] = [
 export const sessionsPagePropsFixture: SessionsPageProps = {
   history,
   location: {
-    "pathname": "/sessions",
-    "search": "",
-    "hash": "",
-    "state": null,
+    pathname: "/sessions",
+    search: "",
+    hash: "",
+    state: null,
   },
-  "match": {
-    "path": "/sessions",
-    "url": "/sessions",
-    "isExact": true,
-    "params": {},
+  match: {
+    path: "/sessions",
+    url: "/sessions",
+    isExact: true,
+    params: {},
   },
-  "sessions": sessionsList,
-  "sessionsError": null,
-  refreshSessions: (() => {}) as (typeof refreshSessions),
+  sessions: sessionsList,
+  sessionsError: null,
+  refreshSessions: (() => {}) as typeof refreshSessions,
 };
 
 export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
   history,
   location: {
-    "pathname": "/sessions",
-    "search": "",
-    "hash": "",
-    "state": null,
+    pathname: "/sessions",
+    search: "",
+    hash: "",
+    state: null,
   },
-  "match": {
-    "path": "/sessions",
-    "url": "/sessions",
-    "isExact": true,
-    "params": {},
+  match: {
+    path: "/sessions",
+    url: "/sessions",
+    isExact: true,
+    params: {},
   },
-  "sessions": [],
-  "sessionsError": null,
-  refreshSessions: (() => {}) as (typeof refreshSessions),
+  sessions: [],
+  sessionsError: null,
+  refreshSessions: (() => {}) as typeof refreshSessions,
 };

@@ -19,7 +19,7 @@ export interface UserMenuProps {
   onLogoutClick: () => void;
 }
 
-export default function UserMenu (props: UserMenuProps) {
+export default function UserMenu(props: UserMenuProps) {
   const { userName, onLogoutClick } = props;
   return (
     <div className="user-menu">

@@ -19,7 +19,7 @@ export const track = (fn: Function) => (selection: string) => {
   });
 };
 
-export default function trackSubnavSelection (selection: string) {
+export default function trackSubnavSelection(selection: string) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(selection);
 }

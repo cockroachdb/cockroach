@@ -43,7 +43,9 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
   componentDidMount() {
     const nodeId = getMatchParamByName(this.props.match, nodeIDAttr);
     this.props.refreshNodes();
-    this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: nodeId }));
+    this.props.refreshLogs(
+      new protos.cockroach.server.serverpb.LogsRequest({ node_id: nodeId }),
+    );
   }
 
   renderContent = () => {
@@ -51,23 +53,28 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
     const columns = [
       {
         title: "Time",
-        cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
+        cell: (index: number) =>
+          LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
       },
       {
         title: "Severity",
-        cell: (index: number) => protos.cockroach.util.log.Severity[logEntries[index].severity],
+        cell: (index: number) =>
+          protos.cockroach.util.log.Severity[logEntries[index].severity],
       },
       {
         title: "Message",
         cell: (index: number) => (
           <pre className="sort-table__unbounded-column logs-table__message">
-              { (logEntries[index].tags ? "[" + logEntries[index].tags + "] " : "") + logEntries[index].message }
-            </pre>
+            {(logEntries[index].tags
+              ? "[" + logEntries[index].tags + "] "
+              : "") + logEntries[index].message}
+          </pre>
         ),
       },
       {
         title: "File:Line",
-        cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
+        cell: (index: number) =>
+          `${logEntries[index].file}:${logEntries[index].line}`,
       },
     ];
     return (
@@ -77,7 +84,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         className="logs-table"
       />
     );
-  }
+  };
 
   render() {
     const nodeAddress = this.props.currentNode
@@ -90,15 +97,17 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
 
     return (
       <div>
-        <Helmet title={ title } />
+        <Helmet title={title} />
         <div className="section section--heading">
-          <h2 className="base-heading">Logs Node { nodeId } / { nodeAddress }</h2>
+          <h2 className="base-heading">
+            Logs Node {nodeId} / {nodeAddress}
+          </h2>
         </div>
         <section className="section">
           <Loading
-            loading={ !this.props.logs.data }
-            error={ this.props.logs.lastError }
-            render={ this.renderContent }
+            loading={!this.props.logs.data}
+            error={this.props.logs.lastError}
+            render={this.renderContent}
           />
         </section>
       </div>
@@ -107,17 +116,19 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
 }
 
 // Connect the EventsList class with our redux store.
-const logsConnected = withRouter(connect(
-  (state: AdminUIState, ownProps: RouteComponentProps) => {
-    return {
-      logs: state.cachedData.logs,
-      currentNode: currentNode(state, ownProps),
-    };
-  },
-  {
-    refreshLogs,
-    refreshNodes,
-  },
-)(Logs));
+const logsConnected = withRouter(
+  connect(
+    (state: AdminUIState, ownProps: RouteComponentProps) => {
+      return {
+        logs: state.cachedData.logs,
+        currentNode: currentNode(state, ownProps),
+      };
+    },
+    {
+      refreshLogs,
+      refreshNodes,
+    },
+  )(Logs),
+);
 
 export default logsConnected;

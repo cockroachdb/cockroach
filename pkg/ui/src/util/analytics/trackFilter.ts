@@ -18,7 +18,7 @@ export const track = (fn: Function) => (filter: string, value: string) => {
   });
 };
 
-export default function trackFilter (filter: string, value: string) {
+export default function trackFilter(filter: string, value: string) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(filter, value);
 }

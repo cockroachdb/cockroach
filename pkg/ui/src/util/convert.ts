@@ -45,7 +45,9 @@ export function TimestampToMoment(
   if (!timestamp) {
     return defaultsIfNull;
   }
-  return moment.utc((timestamp.seconds.toNumber() * 1e3) + NanoToMilli(timestamp.nanos));
+  return moment.utc(
+    timestamp.seconds.toNumber() * 1e3 + NanoToMilli(timestamp.nanos),
+  );
 }
 
 /**

@@ -12,7 +12,11 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import {
+  Metric,
+  Axis,
+  AxisUnits,
+} from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
@@ -22,118 +26,181 @@ export default function (props: GraphDashboardProps) {
   return [
     <LineGraph title="Batches" sources={nodeSources}>
       <Axis label="batches">
-        <Metric name="cr.node.distsender.batches" title="Batches" nonNegativeRate />
-        <Metric name="cr.node.distsender.batches.partial" title="Partial Batches" nonNegativeRate />
+        <Metric
+          name="cr.node.distsender.batches"
+          title="Batches"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.distsender.batches.partial"
+          title="Partial Batches"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="RPCs" sources={nodeSources}>
       <Axis label="rpcs">
-        <Metric name="cr.node.distsender.rpc.sent" title="RPCs Sent" nonNegativeRate />
-        <Metric name="cr.node.distsender.rpc.sent.local" title="Local Fast-path" nonNegativeRate />
+        <Metric
+          name="cr.node.distsender.rpc.sent"
+          title="RPCs Sent"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.distsender.rpc.sent.local"
+          title="Local Fast-path"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="RPC Errors" sources={nodeSources}>
       <Axis label="errors">
-        <Metric name="cr.node.distsender.rpc.sent.sendnexttimeout" title="RPC Timeouts" nonNegativeRate />
-        <Metric name="cr.node.distsender.rpc.sent.nextreplicaerror" title="Replica Errors" nonNegativeRate />
-        <Metric name="cr.node.distsender.errors.notleaseholder" title="Not Leaseholder Errors" nonNegativeRate />
+        <Metric
+          name="cr.node.distsender.rpc.sent.sendnexttimeout"
+          title="RPC Timeouts"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.distsender.rpc.sent.nextreplicaerror"
+          title="Replica Errors"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.distsender.errors.notleaseholder"
+          title="Not Leaseholder Errors"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="KV Transactions" sources={nodeSources}>
       <Axis label="transactions">
         <Metric name="cr.node.txn.commits" title="Committed" nonNegativeRate />
-        <Metric name="cr.node.txn.commits1PC" title="Fast-path Committed" nonNegativeRate />
+        <Metric
+          name="cr.node.txn.commits1PC"
+          title="Fast-path Committed"
+          nonNegativeRate
+        />
         <Metric name="cr.node.txn.aborts" title="Aborted" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="KV Transaction Restarts" sources={nodeSources}>
       <Axis label="restarts">
-        <Metric name="cr.node.txn.restarts.writetooold" title="Write Too Old" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.writetoooldmulti" title="Write Too Old (multiple)" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.serializable" title="Forwarded Timestamp (iso=serializable)" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.asyncwritefailure" title="Async Consensus Failure" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.readwithinuncertainty" title="Read Within Uncertainty Interval" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.txnaborted" title="Aborted" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.txnpush" title="Push Failure" nonNegativeRate />
-        <Metric name="cr.node.txn.restarts.unknown" title="Unknown" nonNegativeRate />
+        <Metric
+          name="cr.node.txn.restarts.writetooold"
+          title="Write Too Old"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.writetoooldmulti"
+          title="Write Too Old (multiple)"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.serializable"
+          title="Forwarded Timestamp (iso=serializable)"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.asyncwritefailure"
+          title="Async Consensus Failure"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.readwithinuncertainty"
+          title="Read Within Uncertainty Interval"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.txnaborted"
+          title="Aborted"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.txnpush"
+          title="Push Failure"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.unknown"
+          title="Unknown"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="KV Transaction Durations: 99th percentile"
+    <LineGraph
+      title="KV Transaction Durations: 99th percentile"
       tooltip={`The 99th percentile of transaction durations over a 1 minute period.
-                              Values are displayed individually for each node.`}>
+                              Values are displayed individually for each node.`}
+    >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.txn.durations-p99"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.txn.durations-p99"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="KV Transaction Durations: 90th percentile"
+    <LineGraph
+      title="KV Transaction Durations: 90th percentile"
       tooltip={`The 90th percentile of transaction durations over a 1 minute period.
-                              Values are displayed individually for each node.`}>
+                              Values are displayed individually for each node.`}
+    >
       <Axis units={AxisUnits.Duration} label="transaction duration">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.txn.durations-p90"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.txn.durations-p90"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Node Heartbeat Latency: 99th percentile"
+    <LineGraph
+      title="Node Heartbeat Latency: 99th percentile"
       tooltip={`The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
-                              Values are displayed individually for each node.`}>
+                              Values are displayed individually for each node.`}
+    >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.liveness.heartbeatlatency-p99"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.liveness.heartbeatlatency-p99"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Node Heartbeat Latency: 90th percentile"
+    <LineGraph
+      title="Node Heartbeat Latency: 90th percentile"
       tooltip={`The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
-                              Values are displayed individually for each node.`}>
+                              Values are displayed individually for each node.`}
+    >
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.liveness.heartbeatlatency-p90"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.liveness.heartbeatlatency-p90"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
       </Axis>
     </LineGraph>,
-
   ];
 }

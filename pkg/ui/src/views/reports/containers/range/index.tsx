@@ -139,7 +139,9 @@ export class Range extends React.Component<RangeProps, {}> {
     }
 
     // Did we get any responses?
-    if (!_.some(range.data.responses_by_node_id, resp => resp.infos.length > 0)) {
+    if (
+      !_.some(range.data.responses_by_node_id, (resp) => resp.infos.length > 0)
+    ) {
       return (
         <ErrorPage
           rangeID={rangeID}
@@ -152,17 +154,17 @@ export class Range extends React.Component<RangeProps, {}> {
     // Collect all the infos and sort them, putting the leader (or the replica
     // with the highest term, first.
     const infos = _.orderBy(
-      _.flatMap(range.data.responses_by_node_id, resp => {
+      _.flatMap(range.data.responses_by_node_id, (resp) => {
         if (resp.response && _.isEmpty(resp.error_message)) {
           return resp.infos;
         }
         return [];
       }),
       [
-        info => RangeInfo.IsLeader(info),
-        info => FixLong(info.raft_state.applied).toNumber(),
-        info => FixLong(info.raft_state.hard_state.term).toNumber(),
-        info => {
+        (info) => RangeInfo.IsLeader(info),
+        (info) => FixLong(info.raft_state.applied).toNumber(),
+        (info) => FixLong(info.raft_state.hard_state.term).toNumber(),
+        (info) => {
           const localReplica = RangeInfo.GetLocalReplica(info);
           return _.isNil(localReplica) ? 0 : localReplica.replica_id;
         },
@@ -172,15 +174,17 @@ export class Range extends React.Component<RangeProps, {}> {
 
     // Gather all replica IDs.
     const replicas = _.chain(infos)
-      .flatMap(info => info.state.state.desc.internal_replicas)
-      .sortBy(rep => rep.replica_id)
-      .sortedUniqBy(rep => rep.replica_id)
+      .flatMap((info) => info.state.state.desc.internal_replicas)
+      .sortBy((rep) => rep.replica_id)
+      .sortedUniqBy((rep) => rep.replica_id)
       .value();
 
     return (
       <div className="section">
-        <Helmet title={ `r${responseRangeID.toString()} Range | Debug` } />
-        <h1 className="base-heading">Range Report for r{responseRangeID.toString()}</h1>
+        <Helmet title={`r${responseRangeID.toString()} Range | Debug`} />
+        <h1 className="base-heading">
+          Range Report for r{responseRangeID.toString()}
+        </h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <ConnectionsTable range={range} />
@@ -192,8 +196,14 @@ export class Range extends React.Component<RangeProps, {}> {
 }
 const mapStateToProps = (state: AdminUIState, props: RangeProps) => ({
   range: state.cachedData.range[rangeRequestKey(rangeRequestFromProps(props))],
-  allocator: state.cachedData.allocatorRange[allocatorRangeRequestKey(allocatorRequestFromProps(props))],
-  rangeLog: state.cachedData.rangeLog[rangeLogRequestKey(rangeLogRequestFromProps(props))],
+  allocator:
+    state.cachedData.allocatorRange[
+      allocatorRangeRequestKey(allocatorRequestFromProps(props))
+    ],
+  rangeLog:
+    state.cachedData.rangeLog[
+      rangeLogRequestKey(rangeLogRequestFromProps(props))
+    ],
 });
 
 const mapDispatchToProps = {
