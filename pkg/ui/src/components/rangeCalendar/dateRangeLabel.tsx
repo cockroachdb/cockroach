@@ -17,10 +17,7 @@ export interface DateRangeLabelProps {
   to: Moment;
 }
 
-export const DateRangeLabel: React.FC<DateRangeLabelProps> = ({
-  from,
-  to,
-}) => {
+export const DateRangeLabel: React.FC<DateRangeLabelProps> = ({ from, to }) => {
   const dateFormat = "MMM D";
   const timeFormat = "LT";
   const fromDateStr = from.format(dateFormat);
@@ -30,16 +27,18 @@ export const DateRangeLabel: React.FC<DateRangeLabelProps> = ({
   const isUTC = to.isUTC() && from.isUTC();
   return (
     <div style={{ textAlign: "left" }}>
-      <Text textType={TextTypes.Body}>{fromDateStr}{", "}</Text>
+      <Text textType={TextTypes.Body}>
+        {fromDateStr}
+        {", "}
+      </Text>
       <Text textType={TextTypes.BodyStrong}>{fromTimeStr}</Text>
       <Text textType={TextTypes.Body}>{" — "}</Text>
-      <Text textType={TextTypes.Body}>{toDateStr}{", "}</Text>
+      <Text textType={TextTypes.Body}>
+        {toDateStr}
+        {", "}
+      </Text>
       <Text textType={TextTypes.BodyStrong}>{toTimeStr}</Text>
-      {
-        isUTC &&
-          <Text textType={TextTypes.Body}>{" UTC"}</Text>
-      }
-
+      {isUTC && <Text textType={TextTypes.Body}>{" UTC"}</Text>}
     </div>
   );
 };

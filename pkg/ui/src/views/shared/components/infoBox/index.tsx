@@ -14,10 +14,6 @@ import "./infoBox.styl";
 
 export default class InfoBox extends React.Component {
   render() {
-    return (
-      <div className="info-box">
-        { this.props.children }
-      </div>
-    );
+    return <div className="info-box">{this.props.children}</div>;
   }
 }

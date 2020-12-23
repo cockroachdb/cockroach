@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {analytics} from "src/redux/analytics";
+import { analytics } from "src/redux/analytics";
 
-export function trackTerminateSession () {
+export function trackTerminateSession() {
   const boundTrack = analytics.track.bind(analytics);
   (() => {
     boundTrack({
@@ -19,7 +19,7 @@ export function trackTerminateSession () {
   })();
 }
 
-export function trackTerminateQuery () {
+export function trackTerminateQuery() {
   const boundTrack = analytics.track.bind(analytics);
   (() => {
     boundTrack({

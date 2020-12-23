@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {BadgeStatus} from "src/components";
+import { BadgeStatus } from "src/components";
 
 export enum JobStatusVisual {
   BadgeOnly,
@@ -50,13 +50,13 @@ export const JOB_STATUS_RUNNING = "running";
 export const JOB_STATUS_PENDING = "pending";
 
 export const statusOptions = [
-  {value: "", label: "All"},
-  {value: "succeeded", label: "Succeeded"},
-  {value: "failed", label: "Failed"},
-  {value: "running", label: "Running"},
-  {value: "pending", label: "Pending"},
-  {value: "canceled", label: "Canceled"},
-  {value: "paused", label: "Paused"},
+  { value: "", label: "All" },
+  { value: "succeeded", label: "Succeeded" },
+  { value: "failed", label: "Failed" },
+  { value: "running", label: "Running" },
+  { value: "pending", label: "Pending" },
+  { value: "canceled", label: "Canceled" },
+  { value: "paused", label: "Paused" },
 ];
 
 export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
@@ -66,18 +66,18 @@ export function jobHasOneOfStatuses(job: Job, ...statuses: string[]) {
 export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
   switch (status) {
     case JOB_STATUS_SUCCEEDED:
-        return "success";
+      return "success";
     case JOB_STATUS_FAILED:
-        return "danger";
+      return "danger";
     case JOB_STATUS_CANCELED:
-        return "default";
+      return "default";
     case JOB_STATUS_PAUSED:
-        return "default";
+      return "default";
     case JOB_STATUS_RUNNING:
-        return "info";
+      return "info";
     case JOB_STATUS_PENDING:
-        return "warning";
+      return "warning";
     default:
-        return "info";
+      return "info";
   }
 };

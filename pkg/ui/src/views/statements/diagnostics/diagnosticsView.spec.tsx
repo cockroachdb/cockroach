@@ -48,11 +48,14 @@ describe("DiagnosticsView", () => {
             diagnosticsReports={[]}
             dismissAlertMessage={() => {}}
           />
-        </MemoryRouter>);
+        </MemoryRouter>,
+      );
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(`.${cx("crl-button")}`).first();
+      const activateButtonComponent = wrapper
+        .find(`.${cx("crl-button")}`)
+        .first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });
@@ -72,8 +75,8 @@ describe("DiagnosticsView", () => {
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
           dismissAlertMessage={() => {}}
-        />),
-      );
+        />
+      ));
     });
 
     it("renders Table component when diagnostics data is provided", () => {
@@ -81,7 +84,9 @@ describe("DiagnosticsView", () => {
     });
 
     it("calls activate callback with statementId when click on Activate button", () => {
-      const activateButtonComponent = wrapper.find(`.${cx("crl-button")}`).first();
+      const activateButtonComponent = wrapper
+        .find(`.${cx("crl-button")}`)
+        .first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
     });
@@ -98,16 +103,20 @@ describe("DiagnosticsView", () => {
           hasData={true}
           diagnosticsReports={diagnosticsRequests}
           dismissAlertMessage={() => {}}
-        />),
-      );
+        />
+      ));
 
-      const activateButtonComponent = wrapper.find(".crl-statements-diagnostics-view__activate-button").first();
+      const activateButtonComponent = wrapper
+        .find(".crl-statements-diagnostics-view__activate-button")
+        .first();
       assert.isFalse(activateButtonComponent.exists());
     });
   });
 });
 
-function generateDiagnosticsRequest(extendObject: Partial<IStatementDiagnosticsReport> = {}): IStatementDiagnosticsReport {
+function generateDiagnosticsRequest(
+  extendObject: Partial<IStatementDiagnosticsReport> = {},
+): IStatementDiagnosticsReport {
   const diagnosticsRequest = {
     statement_fingerprint: "SELECT * FROM table",
     completed: true,

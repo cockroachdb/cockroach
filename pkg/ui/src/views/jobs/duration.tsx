@@ -10,15 +10,18 @@
 
 import React from "react";
 import { TimestampToMoment } from "src/util/convert";
-import { JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED } from "src/views/jobs/jobStatusOptions";
+import {
+  JOB_STATUS_RUNNING,
+  JOB_STATUS_SUCCEEDED,
+} from "src/views/jobs/jobStatusOptions";
 import { formatDuration } from "src/views/jobs/index";
 import moment from "moment";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 
 export class Duration extends React.PureComponent<{ job: Job }> {
   render() {
-    const {job} = this.props;
+    const { job } = this.props;
     // Parse timestamp to default value NULL instead of Date.now.
     // Conversion dates to Date.now causes traling dates and constant
     // duration increase even when job is finished.
@@ -40,7 +43,10 @@ export class Duration extends React.PureComponent<{ job: Job }> {
         }
         return null;
       case JOB_STATUS_SUCCEEDED:
-        return "Duration: " + formatDuration(moment.duration(finishedAt.diff(startedAt)));
+        return (
+          "Duration: " +
+          formatDuration(moment.duration(finishedAt.diff(startedAt)))
+        );
       default:
         return null;
     }

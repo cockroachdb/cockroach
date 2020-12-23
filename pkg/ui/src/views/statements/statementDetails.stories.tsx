@@ -12,9 +12,12 @@ import React from "react";
 import { storiesOf } from "@storybook/react";
 import { Location } from "history";
 
-import {withBackgroundFactory, withRouterProvider} from ".storybook/decorators";
-import {StatementDetails} from "./statementDetails";
-import {statementDetailsPropsFixture} from "./statementDetails.fixture";
+import {
+  withBackgroundFactory,
+  withRouterProvider,
+} from ".storybook/decorators";
+import { StatementDetails } from "./statementDetails";
+import { statementDetailsPropsFixture } from "./statementDetails.fixture";
 
 // (koorosh) Note: Diagnostics tab isn't added here because it is independent
 // connected view and has to be managed as separate story.
@@ -23,33 +26,35 @@ storiesOf("StatementDetails", module)
   .addDecorator(withRouterProvider)
   .addDecorator(withBackgroundFactory())
   .add("Overview tab", () => (
-    <StatementDetails
-      {...statementDetailsPropsFixture}
-    />
+    <StatementDetails {...statementDetailsPropsFixture} />
   ))
   .add("Logical Plan tab", () => {
     const location: Location = {
       ...statementDetailsPropsFixture.history.location,
       search: new URLSearchParams([["tab", "logical-plan"]]).toString(),
     };
-    return (<StatementDetails
-      {...statementDetailsPropsFixture}
-      history={{
-        ...statementDetailsPropsFixture.history,
-        location,
-      }}
-    />);
+    return (
+      <StatementDetails
+        {...statementDetailsPropsFixture}
+        history={{
+          ...statementDetailsPropsFixture.history,
+          location,
+        }}
+      />
+    );
   })
   .add("Execution Stats tab", () => {
     const location: Location = {
       ...statementDetailsPropsFixture.history.location,
       search: new URLSearchParams([["tab", "execution-stats"]]).toString(),
     };
-    return (<StatementDetails
-      {...statementDetailsPropsFixture}
-      history={{
-        ...statementDetailsPropsFixture.history,
-        location,
-      }}
-    />);
+    return (
+      <StatementDetails
+        {...statementDetailsPropsFixture}
+        history={{
+          ...statementDetailsPropsFixture.history,
+          location,
+        }}
+      />
+    );
   });
