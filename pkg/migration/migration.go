@@ -28,13 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/logtags"
 )
 
 // Manager coordinates long-running migrations.
 type Manager interface {
-	Migrate(ctx context.Context, from, to clusterversion.ClusterVersion) error
+	Migrate(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
 }
 
 // Cluster abstracts a physical KV cluster and can be utilized by a long-runnng

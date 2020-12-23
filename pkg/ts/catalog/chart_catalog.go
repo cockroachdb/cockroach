@@ -2321,6 +2321,7 @@ var charts = []sectionDescription{
 					"jobs.schema_change_gc.currently_running",
 					"jobs.typedesc_schema_change.currently_running",
 					"jobs.stream_ingestion.currently_running",
+					"jobs.migration.currently_running",
 				},
 			},
 			{
@@ -2452,6 +2453,17 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.resume_completed",
 					"jobs.stream_ingestion.resume_failed",
 					"jobs.stream_ingestion.resume_retry_error",
+				},
+			},
+			{
+				Title: "Long Running Migrations",
+				Metrics: []string{
+					"jobs.migration.fail_or_cancel_completed",
+					"jobs.migration.fail_or_cancel_failed",
+					"jobs.migration.fail_or_cancel_retry_error",
+					"jobs.migration.resume_completed",
+					"jobs.migration.resume_failed",
+					"jobs.migration.resume_retry_error",
 				},
 			},
 		},
