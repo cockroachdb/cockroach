@@ -392,7 +392,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&renameDatabaseNode{}):          "rename database",
 	reflect.TypeOf(&renameIndexNode{}):             "rename index",
 	reflect.TypeOf(&renameTableNode{}):             "rename table",
-	reflect.TypeOf(&reparentDatabaseNode{}):        "TODO (rohany): fill out",
+	reflect.TypeOf(&reparentDatabaseNode{}):        "reparent database",
 	reflect.TypeOf(&renderNode{}):                  "render",
 	reflect.TypeOf(&RevokeRoleNode{}):              "revoke role",
 	reflect.TypeOf(&rowCountNode{}):                "count",
