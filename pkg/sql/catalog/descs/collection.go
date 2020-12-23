@@ -259,6 +259,42 @@ func (tc *Collection) getLeasedDescriptorByName(
 	return desc, false, nil
 }
 
+// getLeasedDescriptorByID return a leased descriptor valid for the transaction,
+// acquiring one if necessary.
+// We set a deadline on the transaction based on the lease expiration, which is
+// the usual case, unless setTxnDeadline is false.
+func (tc *Collection) getLeasedDescriptorByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID, setTxnDeadline bool,
+) (catalog.Descriptor, error) {
+	// First, look to see if we already have the table in the shared cache.
+	if desc := tc.leasedDescriptors.getByID(id); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
+		return desc, nil
+	}
+
+	readTimestamp := txn.ReadTimestamp()
+	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if expiration.LessEq(readTimestamp) {
+		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	}
+
+	tc.leasedDescriptors.add(desc)
+	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
+
+	if setTxnDeadline {
+		// If the descriptor we just acquired expires before the txn's deadline,
+		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
+		// timestamp, so we need to set a deadline on the transaction to prevent it
+		// from committing beyond the version's expiration time.
+		txn.UpdateDeadlineMaybe(ctx, expiration)
+	}
+	return desc, nil
+}
+
 // getDescriptorFromStore gets a descriptor from its namespace entry. It does
 // not return the descriptor if the name is being drained.
 func (tc *Collection) getDescriptorFromStore(
@@ -676,7 +712,7 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		// the database which doesn't reflect the changes to the schema. But this
 		// isn't a problem for correctness; it can only happen on other sessions
 		// before the schema change has returned results.
-		desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags, true /* setTxnDeadline */)
+		desc, err := tc.getDescriptorByID(ctx, txn, schemaInfo.ID, flags)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return false, nil, nil
@@ -809,7 +845,7 @@ func (tc *Collection) getSchemaByName(
 func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorByID(ctx, txn, dbID, flags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
@@ -827,7 +863,7 @@ func (tc *Collection) GetImmutableDatabaseByID(
 func (tc *Collection) GetImmutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Immutable, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorByID(ctx, txn, tableID, flags.CommonLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedRelationError(
@@ -847,60 +883,50 @@ func (tc *Collection) GetImmutableTableByID(
 	return hydrated.(*tabledesc.Immutable), nil
 }
 
-func (tc *Collection) getDescriptorVersionByID(
+func (tc *Collection) getDescriptorByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
+) (catalog.Descriptor, error) {
+	return tc.getDescriptorByIDMaybeSetTxnDeadline(ctx, txn, id, flags, false /* setTxnDeadline */)
+}
+
+// getDescriptorByIDMaybeSetTxnDeadline returns a descriptor according to the
+// provided lookup flags. Note that flags.Required is ignored, and an error is
+// always returned if no descriptor with the ID exists.
+func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
-	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id, catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind, true /* required */)
-		if err != nil {
-			return nil, err
-		}
-		if dropped, err := filterDescriptorState(desc, flags); err != nil || dropped {
-			return nil, err
-		}
-		return desc, nil
-	}
-
-	for _, ud := range tc.uncommittedDescriptors {
-		if immut := ud.immutable; immut.GetID() == id {
+	getDescriptorByID := func() (catalog.Descriptor, error) {
+		if ud := tc.getUncommittedDescriptorByID(id); ud != nil {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
-			if immut.Dropped() {
-				// TODO (lucy): This error is meant to be parallel to the error returned
-				// from FilterDescriptorState, but it may be too low-level for getting
-				// descriptors from the descriptor collection. In general the errors
-				// being returned from this method aren't that consistent.
-				return nil, catalog.NewInactiveDescriptorError(catalog.ErrDescriptorDropped)
+			if flags.RequireMutable {
+				return ud.mutable, nil
 			}
-			return immut, nil
+			return ud.immutable, nil
 		}
+
+		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
+			// TODO (lucy): If the descriptor doesn't exist, should we generate our
+			//  own error here instead of using the one from catalogkv?
+			return catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
+				catalogkv.Mutability(flags.RequireMutable), catalogkv.AnyDescriptorKind, true /* required */)
+		}
+
+		return tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
 	}
 
-	// First, look to see if we already have the table in the shared cache.
-	if desc := tc.leasedDescriptors.getByID(id); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
-		return desc, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
+	desc, err := getDescriptorByID()
 	if err != nil {
 		return nil, err
 	}
-
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	// For the by-ID resolution paths, always return tables in the adding state.
+	// TODO (lucy): This was done purely to preserve existing behavior while
+	// refactoring for 21.1. Figure out why we resolve tables being added and
+	// whether we actually should.
+	if desc.Adding() {
+		return desc, nil
 	}
-
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
-
-	if setTxnDeadline {
-		// If the descriptor we just acquired expires before the txn's deadline,
-		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-		// timestamp, so we need to set a deadline on the transaction to prevent it
-		// from committing beyond the version's expiration time.
-		txn.UpdateDeadlineMaybe(ctx, expiration)
+	if dropped, err := filterDescriptorState(desc, flags); err != nil || dropped {
+		return nil, err
 	}
 	return desc, nil
 }
@@ -929,12 +955,11 @@ func (tc *Collection) GetMutableDescriptorByID(
 ) (catalog.MutableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable descriptor for id %d", id)
 
-	if desc := tc.getUncommittedDescriptorByID(id); desc != nil {
-		log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
-		return desc, nil
-	}
-	desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id, catalogkv.Mutable,
-		catalogkv.AnyDescriptorKind, true /* required */)
+	desc, err := tc.getDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
+		RequireMutable: true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1002,9 +1027,7 @@ func (tc *Collection) resolveSchemaByID(
 			_, err = filterDescriptorState(desc, flags)
 		}
 	} else {
-		desc, err = tc.getDescriptorVersionByID(
-			ctx, txn, schemaID, flags, true, /* setTxnDeadline */
-		)
+		desc, err = tc.getDescriptorByID(ctx, txn, schemaID, flags)
 	}
 	if err != nil {
 		return catalog.ResolvedSchema{}, err
@@ -1288,7 +1311,7 @@ func (tc *Collection) GetMutableTypeByID(
 func (tc *Collection) GetImmutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*typedesc.Immutable, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorByID(ctx, txn, typeID, flags.CommonLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
@@ -1345,19 +1368,18 @@ func (tc *Collection) getUncommittedDescriptor(
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.
 func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *tabledesc.Mutable {
-	desc := tc.getUncommittedDescriptorByID(id)
-	if desc != nil {
-		if table, ok := desc.(*tabledesc.Mutable); ok {
+	if ud := tc.getUncommittedDescriptorByID(id); ud != nil {
+		if table, ok := ud.mutable.(*tabledesc.Mutable); ok {
 			return table
 		}
 	}
 	return nil
 }
 
-func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) catalog.MutableDescriptor {
+func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) *uncommittedDescriptor {
 	for _, desc := range tc.uncommittedDescriptors {
 		if desc.mutable.GetID() == id {
-			return desc.mutable
+			return desc
 		}
 	}
 	return nil
@@ -1700,7 +1722,7 @@ func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid)
 func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	desc, err := dt.descriptors.getDescriptorVersionByID(
+	desc, err := dt.descriptors.getDescriptorByIDMaybeSetTxnDeadline(
 		ctx,
 		dt.txn,
 		id,
