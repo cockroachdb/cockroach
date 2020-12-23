@@ -244,19 +244,6 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 	return len(texpr.ResolvedType().TupleLabels()) == 0
 }
 
-// addColumn adds a column to scope with the given alias, type, and
-// expression. It returns a pointer to the new column. The column ID and group
-// are left empty so they can be filled in later.
-func (b *Builder) addColumn(scope *scope, alias string, expr tree.TypedExpr) *scopeColumn {
-	name := tree.Name(alias)
-	scope.cols = append(scope.cols, scopeColumn{
-		name: name,
-		typ:  expr.ResolvedType(),
-		expr: expr,
-	})
-	return &scope.cols[len(scope.cols)-1]
-}
-
 func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColumns) {
 	for i := range cols {
 		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)

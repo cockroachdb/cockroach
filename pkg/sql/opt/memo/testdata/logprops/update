@@ -238,20 +238,19 @@ build
 UPDATE abcde SET a=1 WHERE b=c RETURNING *;
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── volatile, mutations
- ├── fd: ()-->(1), (2)==(3), (3)==(2), (2)-->(4)
+ ├── fd: ()-->(1), (2)==(3), (3)==(2)
  ├── prune: (1-4)
  └── update abcde
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:8(int) b:9(int) c:10(int) d:11(int) rowid:12(int) e:13(int)
       ├── update-mapping:
       │    ├── a_new:15 => a:1
-      │    ├── column17:17 => d:4
       │    └── column16:16 => e:6
       ├── volatile, mutations
       ├── key: (5)
-      ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4), (2)-->(4)
+      ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4)
       └── project
            ├── columns: column17:17(int!null) a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal) a_new:15(int!null) column16:16(int!null)
            ├── immutable

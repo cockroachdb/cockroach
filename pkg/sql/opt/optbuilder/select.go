@@ -1046,7 +1046,7 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := b.addColumn(projectionsScope, "" /* alias */, expr)
+			col := projectionsScope.addColumn("" /* alias */, expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)

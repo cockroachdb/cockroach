@@ -113,7 +113,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 				// when used in a from clause.
 				alias = def.ReturnLabels[0]
 			}
-			outCol = b.addColumn(outScope, alias, texpr)
+			outCol = outScope.addColumn(alias, texpr)
 		}
 
 		scalar := b.buildScalar(texpr, inScope, outScope, outCol, nil)
