@@ -171,7 +171,6 @@ const renderMultipleHeaders = (
 };
 
 const getVerticalLines = (data: [DetailedIdentity[]], index: number) => {
-  // tslint:disable-next-line: no-shadowed-variable
   const values: any = [];
   let currentNumber = 0;
   data.forEach((array) => {
@@ -310,7 +309,6 @@ const getLatencyCell = (
   );
 };
 
-// tslint:disable-next-line: variable-name
 export const Latency: React.SFC<ILatencyProps> = ({
   displayIdentities,
   staleIDs,
@@ -333,7 +331,6 @@ export const Latency: React.SFC<ILatencyProps> = ({
     { "latency-table__multiple": multipleHeader },
     { "latency-table__empty": data.length === 0 },
   );
-  // tslint:disable-next-line: no-bitwise
   const width =
     data &&
     data.reduce((a: any, b: any) => (a.length || a) + b.length, 0) * 108 + 150;

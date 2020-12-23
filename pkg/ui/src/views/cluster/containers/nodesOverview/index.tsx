@@ -162,7 +162,6 @@ const getBadgeTypeByNodeStatus = (
   }
 };
 
-// tslint:disable-next-line:variable-name
 const NodeNameColumn: React.FC<{
   record: NodeStatusRow | DecommissionedNodeStatusRow;
 }> = ({ record }) => {
@@ -174,7 +173,6 @@ const NodeNameColumn: React.FC<{
   );
 };
 
-// tslint:disable-next-line:variable-name
 const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({
   record,
 }) => {
@@ -608,7 +606,6 @@ export const decommissionedNodesTableDataSelector = createSelector(
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
-// tslint:disable-next-line:variable-name
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
@@ -628,7 +625,6 @@ const NodesConnected = connect(
 /**
  * DecommissionedNodesConnected is a redux-connected HOC of NotLiveNodeList.
  */
-// tslint:disable-next-line:variable-name
 const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
     return {
@@ -687,7 +683,6 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 /**
  * NodesMainConnected is a redux-connected HOC of NodesMain.
  */
-// tslint:disable-next-line:variable-name
 const NodesMainConnected = connect(
   (state: AdminUIState) => {
     return {

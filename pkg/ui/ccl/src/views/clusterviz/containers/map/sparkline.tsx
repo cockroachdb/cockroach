@@ -153,7 +153,6 @@ export class SparklineMetricsDataComponent extends React.Component<
       (timestamp) => resultsByTimestamp[timestamp],
     );
 
-    // tslint:disable-next-line:variable-name
     const Sparkline = this.chart;
 
     return <Sparkline results={results} />;

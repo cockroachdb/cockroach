@@ -33,7 +33,6 @@ const openDetails = (data: any) => {
   return <Link to={link}>View statement details</Link>;
 };
 
-// tslint:disable-next-line: variable-name
 export const DrawerComponent = ({
   visible,
   onClose,

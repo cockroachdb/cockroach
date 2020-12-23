@@ -26,7 +26,6 @@ interface ILegendProps {
   noConnections: NoConnection[];
 }
 
-// tslint:disable-next-line: variable-name
 export const Legend: React.SFC<ILegendProps> = ({
   stddevMinus2,
   stddevMinus1,
