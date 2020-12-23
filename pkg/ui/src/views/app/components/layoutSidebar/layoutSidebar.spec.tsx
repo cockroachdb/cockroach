@@ -31,22 +31,30 @@ describe("LayoutSidebar", () => {
   });
 
   it("does not show Network Latency link for single node cluster", () => {
-    const wrapper = shallow(<Sidebar
-      history={history}
-      match={match}
-      location={history.location}
-      isSingleNodeCluster={true}
-    />);
-    assert.isFalse(wrapper.findWhere(w => w.prop("to") === "/reports/network").exists());
+    const wrapper = shallow(
+      <Sidebar
+        history={history}
+        match={match}
+        location={history.location}
+        isSingleNodeCluster={true}
+      />,
+    );
+    assert.isFalse(
+      wrapper.findWhere((w) => w.prop("to") === "/reports/network").exists(),
+    );
   });
 
   it("shows Network Latency link for multi node cluster", () => {
-    const wrapper = shallow(<Sidebar
-      history={history}
-      match={match}
-      location={history.location}
-      isSingleNodeCluster={false}
-    />);
-    assert.isTrue(wrapper.findWhere(w => w.prop("to") === "/reports/network").exists());
+    const wrapper = shallow(
+      <Sidebar
+        history={history}
+        match={match}
+        location={history.location}
+        isSingleNodeCluster={false}
+      />,
+    );
+    assert.isTrue(
+      wrapper.findWhere((w) => w.prop("to") === "/reports/network").exists(),
+    );
   });
 });

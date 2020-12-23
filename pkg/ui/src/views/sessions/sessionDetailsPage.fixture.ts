@@ -8,13 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {refreshSessions} from "src/redux/apiReducers";
-import {createMemoryHistory} from "history";
-import {SessionDetailsProps} from "src/views/sessions/sessionDetails";
-import {activeSession, idleSession, idleTransactionSession} from "src/views/sessions/sessionsPage.fixture";
-import {sessionAttr} from "src/util/constants";
+import { refreshSessions } from "src/redux/apiReducers";
+import { createMemoryHistory } from "history";
+import { SessionDetailsProps } from "src/views/sessions/sessionDetails";
+import {
+  activeSession,
+  idleSession,
+  idleTransactionSession,
+} from "src/views/sessions/sessionsPage.fixture";
+import { sessionAttr } from "src/util/constants";
 
-const history = createMemoryHistory({ initialEntries: ["/sessions"]});
+const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const sessionDetailsPropsBase: SessionDetailsProps = {
   id: "blah",
@@ -25,18 +29,18 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
   session: null,
   history,
   location: {
-    "pathname": "/sessions/blah",
-    "search": "",
-    "hash": "",
-    "state": null,
+    pathname: "/sessions/blah",
+    search: "",
+    hash: "",
+    state: null,
   },
-  "match": {
-    "path": "/sessions/blah",
-    "url": "/sessions/blah",
-    "isExact": true,
-    "params": {[sessionAttr]: "blah"},
+  match: {
+    path: "/sessions/blah",
+    url: "/sessions/blah",
+    isExact: true,
+    params: { [sessionAttr]: "blah" },
   },
-  refreshSessions: (() => {}) as (typeof refreshSessions),
+  refreshSessions: (() => {}) as typeof refreshSessions,
 };
 
 export const sessionDetailsIdlePropsFixture: SessionDetailsProps = {
@@ -56,5 +60,5 @@ export const sessionDetailsActiveStmtPropsFixture: SessionDetailsProps = {
 
 export const sessionDetailsNotFound: SessionDetailsProps = {
   ...sessionDetailsPropsBase,
-  session: {"session": null},
+  session: { session: null },
 };

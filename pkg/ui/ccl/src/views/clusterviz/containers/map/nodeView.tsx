@@ -59,7 +59,9 @@ export class NodeView extends React.Component<NodeViewProps> {
 
         const deadTime = liveness.expiration.wall_time;
         const deadMoment = LongToMoment(deadTime);
-        return `dead for ${moment.duration(deadMoment.diff(moment())).humanize()}`;
+        return `dead for ${moment
+          .duration(deadMoment.diff(moment()))
+          .humanize()}`;
       }
       case NodeLivenessStatus.NODE_STATUS_LIVE: {
         const startTime = LongToMoment(node.started_at);
@@ -75,20 +77,24 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { used, usable } = nodeCapacityStats(node);
 
     return (
-      <Link
-        to={`/node/${node.desc.node_id}`}
-        style={{ cursor: "pointer" }}
-      >
-        <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
+      <Link to={`/node/${node.desc.node_id}`} style={{ cursor: "pointer" }}>
+        <g
+          transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}
+        >
           <rect width={180} height={210} opacity={0} />
           <Labels
             label={`Node ${node.desc.node_id}`}
             subLabel={this.getUptimeText()}
             tooltip={node.desc.address.address_field}
           />
-          <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
           <g
-            dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(livenessStatus))}
+            dangerouslySetInnerHTML={trustIcon(nodeIcon)}
+            transform="translate(14 14)"
+          />
+          <g
+            dangerouslySetInnerHTML={trustIcon(
+              this.getLivenessIcon(livenessStatus),
+            )}
             transform="translate(9, 9)"
           />
           <CapacityArc

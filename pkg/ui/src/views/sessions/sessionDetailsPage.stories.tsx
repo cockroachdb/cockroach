@@ -11,35 +11,30 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import {withBackgroundFactory, withRouterProvider} from ".storybook/decorators";
-import {SessionDetails} from "src/views/sessions/sessionDetails";
+import {
+  withBackgroundFactory,
+  withRouterProvider,
+} from ".storybook/decorators";
+import { SessionDetails } from "src/views/sessions/sessionDetails";
 import {
   sessionDetailsActiveStmtPropsFixture,
   sessionDetailsActiveTxnPropsFixture,
-  sessionDetailsIdlePropsFixture, sessionDetailsNotFound,
+  sessionDetailsIdlePropsFixture,
+  sessionDetailsNotFound,
 } from "src/views/sessions/sessionDetailsPage.fixture";
 
 storiesOf("Session Details Page", module)
   .addDecorator(withRouterProvider)
   .addDecorator(withBackgroundFactory())
   .add("Idle Session", () => (
-    <SessionDetails
-      {...sessionDetailsIdlePropsFixture}
-    />
+    <SessionDetails {...sessionDetailsIdlePropsFixture} />
   ))
   .add("Idle Txn", () => (
-    <SessionDetails
-      {...sessionDetailsActiveTxnPropsFixture}
-    />
+    <SessionDetails {...sessionDetailsActiveTxnPropsFixture} />
   ))
   .add("Session", () => (
-    <SessionDetails
-      {...sessionDetailsActiveStmtPropsFixture}
-    />
+    <SessionDetails {...sessionDetailsActiveStmtPropsFixture} />
   ))
   .add("Session Not Found", () => (
-    <SessionDetails
-      {...sessionDetailsNotFound}
-    />
-  ))
-;
+    <SessionDetails {...sessionDetailsNotFound} />
+  ));

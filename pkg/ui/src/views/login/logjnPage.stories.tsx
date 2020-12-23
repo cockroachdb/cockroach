@@ -11,16 +11,14 @@ import React from "react";
 import { storiesOf } from "@storybook/react";
 import { withRouterDecorator } from "src/util/decorators";
 import { LoginPage } from "./loginPage";
-import { loginPagePropsFixture, loginPagePropsLoadingFixture, loginPagePropsErrorFixture } from "./loginPage.fixture";
+import {
+  loginPagePropsFixture,
+  loginPagePropsLoadingFixture,
+  loginPagePropsErrorFixture,
+} from "./loginPage.fixture";
 
 storiesOf("LoginPage", module)
   .addDecorator(withRouterDecorator)
-  .add("Default state", () => (
-    <LoginPage {...loginPagePropsFixture} />
-  ))
-  .add("Loading state", () => (
-    <LoginPage {...loginPagePropsLoadingFixture} />
-  ))
-  .add("Error state", () => (
-    <LoginPage {...loginPagePropsErrorFixture} />
-  ));
+  .add("Default state", () => <LoginPage {...loginPagePropsFixture} />)
+  .add("Loading state", () => <LoginPage {...loginPagePropsLoadingFixture} />)
+  .add("Error state", () => <LoginPage {...loginPagePropsErrorFixture} />);

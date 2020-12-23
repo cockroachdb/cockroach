@@ -9,10 +9,20 @@
 // licenses/APL.txt.
 
 import _ from "lodash";
-import { createStore, combineReducers, applyMiddleware, compose, Store } from "redux";
+import {
+  createStore,
+  combineReducers,
+  applyMiddleware,
+  compose,
+  Store,
+} from "redux";
 import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
-import {connectRouter, routerMiddleware, RouterState} from "connected-react-router";
+import {
+  connectRouter,
+  routerMiddleware,
+  RouterState,
+} from "connected-react-router";
 import { createHashHistory, History } from "history";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
@@ -62,18 +72,20 @@ export function createAdminUIStore(historyInst: History<any>) {
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
       // Support for redux dev tools
       // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__ ? (window as any).__REDUX_DEVTOOLS_EXTENSION__({
-        serialize: {
-          options: {
-            function: (_key: string, value: any): Object => {
-              if (value && value.toRaw) {
-                return value.toRaw();
-              }
-              return value;
+      (window as any).__REDUX_DEVTOOLS_EXTENSION__
+        ? (window as any).__REDUX_DEVTOOLS_EXTENSION__({
+            serialize: {
+              options: {
+                function: (_key: string, value: any): Object => {
+                  if (value && value.toRaw) {
+                    return value.toRaw();
+                  }
+                  return value;
+                },
+              },
             },
-          },
-        },
-      }) : _.identity,
+          })
+        : _.identity,
     ),
   );
 

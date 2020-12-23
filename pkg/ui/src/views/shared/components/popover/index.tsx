@@ -39,16 +39,16 @@ export default class Popover extends React.Component<PopoverProps> {
         <div
           ref={this.contentRef}
           className="popover__content"
-          onClick={() => onVisibleChange(!visible)}>
-          { content }
+          onClick={() => onVisibleChange(!visible)}
+        >
+          {content}
         </div>
         <OutsideEventHandler
           onOutsideClick={() => onVisibleChange(false)}
           mountNodePosition={"fixed"}
-          ignoreClickOnRefs={[this.contentRef]}>
-          <div className={popoverClasses}>
-            { children }
-          </div>
+          ignoreClickOnRefs={[this.contentRef]}
+        >
+          <div className={popoverClasses}>{children}</div>
         </OutsideEventHandler>
       </React.Fragment>
     );

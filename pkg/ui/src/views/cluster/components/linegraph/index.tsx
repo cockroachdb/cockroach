@@ -14,14 +14,21 @@ import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
-import * as protos from  "src/js/protos";
+import * as protos from "src/js/protos";
 import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart, InitLineChart, CHART_MARGINS, ConfigureLinkedGuideline,
+  ConfigureLineChart,
+  InitLineChart,
+  CHART_MARGINS,
+  ConfigureLinkedGuideline,
 } from "src/views/cluster/util/graphs";
 import {
-  Metric, MetricProps, Axis, AxisProps, QueryTimeInfo,
+  Metric,
+  MetricProps,
+  Axis,
+  AxisProps,
+  QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
@@ -58,24 +65,36 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
   chart: nvd3.LineChart;
 
   axis = createSelector(
-    (props: {children?: React.ReactNode}) => props.children,
+    (props: { children?: React.ReactNode }) => props.children,
     (children) => {
-      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(children as any, Axis);
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
+        children as any,
+        Axis,
+      );
       if (axes.length === 0) {
-        console.warn("LineGraph requires the specification of at least one axis.");
+        console.warn(
+          "LineGraph requires the specification of at least one axis.",
+        );
         return null;
       }
       if (axes.length > 1) {
-        console.warn("LineGraph currently only supports a single axis; ignoring additional axes.");
+        console.warn(
+          "LineGraph currently only supports a single axis; ignoring additional axes.",
+        );
       }
       return axes[0];
-    });
+    },
+  );
 
   metrics = createSelector(
-    (props: {children?: React.ReactNode}) => props.children,
+    (props: { children?: React.ReactNode }) => props.children,
     (children) => {
-      return findChildrenOfType(children as any, Metric) as React.ReactElement<MetricProps>[];
-    });
+      return findChildrenOfType(
+        children as any,
+        Metric,
+      ) as React.ReactElement<MetricProps>[];
+    },
+  );
 
   initChart() {
     const axis = this.axis(this.props);
@@ -101,14 +120,19 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
 
     // To get the x-coordinate within the chart we subtract the left side of the SVG
     // element and the left side margin.
-    const x = e.clientX - this.graphEl.current.getBoundingClientRect().left - CHART_MARGINS.left;
+    const x =
+      e.clientX -
+      this.graphEl.current.getBoundingClientRect().left -
+      CHART_MARGINS.left;
     // Find the time value of the coordinate by asking the scale to invert the value.
     const t = Math.floor(timeScale.invert(x));
 
     // Find which data point is closest to the x-coordinate.
     let result: moment.Moment;
     if (datapoints.length) {
-      const series: any = datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
+      const series: any = datapoints.map((d: any) =>
+        NanoToMilli(d.timestamp_nanos.toNumber()),
+      );
 
       const right = d3.bisectRight(series, t);
       const left = right - 1;
@@ -137,17 +161,20 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
     }
 
     // Only dispatch if we have something to change to avoid action spamming.
-    if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
+    if (
+      this.props.hoverState.hoverChart !== this.props.title ||
+      !result.isSame(this.props.hoverState.hoverTime)
+    ) {
       this.props.hoverOn({
         hoverChart: this.props.title,
         hoverTime: result,
       });
     }
-  }
+  };
 
   mouseLeave = () => {
     this.props.hoverOff();
-  }
+  };
 
   drawChart = () => {
     // If the document is not visible (e.g. if the window is minimized) we don't
@@ -167,10 +194,15 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
       }
 
       ConfigureLineChart(
-        this.chart, this.graphEl.current, metrics, axis, this.props.data, this.props.timeInfo,
+        this.chart,
+        this.graphEl.current,
+        metrics,
+        axis,
+        this.props.data,
+        this.props.timeInfo,
       );
     }
-  }
+  };
 
   drawLine = () => {
     if (!document.hidden) {
@@ -184,9 +216,15 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
       }
 
       const axis = this.axis(this.props);
-      ConfigureLinkedGuideline(this.chart, this.graphEl.current, axis, this.props.data, hoverTime);
+      ConfigureLinkedGuideline(
+        this.chart,
+        this.graphEl.current,
+        axis,
+        this.props.data,
+        hoverTime,
+      );
     }
-  }
+  };
 
   constructor(props: any) {
     super(props);
@@ -211,7 +249,10 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
   }
 
   componentDidUpdate() {
-    if (this.props.data !== this.state.lastData || this.props.timeInfo !== this.state.lastTimeInfo) {
+    if (
+      this.props.data !== this.state.lastData ||
+      this.props.timeInfo !== this.state.lastTimeInfo
+    ) {
       this.drawChart();
       this.setState({
         lastData: this.props.data,
@@ -233,9 +274,18 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
     }
 
     return (
-      <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
+      <Visualization
+        title={title}
+        subtitle={subtitle}
+        tooltip={tooltip}
+        loading={!data}
+      >
         <div className="linegraph">
-          <svg className="graph linked-guideline" ref={this.graphEl} {...hoverProps} />
+          <svg
+            className="graph linked-guideline"
+            ref={this.graphEl}
+            {...hoverProps}
+          />
         </div>
       </Visualization>
     );

@@ -39,14 +39,12 @@ interface VisualizationProps {
 export default class extends React.Component<VisualizationProps, {}> {
   render() {
     const { title, tooltip, stale } = this.props;
-    const vizClasses = classNames(
-      "visualization",
-      { "visualization--faded": stale || false },
-    );
-    const contentClasses = classNames(
-      "visualization__content",
-      { "visualization--loading": this.props.loading },
-    );
+    const vizClasses = classNames("visualization", {
+      "visualization--faded": stale || false,
+    });
+    const contentClasses = classNames("visualization__content", {
+      "visualization--loading": this.props.loading,
+    });
 
     let tooltipNode: React.ReactNode = "";
     if (tooltip) {
@@ -64,20 +62,20 @@ export default class extends React.Component<VisualizationProps, {}> {
     return (
       <div className={vizClasses}>
         <div className="visualization__header">
-          <span className="visualization__title">
-            {title}
-          </span>
-          {
-            this.props.subtitle ?
-              <span className="visualization__subtitle">{this.props.subtitle}</span>
-              : null
-          }
-          {
-            tooltipNode
-          }
+          <span className="visualization__title">{title}</span>
+          {this.props.subtitle ? (
+            <span className="visualization__subtitle">
+              {this.props.subtitle}
+            </span>
+          ) : null}
+          {tooltipNode}
         </div>
         <div className={contentClasses}>
-          {this.props.loading ? <img className="visualization__spinner" src={spinner} /> :  this.props.children }
+          {this.props.loading ? (
+            <img className="visualization__spinner" src={spinner} />
+          ) : (
+            this.props.children
+          )}
         </div>
       </div>
     );

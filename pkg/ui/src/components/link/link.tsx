@@ -15,16 +15,9 @@ import styles from "./link.module.styl";
 
 const cx = classnames.bind(styles);
 
-export function Link({
-  className,
-  children,
-  to,
-}: LinkProps) {
+export function Link({ className, children, to }: LinkProps) {
   return (
-    <LinkTo
-      className={cx("crl-link", className)}
-      to={to}
-    >
+    <LinkTo className={cx("crl-link", className)} to={to}>
       {children}
     </LinkTo>
   );

@@ -36,7 +36,9 @@ describe("EmailSubscriptionForm", () => {
       const emailAddress = "foo@bar.com";
       const inputComponent = wrapper.find("input.crl-input__text").first();
       inputComponent.simulate("change", { target: { value: emailAddress } });
-      const buttonComponent = wrapper.find(`button.${cx("crl-button")}`).first();
+      const buttonComponent = wrapper
+        .find(`button.${cx("crl-button")}`)
+        .first();
       buttonComponent.simulate("click");
 
       onSubmitHandler.calledOnceWith(emailAddress);
@@ -52,18 +54,24 @@ describe("EmailSubscriptionForm", () => {
     });
 
     it("doesn't call onSubmit callback", () => {
-      const buttonComponent = wrapper.find(`button.${cx("crl-button")}`).first();
+      const buttonComponent = wrapper
+        .find(`button.${cx("crl-button")}`)
+        .first();
       buttonComponent.simulate("click");
       assert.isTrue(onSubmitHandler.notCalled);
     });
 
     it("submit button is disabled", () => {
-      const buttonComponent = wrapper.find(`button.${cx("crl-button")}.${cx("crl-button--disabled")}`).first();
+      const buttonComponent = wrapper
+        .find(`button.${cx("crl-button")}.${cx("crl-button--disabled")}`)
+        .first();
       assert.isTrue(buttonComponent.exists());
     });
 
     it("validation message is shown", () => {
-      const validationMessageWrapper = wrapper.find(".crl-input__text--error-message").first();
+      const validationMessageWrapper = wrapper
+        .find(".crl-input__text--error-message")
+        .first();
       assert.isTrue(validationMessageWrapper.exists());
       assert.equal(validationMessageWrapper.text(), "Invalid email address.");
     });

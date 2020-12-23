@@ -22,7 +22,9 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
-import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
+import InstructionsBox, {
+  showInstructionsBox,
+} from "src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 
@@ -40,7 +42,10 @@ interface NodeCanvasState {
   viewportSize: [number, number];
 }
 
-export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState> {
+export class NodeCanvas extends React.Component<
+  NodeCanvasProps,
+  NodeCanvasState
+> {
   graphEl: React.RefObject<SVGSVGElement> = React.createRef();
   debouncedOnResize: () => void;
 
@@ -56,11 +61,11 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     this.setState({
       viewportSize: [rect.width, rect.height],
     });
-  }
+  };
 
   onResize = () => {
     this.updateViewport();
-  }
+  };
 
   componentDidMount() {
     window.addEventListener("resize", this.debouncedOnResize);
@@ -77,24 +82,33 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { localityTree, locationTree, livenessStatuses, livenesses } = this.props;
+    const {
+      localityTree,
+      locationTree,
+      livenessStatuses,
+      livenesses,
+    } = this.props;
     const { viewportSize } = this.state;
 
     if (asMap) {
-      return <MapLayout
-        localityTree={localityTree}
-        locationTree={locationTree}
-        livenessStatuses={livenessStatuses}
-        viewportSize={viewportSize}
-      />;
+      return (
+        <MapLayout
+          localityTree={localityTree}
+          locationTree={locationTree}
+          livenessStatuses={livenessStatuses}
+          viewportSize={viewportSize}
+        />
+      );
     }
 
-    return <CircleLayout
-      viewportSize={viewportSize}
-      localityTree={localityTree}
-      livenessStatuses={livenessStatuses}
-      livenesses={livenesses}
-    />;
+    return (
+      <CircleLayout
+        viewportSize={viewportSize}
+        localityTree={localityTree}
+        livenessStatuses={livenessStatuses}
+        livenesses={livenesses}
+      />
+    );
   }
 
   renderBackButton() {
@@ -108,7 +122,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
 
     return (
       <Link
-        to={ CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality) }
+        to={CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality)}
         style={{ textDecoration: "none", color: "#595f6c" }}
       >
         <div
@@ -130,7 +144,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
           />
           Up to{" "}
           <span style={{ textTransform: "uppercase" }}>
-            { getLocalityLabel(parentLocality) }
+            {getLocalityLabel(parentLocality)}
           </span>
         </div>
       </Link>
@@ -138,14 +152,17 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   render() {
-    const showMap = renderAsMap(this.props.locationTree, this.props.localityTree);
+    const showMap = renderAsMap(
+      this.props.locationTree,
+      this.props.localityTree,
+    );
 
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
       <div style={{ flexGrow: 1, position: "relative" }}>
-        <div style={{ width: "100%", height: "100%", position: "absolute"  }}>
+        <div style={{ width: "100%", height: "100%", position: "absolute" }}>
           <svg
             style={{
               width: "100%",
@@ -156,14 +173,13 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
             className="cluster-viz"
             ref={this.graphEl}
           >
-            { this.renderContent(showMap) }
+            {this.renderContent(showMap)}
           </svg>
         </div>
-        { this.renderBackButton() }
-        { showInstructionsBox(showMap, this.props.tiers)
-            ? <InstructionsBox />
-            : null
-        }
+        {this.renderBackButton()}
+        {showInstructionsBox(showMap, this.props.tiers) ? (
+          <InstructionsBox />
+        ) : null}
       </div>
     );
   }
