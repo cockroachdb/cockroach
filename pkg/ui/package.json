@@ -4,7 +4,22 @@
   "main": "index.tsx",
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
+  "eslintConfig": {
+    "extends": "@cockroachlabs",
+    "ignorePatterns": ["protos.d.ts", "protos.js"],
+    "rules": {
+      "@typescript-eslint/no-inferrable-types": "off",
+      "react/jsx-key": "off",
+      "@typescript-eslint/ban-types": "off",
+      "react/no-unescaped-entities": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/explicit-module-boundary-types": "off",
+      "@typescript-eslint/no-explicit-any": "off"
+    }
+  },
   "scripts": {
+    "lint": "eslint './{src,ccl}/**/*.{tsx,ts,js}'",
+    "lint:fix": "eslint './{src,ccl}/**/*.{tsx,ts,js}' --fix",
     "storybook": "start-storybook -p 9009",
     "cypress": "./opt/node_modules/.bin/cypress",
     "cypress:open": "yarn cypress open",
@@ -51,6 +66,7 @@
     "@babel/core": "^7.7.7",
     "@babel/preset-env": "^7.7.7",
     "@babel/preset-react": "^7.7.4",
+    "@cockroachlabs/eslint-config": "^0.1.11",
     "@storybook/react": "5.0.6",
     "@types/analytics-node": "^0.0.32",
     "@types/assert": "^1.4.0",
@@ -84,6 +100,8 @@
     "@types/redux-thunk": "^2.1.0",
     "@types/sinon": "^7.5.1",
     "@types/storybook__react": "^4.0.2",
+    "@typescript-eslint/eslint-plugin": "^4.11.0",
+    "@typescript-eslint/parser": "^4.11.0",
     "babel-loader": "^8.0.6",
     "babel-plugin-import": "^1.12.2",
     "bytebuffer": "^5.0.1",
@@ -95,6 +113,10 @@
     "d3-geo-projection": "^2.5.0",
     "enzyme": "^3.3.0",
     "enzyme-adapter-react-16": "^1.15.2",
+    "eslint": "^7.16.0",
+    "eslint-plugin-prettier": "^3.3.0",
+    "eslint-plugin-react": "^7.21.5",
+    "eslint-plugin-react-hooks": "^4.2.0",
     "express": "^4.15.2",
     "fetch-mock": "^5.9.4",
     "file-loader": "^5.0.2",
@@ -111,6 +133,7 @@
     "karma-webpack": "^2.0.13",
     "mocha": "^6.2.1",
     "nib": "^1.1.2",
+    "prettier": "^2.2.1",
     "prop-types": "^15.5.10",
     "protobufjs": "^6.7.3",
     "redux-saga-test-plan": "^4.0.0-beta.2",
@@ -147,7 +170,8 @@
     "markdown-to-jsx": "~6.11.4",
     "node-fetch": "~2.6.1",
     "serialize-javascript": "~3.1.0",
-    "yargs-parser": "~13.1.2"
+    "yargs-parser": "~13.1.2",
+    "fsevents": "1.2.9"
   },
   "engines": {
     "node": ">=12",
