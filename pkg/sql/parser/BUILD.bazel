@@ -25,7 +25,7 @@ go_library(
         "//pkg/roachpb",  # keep
         "//pkg/security",  # keep
         "//pkg/sql/lex",
-        "//pkg/sql/lexbase:lex",
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",  # keep
@@ -33,8 +33,8 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/lib/pq/oid",  # keep
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//oid",  # keep
     ],
 )
 
@@ -52,6 +52,7 @@ go_test(
     embed = [":parser"],
     deps = [
         "//pkg/sql/lex",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
@@ -59,9 +60,9 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
     ],
 )
 
@@ -81,13 +82,13 @@ genrule(
     outs = ["sql.go"],
     cmd = """
       $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
-          $(location sql.go) $(location //vendor/golang.org/x/tools/cmd/goyacc) \
-          $(location //vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports)
+          $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
     """,
     tools = [
         ":sql-gen",
-        "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
-        "//vendor/golang.org/x/tools/cmd/goyacc",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
 )

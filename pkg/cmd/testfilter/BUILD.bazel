@@ -5,7 +5,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/testfilter",
     visibility = ["//visibility:private"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_binary(
@@ -21,6 +21,6 @@ go_test(
     embed = [":testfilter_lib"],
     deps = [
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

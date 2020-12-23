@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/testutils/reduce",
         "//pkg/testutils/reduce/reducesql",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

@@ -28,7 +28,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/util",
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -56,6 +56,6 @@ go_test(
         "//pkg/sql/opt/testutils/testexpr",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -33,6 +33,6 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

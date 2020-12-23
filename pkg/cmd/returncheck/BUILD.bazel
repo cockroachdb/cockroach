@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/returncheck",
     visibility = ["//visibility:private"],
     deps = [
-        "//vendor/github.com/cockroachdb/returncheck",
-        "//vendor/github.com/kisielk/gotool",
+        "@com_github_cockroachdb_returncheck//:returncheck",
+        "@com_github_kisielk_gotool//:gotool",
     ],
 )
 

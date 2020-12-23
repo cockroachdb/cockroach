@@ -19,6 +19,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/encoding",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -16,7 +16,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 # Langgen is a bootstrapping compiler. We need to partition the dependencies
@@ -40,7 +40,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
@@ -53,8 +53,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":lang"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

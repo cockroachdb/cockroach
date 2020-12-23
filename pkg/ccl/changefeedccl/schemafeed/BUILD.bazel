@@ -27,7 +27,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -45,8 +45,8 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
     ],
 )

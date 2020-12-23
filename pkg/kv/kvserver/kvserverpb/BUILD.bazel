@@ -18,8 +18,8 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/github.com/gogo/protobuf/sortkeys",
-        "//vendor/github.com/gogo/protobuf/types",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//sortkeys",
+        "@com_github_gogo_protobuf//types",
     ],
 )

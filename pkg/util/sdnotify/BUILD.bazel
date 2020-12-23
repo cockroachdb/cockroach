@@ -11,7 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:windows": [
-            "//vendor/github.com/cockroachdb/errors",
+            "@com_github_cockroachdb_errors//:errors",
         ],
         "//conditions:default": [],
     }),

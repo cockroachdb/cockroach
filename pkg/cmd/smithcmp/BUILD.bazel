@@ -13,8 +13,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/timeutil",
-        "//vendor/github.com/BurntSushi/toml",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_lib_pq//oid",
     ],
 )
 

@@ -12,9 +12,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log/logpb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
@@ -28,8 +28,8 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":logconfig"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/kr/pretty",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_kr_pretty//:pretty",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

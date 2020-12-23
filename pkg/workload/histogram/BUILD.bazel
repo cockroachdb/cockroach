@@ -8,6 +8,6 @@ go_library(
     deps = [
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/codahale/hdrhistogram",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
     ],
 )

@@ -12,9 +12,9 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/lib/pq",
-        "//vendor/github.com/lib/pq/oid",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lib_pq//:pq",
+        "@com_github_lib_pq//oid",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )

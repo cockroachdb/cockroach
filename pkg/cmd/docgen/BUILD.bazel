@@ -15,9 +15,9 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/util/envutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/golang-commonmark/markdown",
-        "//vendor/github.com/spf13/cobra",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_commonmark_markdown//:markdown",
+        "@com_github_spf13_cobra//:cobra",
     ],
 )
 

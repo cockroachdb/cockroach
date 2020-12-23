@@ -33,12 +33,12 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/errors/oserror",
-        "//vendor/github.com/cockroachdb/pebble",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/dustin/go-humanize",
-        "//vendor/github.com/spf13/pflag",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 
@@ -52,7 +52,7 @@ go_test(
         "store_spec_test.go",
     ],
     deps = [
-        ":base",
+        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -60,7 +60,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -13,7 +13,7 @@ go_library(
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",
         "//pkg/util/syncutil",
-        "//vendor/github.com/olekukonko/tablewriter",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
     ],
 )
 
@@ -28,7 +28,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/sync/errgroup",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_sync//errgroup",
     ],
 )

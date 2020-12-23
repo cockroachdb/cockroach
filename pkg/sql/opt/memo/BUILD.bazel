@@ -40,7 +40,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/treeprinter",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -63,6 +63,7 @@ go_test(
         "//pkg/sql/opt",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/props",
@@ -80,9 +81,9 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/timeofday",
         "//pkg/util/timeutil/pgdate",
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/tools/container/intsets",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//container/intsets",
     ],
 )
 

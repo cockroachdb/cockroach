@@ -33,9 +33,9 @@ go_library(
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/lib/pq/oid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lib_pq//oid",
     ],
 )
 
@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/types",
         "//pkg/testutils",
@@ -70,8 +71,8 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

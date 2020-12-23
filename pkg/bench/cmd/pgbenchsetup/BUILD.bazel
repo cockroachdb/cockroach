@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/bench",
-        "//vendor/github.com/lib/pq",
+        "@com_github_lib_pq//:pq",
     ],
 )
 

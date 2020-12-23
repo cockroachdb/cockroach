@@ -7,9 +7,9 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/util/randutil",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
-        "//vendor/github.com/jackc/pgx",
-        "//vendor/github.com/jackc/pgx/pgtype",
+        "@com_github_cockroachdb_apd_v2//:apd",
+        "@com_github_jackc_pgx//:pgx",
+        "@com_github_jackc_pgx//pgtype",
     ],
 )
 

@@ -18,9 +18,9 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
         "//pkg/util/tracing",
-        "//vendor/github.com/biogo/store/llrb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/cockroachdb/logtags",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
@@ -36,9 +36,9 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/tracing",
-        "//vendor/github.com/biogo/store/llrb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_biogo_store//llrb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cli/systembench/systembenchpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/google.golang.org/grpc",
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
