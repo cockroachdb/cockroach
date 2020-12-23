@@ -14,8 +14,8 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/cockroach-go/crdb",
-        "//vendor/github.com/cockroachdb/errors/oserror",
+        "@com_github_cockroachdb_cockroach_go//crdb",
+        "@com_github_cockroachdb_errors//oserror",
     ],
 )
 

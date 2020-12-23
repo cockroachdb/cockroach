@@ -10,11 +10,11 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/google/go-github/github",
-        "//vendor/github.com/jackc/pgx",
-        "//vendor/github.com/lib/pq",
-        "//vendor/github.com/pkg/browser",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_go_github//github",
+        "@com_github_jackc_pgx//:pgx",
+        "@com_github_lib_pq//:pq",
+        "@com_github_pkg_browser//:browser",
     ],
 )
 

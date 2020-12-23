@@ -18,7 +18,7 @@ go_library(
         "//pkg/util/syncutil/singleflight",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -29,12 +29,12 @@ go_test(
         "main_test.go",
     ],
     deps = [
-        ":ptcache",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptcache",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/roachpb",
@@ -51,8 +51,8 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

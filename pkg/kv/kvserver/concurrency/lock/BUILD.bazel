@@ -8,5 +8,5 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/gogo/protobuf/proto"],
+    deps = ["@com_github_gogo_protobuf//proto"],
 )

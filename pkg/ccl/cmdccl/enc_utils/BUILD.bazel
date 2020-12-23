@@ -10,7 +10,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/log",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

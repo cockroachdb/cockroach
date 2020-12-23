@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geodist",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/golang/geo/s2",
-        "//vendor/github.com/twpayne/go-geom",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_geo//s2",
+        "@com_github_twpayne_go_geom//:go-geom",
     ],
 )

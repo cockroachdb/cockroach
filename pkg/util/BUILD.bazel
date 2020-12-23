@@ -28,9 +28,9 @@ go_library(
     deps = [
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/proto",
-        "//vendor/golang.org/x/tools/container/intsets",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_x_tools//container/intsets",
     ],
 )
 
@@ -49,6 +49,6 @@ go_test(
     deps = [
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

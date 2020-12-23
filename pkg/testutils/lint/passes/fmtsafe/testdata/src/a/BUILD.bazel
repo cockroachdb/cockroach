@@ -7,8 +7,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/go.etcd.io/etcd/raft/v3:raft",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//:raft",
     ],
 )
 
@@ -16,5 +16,5 @@ go_test(
     name = "a_test",
     srcs = ["a_test.go"],
     embed = [":a"],
-    deps = ["//vendor/github.com/cockroachdb/errors"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )

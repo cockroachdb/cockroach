@@ -29,7 +29,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/mon",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -62,6 +62,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

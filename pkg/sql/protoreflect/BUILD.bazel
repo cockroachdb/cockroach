@@ -8,9 +8,9 @@ go_library(
     deps = [
         "//pkg/util/json",
         "//pkg/util/protoutil",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/gogo/protobuf/jsonpb",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
@@ -26,13 +26,14 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/protoreflect",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/tracing/tracingpb",
-        "//vendor/github.com/gogo/protobuf/jsonpb",
-        "//vendor/github.com/gogo/protobuf/types",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
     ],
 )

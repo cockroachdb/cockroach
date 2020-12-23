@@ -22,7 +22,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/sql/opt/optgen/lang",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -38,7 +38,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":optgen_lib"],
     deps = [
-        "//vendor/github.com/cockroachdb/datadriven",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

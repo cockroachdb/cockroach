@@ -41,6 +41,6 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

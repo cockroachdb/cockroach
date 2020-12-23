@@ -7,10 +7,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/testutils/lint/passes/passesutil",
-        "//vendor/golang.org/x/tools/go/analysis",
-        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
-        "//vendor/golang.org/x/tools/go/ast/astutil",
-        "//vendor/golang.org/x/tools/go/ast/inspector",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/inspect",
+        "@org_golang_x_tools//go/ast/astutil",
+        "@org_golang_x_tools//go/ast/inspector",
     ],
 )
 
@@ -18,8 +18,8 @@ go_test(
     name = "returnerrcheck_test",
     srcs = ["returnerrcheck_test.go"],
     deps = [
-        ":returnerrcheck",
+        "//pkg/testutils/lint/passes/returnerrcheck",
         "//pkg/testutils/skip",
-        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+        "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )

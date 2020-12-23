@@ -9,6 +9,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_gogo_protobuf//proto",
     ],
 )

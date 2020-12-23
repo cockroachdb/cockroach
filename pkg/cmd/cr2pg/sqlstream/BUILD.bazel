@@ -9,6 +9,6 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

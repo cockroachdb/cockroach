@@ -8,6 +8,6 @@ go_library(
     deps = [
         "//pkg/sql/types",
         "//pkg/util/duration",
-        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "@com_github_cockroachdb_apd_v2//:apd",
     ],
 )

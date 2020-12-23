@@ -7,7 +7,7 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/internal/gopath",
-        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
@@ -15,5 +15,5 @@ go_test(
     name = "team_test",
     srcs = ["team_test.go"],
     embed = [":team"],
-    deps = ["//vendor/github.com/stretchr/testify/require"],
+    deps = ["@com_github_stretchr_testify//require"],
 )

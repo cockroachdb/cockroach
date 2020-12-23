@@ -12,7 +12,7 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/sem/tree",
         "//pkg/util",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -21,18 +21,18 @@ go_test(
     srcs = ["implicator_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":partialidx",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/partialidx",
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",
-        "//vendor/github.com/cockroachdb/datadriven",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

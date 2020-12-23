@@ -61,7 +61,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/workload",
         "//pkg/workload/workloadsql",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

@@ -5,7 +5,7 @@ go_library(
     srcs = ["prereqs.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/prereqs",
     visibility = ["//visibility:private"],
-    deps = ["//vendor/golang.org/x/tools/go/packages"],
+    deps = ["@org_golang_x_tools//go/packages"],
 )
 
 go_binary(

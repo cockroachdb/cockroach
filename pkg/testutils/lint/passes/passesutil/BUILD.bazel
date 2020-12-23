@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/golang.org/x/tools/go/analysis",
-        "//vendor/golang.org/x/tools/go/ast/astutil",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/ast/astutil",
     ],
 )
 
@@ -18,7 +18,7 @@ go_test(
         "//pkg/testutils/lint/passes/descriptormarshal",
         "//pkg/testutils/lint/passes/unconvert",
         "//pkg/testutils/skip",
-        "//vendor/github.com/stretchr/testify/require",
-        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )

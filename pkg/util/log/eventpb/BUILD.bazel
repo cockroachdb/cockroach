@@ -20,8 +20,8 @@ go_library(
     deps = [
         "//pkg/util/jsonbytes",
         "//pkg/util/log/logpb",
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/gogo/protobuf/proto",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
@@ -30,7 +30,7 @@ go_test(
     srcs = ["event_test.go"],
     embed = [":eventpb"],
     deps = [
-        "//vendor/github.com/cockroachdb/redact",
-        "//vendor/github.com/stretchr/testify/assert",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//assert",
     ],
 )

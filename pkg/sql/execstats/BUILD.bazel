@@ -10,7 +10,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
-        "//vendor/github.com/cockroachdb/errors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -30,6 +30,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils/serverutils",
@@ -40,7 +41,7 @@ go_test(
         "//pkg/util/optional",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "//vendor/github.com/stretchr/testify/assert",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )

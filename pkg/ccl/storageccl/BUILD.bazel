@@ -39,8 +39,8 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/tracing",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/crypto/pbkdf2",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_crypto//pbkdf2",
     ],
 )
 
@@ -84,6 +84,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
-        "//vendor/github.com/stretchr/testify/require",
+        "@com_github_stretchr_testify//require",
     ],
 )

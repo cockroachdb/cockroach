@@ -10,11 +10,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log/logpb",
-        "//vendor/github.com/cockroachdb/errors",
-        "//vendor/golang.org/x/tools/go/analysis",
-        "//vendor/golang.org/x/tools/go/analysis/passes/inspect",
-        "//vendor/golang.org/x/tools/go/ast/inspector",
-        "//vendor/golang.org/x/tools/go/types/typeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/inspect",
+        "@org_golang_x_tools//go/ast/inspector",
+        "@org_golang_x_tools//go/types/typeutil",
     ],
 )
 
@@ -22,8 +22,8 @@ go_test(
     name = "fmtsafe_test",
     srcs = ["fmtsafe_test.go"],
     deps = [
-        ":fmtsafe",
+        "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/skip",
-        "//vendor/golang.org/x/tools/go/analysis/analysistest",
+        "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )
