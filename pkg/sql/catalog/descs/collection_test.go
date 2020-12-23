@@ -57,10 +57,9 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.RequireMutable = true
-		tbl, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+		_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
-		require.NotNil(t, tbl)
-		mut := tbl.(*tabledesc.Mutable)
+		require.NotNil(t, mut)
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
 		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
@@ -79,13 +78,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(1), newTable.Version)
 
 		// Ensure that the descriptor has been added to the collection.
-		tbl2, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+		_, mut2, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 		require.NoError(t, err)
-		mut2 := tbl2.(*tabledesc.Mutable)
 		require.Equal(t, mut, mut2)
 
 		t2n := tree.MakeTableNameWithSchema("db", "schema", "table2")
-		newTableResolved, err := descriptors.GetTableByName(ctx, txn, &t2n, flags)
+		_, newTableResolved, err := descriptors.GetMutableTableByName(ctx, txn, &t2n, flags)
 		require.NoError(t, err)
 		require.Equal(t, newTable, newTableResolved)
 		return txn.Run(ctx, b)
@@ -143,9 +141,8 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.RequireMutable = true
-			desc, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
-			mut := desc.(*tabledesc.Mutable)
 			// Verify that the descriptor version is always 1 prior to the write and 2
 			// after the write even after a retry.
 			require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
@@ -280,10 +277,10 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.Required = true
 			tn := tree.MakeTableNameWithSchema("db", "sc", "tab")
 
-			tab, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+			_, tab, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
 
-			resolved, err := descriptors.GetTableByName(ctx, txn, &tn, flags)
+			_, resolved, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
 
 			require.Same(t, tab, resolved)
@@ -303,10 +300,10 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 			tn := tree.MakeNewQualifiedTypeName("db", "sc", "typ")
-			typ, err := descriptors.GetTypeByName(ctx, txn, &tn, flags)
+			_, typ, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
 
-			resolved, err := descriptors.GetTypeByName(ctx, txn, &tn, flags)
+			_, resolved, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
 			require.NoError(t, err)
 
 			require.Same(t, typ, resolved)
