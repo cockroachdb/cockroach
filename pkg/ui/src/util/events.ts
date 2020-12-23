@@ -27,9 +27,10 @@ export function getEventDescription(e: Event$Properties): string {
   switch (e.event_type) {
     case eventTypes.CREATE_DATABASE:
       return `Database Created: User ${info.User} created database ${info.DatabaseName}`;
-    case eventTypes.DROP_DATABASE:
+    case eventTypes.DROP_DATABASE: {
       const tableDropText = getDroppedObjectsText(info);
       return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
+    }
     case eventTypes.RENAME_DATABASE:
       return `Database Renamed: User ${info.User} renamed database ${info.DatabaseName} to ${info.NewDatabaseName}`;
     case eventTypes.ALTER_DATABASE_OWNER:

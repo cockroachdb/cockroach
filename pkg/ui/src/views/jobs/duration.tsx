@@ -30,7 +30,7 @@ export class Duration extends React.PureComponent<{ job: Job }> {
     const finishedAt = TimestampToMoment(job.finished, null);
 
     switch (job.status) {
-      case JOB_STATUS_RUNNING:
+      case JOB_STATUS_RUNNING: {
         const fractionCompleted = job.fraction_completed;
         if (fractionCompleted > 0) {
           const duration = modifiedAt.diff(startedAt);
@@ -42,6 +42,7 @@ export class Duration extends React.PureComponent<{ job: Job }> {
           );
         }
         return null;
+      }
       case JOB_STATUS_SUCCEEDED:
         return (
           "Duration: " +

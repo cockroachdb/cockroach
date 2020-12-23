@@ -78,11 +78,12 @@ export function localSettingsReducer(
   }
 
   switch (action.type) {
-    case SET_UI_VALUE:
+    case SET_UI_VALUE: {
       const { payload } = action as PayloadAction<LocalSettingData>;
       state = _.clone(state);
       state[payload.key] = payload.value;
       return state;
+    }
     default:
       return state;
   }
