@@ -2049,14 +2049,18 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
-		Table:                    *n.table.desc.TableDesc(),
-		Type:                     n.joinType,
-		Visibility:               n.table.colCfg.visibility,
-		LockingStrength:          n.table.lockingStrength,
-		LockingWaitPolicy:        n.table.lockingWaitPolicy,
-		MaintainOrdering:         len(n.reqOrdering) > 0,
-		HasSystemColumns:         n.table.containsSystemColumns,
-		LeftJoinWithPairedJoiner: n.isSecondJoinInPairedJoiner,
+		Table:             *n.table.desc.TableDesc(),
+		Type:              n.joinType,
+		Visibility:        n.table.colCfg.visibility,
+		LockingStrength:   n.table.lockingStrength,
+		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		// TODO(sumeer): specifying ordering here using isFirstJoinInPairedJoiner
+		// is late in the sense that the cost of this has not been taken into
+		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
+		MaintainOrdering:                  len(n.reqOrdering) > 0 || n.isFirstJoinInPairedJoiner,
+		HasSystemColumns:                  n.table.containsSystemColumns,
+		LeftJoinWithPairedJoiner:          n.isSecondJoinInPairedJoiner,
+		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {
@@ -2072,7 +2076,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	joinReaderSpec.LookupColumnsAreKey = n.eqColsAreKey
 
 	numInputNodeCols, planToStreamColMap, post, types :=
-		mappingHelperForLookupJoins(plan, n.input, n.table, false /* addContinuationCol */)
+		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
 
 	// Set the ON condition.
 	if n.onCond != nil {
