@@ -469,11 +469,22 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
+	var leftEqCols opt.ColList
+	var rightEqCols opt.ColList
+	var rightSideCols opt.ColList
 
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, on memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
+		numPrefixCols := index.NonInvertedPrefixColumnCount()
+
+		// Only calculate the left and right equality columns if there is a
+		// multi-column inverted index.
+		if numPrefixCols > 0 && leftEqCols == nil {
+			inputProps := input.Relational()
+			leftEqCols, rightEqCols = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
+		}
 
 		// The non-inverted prefix columns of a multi-column inverted index must
 		// be constrained in order to perform an inverted join. We attempt to
@@ -482,11 +493,16 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// InvertedJoin, similar to GenerateLookupJoins.
 		// TODO(mgartner): Try to constrain prefix columns with CHECK
 		// constraints and computed column expressions.
-		// TODO(mgartner): Try to constrain prefix columns via ON condition
-		// equalities to columns in the input expression.
 		var constFilters memo.FiltersExpr
-		for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+		for i, n := 0, numPrefixCols; i < n; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
+
+			// Check if prefixCol is constrained by an equality constraint.
+			if eqIdx, ok := rightEqCols.Find(prefixCol); ok {
+				invertedJoin.PrefixKeyCols = append(invertedJoin.PrefixKeyCols, leftEqCols[eqIdx])
+				rightSideCols = append(rightSideCols, prefixCol)
+				continue
+			}
 
 			// Try to constrain prefixCol to constant, non-ranging values.
 			foundVals, onIdx, ok := c.findJoinFilterConstants(on, prefixCol)
@@ -516,16 +532,13 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			constFilters = append(constFilters, on[onIdx])
 		}
 
-		// Remove the constant filters that constrain the prefix columns from
-		// the on condition. Copy the filters to a new slice to avoid mutating
-		// the filters within iter.
-		if len(constFilters) > 0 {
-			onCopy := make(memo.FiltersExpr, len(on))
-			copy(onCopy, on)
-			on = onCopy
+		// Remove the redundant filters and update the ON condition if there are
+		// non-inverted prefix columns that have been constrained.
+		if len(rightSideCols) > 0 || len(constFilters) > 0 {
+			on = memo.ExtractRemainingJoinFilters(on, invertedJoin.PrefixKeyCols, rightSideCols)
 			on.RemoveCommonFilters(constFilters)
+			invertedJoin.ConstFilters = constFilters
 		}
-		invertedJoin.ConstFilters = constFilters
 
 		// Check whether the filter can constrain the inverted column.
 		invertedExpr := invertedidx.TryJoinInvertedIndex(
