@@ -89,7 +89,7 @@ message BackupDetails {
   // URIsByLocalityKV is a map of locality KVs to store URIs, used for
   // partitioned backups.
   map<string, string> uris_by_locality_kv = 5 [(gogoproto.customname) = "URIsByLocalityKV"];
-  bytes backup_manifest = 4;
+  bytes deprecated_backup_manifest = 4;
   BackupEncryptionOptions encryption_options = 6;
   EncryptionInfo encryption_info = 9;
 
