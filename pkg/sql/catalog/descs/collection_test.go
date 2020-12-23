@@ -251,11 +251,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			flags.RequireMutable = true
 			flags.Required = true
 
-			ok, schema, err := descriptors.GetSchemaByName(ctx, txn, dbID, "sc", flags)
+			ok, schema, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
 			require.True(t, ok)
 
-			ok, resolved, err := descriptors.GetSchemaByName(ctx, txn, dbID, "sc", flags)
+			ok, resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, dbID, "sc", flags)
 			require.NoError(t, err)
 			require.True(t, ok)
 
