@@ -221,7 +221,31 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
 	// Add to the evaluator.
-	if _, err = ifr.invertedEval.prepareAddIndexRow(row[ifr.invertedColIdx].EncodedBytes()); err != nil {
+	//
+	// NB: Inverted columns are custom encoded in a manner that does not
+	// correspond to Datum encoding, and in the code here we only want the encoded
+	// bytes. We have two possibilities with what the provider of this row has
+	// done:
+	//  1. Not decoded the row: This is the len(enc) > 0 case.
+	//  2. Decoded the row, but special-cased the inverted column by stuffing the
+	//     encoded bytes into a "decoded" DBytes: This is the len(enc) == 0 case.
+	enc := row[ifr.invertedColIdx].EncodedBytes()
+	if len(enc) == 0 {
+		// If the input is from the vectorized engine, the encoded bytes may be
+		// empty (case 2 above). In this case, the Datum should contain the encoded
+		// key as a DBytes. The Datum should never be DNull since nulls aren't
+		// stored in inverted indexes.
+		if row[ifr.invertedColIdx].Datum == nil {
+			ifr.MoveToDraining(errors.New("no datum found"))
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.BytesFamily {
+			ifr.MoveToDraining(errors.New("virtual inverted column should have type bytes"))
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
+	}
+	if _, err = ifr.invertedEval.prepareAddIndexRow(enc); err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}

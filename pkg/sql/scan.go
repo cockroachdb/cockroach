@@ -115,6 +115,12 @@ type scanColumnsConfig struct {
 	// columns are not included here.
 	wantedColumnsOrdinals []uint32
 
+	// virtualColumns maps a subset of wantedColumns that are virtual to the
+	// column type actually stored in the index. For example, the inverted column
+	// of an inverted index has type bytes, even though the column descriptor
+	// matches the source column (Geometry, Geography, JSON or Array).
+	virtualColumns map[tree.ColumnID]*types.T
+
 	// When set, the columns that are not in the wantedColumns list are added to
 	// the list of columns as hidden columns.
 	addUnwantedAsHidden bool
@@ -282,6 +288,14 @@ func initColsForScan(
 			}
 			if err != nil {
 				return cols, err
+			}
+
+			// If this is a virtual column, create a new descriptor with the correct
+			// type.
+			if typ, ok := colCfg.virtualColumns[wc]; ok && !typ.Identical(c.Type) {
+				virtualDesc := *c
+				virtualDesc.Type = typ
+				c = &virtualDesc
 			}
 		}
 
