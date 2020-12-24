@@ -4826,7 +4826,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			byteString := string(*args[0].(*tree.DBytes))
 			start := int(tree.MustBeDInt(args[1]))
 			substring := getSubstringFromIndexBytes(byteString, start)
-			return tree.ParseDByte(substring)
+			return tree.NewDBytes(tree.DBytes(substring)), nil
 		},
 		Info:       "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1).",
 		Volatility: tree.VolatilityImmutable,
@@ -4847,7 +4847,7 @@ var substringImpls = makeBuiltin(tree.FunctionProperties{Category: categoryStrin
 			if err != nil {
 				return nil, err
 			}
-			return tree.ParseDByte(substring)
+			return tree.NewDBytes(tree.DBytes(substring)), nil
 		},
 		Info: "Returns a byte subarray of `input` starting at `start_pos` (count starts at 1) and " +
 			"including up to `length` characters.",
