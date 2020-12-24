@@ -26,7 +26,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*string, error) {
 
 	// Resolve doesn't use the searchPath for resolving FunctionDefinitions
 	// so we can pass in an empty SearchPath.
-	def, err := funcExpr.Func.Resolve(searchPath)
+	def, err := funcExpr.Func.Resolve(nil, nil, searchPath)
 	if err != nil {
 		return nil, err
 	}

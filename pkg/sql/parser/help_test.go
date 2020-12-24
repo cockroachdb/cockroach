@@ -119,6 +119,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`CREATE EXTENSION ??`, `CREATE EXTENSION`},
 
+		{`CREATE FUNCTION blah (??`, `CREATE FUNCTION`},
+
 		{`CREATE USER blih ??`, `CREATE ROLE`},
 		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 

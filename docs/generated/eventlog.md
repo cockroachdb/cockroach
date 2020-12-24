@@ -389,6 +389,27 @@ An event of type `create_database` is recorded when a database is created.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
 
+### `create_func`
+
+An event of type `create_func` is recorded when a user-defined func is created.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FuncName` | The name of the new func. | yes |
+| `Owner` | The name of the owner for the new func. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+
 ### `create_index`
 
 An event of type `create_index` is recorded when an index is created.
@@ -569,6 +590,27 @@ An event of type `drop_database` is recorded when a database is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+
+### `drop_func`
+
+An event of type `drop_func` is recorded when a user-defined func is created.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FuncName` | The name of the new func. | yes |
+| `Owner` | The name of the owner for the new func. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 
 ### `drop_index`
 

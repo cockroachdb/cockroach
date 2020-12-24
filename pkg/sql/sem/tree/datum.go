@@ -4248,11 +4248,12 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"invalid function name: %s", s)
 		}
-		name := UnresolvedName{NumParts: len(substrs)}
+		name := UnresolvedObjectName{NumParts: len(substrs)}
 		for i := 0; i < len(substrs); i++ {
 			name.Parts[i] = substrs[len(substrs)-1-i]
 		}
-		funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
+		funcDef, err := ctx.Planner.ResolveFunc(ctx.Context,
+			ctx.SessionData.SearchPath, &name)
 		if err != nil {
 			return nil, err
 		}

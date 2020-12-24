@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -24,14 +25,14 @@ import (
 //
 // The other syntax nodes hold a mutable ResolvableFunctionReference
 // attribute.  This is populated during parsing with an
-// UnresolvedName, and gets assigned a FunctionDefinition upon the
+// UnresolvedObjectName, and gets assigned a FunctionDefinition upon the
 // first call to its Resolve() method.
 
 // ResolvableFunctionReference implements the editable reference cell
 // of a FuncExpr. The FunctionRerence is updated by the Normalize()
 // method.
 type ResolvableFunctionReference struct {
-	FunctionReference
+	FunctionReference FunctionReference
 }
 
 // Format implements the NodeFormatter interface.
@@ -43,13 +44,19 @@ func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
 func (fn *ResolvableFunctionReference) Resolve(
-	searchPath sessiondata.SearchPath,
+	ctx context.Context, resolver FuncReferenceResolver, searchPath sessiondata.SearchPath,
 ) (*FunctionDefinition, error) {
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil
-	case *UnresolvedName:
-		fd, err := t.ResolveFunction(searchPath)
+	case *UnresolvedObjectName:
+		var fd *FunctionDefinition
+		var err error
+		if resolver == nil {
+			fd, err = t.ResolveFunction(searchPath)
+		} else {
+			fd, err = resolver.ResolveFunc(ctx, searchPath, t)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -79,5 +86,84 @@ type FunctionReference interface {
 	functionReference()
 }
 
-func (*UnresolvedName) functionReference()     {}
-func (*FunctionDefinition) functionReference() {}
+func (*UnresolvedName) functionReference()       {}
+func (*UnresolvedObjectName) functionReference() {}
+func (*FunctionDefinition) functionReference()   {}
+
+// FuncName corresponds to the name of a type in a CREATE FUNCTION statement.
+type FuncName struct {
+	objName
+}
+
+var _ ObjectName = &FuncName{}
+
+// Satisfy the linter.
+var _ = (*FuncName).FQString
+
+func NewUnqualifiedFuncName(fnc Name) *FuncName {
+	return &FuncName{objName{ObjectName: fnc}}
+}
+
+// MakeNewQualifiedTypeName creates a fully qualified type name.
+func MakeNewQualifiedFuncName(db, schema, typ string) FuncName {
+	return FuncName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+			CatalogName:     Name(db),
+			SchemaName:      Name(schema),
+		},
+		ObjectName: Name(typ),
+	}}
+}
+
+// Format implements the NodeFormatter interface.
+func (t *FuncName) Format(ctx *FmtCtx) {
+	t.ObjectNamePrefix.Format(ctx)
+	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&t.ObjectName)
+}
+
+// String implements the Stringer interface.
+func (t *FuncName) String() string {
+	return AsString(t)
+}
+
+// FQString renders the type name in full, not omitting the prefix
+// schema and catalog names. Suitable for logging, etc.
+func (t *FuncName) FQString() string {
+	ctx := NewFmtCtx(FmtSimple)
+	ctx.FormatNode(&t.CatalogName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&t.SchemaName)
+	ctx.WriteByte('.')
+	ctx.FormatNode(&t.ObjectName)
+	return ctx.CloseAndGetString()
+}
+
+func (t *FuncName) objectName() {}
+
+// FuncPrefix is the prefix used for function names in the namespace table. This
+// is to produce a separate namespace for functions than tables/views, like
+// Postgres. We assume that people won't try to make tables that start with
+// "⋅𝘧𝘯".
+const FuncPrefix = "⋅𝘧𝘯"
+
+// MangledName returns the namespace key for this function. It should be used
+// only for the low-level lookup routines that actually read from the namespace
+// table.
+func (t *FuncName) MangledName() string {
+	return FuncPrefix + string(t.ObjectName)
+}
+
+// FuncReferenceResolver is the interface that will provide the ability
+// to actually look up function definitions based on their name from the
+// catalog.
+type FuncReferenceResolver interface {
+	ResolveFunc(ctx context.Context,
+		searchPath sessiondata.SearchPath,
+		name *UnresolvedObjectName,
+	) (*FunctionDefinition, error)
+}

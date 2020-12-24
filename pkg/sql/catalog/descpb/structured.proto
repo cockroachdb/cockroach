@@ -1301,8 +1301,62 @@ message SchemaDescriptor {
   optional PrivilegeDescriptor privileges = 4;
 }
 
+ message FuncDescriptor {
+   option (gogoproto.equal) = true;
+   // Needed for the descriptorProto interface.
+   option (gogoproto.goproto_getters) = true;
+
+   // Shared descriptor fields. See the discussion at the top of TableDescriptor.
+
+   // name is the current name of this user defined function.
+   optional string name = 3 [(gogoproto.nullable) = false];
+
+   // id is the globally unique ID for this function.
+   optional uint32 id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+
+   // privileges contains the privileges for the function.
+   optional PrivilegeDescriptor privileges = 5;
+
+   optional string offline_reason = 7 [(gogoproto.nullable) = false];
+   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
+
+   optional uint32 version = 9 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
+   // Last modification time of the descriptor.
+   optional util.hlc.Timestamp modification_time = 10 [(gogoproto.nullable) = false];
+   repeated NameInfo draining_names = 11 [(gogoproto.nullable) = false];
+
+   // FuncDescriptor fields.
+
+   // parent_id represents the ID of the database that this function resides in.
+   optional uint32 parent_id = 1
+   [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+
+   // parent_schema_id represents the ID of the schema that this function resides in.
+   optional uint32 parent_schema_id = 2
+   [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSchemaID", (gogoproto.casttype) = "ID"];
+
+   // Overload is the type that's used to describe a single function overload.
+   message Overload {
+     option (gogoproto.equal) = true;
+
+     // def is the string definition of the user-defined function.
+     optional string def = 1 [(gogoproto.nullable) = false];
+
+     // param_names is the list of parameter names to the function.
+     repeated string param_names = 2;
+     // param_types is the list of parameter types to the function.
+     repeated sql.sem.types.T param_types = 3;
+     // return_type is the return type of the function.
+     optional sql.sem.types.T return_type = 4 [(gogoproto.nullable) = false];
+   }
+
+   // The overloads on this function. UDFs can have unlimited overloads.
+   // Overloads must have distinct input type signatures.
+   repeated Overload overloads = 12 [(gogoproto.nullable) = false];
+ }
+
 // Descriptor is a union type for descriptors for tables, schemas, databases,
-// and types.
+// types, and functions.
 message Descriptor {
   option (gogoproto.equal) = true;
   oneof union {
@@ -1310,5 +1364,6 @@ message Descriptor {
     DatabaseDescriptor database = 2;
     TypeDescriptor type = 3;
     SchemaDescriptor schema = 4;
+    FuncDescriptor func = 5;
   }
 }

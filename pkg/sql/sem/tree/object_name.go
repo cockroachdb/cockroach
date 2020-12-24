@@ -22,6 +22,7 @@ type ObjectName interface {
 
 var _ ObjectName = &TableName{}
 var _ ObjectName = &TypeName{}
+var _ ObjectName = &FuncName{}
 
 // objName is the internal type for a qualified object.
 type objName struct {

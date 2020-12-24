@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -173,6 +174,13 @@ func (ep *DummyEvalPlanner) ResolveTypeByOID(_ context.Context, _ oid.Oid) (*typ
 func (ep *DummyEvalPlanner) ResolveType(
 	_ context.Context, _ *tree.UnresolvedObjectName,
 ) (*types.T, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ResolveFunc implements the tree.FuncReferenceResolver interface.
+func (ep *DummyEvalPlanner) ResolveFunc(
+	_ context.Context, _ sessiondata.SearchPath, _ *tree.UnresolvedObjectName,
+) (*tree.FunctionDefinition, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 

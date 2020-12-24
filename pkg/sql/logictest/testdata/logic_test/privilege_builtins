@@ -467,10 +467,10 @@ SELECT has_function_privilege((SELECT oid FROM pg_proc LIMIT 1), 'EXECUTE')
 ----
 true
 
-query error pgcode 42883 unknown function: does_not_exist()
+query error pgcode 42883 has_function_privilege\(\): function does_not_exist\(\) does not eixst
 SELECT has_function_privilege('does_not_exist', 'EXECUTE')
 
-query error pgcode 42883 unknown function: does_not_exist()
+query error pgcode 42883 has_function_privilege\(\): function does_not_exist\(\) does not eixst
 SELECT has_function_privilege('does_not_exist()', 'EXECUTE')
 
 query B
