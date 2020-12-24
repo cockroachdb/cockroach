@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/pkg/errors"
 )
@@ -56,7 +57,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	return &delayedNode{
 		name:    n.String(),
 		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, err error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
@@ -93,6 +94,23 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				histogramIdx
 				numCols
 			)
+
+			// Guard against crashes in the code below (e.g. #56356).
+			defer func() {
+				if r := recover(); r != nil {
+					// This code allows us to propagate internal errors without having to add
+					// error checks everywhere throughout the code. This is only possible
+					// because the code does not update shared state and does not manipulate
+					// locks.
+					if ok, e := errorutil.ShouldCatch(r); ok {
+						err = e
+					} else {
+						// Other panic objects can't be considered "safe" and thus are
+						// propagated as crashes that terminate the session.
+						panic(r)
+					}
+				}
+			}()
 
 			v := p.newContainerValuesNode(columns, 0)
 			if n.UsingJSON {

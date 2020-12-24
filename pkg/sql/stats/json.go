@@ -63,6 +63,9 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		js.HistogramBuckets[i].NumRange = b.NumRange
 		js.HistogramBuckets[i].DistinctRange = b.DistinctRange
 
+		if b.UpperBound == nil {
+			return fmt.Errorf("histogram bucket upper bound is unset")
+		}
 		datum, _, err := sqlbase.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
 		if err != nil {
 			return err
