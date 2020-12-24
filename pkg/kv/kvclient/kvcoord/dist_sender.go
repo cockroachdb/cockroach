@@ -462,6 +462,11 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
+// NodeDialer returns a Dialer.
+func (ds *DistSender) NodeDialer() *nodedialer.Dialer {
+	return ds.nodeDialer
+}
+
 // getNodeID attempts to return the local node ID. It returns 0 if the DistSender
 // does not have access to the Gossip network.
 func (ds *DistSender) getNodeID() roachpb.NodeID {
