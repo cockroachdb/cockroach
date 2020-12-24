@@ -73,6 +73,11 @@ type Overload struct {
 	// statement which will be executed as a common table expression in the query.
 	SQLFn func(*EvalContext, Datums) (string, error)
 
+	// UserDef must be set for overloads of type UserDefinedClass. It
+	// is a user-defined scalar expression that will be evaluated when
+	// the overload is run.
+	UserDef Expr
+
 	// counter, if non-nil, should be incremented upon successful
 	// type check of expressions using this overload.
 	counter telemetry.Counter

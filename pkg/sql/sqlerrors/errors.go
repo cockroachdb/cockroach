@@ -106,6 +106,8 @@ func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKin
 		return NewUndefinedRelationError(name)
 	case tree.TypeObject:
 		return NewUndefinedTypeError(name)
+	case tree.FuncObject:
+		return NewUndefinedFuncError(name)
 	default:
 		return errors.AssertionFailedf("unknown object kind %d", kind)
 	}
@@ -114,6 +116,11 @@ func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKin
 // NewUndefinedTypeError creates an error that represents a missing type.
 func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))
+}
+
+// NewUndefinedFuncError creates an error that represents a missing func.
+func NewUndefinedFuncError(name tree.NodeFormatter) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "function %s() does not exist", tree.ErrString(name))
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
@@ -145,6 +152,8 @@ func MakeObjectAlreadyExistsError(collidingObject *descpb.Descriptor, name strin
 	switch collidingObject.Union.(type) {
 	case *descpb.Descriptor_Table:
 		return NewRelationAlreadyExistsError(name)
+	case *descpb.Descriptor_Func:
+		return NewFuncAlreadyExistsError(name)
 	case *descpb.Descriptor_Type:
 		return NewTypeAlreadyExistsError(name)
 	case *descpb.Descriptor_Database:
@@ -165,6 +174,11 @@ func NewRelationAlreadyExistsError(name string) error {
 // NewTypeAlreadyExistsError creates an error for a preexisting type.
 func NewTypeAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateObject, "type %q already exists", name)
+}
+
+// NewFuncAlreadyExistsError creates an error for a preexisting func.
+func NewFuncAlreadyExistsError(name string) error {
+	return pgerror.Newf(pgcode.DuplicateObject, "function %q already exists", name)
 }
 
 // IsRelationAlreadyExistsError checks whether this is an error for a preexisting relation.

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -120,10 +121,15 @@ type Catalog interface {
 	// ResolveTypeByOID is used to look up a user defined type by ID.
 	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 
-	// ResolveType is used to resolve an unresolved object name.
+	// ResolveType is used to resolve an unresolved type name.
 	ResolveType(
 		ctx context.Context, name *tree.UnresolvedObjectName,
 	) (*types.T, error)
+
+	// ResolveFunc is used to resolve an unresolved function name.
+	ResolveFunc(
+		ctx context.Context, searchPath sessiondata.SearchPath, name *tree.UnresolvedObjectName,
+	) (*tree.FunctionDefinition, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

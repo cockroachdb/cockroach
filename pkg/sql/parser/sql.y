@@ -525,7 +525,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
-    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
+    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedObjectName()}
 }
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
@@ -544,6 +544,12 @@ func (u *sqlSymUnion) geoShapeType() geopb.ShapeType {
 }
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
+}
+func (u *sqlSymUnion) formalParam() tree.FormalParam {
+    return u.val.(tree.FormalParam)
+}
+func (u *sqlSymUnion) formalParams() []tree.FormalParam {
+    return u.val.([]tree.FormalParam)
 }
 func (u *sqlSymUnion) typeReference() tree.ResolvableTypeReference {
     return u.val.(tree.ResolvableTypeReference)
@@ -670,7 +676,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> RANGE RANGES READ REAL REASSIGN RECURSIVE RECURRING REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE REINDEX
 %token <str> REMOVE_PATH RENAME REPEATABLE REPLACE
-%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
+%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETURNS RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
 %token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
@@ -806,6 +812,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_index_stmt
+%type <tree.Statement> create_function_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
 %type <tree.Statement> create_schema_stmt
@@ -923,6 +930,9 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> declare_cursor_stmt
 %type <tree.Statement> reindex_stmt
 
+%type <tree.FormalParam> formal_param
+%type <[]tree.FormalParam> formal_param_list
+
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
@@ -972,13 +982,14 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <str> privilege savepoint_name
 %type <tree.KVOption> role_option password_clause valid_until_clause
 %type <tree.Operator> subquery_op
-%type <*tree.UnresolvedName> func_name func_name_no_crdb_extra
+%type <*tree.UnresolvedObjectName> func_name func_name_no_crdb_extra
 %type <str> opt_class opt_collate
 
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> func_def_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
@@ -3090,6 +3101,55 @@ create_extension_stmt:
   }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
+formal_param:
+  name typename
+  {
+    $$.val = tree.FormalParam{Name: $1, Type: $2.typeReference()}
+  }
+// Note that Postgres supports nameless type parameters. This is unsupported
+// for now.
+//| typename
+//	{
+//	  $$.val = tree.FormalParam{Name: $1, Type: $2.typeReference()}
+//	}
+
+formal_param_list:
+  formal_param
+  {
+    $$.val = []tree.FormalParam{$1.formalParam()}
+  }
+|  formal_param_list ',' formal_param
+  {
+    $$.val = append($1.formalParams(), $3.formalParam())
+  }
+
+func_def_name:         db_object_name
+
+// %Help: CREATE FUNCTION
+// %Category: DDL
+// %Text: CREATE [OR REPLACE] FUNCTION name (args) RETURNS (returns) LANGUAGE x
+create_function_stmt:
+  CREATE FUNCTION func_def_name '(' formal_param_list ')' RETURNS typename AS SCONST LANGUAGE name {
+    $$.val = &tree.CreateFunction{
+      Name: $3.unresolvedObjectName(),
+      Params: $5.formalParams(),
+      ReturnType: $8.typeReference(),
+      FuncDef: tree.NewStrVal($10),
+      Language: $12,
+    }
+  }
+| CREATE OR REPLACE FUNCTION func_def_name '(' formal_param_list ')' RETURNS typename AS SCONST LANGUAGE name {
+    $$.val = &tree.CreateFunction{
+      OrReplace: true,
+      Name: $5.unresolvedObjectName(),
+      Params: $7.formalParams(),
+      ReturnType: $10.typeReference(),
+      FuncDef: tree.NewStrVal($12),
+      Language: $14,
+    }
+  }
+| CREATE FUNCTION error // SHOW HELP: CREATE FUNCTION
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplemented(sqllex, "create aggregate") }
@@ -3099,8 +3159,6 @@ create_unsupported:
 | CREATE DEFAULT CONVERSION error { return unimplemented(sqllex, "create def conv") }
 | CREATE FOREIGN TABLE error { return unimplemented(sqllex, "create foreign table") }
 | CREATE FOREIGN DATA error { return unimplemented(sqllex, "create fdw") }
-| CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
-| CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
@@ -3153,6 +3211,7 @@ create_ddl_stmt:
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE opt_persistence_temp_table TABLE error   // SHOW HELP: CREATE TABLE
+| create_function_stmt // EXTEND WITH HELP: CREATE FUNCTION
 | create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
@@ -10443,7 +10502,7 @@ d_expr:
     if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
-| func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
+| func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, $1.unresolvedObjectName().String() + "(...) SCONST") }
 | typed_literal
   {
     $$.val = $1.expr()
@@ -10560,7 +10619,7 @@ typed_literal:
   // we will have conflicts between this rule and the one below.
   func_name_no_crdb_extra SCONST
   {
-    name := $1.unresolvedName()
+    name := $1.unresolvedObjectName()
     if name.NumParts == 1 {
       typName := name.Parts[0]
       /* FORCE DOC */
@@ -10585,7 +10644,6 @@ typed_literal:
         // types, return an unimplemented error message.
         var typ tree.ResolvableTypeReference
         var ok bool
-        var err error
         var unimp int
         typ, ok, unimp = types.TypeForNonKeywordTypeName(typName)
         if !ok {
@@ -10593,9 +10651,7 @@ typed_literal:
             case 0:
               // In this case, we don't think this type is one of our
               // known unsupported types, so make a type reference for it.
-              aIdx := sqllex.(*lexer).NewAnnotation()
-              typ, err = name.ToUnresolvedObjectName(aIdx)
-              if err != nil { return setErr(sqllex, err) }
+              typ = name
             case -1:
               return unimplemented(sqllex, "type name " + typName)
             default:
@@ -10605,10 +10661,7 @@ typed_literal:
       $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: typ, SyntaxMode: tree.CastPrepend}
       }
     } else {
-      aIdx := sqllex.(*lexer).NewAnnotation()
-      res, err := name.ToUnresolvedObjectName(aIdx)
-      if err != nil { return setErr(sqllex, err) }
-      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: res, SyntaxMode: tree.CastPrepend}
+      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: name, SyntaxMode: tree.CastPrepend}
     }
   }
 | const_typename SCONST
@@ -11860,18 +11913,36 @@ column_path_with_star:
 func_name:
   type_function_name
   {
-    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 | prefixed_column_path
+  {
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    fn, err := $1.unresolvedName().ToUnresolvedObjectName(aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = fn
+  }
 
 // func_name_no_crdb_extra is the same rule as func_name, but does not
 // contain some CRDB specific keywords like FAMILY.
 func_name_no_crdb_extra:
   type_function_name_no_crdb_extra
   {
-    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 | prefixed_column_path
+  {
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    fn, err := $1.unresolvedName().ToUnresolvedObjectName(aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = fn
+  }
 
 // Names for database objects (tables, sequences, views, stored functions).
 // Accepted patterns:
@@ -12235,6 +12306,7 @@ unreserved_keyword:
 | RESTRICT
 | RESUME
 | RETRY
+| RETURNS
 | REVISION_HISTORY
 | REVOKE
 | ROLE

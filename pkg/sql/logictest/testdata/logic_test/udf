@@ -1,0 +1,44 @@
+statement ok
+CREATE FUNCTION f (a INT, b INT) RETURNS INT AS 'SELECT a+b' LANGUAGE SQL;
+CREATE SCHEMA s;
+CREATE FUNCTION s.f(a INT) RETURNS INT AS 'SELECT a' LANGUAGE SQL
+
+# Make sure functions and tables don't share a namespace.
+
+statement ok
+CREATE TABLE f (c1 INT, c2 INT);
+INSERT INTO f VALUES(1, 2), (3, 4)
+
+query II colnames
+SELECT f(c1, c2), s.f(f(c1, c2)) FROM f ORDER BY 1
+----
+f  f
+3  3
+7  7
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+CREATE TABLE ⋅𝘧𝘯foo (a int)
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+CREATE TABLE ⋅𝘧𝘯 (a int)
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+CREATE VIEW ⋅𝘧𝘯foo AS SELECT 1
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+CREATE SEQUENCE ⋅𝘧𝘯foo
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+ALTER TABLE f RENAME TO ⋅𝘧𝘯foo
+
+statement error objects with the prefix ⋅𝘧𝘯 cannot be used to create this type of object
+ALTER TABLE f RENAME TO ⋅𝘧𝘯
+
+statement ok
+CREATE FUNCTION "s p a c e"(a int) RETURNS int AS 'SELECT a' LANGUAGE SQL
+
+query I colnames
+SELECT "s p a c e"(3)
+----
+s p a c e
+3

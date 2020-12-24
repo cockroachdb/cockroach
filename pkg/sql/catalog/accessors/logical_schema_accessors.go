@@ -176,6 +176,13 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		} else {
 			found, desc, err = l.tc.GetImmutableTableByName(ctx, txn, &tableName, flags)
 		}
+	case tree.FuncObject:
+		funcName := tree.MakeNewQualifiedFuncName(db, schema, object)
+		if flags.RequireMutable {
+			found, desc, err = l.tc.GetMutableFuncByName(ctx, txn, &funcName, flags)
+		} else {
+			found, desc, err = l.tc.GetImmutableFuncByName(ctx, txn, &funcName, flags)
+		}
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}

@@ -65,7 +65,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		return ComputeColNameInternal(sp, e.Expr)
 
 	case *FuncExpr:
-		fd, err := e.Func.Resolve(sp)
+		fd, err := e.Func.Resolve(nil, nil, sp)
 		if err != nil {
 			return 0, "", err
 		}
