@@ -49,6 +49,8 @@ type SemaContext struct {
 	// TypeResolver manages resolving type names into *types.T's.
 	TypeResolver TypeReferenceResolver
 
+	// Only one of the following two AOST-related fields can be set at a time.
+
 	// AsOfTimestamp denotes the explicit AS OF SYSTEM TIME timestamp for the
 	// query, if any. If the query is not an AS OF SYSTEM TIME query,
 	// AsOfTimestamp is nil.
@@ -61,6 +63,12 @@ type SemaContext struct {
 	// TableNameResolver is used to resolve the fully qualified
 	// name of a table given its ID.
 	TableNameResolver QualifiedNameResolver
+
+	// AsOfTimestampForBackfill is set to non-nil if the query contains a backfill
+	// operation that is expected to perform at a user-defined timestamp. It's
+	// distinct from AsOfTimestamp above, which is used to denote a user-defined
+	// *transaction* timestamp.
+	AsOfTimestampForBackfill *hlc.Timestamp
 
 	Properties SemaProperties
 }

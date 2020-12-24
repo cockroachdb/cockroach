@@ -137,6 +137,10 @@ const (
 	// rather than string literals. For example, the bytes \x40ab will be formatted
 	// as x'40ab' rather than '\x40ab'.
 	fmtFormatByteLiterals
+
+	// FmtSkipAsOfSystemTimeClauses prevents the formatter from printing AS OF
+	// SYSTEM TIME clauses.
+	FmtSkipAsOfSystemTimeClauses
 )
 
 // Composite/derived flag definitions follow.
