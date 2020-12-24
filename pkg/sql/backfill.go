@@ -445,14 +445,14 @@ func (sc *SchemaChanger) dropConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
-		if tableDescs[sc.descID], err = descsCol.GetTableVersionByID(
-			ctx, txn, sc.descID, tree.ObjectLookupFlagsWithRequired(),
+		if tableDescs[sc.descID], err = descsCol.GetImmutableTableByID(
+			ctx, txn, sc.descID, tree.ObjectLookupFlags{},
 		); err != nil {
 			return err
 		}
 		for id := range fksByBackrefTable {
-			if tableDescs[id], err = descsCol.GetTableVersionByID(
-				ctx, txn, id, tree.ObjectLookupFlagsWithRequired(),
+			if tableDescs[id], err = descsCol.GetImmutableTableByID(
+				ctx, txn, id, tree.ObjectLookupFlags{},
 			); err != nil {
 				return err
 			}
@@ -692,7 +692,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (*tabledesc.Immutable, error) {
-	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}

@@ -100,7 +100,7 @@ func (p *planner) AlterPrimaryKey(
 			if i != 0 {
 				sb.WriteString(comma)
 			}
-			childTable, err := p.Descriptors().GetTableVersionByID(
+			childTable, err := p.Descriptors().GetImmutableTableByID(
 				ctx,
 				p.Txn(),
 				interleaveTableID,
