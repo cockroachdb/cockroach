@@ -25,13 +25,13 @@ go_test(
     name = "protoutil_test",
     srcs = ["clone_test.go"],
     deps = [
+        ":protoutil",
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",
-        "//pkg/util/protoutil",
         "@com_github_gogo_protobuf//proto",
     ],
 )

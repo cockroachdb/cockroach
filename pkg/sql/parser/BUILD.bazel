@@ -52,7 +52,6 @@ go_test(
     embed = [":parser"],
     deps = [
         "//pkg/sql/lex",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
@@ -82,13 +81,13 @@ genrule(
     outs = ["sql.go"],
     cmd = """
       $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
-          $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+          $(location sql.go) $(location @com_github_cockroachdb_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
     """,
     tools = [
         ":sql-gen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
-        "@org_golang_x_tools//cmd/goyacc",
+        "@com_github_cockroachdb_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
 )

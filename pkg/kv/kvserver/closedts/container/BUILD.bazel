@@ -28,8 +28,8 @@ go_test(
     name = "container_test",
     srcs = ["container_test.go"],
     deps = [
+        ":container",
         "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/closedts/container",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/provider/testutils",
         "//pkg/kv/kvserver/closedts/transport/testutils",

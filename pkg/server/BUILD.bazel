@@ -276,7 +276,6 @@ go_test(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",
-        "//pkg/server",
         "//pkg/server/debug",
         "//pkg/server/diagnosticspb",
         "//pkg/server/serverpb",
