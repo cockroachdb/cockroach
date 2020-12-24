@@ -30,9 +30,10 @@ import (
 
 // Updater abstracts the key/value operations for updating table rows.
 type Updater struct {
-	Helper                rowHelper
-	DeleteHelper          *rowHelper
-	FetchCols             []descpb.ColumnDescriptor
+	Helper       rowHelper
+	DeleteHelper *rowHelper
+	FetchCols    []descpb.ColumnDescriptor
+	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex  catalog.TableColMap
 	UpdateCols            []descpb.ColumnDescriptor
 	UpdateColIDtoRowIndex catalog.TableColMap
@@ -77,8 +78,9 @@ var returnTruePseudoError error = returnTrue{}
 // that will be passed to UpdateRow.
 //
 // The returned Updater contains a FetchCols field that defines the
-// expectation of which values are passed as oldValues to UpdateRow. All the columns
-// passed in requestedCols will be included in FetchCols at the beginning.
+// expectation of which values are passed as oldValues to UpdateRow.
+// requestedCols must be non-nil and define the schema that determines
+// FetchCols.
 func MakeUpdater(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -89,6 +91,10 @@ func MakeUpdater(
 	updateType rowUpdaterType,
 	alloc *rowenc.DatumAlloc,
 ) (Updater, error) {
+	if requestedCols == nil {
+		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
+	}
+
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
