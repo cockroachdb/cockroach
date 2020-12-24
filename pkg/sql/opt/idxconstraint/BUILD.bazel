@@ -24,10 +24,10 @@ go_test(
     srcs = ["index_constraints_test.go"],
     data = glob(["testdata/**"]),
     deps = [
+        ":idxconstraint",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/exec/execbuilder",
-        "//pkg/sql/opt/idxconstraint",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",

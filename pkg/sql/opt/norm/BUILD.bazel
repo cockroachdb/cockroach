@@ -68,7 +68,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
-        "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",

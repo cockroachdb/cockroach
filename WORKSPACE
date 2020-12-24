@@ -80,3 +80,26 @@ git_repository(
 )
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
+
+# Gazelle silently ignores go_repository re-declarations. See
+# https://github.com/bazelbuild/bazel-gazelle/issues/561. What that means for
+# us, given we want to run a custom version of goyacc
+# (https://github.com/cockroachdb/cockroach/pull/57384, sitting under
+# @org_golang_x_tools by default), is that bazel doesn't actually pick it up.
+#
+# TODO(irfansharif): This is a wart that we can remove once
+# https://github.com/golang/tools/pull/259/files is merged upstream. We could
+# also generate a .patch file and apply it directly:
+# https://github.com/bazelbuild/rules_go/blob/0.19.0/go/workspace.rst#overriding-dependencies
+# It is a bit unfortunate though that depending on what the default modules we
+# load above end up loading, we're no longer able to override it with our own
+# fork. We'll need a longer term solution here.
+load("@bazel_gazelle//:deps.bzl", "go_repository")
+go_repository(
+    name = "com_github_cockroachdb_tools",
+    build_file_proto_mode = "disable_global",
+    importpath = "golang.org/x/tools",
+    replace = "github.com/cockroachdb/tools",
+    sum = "h1:TZHlzTz/OL/BaGcWzajnqbmf6Tn+399ylrK/at75zXM=",
+    version = "v0.0.0-20201202174556-f18ddc082e74",
+)

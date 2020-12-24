@@ -56,10 +56,10 @@ go_test(
         "x509_test.go",
     ],
     deps = [
+        ":security",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/testutils",

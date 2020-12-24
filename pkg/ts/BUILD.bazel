@@ -75,7 +75,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/localtestcluster",
         "//pkg/testutils/serverutils",
-        "//pkg/ts",
         "//pkg/ts/testmodel",
         "//pkg/ts/tspb",
         "//pkg/util/hlc",
