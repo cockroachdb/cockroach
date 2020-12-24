@@ -54,7 +54,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
 			if len(col.UsesSequenceIds) == 1 {
-				seq, err := p.Descriptors().GetTableVersionByID(
+				seq, err := p.Descriptors().GetImmutableTableByID(
 					ctx,
 					p.txn,
 					col.UsesSequenceIds[0],

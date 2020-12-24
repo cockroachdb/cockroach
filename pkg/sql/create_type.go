@@ -336,7 +336,8 @@ func (p *planner) createEnumWithID(
 	// However having USAGE on a parent schema of the type
 	// gives USAGE privilege to the type.
 	privs := descpb.NewDefaultPrivilegeDescriptor(params.p.User())
-	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(params.ctx, p.Txn(), schemaID)
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+		params.ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return err
 	}

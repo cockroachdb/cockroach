@@ -678,7 +678,7 @@ func (tc *Collection) getUserDefinedSchemaByName(
 
 		// Look up whether the schema is on the database descriptor and return early
 		// if it's not.
-		dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID, tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{})
 		if err != nil {
 			return false, nil, err
 		}
@@ -854,15 +854,6 @@ func (tc *Collection) getSchemaByName(
 	}, nil
 }
 
-// GetDatabaseVersionByID returns a database descriptor valid for the
-// transaction. See GetDatabaseVersion.
-// Deprecated in favor of GetImmutableDatabaseByID.
-func (tc *Collection) GetDatabaseVersionByID(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (*dbdesc.Immutable, error) {
-	return tc.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
-}
-
 // GetMutableDatabaseByID returns a mutable database descriptor with
 // properties according to the provided lookup flags. RequireMutable is ignored.
 // Required is ignored, and an error is always returned if no descriptor with
@@ -908,14 +899,6 @@ func (tc *Collection) getDatabaseByID(
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
 	return db, nil
-}
-
-// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
-// Deprecated in favor of GetImmutableTableByID.
-func (tc *Collection) GetTableVersionByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*tabledesc.Immutable, error) {
-	return tc.GetImmutableTableByID(ctx, txn, tableID, flags)
 }
 
 // GetMutableTableByID returns a mutable table descriptor with
@@ -1089,14 +1072,6 @@ func (tc *Collection) GetMutableDescriptorByIDWithFlags(
 	return desc.(catalog.MutableDescriptor), nil
 }
 
-// ResolveSchemaByID looks up a schema by ID.
-// Deprecated in favor of GetImmutableSchemaByID.
-func (tc *Collection) ResolveSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID,
-) (catalog.ResolvedSchema, error) {
-	return tc.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{})
-}
-
 // GetMutableSchemaByID returns a ResolvedSchema wrapping a mutable
 // descriptor, if applicable. RequireMutable is ignored.
 // Required is ignored, and an error is always returned if no descriptor with
@@ -1220,16 +1195,17 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		getType := typedesc.TypeLookupFunc(func(
 			ctx context.Context, id descpb.ID,
 		) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			desc, err := tc.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
-				tree.DatabaseLookupFlags{Required: true})
+			dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
+				tree.DatabaseLookupFlags{})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			sc, err := tc.ResolveSchemaByID(ctx, txn, desc.ParentSchemaID)
+			sc, err := tc.GetImmutableSchemaByID(
+				ctx, txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -1446,15 +1422,6 @@ func (tc *Collection) GetMutableTypeByID(
 		return nil, err
 	}
 	return desc.(*typedesc.Mutable), nil
-}
-
-// GetTypeVersionByID is the equivalent of GetTableVersionByID but for accessing
-// types.
-// Deprecated in favor of GetImmutableTypeByID.
-func (tc *Collection) GetTypeVersionByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*typedesc.Immutable, error) {
-	return tc.GetImmutableTypeByID(ctx, txn, typeID, flags)
 }
 
 // GetImmutableTypeByID returns an immutable type descriptor with

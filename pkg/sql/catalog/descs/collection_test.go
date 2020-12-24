@@ -208,7 +208,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			immByID, err := descriptors.GetDatabaseVersionByID(ctx, txn, db.GetID(), flags)
+			immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
@@ -236,7 +236,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
 
-			immByIDAfter, err := descriptors.GetDatabaseVersionByID(ctx, txn, db.GetID(), flags)
+			immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
