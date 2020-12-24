@@ -75,3 +75,25 @@ user testuser
 # Being the owner of schema s should allow testuser to drop table s.t.
 statement ok
 DROP TABLE s.t
+
+# Verify that a table can successfully be dropped after performing
+# a schema change to the table in the same transaction.
+# See https://github.com/cockroachdb/cockroach/issues/56235.
+subtest drop_after_schema_change_in_txn
+statement ok
+CREATE TABLE to_drop();
+
+statement ok
+BEGIN;
+
+statement ok
+ALTER TABLE to_drop ADD COLUMN foo int;
+
+statement ok
+DROP TABLE to_drop;
+
+statement ok
+COMMIT;
+
+statement error pgcode 42P01 relation "to_drop" does not exist
+DROP TABLE to_drop;
