@@ -1,0 +1,125 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    FAMILY (a, b, c),
+    INDEX b_partial (b) WHERE b > 10
+)
+
+statement ok
+CREATE TABLE inv (
+    a INT PRIMARY KEY,
+    b JSON,
+    c STRING,
+    INVERTED INDEX i (b) WHERE c IN ('foo', 'bar'),
+    FAMILY (a, b, c)
+)
+
+# ---------------------------------------------------------
+# EXPLAIN
+# ---------------------------------------------------------
+
+# EXPLAIN output shows the partial index label on scans and joins on partial
+# indexes.
+query T
+EXPLAIN SELECT b FROM t WHERE b > 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@b_partial (partial index)
+  spans: FULL SCAN
+
+query T
+EXPLAIN SELECT t1.a FROM t t1 INNER LOOKUP JOIN t t2 ON t1.a = t2.b AND t2.b > 10
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: t@b_partial (partial index)
+│ equality: (a) = (b)
+│
+└── • scan
+      missing stats
+      table: t@primary
+      spans: [/11 - ]
+
+query T
+EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: inv@i (partial index)
+  spans: 1 span
+
+query T
+EXPLAIN SELECT a FROM inv@i WHERE b @> '{"x": "y"}' AND c = 'foo'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: c = 'foo'
+│
+└── • index join
+    │ table: inv@primary
+    │
+    └── • scan
+          missing stats
+          table: inv@i (partial index)
+          spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM inv@i WHERE b @> '{"x": "y"}' AND c IN ('foo', 'bar')
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: inv@primary
+│
+└── • scan
+      missing stats
+      table: inv@i (partial index)
+      spans: 1 span
+
+# ---------------------------------------------------------
+# JOIN
+# ---------------------------------------------------------
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE b (b INT, INDEX (b) WHERE b IS NOT NULL)
+
+# The partial index can be used because the ON condition implicitly implies the
+# partial index predicate, b IS NOT NULL.
+query T
+EXPLAIN SELECT * FROM a JOIN b ON a = b
+----
+distribution: local
+vectorized: true
+·
+• merge join
+│ equality: (a) = (b)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: a@primary
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: b@b_b_idx (partial index)
+      spans: FULL SCAN
