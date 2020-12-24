@@ -271,7 +271,8 @@ func (p *planner) accumulateOwnedSequences(
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
 				// exist.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				if errors.Is(err, catalog.ErrDescriptorDropped) ||
+					pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 					log.Infof(ctx,
 						"swallowing error for owned sequence that was not found %s", err.Error())
 					continue
