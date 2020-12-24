@@ -396,6 +396,12 @@ func (*CreateIndex) StatementType() StatementType { return DDL }
 func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 
 // StatementType implements the Statement interface.
+func (*CreateFunction) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateFunction) StatementTag() string { return "CREATE FUNCTION" }
+
+// StatementType implements the Statement interface.
 func (n *CreateSchema) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1096,6 +1102,7 @@ func (n *CreateExtension) String() string                { return AsString(n) }
 func (n *CreateIndex) String() string                    { return AsString(n) }
 func (n *CreateRole) String() string                     { return AsString(n) }
 func (n *CreateTable) String() string                    { return AsString(n) }
+func (n *CreateFunction) String() string                 { return AsString(n) }
 func (n *CreateSchema) String() string                   { return AsString(n) }
 func (n *CreateSequence) String() string                 { return AsString(n) }
 func (n *CreateStats) String() string                    { return AsString(n) }

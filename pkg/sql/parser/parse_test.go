@@ -89,6 +89,10 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE IF NOT EXISTS a SURVIVE ZONE FAILURE`},
 		{`CREATE DATABASE IF NOT EXISTS a PRIMARY REGION "us-west-1"`},
 
+		{`CREATE FUNCTION a (a STRING) RETURNS STRING AS 'SELECT a' LANGUAGE sql`},
+		{`CREATE FUNCTION a (a INT8, b INT8, c INT8) RETURNS INT8 AS 'SELECT a+b+c' LANGUAGE sql`},
+		{`CREATE OR REPLACE FUNCTION a (a INT8) RETURNS INT8 AS 'SELECT a+1' LANGUAGE sql`},
+
 		{`CREATE SCHEMA IF NOT EXISTS foo`},
 		{`CREATE SCHEMA foo`},
 		{`CREATE SCHEMA IF NOT EXISTS foo.bar`},
@@ -1760,15 +1764,17 @@ func TestParse(t *testing.T) {
 	}
 	var p parser.Parser // Verify that the same parser can be reused.
 	for _, d := range testData {
-		stmts, err := p.Parse(d.sql)
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %s", d.sql, err)
-		}
-		s := stmts.String()
-		if d.sql != s {
-			t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
-		}
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		t.Run(d.sql, func(t *testing.T) {
+			stmts, err := p.Parse(d.sql)
+			if err != nil {
+				t.Fatalf("%s: expected success, but found %s", d.sql, err)
+			}
+			s := stmts.String()
+			if d.sql != s {
+				t.Errorf("expected \n%q\n, but found \n%q", d.sql, s)
+			}
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.sql)
+		})
 	}
 }
 
@@ -3152,8 +3158,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
-		{`CREATE FUNCTION a`, 17511, `create`, ``},
-		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
 		{`CREATE OPERATOR a`, 0, `create operator`, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
