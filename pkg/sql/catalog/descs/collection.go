@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -607,6 +608,64 @@ func (tc *Collection) getTypeByName(
 		return false, nil, err
 	}
 	return true, typ, nil
+}
+
+// GetMutableFuncByName returns a mutable func descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableFuncByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (found bool, _ *funcdesc.Mutable, _ error) {
+	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, true /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*funcdesc.Mutable), nil
+}
+
+// GetImmutableFuncByName returns a mutable func descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetImmutableFuncByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+) (found bool, _ *funcdesc.Immutable, _ error) {
+	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, false /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*funcdesc.Immutable), nil
+}
+
+// getFuncByName returns a func descriptor with properties according to the
+// provided lookup flags.
+func (tc *Collection) getFuncByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	name tree.ObjectName,
+	flags tree.ObjectLookupFlags,
+	mutable bool,
+) (found bool, _ funcdesc.Descriptor, err error) {
+	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags, mutable)
+	if err != nil {
+		return false, nil, err
+	} else if !found {
+		if flags.Required {
+			return false, nil, sqlerrors.NewUndefinedFuncError(name)
+		}
+		return false, nil, nil
+	}
+	fn, ok := desc.(funcdesc.Descriptor)
+	if !ok {
+		if flags.Required {
+			return false, nil, sqlerrors.NewUndefinedFuncError(name)
+		}
+		return false, nil, nil
+	}
+	if err := catalog.FilterDescriptorState(fn, flags.CommonLookupFlags); err != nil {
+		if flags.Required {
+			return false, nil, err
+		}
+		return false, nil, nil
+	}
+	return true, fn, nil
 }
 
 // TODO (lucy): Should this just take a database name? We're separately

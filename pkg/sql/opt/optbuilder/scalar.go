@@ -484,7 +484,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
+	def, err := f.Func.Resolve(b.ctx, b.catalog, b.semaCtx.SearchPath)
 	if err != nil {
 		panic(err)
 	}

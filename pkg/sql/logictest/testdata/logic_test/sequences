@@ -638,7 +638,7 @@ DROP SEQUENCE drop_prevention_test
 
 # Giving a nonexistent function doesn't mess up the nextval-detection algorithm.
 
-statement error pq: unknown function: nxtvl()
+statement error function nxtvl\(\) does not exist
 CREATE TABLE seq_using_table (id INT PRIMARY KEY DEFAULT nxtvl('foo'))
 
 # Sequence deletion is allowed once the sequence-using column is removed.

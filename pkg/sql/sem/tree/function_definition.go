@@ -126,6 +126,10 @@ const (
 	// should also include a definition for Overload.Fn, which is executed
 	// like a NormalClass function and returns a Datum.
 	SQLClass
+
+	// UserDefinedClass is a user-defined function whose implementation
+	// is provided by the user (via a FuncDescriptor).
+	UserDefinedClass
 )
 
 // Avoid vet warning about unused enum value.
@@ -144,7 +148,9 @@ func NewFunctionDefinition(
 			props.AmbiguousReturnType = true
 		}
 		// Produce separate telemetry for each overload.
-		def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
+		if props.Class != UserDefinedClass {
+			def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
+		}
 
 		overloads[i] = &def[i]
 	}

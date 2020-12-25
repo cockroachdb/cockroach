@@ -3026,6 +3026,7 @@ type EvalDatabase interface {
 type EvalPlanner interface {
 	EvalDatabase
 	TypeReferenceResolver
+	FuncReferenceResolver
 
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.

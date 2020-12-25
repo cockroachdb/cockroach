@@ -271,7 +271,7 @@ func cleanupSchemaObjects(
 	}
 
 	for _, toDelete := range []struct {
-		// typeName is the type of table being deleted, e.g. view, table, sequence
+		// funcName is the type of table being deleted, e.g. view, table, sequence
 		typeName string
 		// ids represents which ids we wish to remove.
 		ids descpb.IDs

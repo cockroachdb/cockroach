@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -257,6 +258,12 @@ func (oc *optCatalog) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
 	return oc.planner.ResolveType(ctx, name)
+}
+
+func (oc *optCatalog) ResolveFunc(
+	ctx context.Context, searchPath sessiondata.SearchPath, name *tree.UnresolvedObjectName,
+) (*tree.FunctionDefinition, error) {
+	return oc.planner.ResolveFunc(ctx, searchPath, name)
 }
 
 func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {

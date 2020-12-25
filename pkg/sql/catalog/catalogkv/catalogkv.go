@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -114,6 +115,7 @@ const (
 	SchemaDescriptorKind
 	TableDescriptorKind
 	TypeDescriptorKind
+	FuncDescriptorKind
 	AnyDescriptorKind // permit any kind
 )
 
@@ -188,6 +190,8 @@ func desiredKindError(desc catalog.Descriptor, kind DescriptorKind, id descpb.ID
 		kindMismatched = kind != TableDescriptorKind
 	case catalog.TypeDescriptor:
 		kindMismatched = kind != TypeDescriptorKind
+	case funcdesc.Descriptor:
+		kindMismatched = kind != FuncDescriptorKind
 	}
 	if !kindMismatched {
 		return nil
@@ -212,6 +216,8 @@ func requiredError(kind DescriptorKind, id descpb.ID) error {
 		err = sqlerrors.NewUnsupportedSchemaUsageError(fmt.Sprintf("[%d]", id))
 	case TypeDescriptorKind:
 		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
+	case FuncDescriptorKind:
+		err = sqlerrors.NewUndefinedFuncError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
 	}
@@ -286,6 +292,8 @@ func validateDescriptor(ctx context.Context, dg catalog.DescGetter, desc catalog
 		return desc.Validate(ctx, dg)
 	case catalog.DatabaseDescriptor:
 		return desc.Validate()
+	case funcdesc.Descriptor:
+		return desc.Validate(ctx, dg)
 	case catalog.TypeDescriptor:
 		return desc.Validate(ctx, dg)
 	case catalog.SchemaDescriptor:
@@ -307,8 +315,8 @@ func unwrapDescriptor(
 	validate bool,
 ) (catalog.Descriptor, error) {
 	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
-		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	table, database, fnc, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
+		desc.GetDatabase(), desc.GetFunc(), desc.GetType(), desc.GetSchema()
 	var unwrapped catalog.Descriptor
 	switch {
 	case table != nil:
@@ -319,6 +327,8 @@ func unwrapDescriptor(
 		unwrapped = immTable
 	case database != nil:
 		unwrapped = dbdesc.NewImmutable(*database)
+	case fnc != nil:
+		unwrapped = funcdesc.NewImmutable(*fnc)
 	case typ != nil:
 		unwrapped = typedesc.NewImmutable(*typ)
 	case schema != nil:
@@ -341,9 +351,9 @@ func unwrapDescriptorMutable(
 	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
 ) (catalog.MutableDescriptor, error) {
 	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema :=
+	table, database, fnc, typ, schema :=
 		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
-		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+		desc.GetDatabase(), desc.GetFunc(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
 		mutTable, err := tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
@@ -360,6 +370,8 @@ func unwrapDescriptorMutable(
 			return nil, err
 		}
 		return dbDesc, nil
+	case fnc != nil:
+		return funcdesc.NewExistingMutable(*fnc), nil
 	case typ != nil:
 		return typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
