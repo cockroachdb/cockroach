@@ -487,13 +487,10 @@ func (tp *ObjectNamePrefix) Resolve(
 // TableName (or whatever an object name will be called by then)
 // and then undergo regular name resolution via ResolveExisting(). When
 // that happens, the following function can be removed.
-func (n *UnresolvedName) ResolveFunction(
+func (n *UnresolvedObjectName) ResolveFunction(
 	searchPath sessiondata.SearchPath,
 ) (*FunctionDefinition, error) {
-	if n.NumParts > 3 || len(n.Parts[0]) == 0 || n.Star {
-		// The Star part of the condition is really an assertion. The
-		// parser should not have let this star propagate to a point where
-		// this method is called.
+	if n.NumParts > 3 || len(n.Parts[0]) == 0 {
 		return nil, pgerror.Newf(pgcode.InvalidName,
 			"invalid function name: %s", n)
 	}
@@ -607,6 +604,8 @@ const (
 	TableObject DesiredObjectKind = iota
 	// TypeObject is used when a type-like object is desired from resolution.
 	TypeObject
+	// TypeObject is used when a func-like object is desired from resolution.
+	FuncObject
 )
 
 // NewQualifiedObjectName returns an ObjectName of the corresponding kind.
@@ -619,6 +618,9 @@ func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKi
 		return &name
 	case TypeObject:
 		name := MakeNewQualifiedTypeName(catalog, schema, object)
+		return &name
+	case FuncObject:
+		name := MakeNewQualifiedFuncName(catalog, schema, object)
 		return &name
 	}
 	return nil

@@ -1,0 +1,12 @@
+statement ok
+CREATE FUNCTION f (a INT, b INT) RETURNS INT AS 'SELECT a+b' LANGUAGE SQL
+
+statement ok
+CREATE TABLE t (c1 INT, c2 INT);
+INSERT INTO t VALUES(1, 2), (3, 4)
+
+query I
+SELECT f(c1, c2) FROM t
+----
+3
+7

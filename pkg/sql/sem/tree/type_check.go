@@ -902,7 +902,7 @@ func (expr *FuncExpr) TypeCheck(
 	if semaCtx != nil {
 		searchPath = semaCtx.SearchPath
 	}
-	def, err := expr.Func.Resolve(searchPath)
+	def, err := expr.Func.Resolve(nil, nil, searchPath)
 	if err != nil {
 		return nil, err
 	}

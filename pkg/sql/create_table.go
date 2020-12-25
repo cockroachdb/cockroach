@@ -2204,9 +2204,9 @@ func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescript
 func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
-			FunctionReference: &tree.UnresolvedName{
+			FunctionReference: &tree.UnresolvedObjectName{
 				NumParts: 1,
-				Parts:    tree.NameParts{funcName},
+				Parts:    [3]string{funcName},
 			},
 		}
 	}

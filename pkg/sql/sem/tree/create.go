@@ -1862,7 +1862,7 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 
 // CreateFunction represents a CREATE FUNCTION statement.
 type CreateFunction struct {
-	Name       *UnresolvedName
+	Name       *UnresolvedObjectName
 	OrReplace  bool
 	Params     []FormalParam
 	ReturnType ResolvableTypeReference

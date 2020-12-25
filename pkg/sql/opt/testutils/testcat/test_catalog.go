@@ -44,6 +44,7 @@ const (
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
 	tree.TypeReferenceResolver
+	tree.FuncReferenceResolver
 	testSchema Schema
 	counter    int
 }

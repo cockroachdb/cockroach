@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -124,6 +125,8 @@ type Catalog interface {
 	ResolveType(
 		ctx context.Context, name *tree.UnresolvedObjectName,
 	) (*types.T, error)
+
+	ResolveFunc(ctx context.Context, searchPath sessiondata.SearchPath, name *tree.UnresolvedObjectName) (*tree.FunctionDefinition, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

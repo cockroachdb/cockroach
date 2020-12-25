@@ -554,9 +554,8 @@ func (c *CustomFuncs) FoldFunction(
 	for i := range exprs {
 		exprs[i] = memo.ExtractConstDatum(args[i])
 	}
-	funcRef := tree.WrapFunction(private.Name)
 	fn := tree.NewTypedFuncExpr(
-		funcRef,
+		tree.ResolvableFunctionReference{},
 		0, /* aggQualifier */
 		exprs,
 		nil, /* filter */

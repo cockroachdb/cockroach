@@ -525,7 +525,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
-    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
+    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedObjectName()}
 }
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
@@ -3131,7 +3131,7 @@ func_def_name:         db_object_name
 create_function_stmt:
   CREATE FUNCTION func_def_name '(' formal_param_list ')' RETURNS typename AS SCONST LANGUAGE name {
     $$.val = &tree.CreateFunction{
-      Name: $3.unresolvedObjectName().ToUnresolvedName(),
+      Name: $3.unresolvedObjectName(),
       Params: $5.formalParams(),
       ReturnType: $8.typeReference(),
       FuncDef: tree.NewStrVal($10),
@@ -3141,7 +3141,7 @@ create_function_stmt:
 | CREATE OR REPLACE FUNCTION func_def_name '(' formal_param_list ')' RETURNS typename AS SCONST LANGUAGE name {
     $$.val = &tree.CreateFunction{
       OrReplace: true,
-      Name: $5.unresolvedObjectName().ToUnresolvedName(),
+      Name: $5.unresolvedObjectName(),
       Params: $7.formalParams(),
       ReturnType: $10.typeReference(),
       FuncDef: tree.NewStrVal($12),
@@ -11913,18 +11913,36 @@ column_path_with_star:
 func_name:
   type_function_name
   {
-    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 | prefixed_column_path
+  {
+		aIdx := sqllex.(*lexer).NewAnnotation()
+		fn, err := $1.unresolvedName().ToUnresolvedObjectName(aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = fn
+  }
 
 // func_name_no_crdb_extra is the same rule as func_name, but does not
 // contain some CRDB specific keywords like FAMILY.
 func_name_no_crdb_extra:
   type_function_name_no_crdb_extra
   {
-    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
+    aIdx := sqllex.(*lexer).NewAnnotation()
+    res, err := tree.NewUnresolvedObjectName(1, [3]string{$1}, aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = res
   }
 | prefixed_column_path
+  {
+		aIdx := sqllex.(*lexer).NewAnnotation()
+		fn, err := $1.unresolvedName().ToUnresolvedObjectName(aIdx)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = fn
+  }
 
 // Names for database objects (tables, sequences, views, stored functions).
 // Accepted patterns:
