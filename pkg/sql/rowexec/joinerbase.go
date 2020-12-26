@@ -86,14 +86,7 @@ func (jb *joinerBase) init(
 	onCondTypes = append(onCondTypes, leftTypes...)
 	onCondTypes = append(onCondTypes, rightTypes...)
 
-	var outputTypes []*types.T
-	if !jType.ShouldIncludeLeftColsInOutput() {
-		outputTypes = append(outputTypes, rightTypes...)
-	} else if !jType.ShouldIncludeRightColsInOutput() {
-		outputTypes = append(outputTypes, leftTypes...)
-	} else {
-		outputTypes = append(outputTypes, onCondTypes...)
-	}
+	outputTypes := jType.MakeOutputTypes(leftTypes, rightTypes)
 	if outputContinuationColumn {
 		outputTypes = append(outputTypes, types.Bool)
 	}
