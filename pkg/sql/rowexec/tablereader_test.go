@@ -437,9 +437,15 @@ func TestLimitScans(t *testing.T) {
 		if span.Operation == tableReaderProcName {
 			// Verify that stat collection lines up with results.
 			stats := execinfrapb.ComponentStats{}
-			if err := types.UnmarshalAny(span.Stats, &stats); err != nil {
-				t.Fatal(err)
-			}
+			span.Structured(func(item *types.Any) {
+				if !types.Is(item, &stats) {
+					return
+				}
+				if err := types.UnmarshalAny(item, &stats); err != nil {
+					t.Fatal(err)
+				}
+			})
+
 			if stats.KV.TuplesRead.Value() != limit {
 				t.Fatalf("read %d rows, but stats counted: %s", limit, stats.KV.TuplesRead)
 			}

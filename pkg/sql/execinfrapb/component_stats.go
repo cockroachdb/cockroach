@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
@@ -338,14 +339,25 @@ func ExtractStatsFromSpans(
 ) map[ComponentID]*ComponentStats {
 	statsMap := make(map[ComponentID]*ComponentStats)
 	for i := range spans {
-		if spans[i].Stats == nil {
-			continue
-		}
-
+		span := &spans[i]
 		var stats ComponentStats
-		if err := types.UnmarshalAny(spans[i].Stats, &stats); err != nil {
-			continue
-		}
+
+		found := false
+		// TODO(radu): there's nothing stopping us from having multiple
+		// ComponentStats in a single Span once we are in the 21.2 cycle.
+		span.Structured(func(item *types.Any) {
+			if found {
+				return
+			}
+			if !types.Is(item, &stats) {
+				return
+			}
+			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+				return
+			}
+			found = true
+		})
+
 		if stats.Component == (ComponentID{}) {
 			continue
 		}
