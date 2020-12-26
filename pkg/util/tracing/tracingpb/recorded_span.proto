@@ -65,7 +65,17 @@ message RecordedSpan {
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
   // Stats collected in this span.
-  google.protobuf.Any stats = 10;
+  //
+  // Deprecated - remove in 21.2 cycle. Stats will use the structured field
+  // below; 21.1 nodes already know to look there.
+  google.protobuf.Any deprecated_stats = 10;
+
+  // InternalStructured are payloads attached to this Span.
+  //
+  // Do not use directly, but call Structured() instead.
+  //
+  // TODO(tbg): rename once DeprecatedStats is removed.
+  repeated google.protobuf.Any internal_structured = 11;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

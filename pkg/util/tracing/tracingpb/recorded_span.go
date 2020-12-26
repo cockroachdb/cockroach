@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	types "github.com/gogo/protobuf/types"
 )
 
 // LogMessageField is the field name used for the opentracing.Span.LogFields()
@@ -27,6 +29,17 @@ func (s *RecordedSpan) String() string {
 		sb.WriteString(fmt.Sprintf("%s %s\n", ev.Time.UTC().Format(time.RFC3339Nano), ev.Msg()))
 	}
 	return sb.String()
+}
+
+// Structured visits the data passed to LogStructured for the Span from which
+// the RecordedSpan was created.
+func (s *RecordedSpan) Structured(visit func(*types.Any)) {
+	if s.DeprecatedStats != nil {
+		visit(s.DeprecatedStats)
+	}
+	for _, item := range s.InternalStructured {
+		visit(item)
+	}
 }
 
 // Msg extracts the message of the LogRecord, which is either in an "event" or
