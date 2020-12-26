@@ -532,12 +532,7 @@ func (o *mergeJoinBase) reset(ctx context.Context) {
 }
 
 func (o *mergeJoinBase) Init() {
-	if o.joinType.ShouldIncludeLeftColsInOutput() {
-		o.outputTypes = append(o.outputTypes, o.left.sourceTypes...)
-	}
-	if o.joinType.ShouldIncludeRightColsInOutput() {
-		o.outputTypes = append(o.outputTypes, o.right.sourceTypes...)
-	}
+	o.outputTypes = o.joinType.MakeOutputTypes(o.left.sourceTypes, o.right.sourceTypes)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.proberState.lBufferedGroup.spillingQueue = newSpillingQueue(

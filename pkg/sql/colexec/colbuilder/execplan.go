@@ -967,13 +967,8 @@ func NewColOperator(
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 			}
-			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
-			if core.HashJoiner.Type.ShouldIncludeLeftColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
-			}
-			if core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
-			}
+
+			result.ColumnTypes = core.HashJoiner.Type.MakeOutputTypes(leftTypes, rightTypes)
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err = result.planAndMaybeWrapFilter(
@@ -1027,13 +1022,7 @@ func NewColOperator(
 
 			result.Op = mj
 			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
-			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
-			if core.MergeJoiner.Type.ShouldIncludeLeftColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
-			}
-			if core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
-			}
+			result.ColumnTypes = core.MergeJoiner.Type.MakeOutputTypes(leftTypes, rightTypes)
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapFilter(
