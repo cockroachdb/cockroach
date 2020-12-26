@@ -834,6 +834,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
+  pkg/sql/colexec/crossjoiner.eg.go \
   pkg/sql/colexec/default_cmp_expr.eg.go \
   pkg/sql/colexec/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/default_cmp_sel_ops.eg.go \
