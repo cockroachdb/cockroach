@@ -13,6 +13,7 @@ go_library(
         "columnarizer.go",
         "constants.go",
         "count.go",
+        "crossjoiner.go",
         "deselector.go",
         "disk_spiller.go",
         "expr.go",
