@@ -811,180 +811,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftGroupsFromBatch(
 	)
 }
 
-// buildLeftBufferedGroup is similar to buildLeftGroupsFromBatch, but it
-// builds the output columns corresponding to the left input based on the
-// buffered group. The goal is to repeat each row from the left buffered group
-// leftGroup.numRepeats times.
-// Note that for non-set operation joins all other fields of leftGroup are
-// ignored because, by definition, all rows in the buffered group are part of
-// leftGroup (i.e. we don't need to look at rowStartIdx and rowEndIdx). Also,
-// all rows in the buffered group do have a match, so the group can neither be
-// "nullGroup" nor "unmatched".
-// This function does pay attention to rowEndIdx field for set operation joins:
-// only the first rowEndIdx will be output. For performance reasons we choose
-// to output the first rows (for both INTERSECT ALL and EXCEPT ALL joins we
-// need to output exactly rowEndIdx different rows from the left, but the
-// choice of rows can be arbitrary).
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildLeftBufferedGroup(
-	ctx context.Context,
-	leftGroup group,
-	input *mergeJoinInput,
-	bufferedGroup mjBufferedGroup,
-	destStartIdx int,
-) {
-	var err error
-	currentBatch := o.builderState.lBufferedGroupBatch
-	if currentBatch == nil {
-		currentBatch, err = bufferedGroup.dequeue(ctx)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-		o.builderState.lBufferedGroupBatch = currentBatch
-		o.builderState.left.curSrcStartIdx = 0
-		o.builderState.left.numRepeatsIdx = 0
-	}
-	initialBuilderState := o.builderState.left
-	o.unlimitedAllocator.PerformOperation(
-		o.output.ColVecs()[:len(input.sourceTypes)],
-		func() {
-			batchLength := currentBatch.Length()
-			for batchLength > 0 {
-				// Loop over every column.
-			LeftColLoop:
-				for colIdx := range input.sourceTypes {
-					outStartIdx := destStartIdx
-					src := currentBatch.ColVec(colIdx)
-					srcNulls := src.Nulls()
-					out := o.output.ColVec(colIdx)
-					outNulls := out.Nulls()
-					switch input.canonicalTypeFamilies[colIdx] {
-					// {{range $.Overloads}}
-					case _CANONICAL_TYPE_FAMILY:
-						switch input.sourceTypes[colIdx].Width() {
-						// {{range .WidthOverloads}}
-						case _TYPE_WIDTH:
-							srcCol := src.TemplateType()
-							outCol := out.TemplateType()
-							var val _GOTYPE
-							// {{if _JOIN_TYPE.IsSetOp}}
-							// Loop over every row in the group until we hit
-							// rowEndIdx number of rows.
-							// {{else}}
-							// Loop over every row in the group.
-							// {{end}}
-							for ; o.builderState.left.curSrcStartIdx < batchLength; o.builderState.left.curSrcStartIdx++ {
-								// Repeat each row numRepeats times.
-								// {{/*
-								// TODO(yuzefovich): we can optimize this code for
-								// LEFT SEMI, INTERSECT ALL, and EXCEPT ALL joins
-								// because in that case numRepeats is always 1.
-								// */}}
-								srcStartIdx := o.builderState.left.curSrcStartIdx
-								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.output.Capacity() {
-									toAppend = o.output.Capacity() - outStartIdx
-								}
-
-								// {{if _JOIN_TYPE.IsSetOp}}
-								if o.builderState.left.setOpLeftSrcIdx == leftGroup.rowEndIdx {
-									// We have fully materialized first rowEndIdx
-									// rows in the current column, so we need to
-									// either transition to the next column or exit.
-									// We can accomplish this by setting toAppend
-									// to 0.
-									toAppend = 0
-								}
-								o.builderState.left.setOpLeftSrcIdx += toAppend
-								// {{end}}
-
-								// {{/*
-								// TODO(yuzefovich): check whether it is beneficial
-								// to have 'if toAppend > 0' check here.
-								// */}}
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val = srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
-										execgen.SET(outCol, outStartIdx, val)
-										outStartIdx++
-									}
-								}
-
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the rows in the current batch, so
-									// we move to the next column.
-									if colIdx == len(input.sourceTypes)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										o.builderState.left.numRepeatsIdx += toAppend
-										// {{if _JOIN_TYPE.IsSetOp}}
-										// {{/*
-										//     For non-set operation join the builder state is reset once the
-										//     buffered group has been fully built (at the very bottom of this
-										//     function), but we might be short-circuiting right now because
-										//     set operation joins can have partially-built groups.
-										// */}}
-										if o.builderState.left.setOpLeftSrcIdx == leftGroup.rowEndIdx {
-											o.builderState.lBufferedGroupBatch = nil
-											o.builderState.left.reset()
-										}
-										// {{end}}
-										return
-									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									o.builderState.left.setBuilderColumnState(initialBuilderState)
-									continue LeftColLoop
-								}
-								// We fully processed the current row, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next row
-								// would be repeated leftGroup.numRepeats times).
-								o.builderState.left.numRepeatsIdx = 0
-							}
-							// {{end}}
-						}
-					// {{end}}
-					default:
-						colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
-					}
-					if colIdx == len(input.sourceTypes)-1 {
-						// We have appended some tuples into the output batch from the current
-						// batch (the latter is now fully processed), so we need to adjust
-						// destStartIdx accordingly for the next batch.
-						destStartIdx = outStartIdx
-					} else {
-						o.builderState.left.setBuilderColumnState(initialBuilderState)
-					}
-				}
-				// We have processed all tuples in the current batch from the
-				// buffered group, so we need to dequeue the next one.
-				o.unlimitedAllocator.ReleaseBatch(currentBatch)
-				currentBatch, err = bufferedGroup.dequeue(ctx)
-				if err != nil {
-					colexecerror.InternalError(err)
-				}
-				o.builderState.lBufferedGroupBatch = currentBatch
-				batchLength = currentBatch.Length()
-				// We have transitioned to building from a new batch, so we
-				// need to update the builder state to build from the beginning
-				// of the new batch.
-				o.builderState.left.curSrcStartIdx = 0
-				o.builderState.left.numRepeatsIdx = 0
-				// We also need to update 'initialBuilderState' so that the
-				// builder state gets reset correctly in-between different
-				// columns in the loop above.
-				initialBuilderState = o.builderState.left
-			}
-			o.builderState.lBufferedGroupBatch = nil
-			o.builderState.left.reset()
-		},
-	)
-}
-
 // {{/*
 // This code snippet builds the output corresponding to the right side (i.e. is
 // the main body of buildRightGroupsFromBatch()).
@@ -1138,118 +964,6 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 		})
 }
 
-// buildRightBufferedGroup is similar to buildRightGroupsFromBatch, but it
-// builds the output columns corresponding to the right input based on the
-// buffered group. The goal is to repeat the whole buffered group
-// rightGroup.numRepeats times.
-// Note that all other fields of rightGroup are ignored because, by definition,
-// all rows in the buffered group are part of rightGroup (i.e. we don't need to
-// look at rowStartIdx and rowEndIdx). Also, all rows in the buffered group do
-// have a match, so the group can neither be "nullGroup" nor "unmatched".
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightBufferedGroup(
-	ctx context.Context,
-	rightGroup group,
-	colOffset int,
-	input *mergeJoinInput,
-	bufferedGroup mjBufferedGroup,
-	destStartIdx int,
-) {
-	var err error
-	o.unlimitedAllocator.PerformOperation(
-		o.output.ColVecs()[colOffset:colOffset+len(input.sourceTypes)],
-		func() {
-			outStartIdx := destStartIdx
-			// Repeat the buffered group numRepeats times.
-			for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
-				currentBatch := o.builderState.rBufferedGroupBatch
-				if currentBatch == nil {
-					currentBatch, err = bufferedGroup.dequeue(ctx)
-					if err != nil {
-						colexecerror.InternalError(err)
-					}
-					o.builderState.rBufferedGroupBatch = currentBatch
-					o.builderState.right.curSrcStartIdx = 0
-				}
-				batchLength := currentBatch.Length()
-				for batchLength > 0 {
-					toAppend := batchLength - o.builderState.right.curSrcStartIdx
-					if outStartIdx+toAppend > o.output.Capacity() {
-						toAppend = o.output.Capacity() - outStartIdx
-					}
-
-					// Loop over every column.
-					for colIdx := range input.sourceTypes {
-						src := currentBatch.ColVec(colIdx)
-						srcNulls := src.Nulls()
-						out := o.output.ColVec(colIdx + colOffset)
-						outNulls := out.Nulls()
-						switch input.canonicalTypeFamilies[colIdx] {
-						// {{range $.Overloads}}
-						case _CANONICAL_TYPE_FAMILY:
-							switch input.sourceTypes[colIdx].Width() {
-							// {{range .WidthOverloads}}
-							case _TYPE_WIDTH:
-								srcCol := src.TemplateType()
-								outCol := out.TemplateType()
-
-								// Optimization in the case that group length is 1, use assign
-								// instead of copy.
-								if toAppend == 1 {
-									if srcNulls.NullAt(o.builderState.right.curSrcStartIdx) {
-										outNulls.SetNull(outStartIdx)
-									} else {
-										v := srcCol.Get(o.builderState.right.curSrcStartIdx)
-										execgen.SET(outCol, outStartIdx, v)
-									}
-								} else {
-									out.Copy(
-										coldata.CopySliceArgs{
-											SliceArgs: coldata.SliceArgs{
-												Src:         src,
-												DestIdx:     outStartIdx,
-												SrcStartIdx: o.builderState.right.curSrcStartIdx,
-												SrcEndIdx:   o.builderState.right.curSrcStartIdx + toAppend,
-											},
-										},
-									)
-								}
-								// {{end}}
-							}
-							// {{end}}
-						default:
-							colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", input.sourceTypes[colIdx].String()))
-						}
-					}
-					outStartIdx += toAppend
-
-					if toAppend < batchLength-o.builderState.right.curSrcStartIdx {
-						// If we haven't materialized all the rows from the batch, then we
-						// are ready to emit the output batch.
-						o.builderState.right.curSrcStartIdx += toAppend
-						return
-					}
-					// We have fully processed the current batch, so we need to get the
-					// next one.
-					o.unlimitedAllocator.ReleaseBatch(currentBatch)
-					currentBatch, err = bufferedGroup.dequeue(ctx)
-					if err != nil {
-						colexecerror.InternalError(err)
-					}
-					o.builderState.rBufferedGroupBatch = currentBatch
-					batchLength = currentBatch.Length()
-					o.builderState.right.curSrcStartIdx = 0
-				}
-				// We have fully processed all the batches from the buffered group, so
-				// we need to rewind it.
-				if err := bufferedGroup.rewind(); err != nil {
-					colexecerror.InternalError(err)
-				}
-				o.builderState.rBufferedGroupBatch = nil
-			}
-			o.builderState.right.reset()
-		})
-}
-
 // probe is where we generate the groups slices that are used in the build
 // phase. We do this by first assuming that every row in both batches
 // contributes to the cross product. Then, with every equality column, we
@@ -1280,81 +994,15 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) probe(ctx context.Context) {
 // setBuilderSourceToBufferedGroup sets up the builder state to use the
 // buffered group.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx context.Context) {
-	// {{if and (_JOIN_TYPE.IsLeftAnti) (not _JOIN_TYPE.IsSetOp)}}
-	// All tuples in the buffered group have matches, so they are not output in
-	// case of LEFT ANTI join.
-	o.builderState.lGroups = o.builderState.lGroups[:0]
-	// {{else if _JOIN_TYPE.IsRightAnti}}
-	// All tuples in the buffered group have matches, so they are not output in
-	// case of RIGHT ANTI join.
-	o.builderState.rGroups = o.builderState.rGroups[:0]
-	// {{else}}
-	lGroupEndIdx := o.proberState.lBufferedGroup.numTuples
-	rGroupEndIdx := o.proberState.rBufferedGroup.numTuples
-	_, _ = lGroupEndIdx, rGroupEndIdx
-	// The capacity of builder state lGroups and rGroups is always at least 1
-	// given the init.
-	o.builderState.lGroups = o.builderState.lGroups[:1]
-	o.builderState.rGroups = o.builderState.rGroups[:1]
-	// {{if _JOIN_TYPE.IsLeftAnti}}
-	// For EXCEPT ALL join we add (lGroupEndIdx - rGroupEndIdx) number
-	// (if positive) of unmatched rows.
-	if lGroupEndIdx > rGroupEndIdx {
-		o.builderState.lGroups[0] = group{
-			rowStartIdx: 0,
-			rowEndIdx:   lGroupEndIdx - rGroupEndIdx,
-			numRepeats:  1,
-			toBuild:     lGroupEndIdx - rGroupEndIdx,
-			unmatched:   true,
-		}
-	} else {
-		o.builderState.lGroups = o.builderState.lGroups[:0]
-	}
-	// {{else if _JOIN_TYPE.IsLeftSemi}}
-	numMatched := lGroupEndIdx
-	// {{if _JOIN_TYPE.IsSetOp}}
-	// For INTERSECT ALL join we add a left group to build of length
-	// min(lGroupEndIdx, rGroupEndIdx).
-	if rGroupEndIdx < lGroupEndIdx {
-		numMatched = rGroupEndIdx
-	}
-	// {{end}}
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   numMatched,
-		numRepeats:  1,
-		toBuild:     numMatched,
-	}
-	// {{else if _JOIN_TYPE.IsRightSemi}}
-	o.builderState.rGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   rGroupEndIdx,
-		numRepeats:  1,
-		toBuild:     rGroupEndIdx,
-	}
-	// {{else}}
-	o.builderState.lGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   lGroupEndIdx,
-		numRepeats:  rGroupEndIdx,
-		toBuild:     lGroupEndIdx * rGroupEndIdx,
-	}
-	o.builderState.rGroups[0] = group{
-		rowStartIdx: 0,
-		rowEndIdx:   rGroupEndIdx,
-		numRepeats:  lGroupEndIdx,
-		toBuild:     rGroupEndIdx * lGroupEndIdx,
-	}
-	// {{end}}
-	// {{end}}
-
 	o.builderState.buildFrom = mjBuildFromBufferedGroup
+	o.bufferedGroup.helper.setupBuilder()
+	o.builderState.totalOutCountFromBufferedGroup = o.bufferedGroup.helper.calculateOutputCount()
+	o.builderState.alreadyEmittedFromBufferedGroup = 0
 
 	// We cannot yet reset the buffered groups because the builder will be taking
 	// input from them. The actual reset will take place on the next call to
 	// initProberState().
-	o.proberState.lBufferedGroupNeedToReset = true
-	o.proberState.rBufferedGroupNeedToReset = true
+	o.bufferedGroup.needToReset = true
 }
 
 // exhaustLeftSource sets up the builder to process any remaining tuples from
@@ -1464,19 +1112,19 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) int 
 // build creates the cross product, and writes it to the output member.
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 	outStartIdx := o.builderState.outCount
-	// {{if or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti}}
-	o.builderState.outCount = o.calculateOutputCount(o.builderState.rGroups)
-	// {{else}}
-	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
-	// {{end}}
-	if o.output.Width() != 0 && o.builderState.outCount > outStartIdx {
-		// We will be actually building the output if we have columns in the output
-		// batch (meaning that we're not doing query like 'SELECT count(*) ...')
-		// and when builderState.outCount has increased (meaning that we have
-		// something to build).
-		colOffsetForRightGroups := 0
-		switch o.builderState.buildFrom {
-		case mjBuildFromBatch:
+	switch o.builderState.buildFrom {
+	case mjBuildFromBatch:
+		// {{if or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti}}
+		o.builderState.outCount = o.calculateOutputCount(o.builderState.rGroups)
+		// {{else}}
+		o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups)
+		// {{end}}
+		if o.output.Width() != 0 && o.builderState.outCount > outStartIdx {
+			// We will be actually building the output if we have columns in the output
+			// batch (meaning that we're not doing query like 'SELECT count(*) ...')
+			// and when builderState.outCount has increased (meaning that we have
+			// something to build).
+			colOffsetForRightGroups := 0
 			// {{if not (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti)}}
 			o.buildLeftGroupsFromBatch(o.builderState.lGroups, &o.left, o.proberState.lBatch, outStartIdx)
 			colOffsetForRightGroups = len(o.left.sourceTypes)
@@ -1484,20 +1132,30 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 			// {{end}}
 			// {{if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti)}}
 			o.buildRightGroupsFromBatch(o.builderState.rGroups, colOffsetForRightGroups, &o.right, o.proberState.rBatch, outStartIdx)
-		// {{end}}
-		case mjBuildFromBufferedGroup:
+			// {{end}}
+		}
+
+	case mjBuildFromBufferedGroup:
+		willEmit := o.builderState.totalOutCountFromBufferedGroup - o.builderState.alreadyEmittedFromBufferedGroup
+		if o.builderState.outCount+willEmit > o.output.Capacity() {
+			willEmit = o.output.Capacity() - o.builderState.outCount
+		} else {
+			o.builderState.outFinished = true
+		}
+		o.builderState.outCount += willEmit
+		o.builderState.alreadyEmittedFromBufferedGroup += willEmit
+		if o.output.Width() != 0 && willEmit > 0 {
 			// {{if not (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti)}}
-			o.buildLeftBufferedGroup(ctx, o.builderState.lGroups[0], &o.left, o.proberState.lBufferedGroup, outStartIdx)
-			colOffsetForRightGroups = len(o.left.sourceTypes)
-			_ = colOffsetForRightGroups
+			o.bufferedGroup.helper.buildFromLeftInput(ctx, outStartIdx)
 			// {{end}}
 			// {{if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti)}}
-			o.buildRightBufferedGroup(ctx, o.builderState.rGroups[0], colOffsetForRightGroups, &o.right, o.proberState.rBufferedGroup, outStartIdx)
-		// {{end}}
-
-		default:
-			colexecerror.InternalError(errors.AssertionFailedf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
+			o.bufferedGroup.helper.buildFromRightInput(ctx, outStartIdx)
+			// {{end}}
 		}
+
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported mjBuildFrom %d", o.builderState.buildFrom))
+
 	}
 }
 
@@ -1553,6 +1211,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 
 func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(o.outputTypes, o.output, 1 /* minCapacity */)
+	o.bufferedGroup.helper.output = o.output
 	for {
 		switch o.state {
 		case mjEntry:
@@ -1602,15 +1261,11 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 				return o.output
 			}
 		case mjDone:
-			// Note that resetting of buffered groups will close disk queues
+			// Note that resetting of buffered group will close disk queues
 			// (if there are any).
-			if o.proberState.lBufferedGroupNeedToReset {
-				o.proberState.lBufferedGroup.reset(ctx)
-				o.proberState.lBufferedGroupNeedToReset = false
-			}
-			if o.proberState.rBufferedGroupNeedToReset {
-				o.proberState.rBufferedGroup.reset(ctx)
-				o.proberState.rBufferedGroupNeedToReset = false
+			if o.bufferedGroup.needToReset {
+				o.bufferedGroup.helper.reset(ctx)
+				o.bufferedGroup.needToReset = false
 			}
 			return coldata.ZeroBatch
 		default:
