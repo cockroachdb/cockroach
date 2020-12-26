@@ -1329,10 +1329,6 @@ func (ef *execFactory) ConstructUpdate(
 		return nil, err
 	}
 
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
@@ -1485,10 +1481,6 @@ func (ef *execFactory) ConstructUpsert(
 		return nil, err
 	}
 
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	ru.FetchCols = ru.FetchCols[:len(fetchColDescs)]
-
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
@@ -1598,10 +1590,6 @@ func (ef *execFactory) ConstructDelete(
 	if err != nil {
 		return nil, err
 	}
-
-	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
-	// computed a correct set that can sometimes be smaller.
-	rd.FetchCols = rd.FetchCols[:len(fetchColDescs)]
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)

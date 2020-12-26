@@ -1128,3 +1128,10 @@ CREATE TABLE regression_47141(a time(3), b bytea)
 
 statement error type conversion from TIME\(3\) to TIME\(2\) requires overwriting existing values which is not yet implemented
 ALTER TABLE regression_47141 ALTER a SET DATA TYPE time(2)
+
+# Regression for #54629.
+statement ok
+CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
+ALTER TABLE t54629 ADD CONSTRAINT pk PRIMARY KEY (c);
+INSERT INTO t54629 VALUES (1);
+DELETE FROM t54629 WHERE c = 1;

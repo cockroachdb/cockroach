@@ -25,9 +25,10 @@ import (
 
 // Updater abstracts the key/value operations for updating table rows.
 type Updater struct {
-	Helper                rowHelper
-	DeleteHelper          *rowHelper
-	FetchCols             []sqlbase.ColumnDescriptor
+	Helper       rowHelper
+	DeleteHelper *rowHelper
+	FetchCols    []sqlbase.ColumnDescriptor
+	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	UpdateCols            []sqlbase.ColumnDescriptor
 	UpdateColIDtoRowIndex map[sqlbase.ColumnID]int
@@ -69,8 +70,9 @@ const (
 // that will be passed to UpdateRow.
 //
 // The returned Updater contains a FetchCols field that defines the
-// expectation of which values are passed as oldValues to UpdateRow. All the columns
-// passed in requestedCols will be included in FetchCols at the beginning.
+// expectation of which values are passed as oldValues to UpdateRow.
+// requestedCols must be non-nil and define the schema that determines
+// FetchCols.
 func MakeUpdater(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -83,6 +85,10 @@ func MakeUpdater(
 	evalCtx *tree.EvalContext,
 	alloc *sqlbase.DatumAlloc,
 ) (Updater, error) {
+	if requestedCols == nil {
+		return Updater{}, errors.AssertionFailedf("requestedCols is nil in MakeUpdater")
+	}
+
 	rowUpdater, err := makeUpdaterWithoutCascader(
 		ctx, txn, tableDesc, fkTables, updateCols, requestedCols, updateType, checkFKs, alloc,
 	)

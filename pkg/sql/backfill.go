@@ -647,7 +647,8 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				rd, err := row.MakeDeleter(
-					ctx, txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
+					ctx, txn, tableDesc, nil, nil, /* requestedCols */
+					row.SkipFKs, nil /* *tree.EvalContext */, alloc,
 				)
 				if err != nil {
 					return err
@@ -1791,7 +1792,8 @@ func indexTruncateInTxn(
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd, err := row.MakeDeleter(
-			ctx, txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
+			ctx, txn, tableDesc, nil, nil, /* requestedCols */
+			row.SkipFKs, nil /* *tree.EvalContext */, alloc,
 		)
 		if err != nil {
 			return err
