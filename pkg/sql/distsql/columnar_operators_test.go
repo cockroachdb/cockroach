@@ -692,13 +692,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 							}
 
-							var outputTypes []*types.T
-							if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
-								outputTypes = append(outputTypes, lInputTypes...)
-							}
-							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-								outputTypes = append(outputTypes, rInputTypes...)
-							}
+							outputTypes := testSpec.joinType.MakeOutputTypes(lInputTypes, rInputTypes)
 							outputColumns := make([]uint32, len(outputTypes))
 							for i := range outputColumns {
 								outputColumns[i] = uint32(i)
@@ -908,13 +902,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							}
 							return cmp < 0
 						})
-						var outputTypes []*types.T
-						if testSpec.joinType.ShouldIncludeLeftColsInOutput() {
-							outputTypes = append(outputTypes, lInputTypes...)
-						}
-						if testSpec.joinType.ShouldIncludeRightColsInOutput() {
-							outputTypes = append(outputTypes, rInputTypes...)
-						}
+						outputTypes := testSpec.joinType.MakeOutputTypes(lInputTypes, rInputTypes)
 						outputColumns := make([]uint32, len(outputTypes))
 						for i := range outputColumns {
 							outputColumns[i] = uint32(i)
