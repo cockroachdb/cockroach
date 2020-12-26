@@ -657,7 +657,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 		for run := 0; run < nRuns; run++ {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
-					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
+					for nEqCols := 0; nEqCols <= nCols; nEqCols++ {
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
@@ -732,7 +732,13 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								// It is possible that we have a filter that is always false, and this
 								// will allow us to plan a zero operator which always returns a zero
 								// batch. In such case, the spilling might not occur and that's ok.
-								forcedDiskSpillMightNotOccur: !onExpr.Empty(),
+								//
+								// We also won't be able to "detect" that the spilling occurred in case
+								// of the cross joins since they use spilling queues directly that don't
+								// take in a spilling callback (unlike the diskSpiller-based operators).
+								// TODO(yuzefovich): add a callback for when the spilling occurs to
+								// spillingQueues.
+								forcedDiskSpillMightNotOccur: !onExpr.Empty() || len(lEqCols) == 0,
 								numForcedRepartitions:        2,
 								rng:                          rng,
 							}
