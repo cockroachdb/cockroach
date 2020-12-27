@@ -29,7 +29,9 @@ import (
 func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx int) {
 	var err error
 	currentBatch := b.builderState.left.currentBatch
-	if currentBatch == nil {
+	if currentBatch == nil || b.builderState.left.curSrcStartIdx == currentBatch.Length() {
+		// We need to get the next batch to build from if it is the first one or
+		// we have fully processed the previous one.
 		currentBatch, err = b.left.tuples.dequeue(ctx)
 		if err != nil {
 			colexecerror.InternalError(err)
@@ -42,7 +44,9 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 	b.left.unlimitedAllocator.PerformOperation(
 		b.output.ColVecs()[:len(b.left.types)],
 		func() {
+			leftNumRepeats := b.builderState.setup.leftNumRepeats
 			isSetOp := b.joinType.IsSetOpJoin()
+			outputCapacity := b.output.Capacity()
 			batchLength := currentBatch.Length()
 			for batchLength > 0 {
 				// Loop over every column.
@@ -60,58 +64,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Bool()
 							outCol := out.Bool()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.BytesFamily:
@@ -120,58 +184,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Bytes()
 							outCol := out.Bytes()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol.Set(outStartIdx, val)
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol.Set(outStartIdx, val)
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.DecimalFamily:
@@ -180,58 +304,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Decimal()
 							outCol := out.Decimal()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx].Set(&val)
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx].Set(&val)
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.IntFamily:
@@ -239,171 +423,351 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						case 16:
 							srcCol := src.Int16()
 							outCol := out.Int16()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						case 32:
 							srcCol := src.Int32()
 							outCol := out.Int32()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						case -1:
 						default:
 							srcCol := src.Int64()
 							outCol := out.Int64()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.FloatFamily:
@@ -412,58 +776,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Float64()
 							outCol := out.Float64()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.TimestampTZFamily:
@@ -472,58 +896,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Timestamp()
 							outCol := out.Timestamp()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case types.IntervalFamily:
@@ -532,58 +1016,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Interval()
 							outCol := out.Interval()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol[outStartIdx] = val
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol[outStartIdx] = val
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					case typeconv.DatumVecCanonicalTypeFamily:
@@ -592,58 +1136,118 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 						default:
 							srcCol := src.Datum()
 							outCol := out.Datum()
-							// Loop over every tuple in the current batch.
-							for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
-								// Repeat each row leftNumRepeats times.
-								srcStartIdx := b.builderState.left.curSrcStartIdx
-								repeatsLeft := b.builderState.setup.leftNumRepeats - b.builderState.left.numRepeatsIdx
-								toAppend := repeatsLeft
-								if outStartIdx+toAppend > b.output.Capacity() {
-									toAppend = b.output.Capacity() - outStartIdx
-								}
-
-								if isSetOp {
-									if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
-										// We have fully materialized first leftSrcEndIdx
-										// tuples in the current column, so we need to
-										// either transition to the next column or exit.
-										// We can accomplish this by setting toAppend
-										// to 0.
-										toAppend = 0
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
 									}
-									b.builderState.left.setOpLeftSrcIdx += toAppend
-								}
 
-								if srcNulls.NullAt(srcStartIdx) {
-									outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
-									outStartIdx += toAppend
-								} else {
-									val := srcCol.Get(srcStartIdx)
-									for i := 0; i < toAppend; i++ {
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
 										outCol.Set(outStartIdx, val)
-										outStartIdx++
 									}
-								}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
 
-								if toAppend < repeatsLeft {
-									// We didn't materialize all the tuples in the current batch, so
-									// we move to the next column.
-									if colIdx == len(b.left.types)-1 {
-										// This is the last column, so we update the builder state
-										// and exit.
-										b.builderState.left.numRepeatsIdx += toAppend
-										return
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
 									}
-									// We need to start building the next column
-									// with the same initial builder state as the
-									// current column.
-									b.builderState.left = initialBuilderState
-									continue LeftColLoop
 								}
-								// We fully processed the current tuple, and before moving on to the
-								// next one, we need to reset numRepeatsIdx (so that the next tuple
-								// would be repeated leftNumRepeats times).
-								b.builderState.left.numRepeatsIdx = 0
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol.Set(outStartIdx, val)
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
 							}
 						}
 					default:
@@ -693,6 +1297,7 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 		b.output.ColVecs()[b.builderState.rightColOffset:],
 		func() {
 			outStartIdx := destStartIdx
+			outputCapacity := b.output.Capacity()
 			// Repeat the buffered tuples rightNumRepeats times.
 			for ; b.builderState.right.numRepeatsIdx < b.builderState.setup.rightNumRepeats; b.builderState.right.numRepeatsIdx++ {
 				currentBatch := b.builderState.right.currentBatch
@@ -707,8 +1312,8 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 				batchLength := currentBatch.Length()
 				for batchLength > 0 {
 					toAppend := batchLength - b.builderState.right.curSrcStartIdx
-					if outStartIdx+toAppend > b.output.Capacity() {
-						toAppend = b.output.Capacity() - outStartIdx
+					if outStartIdx+toAppend > outputCapacity {
+						toAppend = outputCapacity - outStartIdx
 					}
 
 					// Loop over every column.
@@ -1022,6 +1627,12 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 					b.builderState.right.currentBatch = currentBatch
 					batchLength = currentBatch.Length()
 					b.builderState.right.curSrcStartIdx = 0
+
+					if outStartIdx == outputCapacity {
+						// We reached the capacity of the output batch, so we
+						// can emit it.
+						return
+					}
 				}
 				// We have fully processed all the batches from the right side,
 				// so we need to rewind the queue.
