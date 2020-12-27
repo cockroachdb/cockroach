@@ -346,9 +346,10 @@ func (s spanSetReader) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io storage.IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
-	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
