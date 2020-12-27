@@ -14,6 +14,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/twpayne/go-geom"
@@ -1951,6 +1953,48 @@ Flags shown square brackets after the geometry type have the following meaning:
 			},
 			tree.VolatilityImmutable,
 		),
+	),
+	"st_generatepoints": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				seed := timeutil.Now().Unix()
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.",
+			}.String(),
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				seed := int64(tree.MustBeDInt(args[2]))
+				if seed < 1 {
+					return nil, errors.New("seed must be greater than zero")
+				}
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_numpoints": makeBuiltin(
 		defProps(),
@@ -5877,7 +5921,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_generatepoints":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
 	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
 	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
 	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
