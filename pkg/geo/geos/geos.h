@@ -16,6 +16,8 @@ extern "C" {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
+typedef void* CR_GEOS_PreparedGeometry;
+typedef void* CR_GEOS_CoordSequence;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -146,6 +148,29 @@ CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, C
                                                 double densifyFrac, double* ret);
 CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
                                       double tolerance, char* ret);
+
+//
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_PrepareGeometry(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry* ret);
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry g);
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret);
+
+//
+// CoordSequence
+//
+
+CR_GEOS_Status CR_GEOS_CoordSequenceCreate(CR_GEOS* lib, int size, int dims, CR_GEOS_CoordSequence* ret);
+CR_GEOS_Status CR_GEOS_CoordSequenceSetXY(CR_GEOS* lib, CR_GEOS_CoordSequence old, int idx, double x, double y, CR_GEOS_CoordSequence* ret);
+CR_GEOS_Status CR_GEOS_CoordSequenceDestroy(CR_GEOS* lib, CR_GEOS_CoordSequence s);
+
+//
+// Geometry constructors
+//
+
+CR_GEOS_Status CR_GEOS_GeometryPointCreate(CR_GEOS* lib, CR_GEOS_CoordSequence s, CR_GEOS_String* pointEWKB);
 
 //
 // Binary predicates.

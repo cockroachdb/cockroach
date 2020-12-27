@@ -59,6 +59,12 @@ var geosOnce struct {
 	once sync.Once
 }
 
+// PreparedGeometry is an instance of a GEOS PreparedGeometry.
+type PreparedGeometry C.CR_GEOS_PreparedGeometry
+
+// CoordSequence is an instance of a GEOS CoordSequence.
+type CoordSequence C.CR_GEOS_CoordSequence
+
 // EnsureInit attempts to start GEOS if it has not been opened already
 // and returns the location if found, and an error if the CR_GEOS is not valid.
 func EnsureInit(
@@ -635,6 +641,96 @@ func ClipByRect(
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+//
+// PreparedGeometry
+//
+
+// PrepareGeometry prepares a geometry in GEOS.
+func PrepareGeometry(a geopb.EWKB) (PreparedGeometry, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var ret C.CR_GEOS_PreparedGeometry
+	if err := statusToError(C.CR_GEOS_PrepareGeometry(g, goToCSlice(a), &ret)); err != nil {
+		return nil, err
+	}
+	return PreparedGeometry(ret), nil
+}
+
+// PreparedGeomDestroy destroyed a prepared geometry.
+func PreparedGeomDestroy(a PreparedGeometry) error {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return err
+	}
+	return statusToError(C.CR_GEOS_PreparedGeometryDestroy(g, C.CR_GEOS_PreparedGeometry(a)))
+}
+
+//
+// CoordSequence
+//
+
+// CoordSequenceCreate creates a new CoordSequence through GEOS.
+func CoordSequenceCreate(size, dims int) (CoordSequence, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var ret C.CR_GEOS_CoordSequence
+	if err := statusToError(C.CR_GEOS_CoordSequenceCreate(g, C.int(size), C.int(dims), &ret)); err != nil {
+		return nil, err
+	}
+	return CoordSequence(ret), nil
+}
+
+// CoordSequenceSetXY sets X and Y for a given index on CoordSequence provided.
+func CoordSequenceSetXY(cs CoordSequence, idx int, x, y float64) (CoordSequence, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var ret C.CR_GEOS_CoordSequence
+	// old = C.CR_GEOS_CoordSequence(cs)
+	// ret := C.CR_GEOS_CoordSequence(cs)
+	// fmt.Println(ret)
+	if err := statusToError(C.CR_GEOS_CoordSequenceSetXY(g, C.CR_GEOS_CoordSequence(cs), C.int(idx), C.double(x), C.double(y), &ret)); err != nil {
+		return nil, err
+	}
+	return CoordSequence(ret), nil
+}
+
+// CoordSequenceDestroy destroys the CoordSequence provided.
+func CoordSequenceDestroy(cs CoordSequence) error {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return err
+	}
+	return statusToError(C.CR_GEOS_CoordSequenceDestroy(g, C.CR_GEOS_CoordSequence(cs)))
+}
+
+//
+// Geometry constructors
+//
+
+// GeometryPointCreate creates a Geometry of type Point out of the provided CoordSequence.
+func GeometryPointCreate(cs CoordSequence) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	ret := C.CR_GEOS_CoordSequence(cs)
+	if err := statusToError(C.CR_GEOS_GeometryPointCreate(g, ret, &cEWKB)); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
+
+//
+// Binary predicates.
+//
+
 // Covers returns whether the EWKB provided by A covers the EWKB provided by B.
 func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	g, err := ensureInitInternal()
@@ -708,6 +804,19 @@ func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	}
 	var ret C.char
 	if err := statusToError(C.CR_GEOS_Equals(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// PreparedIntersects returns whether the EWKB provided by A intersects the EWKB provided by B.
+func PreparedIntersects(a PreparedGeometry, b geopb.EWKB) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_PreparedIntersects(g, C.CR_GEOS_PreparedGeometry(a), goToCSlice(b), &ret)); err != nil {
 		return false, err
 	}
 	return ret == 1, nil
