@@ -15,6 +15,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
@@ -1951,6 +1952,44 @@ Flags shown square brackets after the geometry type have the following meaning:
 			},
 			tree.VolatilityImmutable,
 		),
+	),
+	"st_generatepoints": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				generatedPoints, err := geomfn.GeneratePoints(geometry, npoints, time.Now().Unix())
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"npoints", types.Int4}, {"seed", types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := tree.MustBeDGeometry(args[0]).Geometry
+				npoints := int(tree.MustBeDInt(args[1]))
+				seed := int64(tree.MustBeDInt(args[2]))
+				generatedPoints, err := geomfn.GeneratePoints(geometry, npoints, seed)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(generatedPoints), nil
+			},
+			Info: infoBuilder{
+				info: "Generates pseudo-random points until the requested number are found within the input area.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_numpoints": makeBuiltin(
 		defProps(),
@@ -5877,7 +5916,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_generatepoints":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48941}),
 	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
 	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
 	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),

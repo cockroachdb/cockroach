@@ -129,6 +129,11 @@ typedef int (*CR_GEOS_HausdorffDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_
 typedef int (*CR_GEOS_HausdorffDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry, double, double*);
 
+typedef CR_GEOS_PreparedGeometry (*CR_GEOS_Prepare_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef void (*CR_GEOS_PreparedGeom_destroy_r)(CR_GEOS_Handle, CR_GEOS_PreparedGeometry);
+
+typedef char (*CR_GEOS_PreparedIntersects_r)(CR_GEOS_Handle, CR_GEOS_PreparedGeometry, CR_GEOS_Geometry);
+
 typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Contains_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -160,6 +165,12 @@ typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geomet
                                                   CR_GEOS_Geometry);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_Node_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+
+typedef CR_GEOS_Geometry (*CR_GEOS_Geom_createPoint_r)(CR_GEOS_Handle, CR_GEOS_CoordSequence);
+
+typedef CR_GEOS_CoordSequence (*CR_GEOS_CoordSeq_create_r)(CR_GEOS_Handle, int, int);
+typedef int (*CR_GEOS_CoordSeq_setXY_r)(CR_GEOS_Handle, CR_GEOS_CoordSequence, int, double, double);
+typedef void (*CR_GEOS_CoordSeq_destroy_r)(CR_GEOS_Handle, CR_GEOS_CoordSequence);
 
 typedef CR_GEOS_Geometry (*CR_GEOS_VoronoiDiagram_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry, double, int);
@@ -241,6 +252,17 @@ struct CR_GEOS {
   CR_GEOS_FrechetDistanceDensify_r GEOSFrechetDistanceDensify_r;
   CR_GEOS_HausdorffDistance_r GEOSHausdorffDistance_r;
   CR_GEOS_HausdorffDistanceDensify_r GEOSHausdorffDistanceDensify_r;
+
+  CR_GEOS_Prepare_r GEOSPrepare_r;
+  CR_GEOS_PreparedGeom_destroy_r GEOSPreparedGeom_destroy_r;
+
+  CR_GEOS_PreparedIntersects_r GEOSPreparedIntersects_r;
+
+  CR_GEOS_CoordSeq_create_r GEOSCoordSeq_create_r;
+  CR_GEOS_CoordSeq_setXY_r GEOSCoordSeq_setXY_r;
+  CR_GEOS_CoordSeq_destroy_r GEOSCoordSeq_destroy_r;
+
+  CR_GEOS_Geom_createPoint_r GEOSGeom_createPoint_r;
 
   CR_GEOS_Covers_r GEOSCovers_r;
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
@@ -341,6 +363,13 @@ struct CR_GEOS {
     INIT(GEOSFrechetDistanceDensify_r);
     INIT(GEOSHausdorffDistance_r);
     INIT(GEOSHausdorffDistanceDensify_r);
+    INIT(GEOSPrepare_r);
+    INIT(GEOSPreparedGeom_destroy_r);
+    INIT(GEOSPreparedIntersects_r);
+    INIT(GEOSCoordSeq_create_r);
+    INIT(GEOSCoordSeq_setXY_r);
+    INIT(GEOSCoordSeq_destroy_r);
+    INIT(GEOSGeom_createPoint_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
@@ -1161,6 +1190,126 @@ CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, C
 }
 
 //
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_PrepareGeometry(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  if (geom != nullptr) {
+    *ret = lib->GEOSPrepare_r(handle, geom);
+    // TODO: make sure underlying geom is freed too.
+    // lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry g) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  lib->GEOSPreparedGeom_destroy_r(handle, g);
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+template <typename T>
+CR_GEOS_Status CR_GEOS_PreparedBinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b,
+                                       char* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  if (geomB != nullptr) {
+    auto r = fn(handle, a, geomB);
+    // ret == 2 indicates an exception.
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    } else {
+      *ret = r;
+    }
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry a, CR_GEOS_Slice b, char* ret) {
+  return CR_GEOS_PreparedBinaryPredicate(lib, lib->GEOSPreparedIntersects_r, a, b, ret);
+}
+
+//
+// CoordSequence
+//
+
+CR_GEOS_Status CR_GEOS_CoordSequenceCreate(CR_GEOS* lib, int size, int dims, CR_GEOS_CoordSequence* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto r = lib->GEOSCoordSeq_create_r(handle, size, dims);
+  if (r != nullptr) {
+    *ret = r;
+  }
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_CoordSequenceSetXY(CR_GEOS* lib, CR_GEOS_CoordSequence old, int idx, double x, double y, CR_GEOS_CoordSequence* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto r = lib->GEOSCoordSeq_setXY_r(handle, old, idx, x, y);
+  // r == 0 indicates an exception.
+  if (r == 0) {
+    if (error.length() == 0) {
+      error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+    }
+  }
+  *ret = old;
+
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+// TODO: Check, should it be pointer?
+CR_GEOS_Status CR_GEOS_CoordSequenceDestroy(CR_GEOS* lib, CR_GEOS_CoordSequence s) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  lib->GEOSCoordSeq_destroy_r(handle, s);
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+//
+// Geometry constructors
+//
+
+// TODO: Should it be a point for CoordSequence here?
+CR_GEOS_Status CR_GEOS_GeometryPointCreate(CR_GEOS* lib, CR_GEOS_CoordSequence s, CR_GEOS_String* pointEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = lib->GEOSGeom_createPoint_r(handle, s);
+  if (geom != nullptr) {
+    auto srid = lib->GEOSGetSRID_r(handle, geom);
+    CR_GEOS_writeGeomToEWKB(lib, handle, geom, pointEWKB, srid);
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+//
 // Binary predicates
 //
 
@@ -1226,6 +1375,10 @@ CR_GEOS_Status CR_GEOS_Intersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b
 
 CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSOverlaps_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSPreparedIntersects_r, a, b, ret);
 }
 
 CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
