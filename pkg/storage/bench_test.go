@@ -1066,10 +1066,8 @@ func runExportToSst(
 	for i := 0; i < b.N; i++ {
 		startTS := hlc.Timestamp{WallTime: int64(numRevisions / 2)}
 		endTS := hlc.Timestamp{WallTime: int64(numRevisions + 2)}
-		_, _, _, err := engine.ExportMVCCToSst(roachpb.KeyMin, roachpb.KeyMax, startTS, endTS, exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, IterOptions{
-			LowerBound: roachpb.KeyMin,
-			UpperBound: roachpb.KeyMax,
-		})
+		_, _, _, err := engine.ExportMVCCToSst(roachpb.KeyMin, roachpb.KeyMax, startTS, endTS,
+			exportAllRevisions, 0 /* targetSize */, 0 /* maxSize */, false /* useTBI */)
 		if err != nil {
 			b.Fatal(err)
 		}

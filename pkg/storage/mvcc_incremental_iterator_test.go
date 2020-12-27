@@ -44,9 +44,7 @@ func iterateExpectErr(
 	return func(t *testing.T) {
 		t.Helper()
 		iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-			IterOptions: IterOptions{
-				UpperBound: endKey,
-			},
+			EndKey:    endKey,
 			StartTime: startTime,
 			EndTime:   endTime,
 		})
@@ -75,11 +73,12 @@ func assertExportedKVs(
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
-	io IterOptions,
 	expected []MVCCKeyValue,
+	useTBI bool,
 ) {
 	const big = 1 << 30
-	data, _, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big, io)
+	data, _, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big,
+		useTBI)
 	require.NoError(t, err)
 
 	if data == nil {
@@ -114,13 +113,14 @@ func assertIteratedKVs(
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
-	io IterOptions,
 	expected []MVCCKeyValue,
+	useTBI bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
-		IterOptions: io,
-		StartTime:   startTime,
-		EndTime:     endTime,
+		EndKey:                              endKey,
+		EnableTimeBoundIteratorOptimization: useTBI,
+		StartTime:                           startTime,
+		EndTime:                             endTime,
 	})
 	defer iter.Close()
 	var iterFn func()
@@ -161,25 +161,22 @@ func assertEqualKVs(
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-		io := IterOptions{UpperBound: endKey}
 		t.Run("iterate", func(t *testing.T) {
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+				false /* useTBI */)
 		})
 		t.Run("iterate-tbi", func(t *testing.T) {
-			io := io
-			io.MinTimestampHint = startTime.Next()
-			io.MaxTimestampHint = endTime
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+				true /* useTBI */)
 		})
 
 		t.Run("export", func(t *testing.T) {
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+				false /* useTBI */)
 		})
 		t.Run("export-tbi", func(t *testing.T) {
-			io := io
-			io.MinTimestampHint = startTime.Next()
-			io.MaxTimestampHint = endTime
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, io, expected)
+			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+				true /* useTBI */)
 		})
 	}
 }
@@ -403,9 +400,7 @@ func slurpKVsInTimeRange(
 ) ([]MVCCKeyValue, error) {
 	endKey := prefix.PrefixEnd()
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
-		IterOptions: IterOptions{
-			UpperBound: endKey,
-		},
+		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
@@ -703,9 +698,9 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		// inclusive on the end time. The expectation is that we'll see a write
 		// intent error.
 		it := NewMVCCIncrementalIterator(db2, MVCCIncrementalIterOptions{
-			IterOptions: IterOptions{UpperBound: keys.MaxKey},
-			StartTime:   hlc.Timestamp{WallTime: 1},
-			EndTime:     hlc.Timestamp{WallTime: 2},
+			EndKey:    keys.MaxKey,
+			StartTime: hlc.Timestamp{WallTime: 1},
+			EndTime:   hlc.Timestamp{WallTime: 2},
 		})
 		defer it.Close()
 		for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; it.Next() {

@@ -645,10 +645,11 @@ func (p *Pebble) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 // MVCCGet implements the Engine interface.
@@ -1230,10 +1231,11 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
@@ -1435,10 +1437,11 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r, _ := tryWrapReader(p, MVCCKeyAndIntentsIterKind)
-	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, io)
+	return pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
+		maxSize, useTBI)
 }
 
 // Get implements the Reader interface.
@@ -1521,7 +1524,7 @@ func pebbleExportToSst(
 	startTS, endTS hlc.Timestamp,
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
-	io IterOptions,
+	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	sstFile := &MemFile{}
 	sstWriter := MakeBackupSSTWriter(sstFile)
@@ -1531,9 +1534,10 @@ func pebbleExportToSst(
 	iter := NewMVCCIncrementalIterator(
 		reader,
 		MVCCIncrementalIterOptions{
-			IterOptions: io,
-			StartTime:   startTS,
-			EndTime:     endTS,
+			EndKey:                              endKey,
+			EnableTimeBoundIteratorOptimization: useTBI,
+			StartTime:                           startTS,
+			EndTime:                             endTS,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
