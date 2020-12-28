@@ -1,0 +1,49 @@
+# LogicTest: local
+
+# This test depends on table ID's being stable, so add new tests at the bottom
+# of the file.
+
+# Create a table and split it up into ranges.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, FAMILY (x, y));
+ALTER TABLE t SPLIT AT VALUES (0)
+
+# Get the range that contains this table.
+let $rangeid
+SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
+
+# Without any data in the table, there shouldn't be any keys in the range.
+query T
+SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
+----
+
+# Insert some data into the table.
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 2)
+
+# List out all of the keys in this range. The values themselves are
+# different on each run of the test due to metadata stored in the value.
+query T
+SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
+----
+/Table/53/1/1/0
+/Table/53/1/2/0
+
+# An error should be returned when an invalid range ID is specified.
+statement error pq: range with ID 1000000 not found
+SELECT key FROM crdb_internal.list_sql_keys_in_range(1000000)
+
+# Ensure that the paging behavior of the generator builtin works correctly.
+# Create a new table with a multiple of rangeKeyIteratorChunkSize (currently 256).
+statement ok
+CREATE TABLE t2 (x INT PRIMARY KEY);
+INSERT INTO t2 (SELECT * FROM generate_series(1, 1024));
+ALTER TABLE t2 SPLIT AT VALUES (0)
+
+let $rangeid
+SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't2'
+
+query II
+SELECT count(key), count(DISTINCT key) FROM crdb_internal.list_sql_keys_in_range($rangeid)
+----
+1024 1024

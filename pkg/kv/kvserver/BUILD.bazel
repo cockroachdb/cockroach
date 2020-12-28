@@ -288,6 +288,7 @@ go_test(
         "//pkg/gossip/resolver",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/abortspan",
