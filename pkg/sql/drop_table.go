@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -373,7 +374,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := ScanMetaKVs(ctx, p.txn, span)
+		ranges, err := sqlutil.ScanMetaKVs(ctx, p.txn, span)
 		if err != nil {
 			return err
 		}
