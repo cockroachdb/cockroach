@@ -57,6 +57,7 @@ func TestAggregateProperties(t *testing.T) {
 	}
 }
 
+//	TESTING IF MY CHANGES WILL WORK
 // func TestAggregateIgnoresNulls(t *testing.T){
 // 	test := func(expected, actual bool){
 // 		if expected != actual {
