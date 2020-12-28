@@ -282,7 +282,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			// - BACKUP INTO LATEST IN collection
 			// - BACKUP INTO full1 IN collection
 			t.Run("collection", func(t *testing.T) {
-				collectionLoc := fmt.Sprintf("nodelocal://1/%s?AUTH=implicit", t.Name())
+				collectionLoc := fmt.Sprintf("nodelocal://1/%s/?AUTH=implicit", t.Name())
 				collectionTo := localizeURI(t, collectionLoc, localities)
 				fullTime := time.Date(2020, 12, 25, 6, 0, 0, 0, time.UTC)
 				inc1Time := fullTime.Add(time.Minute * 30)
