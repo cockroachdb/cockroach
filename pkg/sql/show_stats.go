@@ -130,7 +130,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					for j, d := range colIDs {
 						result[i].Columns[j] = statColumnString(desc, d)
 					}
-					if err := result[i].DecodeAndSetHistogram(r[histogramIdx]); err != nil {
+					if err := result[i].DecodeAndSetHistogram(ctx, &p.semaCtx, r[histogramIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
 					}
