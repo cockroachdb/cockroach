@@ -42,14 +42,14 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 dequeue r=req1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 new-request r=req2 txn=txn2 ts=10,1 spans=w@a
@@ -70,7 +70,7 @@ release txn=txn1 span=a
 ----
 global: num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,1, seq: 0
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, seq: 0
    queued writers:
     active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
@@ -92,7 +92,7 @@ add-discovered r=req2 k=a txn=txn3
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
 local: num=0
@@ -113,7 +113,7 @@ dequeue r=req3
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 0.000000010,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000003, ts: 10.000000000,1, info: repl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -123,7 +123,7 @@ release txn=txn3 span=a
 ----
 global: num=1
  lock: "a"
-  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,1, seq: 0
+  res: req: 2, txn: 00000000-0000-0000-0000-000000000002, ts: 10.000000000,1, seq: 0
 local: num=0
 
 guard-state r=req2

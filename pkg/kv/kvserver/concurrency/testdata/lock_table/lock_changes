@@ -20,14 +20,14 @@ acquire r=req1 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
 local: num=0
 
 release txn=txn2 span=a,c
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ acquire r=req2 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [2, 3]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ acquire r=req2 k=a durability=r
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
    queued writers:
     active: true req: 1, txn: none
    distinguished req: 1
@@ -79,7 +79,7 @@ dequeue r=reqContend
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ acquire r=req3 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 1, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 1, seqs: [0]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ acquire r=req4 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
 local: num=0
 
 # ---------------------------------------------------------------------------------
@@ -137,7 +137,7 @@ print
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 8.000000000,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -153,7 +153,7 @@ acquire r=req6 k=a durability=r
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
    waiting readers:
     req: 2, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
@@ -167,7 +167,7 @@ acquire r=req6 k=a durability=u
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
 local: num=0
 
 guard-state r=req5
@@ -196,7 +196,7 @@ add-discovered r=req7 k=a txn=txn1
 ----
 global: num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 14.000000000,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
    waiting readers:
     req: 3, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
