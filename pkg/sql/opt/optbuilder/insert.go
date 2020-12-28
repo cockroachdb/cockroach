@@ -1080,6 +1080,8 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 		mb.projectPartialIndexPutCols(preCheckScope)
 	}
 
+	mb.buildUniqueChecksForUpsert()
+
 	mb.buildFKChecksForUpsert()
 
 	private := mb.makeMutationPrivate(returning != nil)
