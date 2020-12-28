@@ -27,6 +27,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvserver/idalloc",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

@@ -30,11 +30,11 @@ go_test(
         "partitionedqueue_test.go",
     ],
     deps = [
-        ":colcontainer",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
+        "//pkg/sql/colcontainer",
         "//pkg/sql/colexecbase",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",

@@ -20,5 +20,8 @@ go_test(
         "match_test.go",
     ],
     embed = [":fsm"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/fsm",
+        "@com_github_stretchr_testify//require",
+    ],
 )

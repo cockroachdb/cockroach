@@ -42,12 +42,12 @@ go_test(
         "json_array_test.go",
     ],
     deps = [
-        ":invertedidx",
         "//pkg/geo",
         "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
         "//pkg/sql/opt",
         "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/opt/invertedidx",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/testcat",

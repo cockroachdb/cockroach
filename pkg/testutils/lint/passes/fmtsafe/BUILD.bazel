@@ -22,7 +22,7 @@ go_test(
     name = "fmtsafe_test",
     srcs = ["fmtsafe_test.go"],
     deps = [
-        ":fmtsafe",
+        "//pkg/testutils/lint/passes/fmtsafe",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

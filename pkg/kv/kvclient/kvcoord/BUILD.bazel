@@ -105,6 +105,7 @@ go_test(
         "//pkg/gossip/simulation",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/lock",

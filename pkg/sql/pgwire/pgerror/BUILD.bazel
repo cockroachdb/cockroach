@@ -41,6 +41,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/log",

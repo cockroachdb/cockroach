@@ -20,6 +20,7 @@ go_test(
     ],
     embed = [":csv"],
     deps = [
+        "//pkg/util/encoding/csv",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],

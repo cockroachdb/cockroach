@@ -83,6 +83,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
         "//pkg/keys",

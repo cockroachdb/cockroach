@@ -41,6 +41,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/bulk",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/kvserverbase",
