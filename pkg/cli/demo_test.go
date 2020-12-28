@@ -49,6 +49,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:               1 << 10,
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
+				EnableDemoLoginEndpoint: true,
 			},
 		},
 		{
@@ -66,6 +67,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:               4 << 10,
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
+				EnableDemoLoginEndpoint: true,
 			},
 		},
 	}
