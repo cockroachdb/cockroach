@@ -253,9 +253,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
-	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
+	requestedCols := make([]descpb.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added)+len(cb.dropped))
 	requestedCols = append(requestedCols, tableDesc.Columns...)
 	requestedCols = append(requestedCols, cb.added...)
+	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
 		ctx,
 		txn,
