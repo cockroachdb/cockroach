@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -20,19 +19,143 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/petermattis/goid"
 )
 
-const severityChar = "IWEF"
+// logEntry represents a logging event flowing through this package.
+//
+// It is different from logpb.Entry in that it is able to preserve
+// more information about the structure of the source event, so that
+// more details about this structure can be preserved by output
+// formatters. logpb.Entry, in comparison, was tailored specifically
+// to the legacy crdb-v1 formatter, and is a lossy representation.
+type logEntry struct {
+	// The entry timestamp.
+	ts int64
+	// The severity of the event.
+	sev Severity
+	// The channel on which the entry was sent.
+	ch Channel
+	// The goroutine where the event was generated.
+	gid int64
+	// The file/line where the event was generated.
+	file string
+	line int
+
+	// The entry counter. Populated by outputLogEntry().
+	counter uint64
+
+	// The logging tags.
+	tags *logtags.Buffer
+
+	// The stack trace(s), when processing e.g. a fatal event.
+	stacks []byte
+
+	// Whether the entry is structured or not.
+	structured bool
+
+	// The entry payload.
+	payload entryPayload
+}
+
+type entryPayload struct {
+	// Whether the payload is redactable or not.
+	redactable bool
+
+	// The actual payload string.
+	// For structured entries, this is the JSON
+	// representation of the payload fields, without the
+	// outer '{}'.
+	// For unstructured entries, this is the (flat) message.
+	//
+	// If redactable is true, message is a RedactableString
+	// in disguise. If it is false, message is a flat string with
+	// no guarantees about content.
+	message string
+}
+
+func makeRedactablePayload(m redact.RedactableString) entryPayload {
+	return entryPayload{redactable: true, message: string(m)}
+}
+
+func makeUnsafePayload(m string) entryPayload {
+	return entryPayload{redactable: false, message: m}
+}
+
+// makeEntry creates a logEntry.
+func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
+	res = logEntry{
+		ts:   timeutil.Now().UnixNano(),
+		sev:  s,
+		ch:   c,
+		gid:  goid.Get(),
+		tags: logtags.FromContext(ctx),
+	}
+
+	// Populate file/lineno.
+	res.file, res.line, _ = caller.Lookup(depth + 1)
+
+	return res
+}
+
+// makeStructuredEntry creates a logEntry using a structured payload.
+func makeStructuredEntry(
+	ctx context.Context, s Severity, c Channel, depth int, payload eventpb.EventPayload,
+) (res logEntry) {
+	res = makeEntry(ctx, s, c, depth+1)
+
+	res.structured = true
+	_, b := payload.AppendJSONFields(false, nil)
+	res.payload = makeRedactablePayload(b.ToString())
+	return res
+}
+
+// makeUnstructuredEntry creates a logEntry using an unstructured message.
+func makeUnstructuredEntry(
+	ctx context.Context,
+	s Severity,
+	c Channel,
+	depth int,
+	redactable bool,
+	format string,
+	args ...interface{},
+) (res logEntry) {
+	res = makeEntry(ctx, s, c, depth+1)
+
+	res.structured = false
+
+	if redactable {
+		var buf redact.StringBuilder
+		if len(args) == 0 {
+			// TODO(knz): Remove this legacy case.
+			buf.Print(redact.Safe(format))
+		} else if len(format) == 0 {
+			buf.Print(args...)
+		} else {
+			buf.Printf(format, args...)
+		}
+		res.payload = makeRedactablePayload(buf.RedactableString())
+	} else {
+		var buf strings.Builder
+		formatArgs(&buf, format, args...)
+		res.payload = makeUnsafePayload(buf.String())
+	}
+
+	return res
+}
+
+var configTagsBuffer = logtags.SingleTagBuffer("config", nil)
 
 // makeStartLine creates a formatted log entry suitable for the start
 // of a logging output using the canonical logging format.
 func makeStartLine(formatter logFormatter, format string, args ...interface{}) *buffer {
-	entry := MakeEntry(
+	entry := makeUnstructuredEntry(
 		context.Background(),
 		severity.INFO,
 		channel.DEV, /* DEV ensures the channel number is omitted in headers. */
@@ -40,8 +163,8 @@ func makeStartLine(formatter logFormatter, format string, args ...interface{}) *
 		true,        /* redactable */
 		format,
 		args...)
-	entry.Tags = "config"
-	return formatter.formatEntry(entry, nil)
+	entry.tags = configTagsBuffer
+	return formatter.formatEntry(entry)
 }
 
 // getStartLines retrieves the log entries for the start
@@ -78,8 +201,46 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	return messages
 }
 
-// MakeEntry creates an logpb.Entry.
-func MakeEntry(
+// convertToLegacy turns the entry into a logpb.Entry.
+func (e logEntry) convertToLegacy() (res logpb.Entry) {
+	res = logpb.Entry{
+		Severity:   e.sev,
+		Channel:    e.ch,
+		Time:       e.ts,
+		File:       e.file,
+		Line:       int64(e.line),
+		Goroutine:  e.gid,
+		Counter:    e.counter,
+		Redactable: e.payload.redactable,
+		Message:    e.payload.message,
+	}
+
+	if e.tags != nil {
+		if e.payload.redactable {
+			res.Tags = string(renderTagsAsRedactable(e.tags))
+		} else {
+			var buf strings.Builder
+			e.tags.FormatToString(&buf)
+			res.Tags = buf.String()
+		}
+	}
+
+	if e.structured {
+		// At this point, the message only contains the JSON fields of the
+		// payload. Add the decoration suitable for our legacy file
+		// format.
+		res.Message = "Structured entry: {" + res.Message + "}"
+	}
+
+	if e.stacks != nil {
+		res.Message += "\n" + string(e.stacks)
+	}
+
+	return res
+}
+
+// MakeLegacyEntry creates an logpb.Entry.
+func MakeLegacyEntry(
 	ctx context.Context,
 	s Severity,
 	c Channel,
@@ -88,56 +249,5 @@ func MakeEntry(
 	format string,
 	args ...interface{},
 ) (res logpb.Entry) {
-	res = logpb.Entry{
-		Severity:   s,
-		Channel:    c,
-		Time:       timeutil.Now().UnixNano(),
-		Goroutine:  goid.Get(),
-		Redactable: redactable,
-	}
-
-	// Populate file/lineno.
-	file, line, _ := caller.Lookup(depth + 1)
-	res.File = file
-	res.Line = int64(line)
-
-	// Populate the tags.
-	var buf strings.Builder
-	if redactable {
-		renderTagsAsRedactable(ctx, &buf)
-	} else {
-		formatTags(ctx, false /* brackets */, &buf)
-	}
-	res.Tags = buf.String()
-
-	// Populate the message.
-	buf.Reset()
-	if redactable {
-		renderArgsAsRedactable(&buf, format, args...)
-	} else {
-		formatArgs(&buf, format, args...)
-	}
-	res.Message = buf.String()
-
-	return
-}
-
-func renderArgsAsRedactable(buf *strings.Builder, format string, args ...interface{}) {
-	if len(args) == 0 {
-		buf.WriteString(format)
-	} else if len(format) == 0 {
-		redact.Fprint(buf, args...)
-	} else {
-		redact.Fprintf(buf, format, args...)
-	}
-}
-
-func formatArgs(buf *strings.Builder, format string, args ...interface{}) {
-	if len(args) == 0 {
-		buf.WriteString(format)
-	} else if len(format) == 0 {
-		fmt.Fprint(buf, args...)
-	} else {
-		fmt.Fprintf(buf, format, args...)
-	}
+	return makeUnstructuredEntry(ctx, s, c, depth+1, redactable, format, args...).convertToLegacy()
 }
