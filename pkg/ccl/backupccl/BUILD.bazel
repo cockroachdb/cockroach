@@ -126,7 +126,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",

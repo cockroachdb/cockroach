@@ -33,7 +33,6 @@ go_test(
     deps = [
         "//pkg/testutils/skip",
         "//pkg/util/timeutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

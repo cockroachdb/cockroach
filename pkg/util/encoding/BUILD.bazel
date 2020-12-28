@@ -45,7 +45,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
-        "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/log",
         "//pkg/util/randutil",

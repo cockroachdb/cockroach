@@ -39,7 +39,7 @@ go_test(
     name = "cat_test",
     srcs = ["utils_test.go"],
     deps = [
-        "//pkg/sql/opt/cat",
+        ":cat",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/sem/tree",
     ],

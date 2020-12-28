@@ -12,7 +12,7 @@ go_test(
     name = "randutil_test",
     srcs = ["rand_test.go"],
     deps = [
+        ":randutil",
         "//pkg/util/log",
-        "//pkg/util/randutil",
     ],
 )
