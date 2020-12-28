@@ -12,7 +12,6 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -92,26 +91,8 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
-	// familyCols returns the columns in the given family.
-	familyCols := func(fam cat.Family) opt.ColSet {
-		var colSet opt.ColSet
-		for i, n := 0, fam.ColumnCount(); i < n; i++ {
-			id := tabMeta.MetaID.ColumnID(fam.Column(i).Ordinal)
-			colSet.Add(id)
-		}
-		return colSet
-	}
-
-	// addFamilyCols adds all columns in each family containing at least one
-	// column that is being updated.
-	addFamilyCols := func(updateCols opt.ColSet) {
-		for i, n := 0, tabMeta.Table.FamilyCount(); i < n; i++ {
-			famCols := familyCols(tabMeta.Table.Family(i))
-			if famCols.Intersects(updateCols) {
-				cols.UnionWith(famCols)
-			}
-		}
-	}
+	// Retain any FetchCols that are needed for updating indexes.
+	cols.UnionWith(private.IndexFetchCols)
 
 	// Retain any FetchCols that are needed for ReturnCols. If a RETURN column
 	// is needed, then:
@@ -129,77 +110,6 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			if op == opt.DeleteOp || len(private.UpdateCols) == 0 || private.UpdateCols[ord] == 0 {
 				cols.Add(tabMeta.MetaID.ColumnID(ord))
 			}
-		}
-	}
-
-	switch op {
-	case opt.UpdateOp, opt.UpsertOp:
-		// Determine set of target table columns that need to be updated.
-		var updateCols opt.ColSet
-		for ord, col := range private.UpdateCols {
-			if col != 0 {
-				updateCols.Add(tabMeta.MetaID.ColumnID(ord))
-			}
-		}
-
-		// Make sure to consider indexes that are being added or dropped.
-		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			// If the columns being updated are not part of the index and the
-			// index is not a partial index, then the update does not require
-			// changes to the index. Partial indexes may be updated (even when a
-			// column in the index is not changing) when rows that were not
-			// previously in the index must be added to the index because they
-			// now satisfy the partial index predicate.
-			//
-			// Note that we use the set of index columns where the virtual
-			// columns have been mapped to their source columns. Virtual columns
-			// are never part of the updated columns. Updates to source columns
-			// trigger index changes.
-			//
-			// TODO(mgartner): Index columns are not necessary when neither the
-			// index columns nor the columns referenced in the partial index
-			// predicate are being updated. We should prune mutation fetch
-			// columns when this is the case, rather than always marking index
-			// columns of partial indexes as "needed".
-			indexCols := tabMeta.IndexColumnsMapVirtual(i)
-			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
-			if !indexCols.Intersects(updateCols) && !isPartialIndex {
-				continue
-			}
-
-			// Always add index strict key columns, since these are needed to fetch
-			// existing rows from the store.
-			keyCols := tabMeta.IndexKeyColumnsMapVirtual(i)
-			cols.UnionWith(keyCols)
-
-			// Add all columns in any family that includes an update column.
-			// It is possible to update a subset of families only for the primary
-			// index, and only when key columns are not being updated. Otherwise,
-			// all columns in the index must be fetched.
-			// TODO(andyk): It should be possible to not include columns that are
-			// being updated, since the existing value is not used. However, this
-			// would require execution support.
-			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
-				addFamilyCols(updateCols)
-			} else {
-				// Add all of the index columns into cols.
-				indexCols.ForEach(func(col opt.ColumnID) {
-					ord := tabMeta.MetaID.ColumnOrdinal(col)
-					// We don't want to include system columns.
-					if tabMeta.Table.Column(ord).Kind() != cat.System {
-						cols.Add(col)
-					}
-				})
-			}
-		}
-
-	case opt.DeleteOp:
-		// Add in all strict key columns from all indexes, since these are needed
-		// to compose the keys of rows to delete. Include mutation indexes, since
-		// it is necessary to delete rows even from indexes that are being added
-		// or dropped.
-		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			cols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
 		}
 	}
 

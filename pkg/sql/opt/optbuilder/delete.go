@@ -76,6 +76,10 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
 
+	// Set the index fetch columns. Don't attempt to reduce the columns, because
+	// a delete always requires all key columns of all indexes.
+	mb.setIndexFetchCols(false /* reduce */)
+
 	// Project partial index DEL boolean columns.
 	mb.projectPartialIndexDelCols(mb.fetchScope)
 

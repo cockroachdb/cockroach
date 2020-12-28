@@ -1061,6 +1061,10 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
+	// Set the index fetch columns. Attempt to reduce the columns, because an
+	// upsert may not need all columns in order to update the indexes.
+	mb.setIndexFetchCols(true /* reduce */)
+
 	// Project partial index PUT and DEL boolean columns.
 	//
 	// In some cases existing rows may not be fetched for an UPSERT (see

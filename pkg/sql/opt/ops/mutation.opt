@@ -133,6 +133,10 @@ define MutationPrivate {
     # the index.
     PartialIndexDelCols OptionalColList
 
+    # IndexFetchCols is the set of column IDs that are required to fetch in
+    # order to update indexes for UPDATE, UPSERT, and DELETE operations.
+    IndexFetchCols ColSet
+
     # CanaryCol is used only with the Upsert operator. It identifies the column
     # that the execution engine uses to decide whether to insert or to update.
     # If the canary column value is null for a particular input row, then a new
@@ -159,7 +163,8 @@ define MutationPrivate {
     # its input. It's similar to the passthrough columns in projections. This
     # is useful for `UPDATE .. FROM` mutations where the `RETURNING` clause
     # references columns from tables in the `FROM` clause. When this happens
-    # the update will need to pass through those refenced columns from its input.
+    # the update will need to pass through those referenced columns from its
+    # input.
     PassthroughCols ColList
 
     # Mutation operators can act similarly to a With operator: they buffer their
