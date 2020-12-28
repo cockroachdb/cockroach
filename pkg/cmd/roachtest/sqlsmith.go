@@ -176,7 +176,9 @@ func registerSQLSmith(r *testRegistry) {
 			}()
 			if err != nil {
 				es := err.Error()
-				if strings.Contains(es, "internal error") {
+				// TODO(yuzefovich): we temporarily ignore internal errors that
+				// are because of #39433.
+				if strings.Contains(es, "internal error") && !strings.Contains(es, "internal error: invalid index") {
 					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
 				} else if strings.Contains(es, "communication error") {
