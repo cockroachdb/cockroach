@@ -1007,3 +1007,45 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
 
 statement ok
 SELECT * FROM all_null WHERE c IS NOT NULL
+
+# Regression for 58220.
+statement ok
+CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE greeting_stats (x greeting PRIMARY KEY);
+INSERT INTO greeting_stats VALUES ('hi');
+CREATE STATISTICS s FROM greeting_stats
+
+query T
+SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
+)
+----
+[
+    {
+        "columns": [
+            "x"
+        ],
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "public.greeting",
+        "name": "s",
+        "null_count": 0,
+        "row_count": 1
+    }
+]
+
+# Check that we can inject the statistics back into the table as well.
+let $stats
+SHOW STATISTICS USING JSON FOR TABLE greeting_stats
+
+statement ok
+ALTER TABLE greeting_stats INJECT STATISTICS '$stats'
