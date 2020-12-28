@@ -275,6 +275,10 @@ type KVConfig struct {
 	// the Admin API's HTTP endpoints.
 	EnableWebSessionAuthentication bool
 
+	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
+	// which a feature unique to the demo shell.
+	EnableDemoLoginEndpoint bool
+
 	enginesCreated bool
 }
 

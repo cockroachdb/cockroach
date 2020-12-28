@@ -337,6 +337,7 @@ func testServerArgsForTransientCluster(
 		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
 		CacheSize:               demoCtx.cacheSize,
 		NoAutoInitializeCluster: true,
+		EnableDemoLoginEndpoint: true,
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),
@@ -884,8 +885,15 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
-		// Print node ID and admin UI URL.
-		fmt.Fprintf(w, "  (console) %s\n", s.AdminURL())
+		// Print node ID and console URL. Embed the autologin feature inside the URL.
+		pwauth := url.Values{
+			"username": []string{c.adminUser.Normalized()},
+			"password": []string{c.adminPassword},
+		}
+		serverURL := s.Cfg.AdminURL()
+		serverURL.Path = server.DemoLoginPath
+		serverURL.RawQuery = pwauth.Encode()
+		fmt.Fprintf(w, "  (console) %s\n", serverURL)
 		// Print unix socket if defined.
 		if c.useSockets {
 			sock := c.sockForServer(nodeID)

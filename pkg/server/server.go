@@ -1689,6 +1689,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.mux.Handle(loginPath, gwMux)
 	s.mux.Handle(logoutPath, authHandler)
 
+	if s.cfg.EnableDemoLoginEndpoint {
+		s.mux.Handle(DemoLoginPath, http.HandlerFunc(s.authentication.demoLogin))
+	}
+
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 

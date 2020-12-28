@@ -213,6 +213,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
 	}
+	if params.EnableDemoLoginEndpoint {
+		cfg.EnableDemoLoginEndpoint = true
+	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
