@@ -2531,7 +2531,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		targetSlice[i] = &tp
 		states[i] = scs.targetStates[i].State
 	}
-	_, err := ex.planner.extendedEvalCtx.QueueJob(jobs.Record{
+	_, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   "Schema change job", // TODO(ajwerner): use const
 		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
 		Username:      ex.planner.User(),

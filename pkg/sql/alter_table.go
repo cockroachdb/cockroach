@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -49,6 +50,8 @@ type alterTableNode struct {
 	// commands - the JSON stats expressions.
 	// It is parallel with n.Cmds (for the inject stats commands).
 	statsData map[int]tree.TypedExpr
+
+	newSchemaChangerTargets []targets.TargetState
 }
 
 // AlterTable applies a schema change on a table.
@@ -69,8 +72,9 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		if err != nil {
 			return nil, err
 		}
-		scs.setTargetStates(updated)
-		return &alterTableNode{}, nil
+		return &alterTableNode{
+			newSchemaChangerTargets: updated,
+		}, nil
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptorEx(
@@ -149,7 +153,8 @@ func (n *alterTableNode) ReadingOwnWrites() {}
 
 func (n *alterTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("table"))
-	if params.p.extendedEvalCtx.SchemaChangerState.inUse {
+	if scs := params.p.extendedEvalCtx.SchemaChangerState; scs.inUse {
+		scs.setTargetStates(n.newSchemaChangerTargets)
 		return nil
 	}
 
