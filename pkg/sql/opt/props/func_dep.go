@@ -959,6 +959,8 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 			// Equivalence dependencies already maintain closure, so skip them.
 			if !fd.equiv {
 				fd.to = f.ComputeClosure(fd.to)
+				// Maintain the invariant that from and to columns don't overlap.
+				fd.to.DifferenceWith(fd.from)
 			}
 		}
 
