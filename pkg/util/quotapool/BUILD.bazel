@@ -34,6 +34,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
+        "//pkg/util/quotapool",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",

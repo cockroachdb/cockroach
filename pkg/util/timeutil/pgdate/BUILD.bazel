@@ -37,6 +37,7 @@ go_test(
     embed = [":pgdate"],
     deps = [
         "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
         "@com_github_lib_pq//:pq",
     ],
 )

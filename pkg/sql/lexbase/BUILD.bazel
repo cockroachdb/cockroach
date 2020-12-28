@@ -16,7 +16,7 @@ go_library(
 go_test(
     name = "lexbase_test",
     srcs = ["encode_test.go"],
-    deps = [":lexbase"],
+    deps = ["//pkg/sql/lexbase"],
 )
 
 # Define the target to auto-generate the list of reserved keywords from the

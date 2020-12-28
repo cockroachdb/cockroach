@@ -34,7 +34,7 @@ go_test(
         "system_test.go",
     ],
     deps = [
-        ":config",
+        "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/roachpb",

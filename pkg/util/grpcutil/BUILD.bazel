@@ -33,6 +33,7 @@ go_test(
     deps = [
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/util/grpcutil",
         "//pkg/util/leaktest",
         "//pkg/util/log/severity",
         "//pkg/util/timeutil",

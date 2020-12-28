@@ -23,10 +23,10 @@ go_test(
     name = "aggmetric_test",
     srcs = ["agg_metric_test.go"],
     deps = [
-        ":aggmetric",
         "//pkg/roachpb",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -48,8 +48,8 @@ go_test(
     srcs = ["test_catalog_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":testcat",
         "//pkg/sql/opt/testutils/opttester",
+        "//pkg/sql/opt/testutils/testcat",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],

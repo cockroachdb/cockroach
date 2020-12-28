@@ -26,12 +26,12 @@ go_test(
         "stopper_test.go",
     ],
     deps = [
-        ":stop",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/quotapool",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

@@ -29,8 +29,8 @@ go_test(
         "transport_util_test.go",
     ],
     deps = [
-        ":transport",
         "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/kv/kvserver/closedts/transport",
         "//pkg/kv/kvserver/closedts/transport/testutils",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

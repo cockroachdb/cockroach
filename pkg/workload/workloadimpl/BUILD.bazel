@@ -19,8 +19,8 @@ go_test(
         "random_test.go",
     ],
     deps = [
-        ":workloadimpl",
         "//pkg/util/timeutil",
+        "//pkg/workload/workloadimpl",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_exp//rand",
     ],

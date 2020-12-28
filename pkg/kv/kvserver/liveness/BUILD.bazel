@@ -44,6 +44,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",

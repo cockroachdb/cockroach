@@ -52,7 +52,7 @@ go_test(
         "store_spec_test.go",
     ],
     deps = [
-        ":base",
+        "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
