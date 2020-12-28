@@ -126,6 +126,9 @@ type TestServerArgs struct {
 	// is running in secure mode.
 	DisableWebSessionAuthentication bool
 
+	// IF set, the demo login endpoint will be enabled.
+	EnableDemoLoginEndpoint bool
+
 	// If set, testing specific descriptor validation will be disabled. even if the server
 	DisableTestingDescriptorValidation bool
 }
