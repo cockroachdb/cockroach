@@ -171,9 +171,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			flowCtx := dsp.distSQLSrv.NewFlowContext(ctx, execinfrapb.FlowID{}, &evalCtx.EvalContext, setupReq.TraceKV, localState)
 			// This flowCtx is only used during the vectorize check, so we need to
 			// clean up any accessed descriptors after checking.
-			defer func() {
-				flowCtx.TypeResolverFactory.CleanupFunc(ctx)
-			}()
+			defer flowCtx.TypeResolverFactory.CleanupFunc(ctx)
 
 			for scheduledOnNodeID, spec := range flows {
 				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
