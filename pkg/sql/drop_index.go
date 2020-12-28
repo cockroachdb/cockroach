@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -468,7 +469,7 @@ func (p *planner) dropIndexByName(
 			// the meta ranges directly.
 			if p.ExecCfg().Codec.ForSystemTenant() {
 				span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-				ranges, err := ScanMetaKVs(ctx, p.txn, span)
+				ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
 				if err != nil {
 					return err
 				}
