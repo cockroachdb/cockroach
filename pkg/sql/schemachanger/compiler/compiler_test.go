@@ -24,8 +24,12 @@ func TestCompiler(t *testing.T) {
 			[]targets.TargetState{
 				{
 					&targets.DropColumn{
-						TableID:  1,
-						ColumnID: 2,
+						TableID: 1,
+						Column: descpb.ColumnDescriptor{
+							Name: "foo",
+							ID:   2,
+							Type: types.IntArray,
+						},
 					},
 					targets.State_PUBLIC,
 				},

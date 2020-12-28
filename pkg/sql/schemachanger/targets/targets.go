@@ -1,5 +1,7 @@
 package targets
 
+var NumStates = len(State_name)
+
 type TargetState struct {
 	Target Target
 	State  State

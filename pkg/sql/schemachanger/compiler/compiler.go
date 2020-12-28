@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -113,6 +114,22 @@ type SchemaChange struct {
 	stages []stage
 }
 
+func (g *SchemaChange) forEach(it nodeFunc) error {
+	for _, m := range g.targetStates {
+		for i := 0; i < targets.NumStates; i++ {
+			if ts, ok := m[targets.State(i)]; ok {
+				if err := it(ts.Target, ts.State); err != nil {
+					if iterutil.Done(err) {
+						err = nil
+					}
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (g *SchemaChange) getOrCreateTargetState(
 	t targets.Target, s targets.State,
 ) *targets.TargetState {
@@ -188,43 +205,6 @@ func (g *SchemaChange) addDepEdge(
 	}
 	g.edges = append(g.edges, de)
 	g.targetStateDepEdges[de.from] = append(g.targetStateDepEdges[de.from], de)
-}
-
-func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
-	g := SchemaChange{
-		targetIdxMap:        map[targets.Target]int{},
-		targetStateOpEdges:  map[*targets.TargetState]*opEdge{},
-		targetStateDepEdges: map[*targets.TargetState][]*depEdge{},
-	}
-
-	// TODO: add validation of targets to ensure no two overlap in their
-	// referenced elements.
-	for _, ts := range initialStates {
-		if existing, ok := g.targetIdxMap[ts.Target]; ok {
-			return nil, errors.Errorf("invalid initial states contains duplicate target: %v and %v", ts, initialStates[existing])
-		}
-		idx := len(g.targets)
-		g.targetIdxMap[ts.Target] = idx
-		g.targets = append(g.targets, ts.Target)
-		g.targetStates = append(g.targetStates, map[targets.State]*targets.TargetState{})
-		g.initialTargetStates = append(g.initialTargetStates,
-			g.getOrCreateTargetState(ts.Target, ts.State))
-	}
-	// TODO(ajwerner): Generate the stages for all of the phases as it will make
-	// debugging easier.
-
-	for _, ts := range initialStates {
-		if err := generateOpEdges(&g, ts.Target, ts.State, flags); err != nil {
-			return nil, err
-		}
-	}
-	if err := generateDepEdges(&g); err != nil {
-		return nil, err
-	}
-	if err := buildStages(&g, flags); err != nil {
-		return nil, err
-	}
-	return &g, nil
 }
 
 type stage struct {
@@ -378,37 +358,4 @@ func (g *SchemaChange) Stages() []Stage {
 		})
 	}
 	return ret
-}
-
-func generateDepEdges(g *SchemaChange) error {
-	// We want to generate the dependencies between target states.
-
-	// TODO(ajwerner): refactor, this initial pass is incredibly imperative.
-	// We want to iterate over the set of nodes and then iterate over the set of
-	// targets which might be associated with those nodes and then add relevant
-	// dep edges (we may need to synthesize nodes).
-	for idx, ts := range g.targetStates {
-		for s := range ts {
-			if err := generateTargetStateDepEdges(g, g.targets[idx], s); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// Now we need a way to talk about dependencies.
-// * A column cannot be made public until all of the indexes using it are backfilled.
-// * A column cannot be made public until all column constraints are public
-// * A primary index cannot be made DeleteAndWriteOnly until another primary index
-//   is in DeleteAndWriteOnly.
-// *
-
-func columnsContainsID(haystack []descpb.ColumnID, needle descpb.ColumnID) bool {
-	for _, id := range haystack {
-		if id == needle {
-			return true
-		}
-	}
-	return false
 }
