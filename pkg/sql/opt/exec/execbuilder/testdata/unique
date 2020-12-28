@@ -9,7 +9,7 @@ CREATE TABLE uniq (
   v INT UNIQUE,
   w INT UNIQUE WITHOUT INDEX,
   x INT,
-  y INT,
+  y INT DEFAULT 5,
   UNIQUE WITHOUT INDEX (x, y)
 )
 
@@ -1134,3 +1134,716 @@ vectorized: true
                           row 0, expr 0: 'us-east'
                           row 1, expr 0: 'us-west'
                           row 2, expr 0: 'eu-west'
+
+# -- Tests with UPSERT --
+subtest Upsert
+
+# None of the upserted values have nulls.
+query T
+EXPLAIN UPSERT INTO uniq VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq(k, v, w, x, y)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: uniq@primary
+│               │ equality: (column1) = (k)
+│               │ equality cols are key
+│               │ locking strength: for update
+│               │
+│               └── • values
+│                     size: 5 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (w) = (column3)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (column4, column5)
+            │ pred: upsert_k != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# TODO(rytaft): The default value for x is NULL, and we're not updating either
+# x or y. Therefore, we could avoid planning checks for (x,y) (see #58300).
+query T
+EXPLAIN UPSERT INTO uniq (k, v, w) VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq(k, v, w, x, y)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: uniq@primary
+│               │ equality: (column1) = (k)
+│               │ equality cols are key
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (w) = (column3)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (upsert_x, upsert_y)
+            │ pred: upsert_k != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# TODO(rytaft): No need to plan checks for w since it's aways NULL (see #58300).
+query T
+EXPLAIN UPSERT INTO uniq (k, w, x) VALUES (1, NULL, 1), (2, NULL, NULL)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq(k, v, w, x, y)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: uniq@primary
+│               │ equality: (column1) = (k)
+│               │ equality cols are key
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (w) = (column2)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (column3, upsert_y)
+            │ pred: upsert_k != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# On conflict do update with constant input.
+# TODO(rytaft): The default value for x is NULL, and we're not updating either
+# x or y. Therefore, we could avoid planning checks for (x,y) (see #58300).
+query T
+EXPLAIN INSERT INTO uniq VALUES (100, 1), (200, 1) ON CONFLICT (k) DO UPDATE SET w = excluded.w + 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq(k, v, w, x, y)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • lookup join (left outer)
+│               │ table: uniq@primary
+│               │ equality: (column1) = (k)
+│               │ equality cols are key
+│               │ locking strength: for update
+│               │
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 2 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (w) = (upsert_w)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (x, y) = (upsert_x, upsert_y)
+            │ pred: upsert_k != k
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# On conflict do update with non-constant input.
+# TODO(rytaft): The default value for x is NULL, and we're not updating either
+# x or y. Therefore, we could avoid planning checks for (x,y) (see #58300).
+query T
+EXPLAIN INSERT INTO uniq SELECT k, v FROM other ON CONFLICT (v) DO UPDATE SET w = uniq.k + 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq(k, v, w, x, y)
+│   │ arbiter indexes: uniq_v_key
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • hash join (left outer)
+│               │ equality: (v) = (v)
+│               │
+│               ├── • distinct
+│               │   │ distinct on: v
+│               │   │ nulls are distinct
+│               │   │ error on duplicate
+│               │   │
+│               │   └── • render
+│               │       │
+│               │       └── • scan
+│               │             missing stats
+│               │             table: other@primary
+│               │             spans: FULL SCAN
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: uniq@primary
+│                     spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (upsert_w) = (w)
+│           │ pred: upsert_k != k
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (upsert_x, upsert_y) = (x, y)
+            │ pred: upsert_k != k
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq@primary
+                  spans: FULL SCAN
+
+# On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
+# column.
+# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
+# (see #58246).
+query error pq: there is no unique or exclusion constraint matching the ON CONFLICT specification
+EXPLAIN INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO UPDATE SET w = 10
+
+# Upsert with non-constant input.
+# Add inequality filters for the primary key columns that are not part of each
+# unique constraint to prevent rows from matching themselves in the semi join.
+# We avoid planning checks on c,d since the default for d is NULL.
+query T
+EXPLAIN UPSERT INTO uniq_overlaps_pk SELECT k, v, x FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_overlaps_pk(a, b, c, d)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (v, x) = (b, c)
+│           │ pred: k != a
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_overlaps_pk@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (k) = (a)
+            │ pred: v != b
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_overlaps_pk@primary
+                  spans: FULL SCAN
+
+# Upsert with non-constant input.
+# Add inequality filters for the hidden primary key column.
+query T
+EXPLAIN UPSERT INTO uniq_hidden_pk SELECT k, v, x, y FROM other
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_hidden_pk(a, b, c, d, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: other@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (v, x) = (b, c)
+│           │ pred: column16 != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_hidden_pk@primary
+│                 spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (semi)
+│           │ equality: (k, v, y) = (a, b, d)
+│           │ pred: column16 != rowid
+│           │
+│           ├── • scan buffer
+│           │     label: buffer 1
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: uniq_hidden_pk@primary
+│                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (k) = (a)
+            │ pred: column16 != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_hidden_pk@primary
+                  spans: FULL SCAN
+
+# Combine unique checks with foreign keys.
+# The cascade here affects the unique column in uniq_fk_child.
+query T
+EXPLAIN UPSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_fk_parent(a, b, c, rowid)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • lookup join (left outer)
+│           │ table: uniq_fk_parent@primary
+│           │ equality: (column10) = (rowid)
+│           │ equality cols are key
+│           │
+│           └── • distinct
+│               │ distinct on: column10
+│               │ nulls are distinct
+│               │ error on duplicate
+│               │
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
+│
+├── • fk-cascade
+│     fk: fk_b_ref_uniq_fk_parent
+│     input: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (a) = (a)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_fk_child@primary
+            │     spans: FULL SCAN
+            │
+            └── • except
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# Combine unique checks with foreign keys.
+query T
+EXPLAIN UPSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: uniq_fk_child(a, b, c, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (c) = (column3)
+│           │ pred: column10 != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_child@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ table: uniq_fk_parent@uniq_fk_parent_b_c_key
+│           │ equality: (column2, column3) = (b,c)
+│           │ equality cols are key
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: uniq_fk_parent@uniq_fk_parent_a_key
+            │ equality: (column1) = (a)
+            │ equality cols are key
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Test that we use the index when available for the upsert checks.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO uniq_enum VALUES ('us-west', 'foo', 1, 1), ('us-east', 'bar', 2, 2)
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • upsert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: uniq_enum(r, s, i, j)
+│   │ arbiter indexes: primary
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│       │ label: buffer 1
+│       │
+│       └── • project
+│           │ columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│           │
+│           └── • render
+│               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
+│               │ estimated row count: 2 (missing stats)
+│               │ render 0: upsert_r IN ('us-east', 'us-west', 'eu-west')
+│               │ render 1: column1
+│               │ render 2: column2
+│               │ render 3: column3
+│               │ render 4: column4
+│               │ render 5: r
+│               │ render 6: s
+│               │ render 7: i
+│               │ render 8: j
+│               │ render 9: upsert_r
+│               │ render 10: upsert_i
+│               │
+│               └── • render
+│                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
+│                   │ estimated row count: 2 (missing stats)
+│                   │ render 0: CASE WHEN r IS NULL THEN column1 ELSE r END
+│                   │ render 1: CASE WHEN r IS NULL THEN column3 ELSE i END
+│                   │ render 2: column1
+│                   │ render 3: column2
+│                   │ render 4: column3
+│                   │ render 5: column4
+│                   │ render 6: r
+│                   │ render 7: s
+│                   │ render 8: i
+│                   │ render 9: j
+│                   │
+│                   └── • lookup join (left outer)
+│                       │ columns: (column1, column2, column3, column4, r, s, i, j)
+│                       │ estimated row count: 2 (missing stats)
+│                       │ table: uniq_enum@primary
+│                       │ equality: (column1, column3) = (r,i)
+│                       │ equality cols are key
+│                       │
+│                       └── • values
+│                             columns: (column1, column2, column3, column4)
+│                             size: 4 columns, 2 rows
+│                             row 0, expr 0: 'us-west'
+│                             row 0, expr 1: 'foo'
+│                             row 0, expr 2: 1
+│                             row 0, expr 3: 1
+│                             row 1, expr 0: 'us-east'
+│                             row 1, expr 1: 'bar'
+│                             row 1, expr 2: 2
+│                             row 1, expr 3: 2
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │ columns: ()
+│       │
+│       └── • project
+│           │ columns: (upsert_i, upsert_r)
+│           │ estimated row count: 1 (missing stats)
+│           │
+│           └── • lookup join (semi)
+│               │ columns: ("lookup_join_const_col_@22", upsert_i, upsert_r)
+│               │ table: uniq_enum@primary
+│               │ equality: (lookup_join_const_col_@22, upsert_i) = (r,i)
+│               │ equality cols are key
+│               │ pred: upsert_r != r
+│               │
+│               └── • cross join (inner)
+│                   │ columns: ("lookup_join_const_col_@22", upsert_i, upsert_r)
+│                   │ estimated row count: 6 (missing stats)
+│                   │
+│                   ├── • values
+│                   │     columns: ("lookup_join_const_col_@22")
+│                   │     size: 1 column, 3 rows
+│                   │     row 0, expr 0: 'us-east'
+│                   │     row 1, expr 0: 'us-west'
+│                   │     row 2, expr 0: 'eu-west'
+│                   │
+│                   └── • project
+│                       │ columns: (upsert_i, upsert_r)
+│                       │ estimated row count: 2 (missing stats)
+│                       │
+│                       └── • scan buffer
+│                             columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+│                             label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • project
+            │ columns: (column2, column4, upsert_r, upsert_i)
+            │ estimated row count: 1 (missing stats)
+            │
+            └── • lookup join (semi)
+                │ columns: ("lookup_join_const_col_@32", column2, column4, upsert_r, upsert_i)
+                │ table: uniq_enum@uniq_enum_r_s_j_key
+                │ equality: (lookup_join_const_col_@32, column2, column4) = (r,s,j)
+                │ equality cols are key
+                │ pred: (upsert_r != r) OR (upsert_i != i)
+                │
+                └── • cross join (inner)
+                    │ columns: ("lookup_join_const_col_@32", column2, column4, upsert_r, upsert_i)
+                    │ estimated row count: 6 (missing stats)
+                    │
+                    ├── • values
+                    │     columns: ("lookup_join_const_col_@32")
+                    │     size: 1 column, 3 rows
+                    │     row 0, expr 0: 'us-east'
+                    │     row 1, expr 0: 'us-west'
+                    │     row 2, expr 0: 'eu-west'
+                    │
+                    └── • project
+                        │ columns: (column2, column4, upsert_r, upsert_i)
+                        │ estimated row count: 2 (missing stats)
+                        │
+                        └── • scan buffer
+                              columns: (column1, column2, column3, column4, r, s, i, j, column2, column4, r, check1, upsert_r, upsert_i)
+                              label: buffer 1
