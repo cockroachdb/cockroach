@@ -49,14 +49,14 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 2, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 2
@@ -82,7 +82,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # Issue another write to the same key for txn1 at its initial
@@ -111,7 +111,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0, 1]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0, 1]
 local: num=0
 
 reset namespace
@@ -167,14 +167,14 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 5, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 5
@@ -200,7 +200,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # The txn restarts at a new timestamp, but below the pushed
@@ -233,7 +233,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 1, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 1, seqs: [0]
 local: num=0
 
 reset namespace
@@ -294,14 +294,14 @@ sequence req=req2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: waiting in lock wait-queues
-[2] sequence req2: pushing timestamp of txn 00000001 above 0.000000012,1
+[2] sequence req2: pushing timestamp of txn 00000001 above 12.000000000,1
 [2] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
 debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
    waiting readers:
     req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
@@ -327,7 +327,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000012,2, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 12.000000000,2, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # Issue another write to the same key for txn1 at its initial timestamp,
@@ -375,7 +375,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,1, info: repl epoch: 0, seqs: [1], unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,1, info: repl epoch: 0, seqs: [1], unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 9, txn: none
    distinguished req: 9
