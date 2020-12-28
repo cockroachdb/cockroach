@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -135,7 +135,7 @@ func TestResetQuorum(t *testing.T) {
 
 		var updatedDesc roachpb.RangeDescriptor
 		require.NoError(t, store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			kvs, err := sqlutil.ScanMetaKVs(ctx, txn, roachpb.Span{
 				Key:    roachpb.KeyMin,
 				EndKey: roachpb.KeyMax,
 			})

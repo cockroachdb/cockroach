@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -306,6 +307,22 @@ var generators = map[string]builtinDefinition{
 				"and verbose detail.\n\n"+
 				"Example usage:\n"+
 				"SELECT * FROM crdb_internal.check_consistency(true, '\\x02', '\\x04')",
+			tree.VolatilityVolatile,
+		),
+	),
+
+	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
+		tree.FunctionProperties{
+			Class:    tree.GeneratorClass,
+			Category: categorySystemInfo,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "range_id", Typ: types.Int},
+			},
+			rangeKeyIteratorType,
+			makeRangeKeyIterator,
+			"Returns all SQL K/V pairs within the requested range.",
 			tree.VolatilityVolatile,
 		),
 	),
@@ -1224,3 +1241,101 @@ func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
 
 // Close is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Close() {}
+
+var rangeKeyIteratorType = types.MakeLabeledTuple(
+	// TODO (rohany): These could be bytes if we don't want to display the
+	//  prettified versions of the key and value.
+	[]*types.T{types.String, types.String},
+	[]string{"key", "value"},
+)
+
+// rangeKeyIterator is a ValueGenerator that iterates over all
+// SQL keys in a target range.
+type rangeKeyIterator struct {
+	// rangeID is the ID of the range to iterate over.
+	rangeID roachpb.RangeID
+	// index maintains the current position of the iterator in kvs.
+	index int
+	kvs   []kv.KeyValue
+	// A buffer to avoid allocating an array on every call to Values().
+	buf [2]tree.Datum
+}
+
+var _ tree.ValueGenerator = &rangeKeyIterator{}
+
+func makeRangeKeyIterator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+	// The user must be an admin to use this builtin.
+	isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+	if err != nil {
+		return nil, err
+	}
+	if !isAdmin {
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
+	}
+	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
+	return &rangeKeyIterator{
+		rangeID: rangeID,
+	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (rk *rangeKeyIterator) ResolvedType() *types.T {
+	return rangeKeyIteratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+	// Scan the range meta K/V's to find the target range.
+	// TODO (rohany): Is there no other way to grab a range by its ID?
+	ranges, err := sqlutil.ScanMetaKVs(ctx, txn, roachpb.Span{
+		Key:    keys.MinKey,
+		EndKey: keys.MaxKey,
+	})
+	if err != nil {
+		return err
+	}
+	foundRange := false
+	var rangeDesc roachpb.RangeDescriptor
+	for _, r := range ranges {
+		if err := r.ValueProto(&rangeDesc); err != nil {
+			return err
+		}
+		// Look for a range that matches the target range ID.
+		if rangeDesc.RangeID == rk.rangeID {
+			foundRange = true
+			break
+		}
+	}
+	if !foundRange {
+		return errors.Newf("range with ID %d not found", rk.rangeID)
+	}
+	// Scan all of the K/V's within the target range.
+	// TODO (rohany): Is it OK to have maxRows = 0 here? Since range sizes are capped (64 mb),
+	//  we shouldn't OOM here. If not, we can do these scans as part of the iterator.
+	kvs, err := txn.Scan(ctx, rangeDesc.StartKey, rangeDesc.EndKey, 0 /* maxRows */)
+	if err != nil {
+		return err
+	}
+	rk.kvs = kvs
+	// The user of the generator first calls Next(), then Values(), so the index
+	// managing the iterator's position needs to start at -1 instead of 0.
+	rk.index = -1
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (rk *rangeKeyIterator) Next(_ context.Context) (bool, error) {
+	rk.index++
+	return rk.index < len(rk.kvs), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
+	kv := rk.kvs[rk.index]
+	rk.buf[0] = tree.NewDString(kv.Key.String())
+	rk.buf[1] = tree.NewDString(kv.PrettyValue())
+	return rk.buf[:], nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (rk *rangeKeyIterator) Close() {}

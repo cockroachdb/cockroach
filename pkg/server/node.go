@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -1025,7 +1026,7 @@ func (n *Node) ResetQuorum(
 		if txnTries > 1 {
 			log.Infof(ctx, "failed to retrieve range descriptor for r%d, retrying...", req.RangeID)
 		}
-		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+		kvs, err := sqlutil.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    roachpb.KeyMin,
 			EndKey: roachpb.KeyMax,
 		})

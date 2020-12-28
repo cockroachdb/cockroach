@@ -1,0 +1,28 @@
+# LogicTest: local
+
+# This test depends on table ID's being stable, so add new tests at the bottom
+# of the file.
+
+# Create a table and split it up into ranges.
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, FAMILY (x, y));
+INSERT INTO t VALUES (1, 1), (2, 2);
+ALTER TABLE t SPLIT AT VALUES (0)
+
+# TODO (rohany): I thought ranges were split automatically on table creation, but
+#  I seem to have to do the SPLIT AT above. Is something different in logic tests?
+# Get the range that contains this table.
+let $rangeid
+SELECT range_id FROM crdb_internal.ranges WHERE table_name = 't'
+
+# List out all of the keys in this range. The values themselves are
+# different on each run of the test due to metadata stored in the value.
+query T
+SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
+----
+/Table/53/1/1/0
+/Table/53/1/2/0
+
+# An error should be returned when an invalid range ID is specified.
+statement error pq: range with ID 1000000 not found
+SELECT key FROM crdb_internal.list_sql_keys_in_range(1000000)

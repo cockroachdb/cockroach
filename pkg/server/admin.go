@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1867,7 +1868,7 @@ func (s *adminServer) DataDistribution(
 		acct := s.memMonitor.MakeBoundAccount()
 		defer acct.Close(txnCtx)
 
-		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+		kvs, err := sqlutil.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    keys.UserTableDataMin,
 			EndKey: keys.MaxKey,
 		})

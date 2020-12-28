@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -468,7 +469,7 @@ func (p *planner) dropIndexByName(
 			// the meta ranges directly.
 			if p.ExecCfg().Codec.ForSystemTenant() {
 				span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-				ranges, err := ScanMetaKVs(ctx, p.txn, span)
+				ranges, err := sqlutil.ScanMetaKVs(ctx, p.txn, span)
 				if err != nil {
 					return err
 				}

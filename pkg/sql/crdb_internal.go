@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -2519,7 +2520,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				dbNames[id] = desc.GetName()
 			}
 		}
-		ranges, err := ScanMetaKVs(ctx, p.txn, roachpb.Span{
+		ranges, err := sqlutil.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
 			EndKey: keys.MaxKey,
 		})
