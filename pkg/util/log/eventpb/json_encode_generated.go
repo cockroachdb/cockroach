@@ -727,6 +727,18 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		b = strconv.AppendUint(b, uint64(m.DescriptorID), 10)
 	}
 
+	if m.ApplicationName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ApplicationName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ApplicationName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

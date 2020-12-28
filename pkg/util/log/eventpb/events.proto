@@ -43,5 +43,10 @@ message CommonSQLEventDetails {
   // The primary object descriptor affected by the operation. Set to zero for operations
   // that don't affect descriptors.
   uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID" , (gogoproto.jsontag) = ",omitempty"];
+
+  // The application name for the session where the event was emitted.
+  // This is included in the event to ease filtering of logging output
+  // by application.
+  string application_name = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
