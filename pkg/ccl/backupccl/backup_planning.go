@@ -14,6 +14,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 
@@ -381,7 +382,7 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	q.Del(localityURLParam)
 	parsedURI.RawQuery = q.Encode()
 	if appendPath != "" {
-		parsedURI.Path = parsedURI.Path + appendPath
+		parsedURI.Path = path.Join(parsedURI.Path, appendPath)
 	}
 	baseURI := parsedURI.String()
 	return localityKV, baseURI, nil
