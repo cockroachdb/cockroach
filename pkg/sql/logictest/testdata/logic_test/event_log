@@ -466,7 +466,7 @@ AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 ORDER BY "timestamp", info
 ----
-0  1  {"EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "User": "root", "Value": "true"}
+0  1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "User": "root", "Value": "true"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.range_merge.queue_enabled", "Statement": "SET CLUSTER SETTING \"kv.range_merge.queue_enabled\" = false", "User": "root", "Value": "false"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "sql.stats.automatic_collection.min_stale_rows", "Statement": "SET CLUSTER SETTING \"sql.stats.automatic_collection.min_stale_rows\" = $1::INT8", "User": "root", "Value": "5"}
 0  1  {"EventType": "set_cluster_setting", "SettingName": "kv.allocator.load_based_lease_rebalancing.enabled", "Statement": "SET CLUSTER SETTING \"kv.allocator.load_based_lease_rebalancing.enabled\" = false", "User": "root", "Value": "false"}
