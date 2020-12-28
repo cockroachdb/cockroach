@@ -736,6 +736,18 @@ func TestFuncDeps_ProjectCols(t *testing.T) {
 	// Verify that lax keys convert to strong keys.
 	abcde.MakeNotNull(c(2, 3, 4, 5))
 	verifyFD(t, abcde, "key(3,4); (2)-->(3-5), (3,4)-->(2,5)")
+
+	// Regression test for #56358: ProjectCols was creating FD relations with
+	// overlapping from/to sets.
+	fd := &props.FuncDepSet{}
+	fd.AddConstants(c(2, 3))
+	fd.AddSynthesizedCol(c(4), 1)
+	fd.AddStrictKey(c(1), c(1, 2, 3, 4))
+	fd.AddEquivalency(2, 3)
+	verifyFD(t, fd, "key(1); ()-->(2,3), (4)-->(1), (1)-->(2-4), (2)==(3), (3)==(2)")
+	// Now project away column 3, and make sure we don't end up with (1)->(1,4).
+	fd.ProjectCols(c(1, 2, 4))
+	verifyFD(t, fd, "key(1); ()-->(2), (4)-->(1), (1)-->(4)")
 }
 
 func TestFuncDeps_AddFrom(t *testing.T) {
