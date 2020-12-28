@@ -30,6 +30,7 @@ go_library(
         "//pkg/geo/geotransform",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/telemetry",
