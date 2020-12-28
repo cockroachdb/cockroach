@@ -63,7 +63,6 @@ go_test(
         "//pkg/sql/opt",
         "//pkg/sql/opt/constraint",
         "//pkg/sql/opt/invertedexpr",
-        "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/props",

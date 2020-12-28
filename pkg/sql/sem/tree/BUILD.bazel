@@ -205,7 +205,6 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",
-        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/testutils",

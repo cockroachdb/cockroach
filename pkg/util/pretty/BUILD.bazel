@@ -14,5 +14,5 @@ go_library(
 go_test(
     name = "pretty_test",
     srcs = ["pretty_test.go"],
-    deps = ["//pkg/util/pretty"],
+    deps = [":pretty"],
 )

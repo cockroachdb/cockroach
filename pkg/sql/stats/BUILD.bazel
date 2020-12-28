@@ -86,7 +86,6 @@ go_test(
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
-        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

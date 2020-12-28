@@ -85,7 +85,6 @@ go_test(
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/zerofields",
