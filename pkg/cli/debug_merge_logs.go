@@ -64,7 +64,7 @@ func writeLogStream(
 		if _, err = w.Write(prefixBytes); err != nil {
 			return err
 		}
-		return log.FormatEntry(ei.Entry, w)
+		return log.FormatLegacyEntry(ei.Entry, w)
 	}
 
 	g, ctx := errgroup.WithContext(context.Background())

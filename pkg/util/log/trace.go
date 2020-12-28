@@ -198,7 +198,7 @@ func Event(ctx context.Context, msg string) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeEntry(ctx,
+	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
@@ -221,7 +221,7 @@ func Eventf(ctx context.Context, format string, args ...interface{}) {
 	}
 
 	// Format the tracing event and add it to the trace.
-	entry := MakeEntry(ctx,
+	entry := MakeLegacyEntry(ctx,
 		severity.INFO, /* unused for trace events */
 		channel.DEV,   /* unused for trace events */
 		1,             /* depth */
@@ -248,7 +248,7 @@ func vEventf(
 			// Nothing to log. Skip the work.
 			return
 		}
-		entry := MakeEntry(ctx,
+		entry := MakeLegacyEntry(ctx,
 			severity.INFO, /* unused for trace events */
 			channel.DEV,   /* unused for trace events */
 			depth+1,

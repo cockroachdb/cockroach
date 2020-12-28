@@ -67,7 +67,8 @@ func TestSecondaryGC(t *testing.T) {
 
 	testLogGC(t, logger,
 		func(ctx context.Context, format string, args ...interface{}) {
-			entry := MakeEntry(ctx, severity.INFO, channel.DEV, 1, si.redactable,
+			entry := makeUnstructuredEntry(ctx, severity.INFO, channel.DEV, 1,
+				true,   /* redactable */
 				format, /* nolint:fmtsafe */
 				args...)
 			logger.outputLogEntry(entry)

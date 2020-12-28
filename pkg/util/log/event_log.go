@@ -12,7 +12,6 @@ package log
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -29,19 +28,20 @@ func StructuredEvent(ctx context.Context, event eventpb.EventPayload) {
 	if len(common.EventType) == 0 {
 		common.EventType = eventpb.GetEventTypeName(event)
 	}
-	// TODO(knz): Avoid marking all the JSON payload as redactable. Do
-	// redaction per-field.
-	b, err := json.Marshal(event)
-	if err != nil {
-		Fatalf(ctx, "unexpected JSON encoding error: %+v", err)
+
+	entry := makeStructuredEntry(ctx,
+		severity.INFO,
+		event.LoggingChannel(),
+		// Note: we use depth 0 intentionally here, so that structured
+		// events can be reliably detected (their source filename will
+		// always be log/event_log.go).
+		0, /* depth */
+		event)
+
+	if sp, el, ok := getSpanOrEventLog(ctx); ok {
+		eventInternal(sp, el, (entry.sev >= severity.ERROR), entry.convertToLegacy())
 	}
 
-	// TODO(knz): Avoid escaping the JSON format when emitting the payload
-	// to an external sink.
-
-	// Note: we use depth 0 intentionally here, so that structured
-	// events can be reliably detected (their source filename will
-	// always be log/event_log.go).
-	// TODO(knz): Consider another way to mark structured events.
-	logfDepth(ctx, 0, severity.INFO, event.LoggingChannel(), "Structured event: %s", string(b))
+	logger := logging.getLogger(entry.ch)
+	logger.outputLogEntry(entry)
 }
