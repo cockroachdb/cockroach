@@ -72,7 +72,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000015,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 15.000000000,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 on-split
@@ -160,7 +160,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000025,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000003-0000-0000-0000-000000000000, ts: 25.000000000,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 reset

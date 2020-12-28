@@ -436,27 +436,12 @@ func nextUUID(counter *uint128.Uint128) uuid.UUID {
 }
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
-	var ts hlc.Timestamp
 	var tsS string
 	d.ScanArgs(t, "ts", &tsS)
-	parts := strings.Split(tsS, ",")
-
-	// Find the wall time part.
-	tsW, err := strconv.ParseInt(parts[0], 10, 64)
+	ts, err := hlc.ParseTimestamp(tsS)
 	if err != nil {
 		d.Fatalf(t, "%v", err)
 	}
-	ts.WallTime = tsW
-
-	// Find the logical part, if there is one.
-	var tsL int64
-	if len(parts) > 1 {
-		tsL, err = strconv.ParseInt(parts[1], 10, 32)
-		if err != nil {
-			d.Fatalf(t, "%v", err)
-		}
-	}
-	ts.Logical = int32(tsL)
 	return ts
 }
 
