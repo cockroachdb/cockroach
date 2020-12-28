@@ -288,8 +288,8 @@ func (c *transientCluster) start(
 	// initial replication factor for small clusters and creating the
 	// admin user.
 	const demoUsername = "demo"
-	demoPassword, err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername)
-	if err != nil {
+	demoPassword := genRandomDemoPassword(demoUsername)
+	if err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername, demoPassword); err != nil {
 		return err
 	}
 	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
@@ -906,4 +906,11 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 	if justOne && numNodesLive > 1 {
 		fmt.Fprintln(w, `To display connection parameters for other nodes, use \demo ls.`)
 	}
+}
+
+// genRandomDemoPassword generates a password that prevents accidental
+// misuse of the DB console started by demo shells.
+func genRandomDemoPassword(username string) string {
+	mypid := os.Getpid()
+	return fmt.Sprintf("%s%d", username, mypid)
 }
