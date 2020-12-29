@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/migration"
@@ -204,6 +205,9 @@ type sqlServerArgs struct {
 
 	// Used to list sessions and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
+
+	// Used to watch settings and descriptor changes.
+	rangeFeedFactory *rangefeed.Factory
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
@@ -280,6 +284,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		codec,
 		lmKnobs,
 		cfg.stopper,
+		cfg.rangeFeedFactory,
 		cfg.LeaseManagerConfig,
 	)
 
@@ -505,6 +510,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		ExternalIODirConfig:        cfg.ExternalIODirConfig,
 		HydratedTables:             hydratedTablesCache,
 		GCJobNotifier:              gcJobNotifier,
+		RangeFeedFactory:           cfg.rangeFeedFactory,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
