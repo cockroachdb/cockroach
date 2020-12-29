@@ -48,9 +48,11 @@ CREATE TABLE partial_indexes (
     a INT PRIMARY KEY,
     b INT,
     c STRING,
+    d INT,
     FAMILY (a),
     FAMILY (b),
     FAMILY (c),
+    FAMILY (d),
     INDEX (c) WHERE b > 1
 )
 ----
@@ -2058,51 +2060,183 @@ update computed
            ├── c_new:13 + 1 [as=column14:14, outer=(13), immutable]
            └── c_new:13 + 10 [as=column15:15, outer=(13), immutable]
 
-# Do not prune columns that are required for evaluating partial index
-# predicates.
-norm expect-not=PruneMutationFetchCols
-UPDATE partial_indexes SET b = b + 1 WHERE a = 1
+# Prune UPDATE fetch columns when the partial index indexes the column but
+# neither the column nor the columns referenced in the partial index predicate
+# are mutating.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPDATE partial_indexes SET d = d + 1 WHERE a = 1
 ----
 update partial_indexes
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 c:7
+ ├── fetch columns: a:6 d:9
  ├── update-mapping:
- │    └── b_new:9 => b:2
- ├── partial index put columns: partial_index_put1:10
+ │    └── d_new:11 => d:4
+ ├── partial index put columns: partial_index_put1:12
+ ├── partial index del columns: partial_index_put1:12
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:12 d_new:11 a:6!null d:9
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(6,9,11,12)
+      ├── select
+      │    ├── columns: a:6!null b:7 d:9
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6,7,9)
+      │    ├── scan partial_indexes
+      │    │    ├── columns: a:6!null b:7 d:9
+      │    │    ├── partial index predicates
+      │    │    │    └── secondary: filters
+      │    │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,9)
+      │    └── filters
+      │         └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      └── projections
+           ├── b:7 > 1 [as=partial_index_put1:12, outer=(7)]
+           └── d:9 + 1 [as=d_new:11, outer=(9), immutable]
+
+# Prune UPSERT fetch columns when the partial index indexes the column but
+# neither the column nor the columns referenced in the partial index predicate
+# are mutating.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPSERT INTO partial_indexes (a, d) VALUES (1, 2)
+----
+upsert partial_indexes
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
+ ├── fetch columns: a:10 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column8:8 => b:2
+ │    ├── column9:9 => c:3
+ │    └── column2:7 => d:4
+ ├── update-mapping:
+ │    └── column2:7 => d:4
+ ├── partial index put columns: partial_index_put1:18
+ ├── partial index del columns: partial_index_del1:19
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:18 partial_index_del1:19 column1:6!null column2:7!null column8:8 column9:9 a:10 d:13
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-10,13,18,19)
+      ├── left-join (cross)
+      │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 d:13
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-11,13)
+      │    ├── values
+      │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-9)
+      │    │    └── (1, 2, NULL, NULL)
+      │    ├── select
+      │    │    ├── columns: a:10!null b:11 d:13
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(10,11,13)
+      │    │    ├── scan partial_indexes
+      │    │    │    ├── columns: a:10!null b:11 d:13
+      │    │    │    ├── partial index predicates
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         └── b:11 > 1 [outer=(11), constraints=(/11: [/2 - ]; tight)]
+      │    │    │    ├── key: (10)
+      │    │    │    └── fd: (10)-->(11,13)
+      │    │    └── filters
+      │    │         └── a:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+      │    └── filters (true)
+      └── projections
+           ├── CASE WHEN a:10 IS NULL THEN column8:8 ELSE b:11 END > 1 [as=partial_index_put1:18, outer=(8,10,11)]
+           └── b:11 > 1 [as=partial_index_del1:19, outer=(11)]
+
+# Do not prune DELETE fetch columns when the a partial index indexes the column
+# and neither the column nor the columns referenced in the partial index
+# predicate are mutating. It is required to fetch all index key columns in order
+# to delete all index entries.
+norm
+DELETE FROM partial_indexes WHERE a = 1
+----
+delete partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:6 c:8
  ├── partial index del columns: partial_index_del1:11
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: partial_index_put1:10 partial_index_del1:11 a:5!null b:6 c:7 b_new:9
+      ├── columns: partial_index_del1:11 a:6!null c:8
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6,8,11)
+      ├── select
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── scan partial_indexes
+      │    │    ├── columns: a:6!null b:7 c:8
+      │    │    ├── partial index predicates
+      │    │    │    └── secondary: filters
+      │    │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+      └── projections
+           └── b:7 > 1 [as=partial_index_del1:11, outer=(7)]
+
+# Do not prune columns that are required for evaluating partial index
+# predicates.
+norm
+UPDATE partial_indexes SET b = b + 1 WHERE a = 1
+----
+update partial_indexes
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b_new:11 => b:2
+ ├── partial index put columns: partial_index_put1:12
+ ├── partial index del columns: partial_index_del1:13
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:12 partial_index_del1:13 a:6!null b:7 c:8 b_new:11
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(5-7,9-11)
+      ├── fd: ()-->(6-8,11-13)
       ├── project
-      │    ├── columns: b_new:9 a:5!null b:6 c:7
+      │    ├── columns: b_new:11 a:6!null b:7 c:8
       │    ├── cardinality: [0 - 1]
       │    ├── immutable
       │    ├── key: ()
-      │    ├── fd: ()-->(5-7,9)
+      │    ├── fd: ()-->(6-8,11)
       │    ├── select
-      │    │    ├── columns: a:5!null b:6 c:7
+      │    │    ├── columns: a:6!null b:7 c:8
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(5-7)
+      │    │    ├── fd: ()-->(6-8)
       │    │    ├── scan partial_indexes
-      │    │    │    ├── columns: a:5!null b:6 c:7
+      │    │    │    ├── columns: a:6!null b:7 c:8
       │    │    │    ├── partial index predicates
       │    │    │    │    └── secondary: filters
-      │    │    │    │         └── b:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
-      │    │    │    ├── key: (5)
-      │    │    │    └── fd: (5)-->(6,7)
+      │    │    │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
       │    │    └── filters
-      │    │         └── a:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+      │    │         └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
       │    └── projections
-      │         └── b:6 + 1 [as=b_new:9, outer=(6), immutable]
+      │         └── b:7 + 1 [as=b_new:11, outer=(7), immutable]
       └── projections
-           ├── b_new:9 > 1 [as=partial_index_put1:10, outer=(9)]
-           └── b:6 > 1 [as=partial_index_del1:11, outer=(6)]
+           ├── b_new:11 > 1 [as=partial_index_put1:12, outer=(11)]
+           └── b:7 > 1 [as=partial_index_del1:13, outer=(7)]
 
 # Prune secondary family column not needed for the update.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)

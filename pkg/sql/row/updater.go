@@ -122,14 +122,14 @@ func MakeUpdater(
 		if primaryKeyColChange {
 			return true
 		}
-		// If the index is a partial index, an update may be required even if
-		// the indexed columns aren't changing. For example, an index entry must
-		// be added when an update to a non-indexed column causes a row to
-		// satisfy the partial index predicate when it did not before.
-		// TODO(mgartner): needsUpdate does not need to return true for every
-		// partial index. A partial index will never require updating if neither
-		// its indexed columns nor the columns referenced in its predicate
-		// expression are changing.
+		// Partial indexes may require updates even if the indexed columns
+		// aren't changing. For example, an index entry must be added when an
+		// update to a non-indexed column causes a row to satisfy the partial
+		// index predicate when it did not before. Each row must be assessed
+		// individually to determine if an update is needed. Therefore, we
+		// always return true here and rely on two columns synthesized for each
+		// partial index that indicate whether PUT and DEL operations should be
+		// performed for each row.
 		if index.IsPartial() {
 			return true
 		}

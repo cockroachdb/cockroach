@@ -987,6 +987,7 @@ func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
 		}
 	}
 
+	var tableScope *scope
 	for i := 0; i < numIndexes; i++ {
 		// If reduce is false, add the key columns for all indexes.
 		if !reduce {
@@ -1002,26 +1003,34 @@ func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
 			}
 		}
 
-		// If the columns being updated are not part of the index and the
-		// index is not a partial index, then the update does not require
-		// changes to the index. Partial indexes may be updated (even when a
-		// column in the index is not changing) when rows that were not
-		// previously in the index must be added to the index because they
-		// now satisfy the partial index predicate.
+		// If the columns being updated are not part of the index, then the
+		// update does not require changes to the index. Partial indexes may be
+		// updated (even when a column in the index is not changing) when the
+		// predicate reference columns that are being updated. For example, rows
+		// that were not previously in the index must be added to the index
+		// because they now satisfy the partial index predicate, requiring the
+		// index columns to be fetched.
 		//
 		// Note that we use the set of index columns where the virtual
 		// columns have been mapped to their source columns. Virtual columns
 		// are never part of the updated columns. Updates to source columns
 		// trigger index changes.
-		//
-		// TODO(mgartner): Index columns are not necessary when neither the
-		// index columns nor the columns referenced in the partial index
-		// predicate are being updated. We should prune mutation fetch
-		// columns when this is the case, rather than always marking index
-		// columns of partial indexes as "needed".
 		indexCols := tabMeta.IndexColumnsMapVirtual(i)
-		_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
-		if !indexCols.Intersects(updateCols) && !isPartialIndex {
+		indexAndPredCols := indexCols.Copy()
+		if _, isPartialIndex := tabMeta.Table.Index(i).Predicate(); isPartialIndex {
+			// Initialize the tableScope once, only if there is a partial index.
+			if tableScope == nil {
+				tableScope = mb.b.allocScope()
+				tableScope.appendOrdinaryColumnsFromTable(tabMeta, &mb.alias)
+			}
+
+			// Collect the columns referenced in the partial index predicate by
+			// building the scalar expression.
+			expr := mb.parsePartialIndexPredicateExpr(i)
+			texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+			mb.b.buildScalar(texpr, tableScope, nil /* outScope */, nil /* outCol */, &indexAndPredCols)
+		}
+		if !indexAndPredCols.Intersects(updateCols) {
 			continue
 		}
 
