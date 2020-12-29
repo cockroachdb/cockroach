@@ -319,6 +319,18 @@ func (c *CustomFuncs) IsUnsimplifiableOr(item *memo.FiltersItem) bool {
 	return or.Left.Op() != opt.NullOp && or.Right.Op() != opt.NullOp
 }
 
+// IsUnsimplifiableIs returns true if this is an IS where the right side is not
+// True or False. SimplifyFilters simplifies an IS expression with True or False
+// as the right input to its left input. This function serves a similar purpose
+// to IsUnsimplifiableOr.
+func (c *CustomFuncs) IsUnsimplifiableIs(item *memo.FiltersItem) bool {
+	is, ok := item.Condition.(*memo.IsExpr)
+	if !ok {
+		return false
+	}
+	return is.Right.Op() != opt.TrueOp && is.Right.Op() != opt.FalseOp
+}
+
 // addConjuncts recursively walks a scalar expression as long as it continues to
 // find nested And operators. It adds any conjuncts (ignoring True operators) to
 // the given FiltersExpr and returns true. If it finds a False or Null operator,
@@ -349,6 +361,24 @@ func (c *CustomFuncs) addConjuncts(
 		} else if t.Right.Op() == opt.NullOp {
 			filters = append(filters, c.f.ConstructFiltersItem(t.Left))
 		} else {
+			filters = append(filters, c.f.ConstructFiltersItem(t))
+		}
+
+	case *memo.IsExpr:
+		// Attempt to replace <expr> IS (True | False) with the left input. Note
+		// that this replacement may cause Null to be returned where the original
+		// expression returned False, because IS (True | False) returns False on a
+		// Null input. However, in this case the replacement is valid because Select
+		// and Join operators treat False and Null filter conditions the same way
+		// (no rows returned).
+		if t.Right.Op() == opt.TrueOp {
+			// <expr> IS True => <expr>
+			filters = append(filters, c.f.ConstructFiltersItem(t.Left))
+		} else if t.Right.Op() == opt.FalseOp {
+			// <expr> IS False => NOT <expr>
+			filters = append(filters, c.f.ConstructFiltersItem(c.f.ConstructNot(t.Left)))
+		} else {
+			// No replacement possible.
 			filters = append(filters, c.f.ConstructFiltersItem(t))
 		}
 

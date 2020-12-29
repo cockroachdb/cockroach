@@ -26,7 +26,7 @@ CREATE TABLE e
 ----
 
 # --------------------------------------------------
-# SimplifyFilters
+# SimplifySelectFilters
 # --------------------------------------------------
 norm expect=SimplifySelectFilters
 SELECT * FROM a WHERE Null
@@ -36,49 +36,6 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1-5)
-
-norm expect=SimplifyJoinFilters
-SELECT * FROM a INNER JOIN xy ON x=1 OR NULL
-----
-inner-join (cross)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── key: (1)
- ├── fd: ()-->(7,8), (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── select
- │    ├── columns: x:7!null y:8
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(7,8)
- │    ├── scan xy
- │    │    ├── columns: x:7!null y:8
- │    │    ├── key: (7)
- │    │    └── fd: (7)-->(8)
- │    └── filters
- │         └── x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
- └── filters (true)
-
-norm expect-not=SimplifyJoinFilters
-SELECT * FROM a INNER JOIN xy ON x=1 OR k=1
-----
-inner-join (cross)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
- ├── key: (1,7)
- ├── fd: (1)-->(2-5), (7)-->(8)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
- └── filters
-      └── (x:7 = 1) OR (k:1 = 1) [outer=(1,7)]
 
 norm expect=SimplifySelectFilters
 SELECT * FROM a WHERE i=1 AND Null
@@ -136,32 +93,85 @@ select
  └── filters
       └── (k:1 = 1) OR (i:2 = 2) [outer=(1,2)]
 
-norm expect=SimplifyJoinFilters
-SELECT * FROM a INNER JOIN xy ON (k=x AND i=y) AND true AND (f=3.5 AND s='foo')
+# Simplify IS True to its left input.
+norm expect=SimplifySelectFilters
+SELECT * FROM c WHERE a IS True
 ----
-inner-join (hash)
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:7!null y:8!null
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (7)
- ├── fd: ()-->(3,4), (1)-->(2,5), (7)-->(8), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
- ├── select
- │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
- │    ├── key: (1)
- │    ├── fd: ()-->(3,4), (1)-->(2,5)
- │    ├── scan a
- │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── filters
- │         ├── f:3 = 3.5 [outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
- │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- ├── scan xy
- │    ├── columns: x:7!null y:8
- │    ├── key: (7)
- │    └── fd: (7)-->(8)
+select
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
+ ├── fd: ()-->(1)
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
  └── filters
-      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      └── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+
+# Simplify IS False to the negation of its left input.
+norm expect=SimplifySelectFilters
+SELECT * FROM c WHERE a IS False
+----
+select
+ ├── columns: a:1!null b:2 c:3 d:4 e:5
+ ├── fd: ()-->(1)
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── filters
+      └── NOT a:1 [outer=(1), constraints=(/1: [/false - /false]; tight), fd=()-->(1)]
+
+# Simplify a deeply nested IS True.
+norm expect=SimplifySelectFilters
+Select * FROM c WHERE a AND (b AND (c AND (d AND (e IS True))))
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4!null e:5!null
+ ├── fd: ()-->(1-5)
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── filters
+      ├── a:1 [outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      ├── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      ├── c:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      ├── d:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+      └── e:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+
+# Don't simplify the IS because the IS expression is a projection, not a Select
+# filter.
+norm expect-not=SimplifySelectFilters
+Select a IS True FROM c WHERE b
+----
+project
+ ├── columns: "?column?":8!null
+ ├── select
+ │    ├── columns: a:1 b:2!null
+ │    ├── fd: ()-->(2)
+ │    ├── scan c
+ │    │    └── columns: a:1 b:2
+ │    └── filters
+ │         └── b:2 [outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+ └── projections
+      └── a:1 IS true [as="?column?":8, outer=(1)]
+
+# Don't simplify an IS NOT expression.
+norm expect-not=SimplifySelectFilters
+SELECT * FROM c WHERE a IS NOT True
+----
+select
+ ├── columns: a:1 b:2 c:3 d:4 e:5
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── filters
+      └── a:1 IS NOT true [outer=(1), constraints=(/1: [ - /false]; tight)]
+
+# Don't simplify the IS because its right argument is Null.
+norm expect-not=SimplifySelectFilters
+SELECT * FROM c WHERE a IS Null
+----
+select
+ ├── columns: a:1 b:2 c:3 d:4 e:5
+ ├── fd: ()-->(1)
+ ├── scan c
+ │    └── columns: a:1 b:2 c:3 d:4 e:5
+ └── filters
+      └── a:1 IS NULL [outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
 
 # --------------------------------------------------
 # ConsolidateSelectFilters

@@ -1481,7 +1481,7 @@ anti-join (lookup t.public.def)
       └── false [type=bool, constraints=(contradiction; tight)]
 
 # Regression test for #40460.
-opt
+opt disable=SimplifyJoinFilters
 SELECT
     *
 FROM
