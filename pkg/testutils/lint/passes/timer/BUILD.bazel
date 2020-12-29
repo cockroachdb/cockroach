@@ -16,7 +16,7 @@ go_test(
     name = "timer_test",
     srcs = ["timer_test.go"],
     deps = [
-        "//pkg/testutils/lint/passes/timer",
+        ":timer",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

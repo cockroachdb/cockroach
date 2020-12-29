@@ -17,7 +17,7 @@ go_test(
     name = "descriptormarshal_test",
     srcs = ["descriptormarshal_test.go"],
     deps = [
-        "//pkg/testutils/lint/passes/descriptormarshal",
+        ":descriptormarshal",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
