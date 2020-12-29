@@ -2080,6 +2080,175 @@ upsert partial_indexes
            ├── column3:7 = 'write-only' [as=partial_index_put4:19]
            └── c:10 = 'write-only' [as=partial_index_del4:20]
 
+# Project false PUT and DEL columns when the index is guaranteed to not require
+# an update.
+exec-ddl
+CREATE TABLE partial_index_project_false (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    INDEX (b) WHERE c > 0
+)
+----
+
+build
+UPSERT INTO partial_index_project_false (a, d) VALUES (1, 2)
+----
+upsert partial_index_project_false
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 c:11 d:12
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column8:8 => b:2
+ │    ├── column8:8 => c:3
+ │    └── column2:7 => d:4
+ ├── update-mapping:
+ │    └── column2:7 => d:4
+ ├── partial index put columns: partial_index_put1:17
+ ├── partial index del columns: partial_index_put1:17
+ └── project
+      ├── columns: partial_index_put1:17!null column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 upsert_a:14 upsert_b:15 upsert_c:16
+      ├── project
+      │    ├── columns: upsert_a:14 upsert_b:15 upsert_c:16 column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:6!null column2:7!null column8:8
+      │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    └── (1, 2)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=column8:8]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:7]
+      │    │    │         │    └── column2:7
+      │    │    │         └── first-agg [as=column8:8]
+      │    │    │              └── column8:8
+      │    │    ├── scan partial_index_project_false
+      │    │    │    ├── columns: a:9!null b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    │    │    └── partial index predicates
+      │    │    │         └── secondary: filters
+      │    │    │              └── c:11 > 0
+      │    │    └── filters
+      │    │         └── column1:6 = a:9
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:6 ELSE a:9 END [as=upsert_a:14]
+      │         ├── CASE WHEN a:9 IS NULL THEN column8:8 ELSE b:10 END [as=upsert_b:15]
+      │         └── CASE WHEN a:9 IS NULL THEN column8:8 ELSE c:11 END [as=upsert_c:16]
+      └── projections
+           └── false [as=partial_index_put1:17]
+
+build
+INSERT INTO partial_index_project_false (a, d) VALUES (1, 2) ON CONFLICT (a) DO UPDATE SET d = 3
+----
+upsert partial_index_project_false
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 c:11 d:12
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column8:8 => b:2
+ │    ├── column8:8 => c:3
+ │    └── column2:7 => d:4
+ ├── update-mapping:
+ │    └── upsert_d:18 => d:4
+ ├── partial index put columns: partial_index_put1:19
+ ├── partial index del columns: partial_index_put1:19
+ └── project
+      ├── columns: partial_index_put1:19!null column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 d_new:14!null upsert_a:15 upsert_b:16 upsert_c:17 upsert_d:18!null
+      ├── project
+      │    ├── columns: upsert_a:15 upsert_b:16 upsert_c:17 upsert_d:18!null column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 d_new:14!null
+      │    ├── project
+      │    │    ├── columns: d_new:14!null column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8
+      │    │    │    │    ├── grouping columns: column1:6!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │    │    └── (1, 2)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=column8:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column2:7]
+      │    │    │    │         │    └── column2:7
+      │    │    │    │         └── first-agg [as=column8:8]
+      │    │    │    │              └── column8:8
+      │    │    │    ├── scan partial_index_project_false
+      │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         └── secondary: filters
+      │    │    │    │              └── c:11 > 0
+      │    │    │    └── filters
+      │    │    │         └── column1:6 = a:9
+      │    │    └── projections
+      │    │         └── 3 [as=d_new:14]
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:6 ELSE a:9 END [as=upsert_a:15]
+      │         ├── CASE WHEN a:9 IS NULL THEN column8:8 ELSE b:10 END [as=upsert_b:16]
+      │         ├── CASE WHEN a:9 IS NULL THEN column8:8 ELSE c:11 END [as=upsert_c:17]
+      │         └── CASE WHEN a:9 IS NULL THEN column2:7 ELSE d_new:14 END [as=upsert_d:18]
+      └── projections
+           └── false [as=partial_index_put1:19]
+
+# Do not project false PUT and DEL columns for an INSERT ON CONFLICT DO NOTHING.
+build
+INSERT INTO partial_index_project_false (a, d) VALUES (1, 2) ON CONFLICT DO NOTHING
+----
+insert partial_index_project_false
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column8:8 => b:2
+ │    ├── column8:8 => c:3
+ │    └── column2:7 => d:4
+ ├── partial index put columns: partial_index_put1:14
+ └── project
+      ├── columns: partial_index_put1:14 column1:6!null column2:7!null column8:8
+      ├── upsert-distinct-on
+      │    ├── columns: column1:6!null column2:7!null column8:8
+      │    ├── grouping columns: column1:6!null
+      │    ├── project
+      │    │    ├── columns: column1:6!null column2:7!null column8:8
+      │    │    └── select
+      │    │         ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12
+      │    │         ├── left-join (hash)
+      │    │         │    ├── columns: column1:6!null column2:7!null column8:8 a:9 b:10 c:11 d:12
+      │    │         │    ├── project
+      │    │         │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │         │    │    ├── values
+      │    │         │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │         │    │    │    └── (1, 2)
+      │    │         │    │    └── projections
+      │    │         │    │         └── NULL::INT8 [as=column8:8]
+      │    │         │    ├── scan partial_index_project_false
+      │    │         │    │    ├── columns: a:9!null b:10 c:11 d:12
+      │    │         │    │    └── partial index predicates
+      │    │         │    │         └── secondary: filters
+      │    │         │    │              └── c:11 > 0
+      │    │         │    └── filters
+      │    │         │         └── column1:6 = a:9
+      │    │         └── filters
+      │    │              └── a:9 IS NULL
+      │    └── aggregations
+      │         ├── first-agg [as=column2:7]
+      │         │    └── column2:7
+      │         └── first-agg [as=column8:8]
+      │              └── column8:8
+      └── projections
+           └── column8:8 > 0 [as=partial_index_put1:14]
+
 # Columns referenced in the SET expression are ambiguous without a table name.
 # Is it the value of the column being inserted or the value of the column
 # currently in the table?

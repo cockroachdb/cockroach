@@ -1723,6 +1723,46 @@ update partial_indexes
            ├── c:7 = 'delete-only' [as=partial_index_put3:13]
            └── c:7 = 'write-only' [as=partial_index_put4:14]
 
+# Project false PUT and DEL columns when the index is guaranteed to not require
+# an update.
+exec-ddl
+CREATE TABLE partial_index_project_false (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    INDEX (b) WHERE c > 0
+)
+----
+
+build
+UPDATE partial_index_project_false SET d = d + 1 WHERE a = 1
+----
+update partial_index_project_false
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 d:9
+ ├── update-mapping:
+ │    └── d_new:11 => d:4
+ ├── partial index put columns: partial_index_put1:12
+ ├── partial index del columns: partial_index_put1:12
+ └── project
+      ├── columns: partial_index_put1:12!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 d_new:11
+      ├── project
+      │    ├── columns: d_new:11 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
+      │    │    ├── scan partial_index_project_false
+      │    │    │    ├── columns: a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    └── partial index predicates
+      │    │    │         └── secondary: filters
+      │    │    │              └── c:8 > 0
+      │    │    └── filters
+      │    │         └── a:6 = 1
+      │    └── projections
+      │         └── d:9 + 1 [as=d_new:11]
+      └── projections
+           └── false [as=partial_index_put1:12]
+
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
 exec-ddl

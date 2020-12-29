@@ -52,8 +52,15 @@ type mutationBuilder struct {
 	alias tree.TableName
 
 	// indexFetchCols is the set of columns that must be fetched in order to
-	// update the table's indexes. See setIndexFetchCols for more details.
+	// update the table's indexes. See
+	// setIndexFetchColsAndMutatingPartialIndexes for more details.
 	indexFetchCols opt.ColSet
+
+	// mutatingPartialIndexes is the set of partial index ordinals that may
+	// require updates due to the mutation. Any partial indexes that are
+	// guaranteed to not require updates are not included. This value is set in
+	// setIndexFetchColsAndMutatingPartialIndexes.
+	mutatingPartialIndexes cat.IndexOrdinalSet
 
 	// outScope contains the current set of columns that are in scope, as well as
 	// the output expression as it is incrementally built. Once the final mutation
@@ -925,7 +932,16 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 				continue
 			}
 
-			expr := mb.parsePartialIndexPredicateExpr(i)
+			var expr tree.Expr
+			if mb.mutatingPartialIndexes.Contains(i) {
+				expr = mb.parsePartialIndexPredicateExpr(i)
+			} else {
+				// If a partial index does not exist in mutatingPartialIndexes,
+				// it is guaranteed to not require updates during this mutation.
+				// Therefore, we can project false for both its PUT and DEL
+				// columns.
+				expr = tree.DBoolFalse
+			}
 
 			// Build synthesized PUT columns.
 			if putScope != nil {
@@ -955,14 +971,19 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 	}
 }
 
-// setIndexFetchCols populates the indexFetchCols field with the columns that
-// must be fetched in order to update the table's indexes. If reduce is true,
-// setIndexFetchCols attempts to reduce the set of columns by not including
-// columns for indexes that are guaranteed to not need updating. This can happen
-// when an UPDATE or UPSERT mutates columns in an isolated family and not
-// indexes by a secondary index. If reduce is false, the set of columns is the
-// union of the key columns of all indexes.
-func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
+// setIndexFetchColsAndMutatingPartialIndexes populates the indexFetchCols field
+// with the columns that must be fetched in order to update the table's indexes.
+// It also populates the mutatingPartialIndexes field with the ordinals of
+// partial indexes that may require updates due to the mutation.
+//
+// If updateColIDs is not empty, setIndexFetchCols attempts to reduce the set of
+// index fetch columns and mutating partial indexes by not including indexes
+// that are guaranteed to not need updating. This can happen when an UPDATE or
+// UPSERT mutates columns in an isolated family and not indexed by a secondary
+// index. If updateColIDs is empty, all indexes must be updated so the index
+// fetch columns is the union of the key columns of all indexes, and the
+// mutating partial indexes includes all partial indexes.
+func (mb *mutationBuilder) setIndexFetchColsAndMutatingPartialIndexes() {
 	tabMeta := mb.md.TableMeta(mb.tabID)
 	numIndexes := mb.tab.DeletableIndexCount()
 
@@ -989,9 +1010,15 @@ func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
 
 	var tableScope *scope
 	for i := 0; i < numIndexes; i++ {
-		// If reduce is false, add the key columns for all indexes.
-		if !reduce {
+		_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
+
+		// If there are no update cols, then every index must be updated.
+		// TODO(mgartner): This is not correct.
+		if mb.updateColIDs.IsEmpty() {
 			mb.indexFetchCols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+			if isPartialIndex {
+				mb.mutatingPartialIndexes.Add(i)
+			}
 			continue
 		}
 
@@ -1017,7 +1044,7 @@ func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
 		// trigger index changes.
 		indexCols := tabMeta.IndexColumnsMapVirtual(i)
 		indexAndPredCols := indexCols.Copy()
-		if _, isPartialIndex := tabMeta.Table.Index(i).Predicate(); isPartialIndex {
+		if isPartialIndex {
 			// Initialize the tableScope once, only if there is a partial index.
 			if tableScope == nil {
 				tableScope = mb.b.allocScope()
@@ -1032,6 +1059,12 @@ func (mb *mutationBuilder) setIndexFetchCols(reduce bool) {
 		}
 		if !indexAndPredCols.Intersects(updateCols) {
 			continue
+		}
+
+		// If the index is partial, add it to the list of partial indexes that
+		// require updates.
+		if isPartialIndex {
+			mb.mutatingPartialIndexes.Add(i)
 		}
 
 		// Always add index strict key columns, since these are needed to fetch

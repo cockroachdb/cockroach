@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // IndexOrdinal identifies an index (in the context of a Table).
@@ -22,6 +23,9 @@ type IndexOrdinal = int
 
 // IndexOrdinals identifies a list of indexes (in the context of a Table).
 type IndexOrdinals = []IndexOrdinal
+
+// IndexOrdinalSet identifies a set of indexes (in the context of a Table).
+type IndexOrdinalSet = util.FastIntSet
 
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary

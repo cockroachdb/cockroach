@@ -2076,27 +2076,27 @@ update partial_indexes
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: partial_index_put1:12 d_new:11 a:6!null d:9
+      ├── columns: partial_index_put1:12!null d_new:11 a:6!null d:9
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(6,9,11,12)
       ├── select
-      │    ├── columns: a:6!null b:7 d:9
+      │    ├── columns: a:6!null d:9
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    ├── fd: ()-->(6,7,9)
+      │    ├── fd: ()-->(6,9)
       │    ├── scan partial_indexes
-      │    │    ├── columns: a:6!null b:7 d:9
+      │    │    ├── columns: a:6!null d:9
       │    │    ├── partial index predicates
       │    │    │    └── secondary: filters
       │    │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
       │    │    ├── key: (6)
-      │    │    └── fd: (6)-->(7,9)
+      │    │    └── fd: (6)-->(9)
       │    └── filters
       │         └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
       └── projections
-           ├── b:7 > 1 [as=partial_index_put1:12, outer=(7)]
+           ├── false [as=partial_index_put1:12]
            └── d:9 + 1 [as=d_new:11, outer=(9), immutable]
 
 # Prune UPSERT fetch columns when the partial index indexes the column but
@@ -2118,20 +2118,20 @@ upsert partial_indexes
  ├── update-mapping:
  │    └── column2:7 => d:4
  ├── partial index put columns: partial_index_put1:18
- ├── partial index del columns: partial_index_del1:19
+ ├── partial index del columns: partial_index_put1:18
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: partial_index_put1:18 partial_index_del1:19 column1:6!null column2:7!null column8:8 column9:9 a:10 d:13
+      ├── columns: partial_index_put1:18!null column1:6!null column2:7!null column8:8 column9:9 a:10 d:13
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(6-10,13,18,19)
+      ├── fd: ()-->(6-10,13,18)
       ├── left-join (cross)
-      │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 d:13
+      │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 d:13
       │    ├── cardinality: [1 - 1]
       │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
-      │    ├── fd: ()-->(6-11,13)
+      │    ├── fd: ()-->(6-10,13)
       │    ├── values
       │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
       │    │    ├── cardinality: [1 - 1]
@@ -2139,23 +2139,22 @@ upsert partial_indexes
       │    │    ├── fd: ()-->(6-9)
       │    │    └── (1, 2, NULL, NULL)
       │    ├── select
-      │    │    ├── columns: a:10!null b:11 d:13
+      │    │    ├── columns: a:10!null d:13
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(10,11,13)
+      │    │    ├── fd: ()-->(10,13)
       │    │    ├── scan partial_indexes
-      │    │    │    ├── columns: a:10!null b:11 d:13
+      │    │    │    ├── columns: a:10!null d:13
       │    │    │    ├── partial index predicates
       │    │    │    │    └── secondary: filters
       │    │    │    │         └── b:11 > 1 [outer=(11), constraints=(/11: [/2 - ]; tight)]
       │    │    │    ├── key: (10)
-      │    │    │    └── fd: (10)-->(11,13)
+      │    │    │    └── fd: (10)-->(13)
       │    │    └── filters
       │    │         └── a:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
       │    └── filters (true)
       └── projections
-           ├── CASE WHEN a:10 IS NULL THEN column8:8 ELSE b:11 END > 1 [as=partial_index_put1:18, outer=(8,10,11)]
-           └── b:11 > 1 [as=partial_index_del1:19, outer=(11)]
+           └── false [as=partial_index_put1:18]
 
 # Do not prune DELETE fetch columns when the a partial index indexes the column
 # and neither the column nor the columns referenced in the partial index
