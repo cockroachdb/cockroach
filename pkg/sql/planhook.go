@@ -51,14 +51,6 @@ type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
 
 var planHooks []planHookFn
 
-// wrappedPlanHookFn is similar to planHookFn but returns an existing plan type.
-// Additionally, it takes a context.
-type wrappedPlanHookFn func(
-	context.Context, tree.Statement, PlanHookState,
-) (planNode, error)
-
-var wrappedPlanHooks []wrappedPlanHookFn
-
 func (p *planner) RunParams(ctx context.Context) runParams {
 	return runParams{ctx, p.ExtendedEvalContext(), p}
 }
