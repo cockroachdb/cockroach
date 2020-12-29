@@ -175,6 +175,22 @@ func (k Key) CutFront(numCols int) Key {
 	}
 }
 
+// CutBack returns the key with the last numCols values removed.
+// Example:
+//   '/1/2'.CutBack(1) = '/1'
+func (k Key) CutBack(numCols int) Key {
+	if numCols == 0 {
+		return k
+	}
+	if len(k.otherVals) < numCols {
+		return EmptyKey
+	}
+	return Key{
+		firstVal:  k.firstVal,
+		otherVals: k.otherVals[:len(k.otherVals)-numCols],
+	}
+}
+
 // IsNextKey returns true if:
 //  - k and other have the same length;
 //  - on all but the last column, k and other have the same values;
