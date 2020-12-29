@@ -537,6 +537,12 @@ func (*DropSchema) StatementType() StatementType { return DDL }
 func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
 
 // StatementType implements the Statement interface.
+func (*DropFunction) StatementType() StatementType { return DDL }
+
+// StatementTag implements the Statement interface.
+func (*DropFunction) StatementTag() string { return "DROP FUNCTION" }
+
+// StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1110,6 +1116,7 @@ func (n *CreateView) String() string                     { return AsString(n) }
 func (n *Deallocate) String() string                     { return AsString(n) }
 func (n *Delete) String() string                         { return AsString(n) }
 func (n *DropDatabase) String() string                   { return AsString(n) }
+func (n *DropFunction) String() string                   { return AsString(n) }
 func (n *DropIndex) String() string                      { return AsString(n) }
 func (n *DropOwnedBy) String() string                    { return AsString(n) }
 func (n *DropSchema) String() string                     { return AsString(n) }
