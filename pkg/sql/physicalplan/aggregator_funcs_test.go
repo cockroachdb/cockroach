@@ -417,6 +417,7 @@ func TestDistAggregationTable(t *testing.T) {
 	// Create a table with a few columns:
 	//  - random integer values from 0 to numRows
 	//  - random integer values (with some NULLs)
+	//  - random integer values (with some NULLs) within int32 range
 	//  - random bool value (mostly false)
 	//  - random bool value (mostly true)
 	//  - random decimals
@@ -424,13 +425,17 @@ func TestDistAggregationTable(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
-		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",
+		"k INT PRIMARY KEY, int1 INT, int2 INT, int3 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",
 		numRows,
 		func(row int) []tree.Datum {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
 				rowenc.RandDatum(rng, types.Int, true),
+				// Note that we use INT4 here, yet the table schema uses INT8 -
+				// this is ok since we want to limit the range of values but use
+				// the default INT type.
+				rowenc.RandDatum(rng, types.Int4, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
 				rowenc.RandDatum(rng, types.Decimal, false),
@@ -462,6 +467,12 @@ func TestDistAggregationTable(t *testing.T) {
 			// See if this column works with this function.
 			_, _, err := execinfrapb.GetAggregateInfo(fn, desc.Columns[colIdx].Type)
 			if err != nil {
+				continue
+			}
+			if fn == execinfrapb.AggregatorSpec_SUM_INT && colIdx == 2 {
+				// When using sum_int over int2 column we're likely to hit an
+				// integer out of range error since we insert random DInts into
+				// that column, so we'll skip such config.
 				continue
 			}
 			foundCol = true

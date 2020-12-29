@@ -1,7 +1,7 @@
 # LogicTest: 5node
 
 statement ok
-CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, _bool BOOL, _bytes BYTES, _bit BIT, PRIMARY KEY (a, b, c, d))
 
 # Split into ten parts.
 statement ok
@@ -27,6 +27,45 @@ NULL       /1       {1}       1
 /7         /8       {3}       3
 /8         /9       {4}       4
 /9         NULL     {5}       5
+
+# Verify that all aggregate functions that we expect to have multi-stage
+# execution do, in fact, get planned with 2 stages.
+query T
+EXPLAIN (DISTSQL) SELECT
+  b, -- any_not_null
+  avg(a),
+  bool_and(_bool),
+  bool_or(_bool),
+  count(a),
+  max(a),
+  min(a),
+  stddev(a),
+  sum(a),
+  sum_int(a),
+  variance(a),
+  xor_agg(_bytes),
+  count(*), -- count_rows
+  bit_and(_bit),
+  bit_or(_bit)
+FROM data GROUP BY b
+----
+distribution: full
+vectorized: true
+·
+• group
+│ group by: b
+│
+└── • scan
+      missing stats
+      table: data@primary
+      spans: FULL SCAN
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsV11v4jgUfd9fYfkprIyC88HXk5lCq0iQdALMdrRCkSEWjURjNglVq6r_fZVAgVDGzsh0nnghvsk9vtfn-FyJN5j-t4JdOHi4H_YcF2h9ZzwZfx_WwHgwHNxMwBwB-rzUaA2BOeergMahFuSrjxc82ccLvomzIvWJvmyfUVw80ywM2fN2uXn6eAbRLv2ZJhGNF6wIXngS0OVSC-avGUv32_6dF4yyXQNRtguL8lFWA7e-NwIhzSi4873pPfj2E8whgjEPmUufWAq7_0IMETQggiZE0III2nCG4DrhC5amPMlT3gqAE77AbgPBKF5vsvz1DMEFTxjsvsEsylYMduGEzlfMZzRkid6ACIYso9GqKJN3QdZJ9ESTV4jgeE3jtAvqOgY0DgEGPHtkCUTQ22RdQDAiBiI2Ik1EWnD2jiDfZIe6aUaXDHbxO6reW2-5TNiSZjzR7XJrJD9-z_0ZuN4kcKfDoUaMWt7jdKQRnK9uvKk72a2_ed4w6Ll9jZj70PN3UZEY-N4_Yy0PR72HHWrkuLvV-Lvfd25vP6LpKHD2ez94ftC7u9OIVWztTLaF7I8or2PXTvg4HHH-Ch5p-nhyOgxn7wfOjF9ydthnE_MkZAkLSzsVuwhYxY1PhU9pxXtajdLhzTKxVolYu5Ta3PPa2vPazle3jtsbBuNJvz_4oZFOcYHMMsWNQ96Pnu_03JtBKXNPP8Yl_rFxLAAucn0Whywprioghk5MBIiFALERIE0ESAsB0kaAdPLPCBDcyH_yZGzsUnCOwdYvr7d5WalcXudrHdsnmedrW6XauLrtcRXb67iuGxczvqS7oyvavBr_DGfKxsdX43-h8Y3q5jMqmc-o6-bFzCfp7uiatK7mO8OZsvmMq_m-0HxmdfOZlcxn1nXrYuaTdHd0TdpX853hTNl85tV8X2g-q7r5rErms-q6fTHzSbo7uiadq_nOcKZsPutqvj_0f_OMED5L1zxOWaV_k41cShYu2Vb3lG-SBbtP-KIosw29Ale8CFmabb_ibeDE2095g8dgfArGx2CjBMa_B26qgDsqYKzUN7bFaEPItykGm2KxmmK1LCHaFoNtFanFYInUYrBEajFYJrUELZG6qSJ1Swhui8Vqq4glBkvEEoMlYonBMrEkaIlYHRWxsGSKysao2hxVG6Rqk1RxlKrNUqw0TLFkmloS0T6N098STYyWiSZGy0QTo6WiSeAy0T4NVaFos_e__g8AAP__dlZT8w==
+
+statement ok
+ALTER TABLE data DROP COLUMN _bool;
+ALTER TABLE data DROP COLUMN _bytes;
+ALTER TABLE data DROP COLUMN _bit;
 
 query T
 EXPLAIN (DISTSQL) SELECT sum(a) FROM data
