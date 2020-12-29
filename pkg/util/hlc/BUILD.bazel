@@ -19,7 +19,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
-        "@org_golang_google_protobuf//proto",
     ],
 )
 
