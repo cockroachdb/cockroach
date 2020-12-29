@@ -522,25 +522,8 @@ func (b *Builder) buildScan(
 
 		// Add the partial indexes after constructing the scan so we can use the
 		// logical properties of the scan to fully normalize the index
-		// predicates. Partial index predicates are only added if the outScope
-		// contains all the table's ordinary columns. If it does not, partial
-		// index predicates cannot be built because they may reference columns
-		// not in outScope. In the most common case, the outScope has the same
-		// number of columns as the table and we can skip checking that each
-		// ordinary column exists in outScope.
-		containsAllOrdinaryTableColumns := true
-		if len(outScope.cols) != tab.ColumnCount() {
-			for i := 0; i < tab.ColumnCount(); i++ {
-				col := tab.Column(i)
-				if col.Kind() == cat.Ordinary && !outScope.colSet().Contains(tabID.ColumnID(col.Ordinal())) {
-					containsAllOrdinaryTableColumns = false
-					break
-				}
-			}
-		}
-		if containsAllOrdinaryTableColumns {
-			b.addPartialIndexPredicatesForTable(tabMeta, outScope)
-		}
+		// predicates.
+		b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
@@ -682,7 +665,12 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 //
 // The predicates are used as "known truths" about table data. Any predicates
 // containing non-immutable operators are omitted.
-func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, tableScope *scope) {
+//
+// scan is an optional argument that is a Scan expression on the table. If scan
+// outputs all the ordinary columns in the table, we avoid constructing a new
+// scan. A scan and its logical properties are required in order to fully
+// normalize the partial index predicates.
+func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
 	tab := tabMeta.Table
 
 	// Find the first partial index.
@@ -698,6 +686,25 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, tabl
 	// predicates.
 	if indexOrd == numIndexes {
 		return
+	}
+
+	// Construct a scan as the tableScope expr so that logical properties of the
+	// scan can be used to fully normalize the index predicate.
+	tableScope := b.allocScope()
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+
+	// If the optional scan argument was provided and it outputs all of the
+	// ordinary table columns, we use it as tableScope.expr. Otherwise, we must
+	// construct a new scan. Attaching a scan to tableScope.expr is required to
+	// fully normalize the partial index predicates with logical properties of
+	// the scan.
+	if scan != nil && tableScope.colSet().SubsetOf(scan.Relational().OutputCols) {
+		tableScope.expr = scan
+	} else {
+		tableScope.expr = b.factory.ConstructScan(&memo.ScanPrivate{
+			Table: tabMeta.MetaID,
+			Cols:  tableScope.colSet(),
+		})
 	}
 
 	// Skip to the first partial index we found above.

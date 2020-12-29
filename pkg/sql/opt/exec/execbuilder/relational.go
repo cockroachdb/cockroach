@@ -547,7 +547,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 
-	if !b.disableTelemetry && scan.UsesPartialIndex(md) {
+	if !b.disableTelemetry && scan.PartialIndexPredicate(md) != nil {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
