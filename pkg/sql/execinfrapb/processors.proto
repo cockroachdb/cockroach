@@ -124,6 +124,7 @@ message ProcessorCoreUnion {
   optional StreamIngestionDataSpec streamIngestionData = 35;
   optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
   optional ParquetWriterSpec ParquetWriter = 37;
+  optional HashGroupJoinerSpec hashGroupJoiner = 38;
 
   reserved 6, 12;
 }

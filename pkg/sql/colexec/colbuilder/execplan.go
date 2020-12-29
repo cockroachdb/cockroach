@@ -254,6 +254,7 @@ var (
 	errExperimentalWrappingProhibited = errors.New("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=experimental_always")
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
 	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
+	errHashGroupJoiner                = errors.New("core.HashGroupJoiner is not supported")
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSpec) error {
@@ -315,6 +316,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.Filterer != nil:
 	case spec.Core.StreamIngestionData != nil:
 	case spec.Core.StreamIngestionFrontier != nil:
+	case spec.Core.HashGroupJoiner != nil:
+		return errHashGroupJoiner
 	default:
 		return errors.AssertionFailedf("unexpected processor core %q", spec.Core)
 	}
