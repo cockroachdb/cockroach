@@ -185,6 +185,16 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 		},
 	},
 
+	execinfrapb.AggregatorSpec_SUM_INT: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM_INT},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
 	execinfrapb.AggregatorSpec_XOR_AGG: {
 		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_XOR_AGG},
 		FinalStage: []FinalStageInfo{
