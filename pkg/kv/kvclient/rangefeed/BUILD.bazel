@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
@@ -38,9 +39,11 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/encoding",
@@ -52,5 +55,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )

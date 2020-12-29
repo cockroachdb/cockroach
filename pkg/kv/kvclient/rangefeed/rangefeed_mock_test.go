@@ -12,11 +12,18 @@ package rangefeed_test
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -25,6 +32,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 type mockClient struct {
@@ -100,7 +108,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		require.NotNil(t, f)
 		rows := make(chan *roachpb.RangeFeedValue)
 
@@ -218,7 +226,7 @@ func TestRangeFeedMock(t *testing.T) {
 				}
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", sp, initialTS, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -266,7 +274,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return ctx.Err()
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -285,7 +293,7 @@ func TestRangeFeedMock(t *testing.T) {
 			EndKey: roachpb.Key("c"),
 		}
 		stopper.Stop(ctx)
-		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{})
+		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
 		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
@@ -324,5 +332,53 @@ func TestRangeFeedMock(t *testing.T) {
 		require.NoError(t, err)
 		<-done
 		r.Close()
+	})
+}
+
+// TestBackoffOnRangefeedFailure ensures that the backoff occurs when a
+// rangefeed fails. It observes this indirectly by looking at logs.
+func TestBackoffOnRangefeedFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var called int64
+	const timesToFail = 3
+	rpcKnobs := rpc.ContextTestingKnobs{
+		StreamClientInterceptor: func(
+			target string, class rpc.ConnectionClass,
+		) grpc.StreamClientInterceptor {
+			return func(
+				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
+			) (stream grpc.ClientStream, err error) {
+				if strings.Contains(method, "RangeFeed") &&
+					atomic.AddInt64(&called, 1) <= timesToFail {
+					return nil, errors.Errorf("boom")
+				}
+				return streamer(ctx, desc, cc, method, opts...)
+			}
+		},
+	}
+	ctx := context.Background()
+	var seen int64
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ContextTestingKnobs: rpcKnobs,
+				},
+				RangeFeed: &rangefeed.TestingKnobs{
+					OnRangefeedRestart: func() {
+						atomic.AddInt64(&seen, 1)
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	testutils.SucceedsSoon(t, func() error {
+		if n := atomic.LoadInt64(&seen); n < timesToFail {
+			return errors.Errorf("seen %d, waiting for %d", n, timesToFail)
+		}
+		return nil
 	})
 }

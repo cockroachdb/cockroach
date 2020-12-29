@@ -64,6 +64,7 @@ go_library(
         "//pkg/kv/kvclient",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvtenant",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/container",
         "//pkg/kv/kvserver/kvserverbase",
