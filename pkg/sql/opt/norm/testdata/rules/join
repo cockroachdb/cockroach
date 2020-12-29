@@ -25,6 +25,10 @@ exec-ddl
 CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
 
+exec-ddl
+CREATE TABLE booleans(a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
+----
+
 norm
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
 ----
@@ -67,20 +71,197 @@ left-join (hash)
       └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
-# DetectJoinContradiction
+# SimplifyJoinFilters
 # --------------------------------------------------
 
-norm expect=DetectJoinContradiction
-SELECT * FROM a INNER JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
+norm expect=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON x=1 OR NULL
 ----
-values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-5,7,8)
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: ()-->(7,8), (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── select
+ │    ├── columns: x:7!null y:8
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7,8)
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── filters
+ │         └── x:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ └── filters (true)
 
-norm expect=DetectJoinContradiction
-SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
+norm expect=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON (k=x AND i=y) AND true AND (f=3.5 AND s='foo')
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5 x:7!null y:8!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── key: (7)
+ ├── fd: ()-->(3,4), (1)-->(2,5), (7)-->(8), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+ ├── select
+ │    ├── columns: k:1!null i:2 f:3!null s:4!null j:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3,4), (1)-->(2,5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         ├── f:3 = 3.5 [outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── i:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+norm expect-not=SimplifyJoinFilters
+SELECT * FROM a INNER JOIN xy ON x=1 OR k=1
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7!null y:8
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-5), (7)-->(8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      └── (x:7 = 1) OR (k:1 = 1) [outer=(1,7)]
+
+# Inner join case. Simplify IS True.
+norm expect=SimplifyJoinFilters
+SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS True
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2 a:4!null b:5 c:6 d:7 e:8
+ ├── fd: ()-->(4), (1)-->(2)
+ ├── select
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── scan xy
+ │    │    ├── columns: x:1!null y:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    └── filters
+ │         └── x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+ ├── select
+ │    ├── columns: a:4!null b:5 c:6 d:7 e:8
+ │    ├── fd: ()-->(4)
+ │    ├── scan booleans
+ │    │    └── columns: a:4 b:5 c:6 d:7 e:8
+ │    └── filters
+ │         └── a:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── filters (true)
+
+# Inner join case. Simplify is False.
+norm expect=SimplifyJoinFilters
+SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS False
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2 a:4 b:5 c:6 d:7 e:8
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan booleans
+ │    └── columns: a:4 b:5 c:6 d:7 e:8
+ └── filters
+      └── (NOT a:4) OR (x:1 <= 0) [outer=(1,4)]
+
+# Left join case. Simplify IS True.
+norm expect=SimplifyJoinFilters
+SELECT * FROM xy LEFT JOIN booleans ON (a AND x > 0) IS True
+----
+left-join (cross)
+ ├── columns: x:1!null y:2 a:4 b:5 c:6 d:7 e:8
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── select
+ │    ├── columns: a:4!null b:5 c:6 d:7 e:8
+ │    ├── fd: ()-->(4)
+ │    ├── scan booleans
+ │    │    └── columns: a:4 b:5 c:6 d:7 e:8
+ │    └── filters
+ │         └── a:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+ └── filters
+      └── x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+
+# Full join case. Simplify IS True.
+norm expect=SimplifyJoinFilters
+SELECT * FROM xy FULL JOIN booleans ON (a AND x > 0) IS True
+----
+full-join (cross)
+ ├── columns: x:1 y:2 a:4 b:5 c:6 d:7 e:8
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan booleans
+ │    └── columns: a:4 b:5 c:6 d:7 e:8
+ └── filters
+      ├── a:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+      └── x:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+
+# Do not simplify IS NOT (when inputs are nullable).
+norm expect-not=SimplifyJoinFilters
+SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS NOT True
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2 a:4 b:5 c:6 d:7 e:8
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan booleans
+ │    └── columns: a:4 b:5 c:6 d:7 e:8
+ └── filters
+      └── (a:4 AND (x:1 > 0)) IS NOT true [outer=(1,4)]
+
+# Do not simplify the IS because the right argument is Null (vs True or False).
+norm expect-not=SimplifyJoinFilters
+SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS Null
+----
+inner-join (cross)
+ ├── columns: x:1!null y:2 a:4 b:5 c:6 d:7 e:8
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1!null y:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan booleans
+ │    └── columns: a:4 b:5 c:6 d:7 e:8
+ └── filters
+      └── (a:4 AND (x:1 > 0)) IS NULL [outer=(1,4)]
+
+# Regression test for #54717. SimplifyJoinFilters should not simplify
+# contradictions. Doing so can split the filter expressions into two
+# FiltersItems such that they are no longer considered a contradiction, and
+# DetectJoinContradiction does not fire.
+norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
+SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
 left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7 y:8
@@ -98,12 +279,21 @@ left-join (cross)
  │    └── fd: ()-->(7,8)
  └── filters (true)
 
-# Regression test for #54717. SimplifyJoinFilters should not simplify
-# contradictions. Doing so can split the filter expressions into two
-# FiltersItems such that they are no longer considered a contradiction, and
-# DetectJoinContradiction does not fire.
-norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
-SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
+# --------------------------------------------------
+# DetectJoinContradiction
+# --------------------------------------------------
+
+norm expect=DetectJoinContradiction
+SELECT * FROM a INNER JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
+----
+values
+ ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:7!null y:8!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5,7,8)
+
+norm expect=DetectJoinContradiction
+SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
 left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7 y:8
@@ -2596,7 +2786,7 @@ project
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality
 # --------------------------------------------------
-norm expect=SimplifyJoinNotNullEquality
+norm expect=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS True
 ----
 inner-join (hash)
@@ -2615,7 +2805,7 @@ inner-join (hash)
  └── filters
       └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
-norm expect=SimplifyJoinNotNullEquality
+norm expect=SimplifyJoinNotNullEquality disable=SimplifyJoinFilters
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS False
 ----
 inner-join (cross)
@@ -2744,7 +2934,7 @@ inner-join (hash)
 
 # Don't trigger rule when one of the variables is nullable.
 norm expect-not=SimplifyJoinNotNullEquality
-SELECT * FROM a INNER JOIN b ON (a.k=b.y) IS True AND (a.i=b.x) IS False
+SELECT * FROM a INNER JOIN b ON (a.k=b.y) IS Null AND (a.i=b.x) IS NOT False
 ----
 inner-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:7!null y:8
@@ -2759,8 +2949,8 @@ inner-join (cross)
  │    ├── key: (7)
  │    └── fd: (7)-->(8)
  └── filters
-      ├── (k:1 = y:8) IS true [outer=(1,8)]
-      └── (i:2 = x:7) IS false [outer=(2,7)]
+      ├── (k:1 = y:8) IS NULL [outer=(1,8)]
+      └── (i:2 = x:7) IS NOT false [outer=(2,7)]
 
 # --------------------------------------------------
 # ExtractJoinEqualities
