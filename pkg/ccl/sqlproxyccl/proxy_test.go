@@ -216,6 +216,47 @@ func TestFailedConnection(t *testing.T) {
 	require.Equal(t, int64(2), s.metrics.RoutingErrCount.Count())
 }
 
+func TestUnexpectedError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up a Server whose FrontendAdmitter function always errors with a
+	// non-CodeError error.
+	ctx := context.Background()
+	s := NewServer(Options{
+		FrontendAdmitter: func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+			return nil, nil, errors.New("unexpected error")
+		},
+	})
+	const listenAddress = "127.0.0.1:0"
+	ln, err := net.Listen("tcp", listenAddress)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = s.Serve(ln)
+	}()
+	defer func() {
+		_ = ln.Close()
+		wg.Wait()
+	}()
+
+	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&connect_timeout=5", ln.Addr().String())
+
+	// Time how long it takes for pgx.Connect to return. If the proxy handles
+	// errors appropriately, pgx.Connect should return near immediately
+	// because the server should close the connection. If not, it may take up
+	// to the 5s connect_timeout for pgx.Connect to give up.
+	start := timeutil.Now()
+	_, err = pgx.Connect(ctx, u)
+	require.Error(t, err)
+	t.Log(err)
+	elapsed := timeutil.Since(start)
+	if elapsed >= 5*time.Second {
+		t.Errorf("pgx.Connect took %s to error out", elapsed)
+	}
+}
+
 func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
