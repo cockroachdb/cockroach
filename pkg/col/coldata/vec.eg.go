@@ -19,6 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+	_ apd.Context
+	_ duration.Duration
+)
+
 func (m *memColumn) Append(args SliceArgs) {
 	switch m.CanonicalTypeFamily() {
 	case types.BoolFamily:
