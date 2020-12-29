@@ -164,7 +164,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				return pErr
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.WriteTimestamp.Add(20, 0), // see UpdateObservedTimestamp
+			expRefreshTS: txn.WriteTimestamp.Add(20, 0).WithSynthetic(false), // see UpdateObservedTimestamp
 		},
 		{
 			pErr: func() *roachpb.Error {

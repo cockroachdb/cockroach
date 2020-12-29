@@ -39,11 +39,11 @@ type EngineKey struct {
 }
 
 const (
-	engineKeyNoVersion                         = 0
-	engineKeyVersionWallTimeLen                = 8
-	engineKeyVersionWallAndLogicalTimeLen      = 12
-	engineKeyVersionWallLogicalAndFlagsTimeLen = 13
-	engineKeyVersionLockTableLen               = 17
+	engineKeyNoVersion                             = 0
+	engineKeyVersionWallTimeLen                    = 8
+	engineKeyVersionWallAndLogicalTimeLen          = 12
+	engineKeyVersionWallLogicalAndSyntheticTimeLen = 13
+	engineKeyVersionLockTableLen                   = 17
 )
 
 // Format implements the fmt.Formatter interface
@@ -131,7 +131,7 @@ func (k EngineKey) IsMVCCKey() bool {
 	return l == engineKeyNoVersion ||
 		l == engineKeyVersionWallTimeLen ||
 		l == engineKeyVersionWallAndLogicalTimeLen ||
-		l == engineKeyVersionWallLogicalAndFlagsTimeLen
+		l == engineKeyVersionWallLogicalAndSyntheticTimeLen
 }
 
 // IsLockTableKey returns true if the key can be decoded as a LockTableKey.
@@ -150,10 +150,10 @@ func (k EngineKey) ToMVCCKey() (MVCCKey, error) {
 	case engineKeyVersionWallAndLogicalTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
-	case engineKeyVersionWallLogicalAndFlagsTimeLen:
+	case engineKeyVersionWallLogicalAndSyntheticTimeLen:
 		key.Timestamp.WallTime = int64(binary.BigEndian.Uint64(k.Version[0:8]))
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
-		key.Timestamp.Flags = uint32(k.Version[12])
+		key.Timestamp.Synthetic = k.Version[12] != 0
 	default:
 		return MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
 	}

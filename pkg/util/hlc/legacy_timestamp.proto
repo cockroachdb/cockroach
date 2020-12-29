@@ -30,17 +30,15 @@ message LegacyTimestamp {
   // skew)/(minimal ns between events) and nearly impossible to
   // overflow.
   optional int32 logical = 2 [(gogoproto.nullable) = false];
-  // A collection of bit flags that provide details about the timestamp
-  // and its meaning. The data type is a uint32, but the number of flags
-  // is limited to 8 so that the flags can be encoded into a single byte.
+  // Indicates that the Timestamp did not come from an HLC clock somewhere
+  // in the system and, therefore, does not have the ability to update a
+  // peer's HLC clock. If set to true, the "synthetic timestamp" may be
+  // arbitrarily disconnected from real time.
   //
-  // Flags do not affect the sort order of Timestamps. However, they are
-  // considered when performing structural equality checks (e.g. using the
-  // == operator). Consider use of the EqOrdering method when testing for
-  // equality.
+  // See the commentary on Timestamp.synthetic for more information.
   //
-  // The field is nullable so that it is not serialized when no flags are
-  // set. This ensures that the timestamp encoding does not change across
-  // nodes that are and are not aware of this field.
-  optional uint32 flags = 3;
+  // The field is nullable so that it is not serialized when set to false.
+  // This ensures that the timestamp encoding does not change across nodes
+  // that are and are not aware of this field.
+  optional bool synthetic = 3;
 }

@@ -63,11 +63,15 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
 			m.Txn = nil                 // never populated below Raft
+			m.Timestamp.Synthetic = nil // never populated below Raft
+			if m.MergeTimestamp != nil {
+				m.MergeTimestamp.Synthetic = nil // never populated below Raft
+			}
 			m.TxnDidNotUpdateMeta = nil // never populated below Raft
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 11599955036265189084,
+		populatedSum: 12366000535951165621,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -124,10 +128,14 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	},
 	reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
+			m := enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
+			if m.MergeTimestamp != nil {
+				m.MergeTimestamp.Synthetic = nil // never populated below Raft
+			}
+			return m
 		},
 		emptySum:     14695981039346656037,
-		populatedSum: 834545685817460463,
+		populatedSum: 6109178572734990978,
 	},
 }
 

@@ -545,7 +545,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 						to = nil
 					}
 
-					ts := start.Add(int64(j), 100)
+					ts := start.Add(int64(j), 100).WithSynthetic(false)
 					if useClock {
 						ts = clock.Now()
 					}

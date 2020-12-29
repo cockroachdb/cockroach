@@ -697,8 +697,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
-	plus10 := origTS.Add(10, 10)
-	plus20 := origTS.Add(20, 0)
+	plus10 := origTS.Add(10, 10).WithSynthetic(false)
+	plus20 := origTS.Add(20, 0).WithSynthetic(false)
 	testCases := []struct {
 		// The test's name.
 		name             string

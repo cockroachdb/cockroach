@@ -59,7 +59,7 @@ func DecodeKey(encodedKey []byte) (key []byte, timestamp hlc.Timestamp, _ error)
 	case 13:
 		timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
 		timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
-		timestamp.Flags = uint32(ts[12])
+		timestamp.Synthetic = ts[12] != 0
 	default:
 		return nil, timestamp, errors.Errorf(
 			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)

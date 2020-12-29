@@ -822,7 +822,7 @@ func (s *bufferSink) EmitRow(
 		{Datum: tree.DNull}, // resolved span
 		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},     // key
-		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},   //value
+		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},   // value
 	})
 	return nil
 }

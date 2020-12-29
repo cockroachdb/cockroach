@@ -77,12 +77,12 @@ const (
 // The keys encoded into the batch are MVCC keys: a string key with a timestamp
 // suffix. MVCC keys are encoded as:
 //
-//   <key>[<wall_time>[<logical>[<flags>]]]<#timestamp-bytes>
+//   <key>[<wall_time>[<logical>[<synthetic>]]]<#timestamp-bytes>
 //
-// The <wall_time>, <logical>, and <flags> portions of the key are encoded as
-// 64-bit, 32-bit, and 8-bit big-endian integers, respectively. A custom RocksDB
-// comparator is used to maintain the desired ordering as these keys do not sort
-// lexicographically correctly.
+// The <wall_time>, <logical>, and <synthetic> portions of the key are encoded
+// as 64-bit, 32-bit, and 8-bit big-endian integers, respectively. A custom
+// RocksDB comparator is used to maintain the desired ordering as these keys do
+// not sort lexicographically correctly.
 //
 // TODO(bilal): This struct exists mostly as a historic artifact. Transition the
 // remaining few test uses of this struct over to pebble.Batch, and remove it
@@ -145,7 +145,7 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 		timestampSentinelLen = 1
 		walltimeEncodedLen   = 8
 		logicalEncodedLen    = 4
-		flagsEncodedLen      = 1
+		syntheticEncodedLen  = 1
 	)
 
 	copy(buf, key.Key)
@@ -157,13 +157,13 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 		pos += timestampSentinelLen
 		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
 		pos += walltimeEncodedLen
-		if key.Timestamp.Logical != 0 || key.Timestamp.Flags != 0 {
+		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
 			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
 			pos += logicalEncodedLen
 		}
-		if key.Timestamp.Flags != 0 {
-			buf[pos] = uint8(key.Timestamp.Flags)
-			pos += flagsEncodedLen
+		if key.Timestamp.Synthetic {
+			buf[pos] = 1
+			pos += syntheticEncodedLen
 		}
 	}
 	buf[len(buf)-1] = byte(timestampLength)

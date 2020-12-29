@@ -173,18 +173,18 @@ func (k MVCCKey) Len() int {
 		timestampSentinelLen      = 1
 		walltimeEncodedLen        = 8
 		logicalEncodedLen         = 4
-		flagsEncodedLen           = 1
+		syntheticEncodedLen       = 1
 		timestampEncodedLengthLen = 1
 	)
 
 	n := len(k.Key) + timestampEncodedLengthLen
 	if !k.Timestamp.IsEmpty() {
 		n += timestampSentinelLen + walltimeEncodedLen
-		if k.Timestamp.Logical != 0 || k.Timestamp.Flags != 0 {
+		if k.Timestamp.Logical != 0 || k.Timestamp.Synthetic {
 			n += logicalEncodedLen
 		}
-		if k.Timestamp.Flags != 0 {
-			n += flagsEncodedLen
+		if k.Timestamp.Synthetic {
+			n += syntheticEncodedLen
 		}
 	}
 	return n
@@ -1677,7 +1677,7 @@ func mvccPutInternal(
 			txnMeta = &txn.TxnMeta
 			// If we bumped the WriteTimestamp, we update both the TxnMeta and the
 			// MVCCMetadata.Timestamp.
-			if txnMeta.WriteTimestamp.Less(writeTimestamp) {
+			if txnMeta.WriteTimestamp != writeTimestamp {
 				txnMetaCpy := *txnMeta
 				txnMetaCpy.WriteTimestamp.Forward(writeTimestamp)
 				txnMeta = &txnMetaCpy
