@@ -1061,6 +1061,11 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
+	// Add the partial index predicate expressions to the table metadata.
+	// These expressions are used to prune fetch columns during
+	// normalization.
+	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */, true /* includeDeletable */)
+
 	// Project partial index PUT and DEL boolean columns.
 	//
 	// In some cases existing rows may not be fetched for an UPSERT (see
