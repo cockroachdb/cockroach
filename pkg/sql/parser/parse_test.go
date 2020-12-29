@@ -445,7 +445,15 @@ func TestParse(t *testing.T) {
 		{`DROP TYPE IF EXISTS db.sc.a, sc.a`},
 		{`DROP TYPE db.sc.a, sc.a CASCADE`},
 		{`DROP TYPE IF EXISTS db.sc.a, sc.a CASCADE`},
-		{`DROP TYPE IF EXISTS db.sc.a, sc.a RESTRICT`},
+
+		{`DROP FUNCTION a`},
+		{`DROP FUNCTION a, b, c`},
+		{`DROP FUNCTION db.sc.a, sc.a`},
+		{`DROP FUNCTION IF EXISTS db.sc.a, sc.a`},
+		{`DROP FUNCTION db.sc.a, sc.a CASCADE`},
+		{`DROP FUNCTION IF EXISTS db.sc.a, sc.a CASCADE`},
+		{`DROP FUNCTION IF EXISTS db.sc.a, sc.a RESTRICT`},
+		{`DROP FUNCTION IF EXISTS db.sc.a, sc.a RESTRICT`},
 
 		{`DELETE FROM a`},
 		{`EXPLAIN DELETE FROM a`},
