@@ -660,7 +660,9 @@ func (s *sqlServer) preStart(
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
-	// components can properly route to KV nodes.
+	// components can properly route to KV nodes. The Start method will block
+	// until a connection is established to the cluster and its ID has been
+	// determined.
 	if s.tenantConnect != nil {
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
