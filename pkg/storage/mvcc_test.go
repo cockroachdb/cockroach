@@ -422,7 +422,7 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 			if err := MVCCPut(
 				context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil,
 			); !testutils.IsError(
-				err, "write at timestamp 0.000000001,0 too old; wrote at 0.000000003,1",
+				err, "write at timestamp 0.000000001,0\\? too old; wrote at 0.000000003,1\\?",
 			) {
 				t.Fatal(err)
 			}

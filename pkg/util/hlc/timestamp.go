@@ -15,13 +15,11 @@ import (
 	"math"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 // Timestamp constant values.
@@ -54,17 +52,6 @@ func (t Timestamp) LessEq(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical <= s.Logical)
 }
 
-var flagStrings = map[TimestampFlag]string{
-	TimestampFlag_SYNTHETIC: "syn",
-}
-var flagStringsInverted = func() map[string]TimestampFlag {
-	m := make(map[string]TimestampFlag)
-	for k, v := range flagStrings {
-		m[v] = k
-	}
-	return m
-}()
-
 // String implements the fmt.Formatter interface.
 func (t Timestamp) String() string {
 	// The following code was originally written as
@@ -72,7 +59,7 @@ func (t Timestamp) String() string {
 	// The main problem with the original code was that it would put
 	// a negative sign in the middle (after the decimal point) if
 	// the value happened to be negative.
-	buf := make([]byte, 0, 20)
+	buf := make([]byte, 0, 21)
 
 	w := t.WallTime
 	if w == 0 {
@@ -114,20 +101,11 @@ func (t Timestamp) String() string {
 	}
 	buf = strconv.AppendInt(buf, int64(t.Logical), 10)
 
-	if t.Flags != 0 {
-		buf = append(buf, '[')
-		comma := false
-		for i := 0; i < 8; i++ {
-			f := TimestampFlag(1 << i)
-			if t.IsFlagSet(f) {
-				if comma {
-					buf = append(buf, ',')
-				}
-				comma = true
-				buf = append(buf, flagStrings[f]...)
-			}
-		}
-		buf = append(buf, ']')
+	if !t.FromClock && !t.IsEmpty() {
+		// 0,0 (an empty timestamp) is always considered to have come from a
+		// clock for formatting purposes. All others timestamps that did not
+		// come from a clock denote this using a question mark.
+		buf = append(buf, '?')
 	}
 
 	return *(*string)(unsafe.Pointer(&buf))
@@ -138,12 +116,12 @@ func (Timestamp) SafeValue() {}
 
 var (
 	timestampRegexp = regexp.MustCompile(
-		`^(?P<sign>-)?(?P<secs>\d{1,19})(?:\.(?P<nanos>\d{1,20}))?(?:,(?P<logical>-?\d{1,10}))?(?:\[(?P<flags>[\w,]+)\])?$`)
+		`^(?P<sign>-)?(?P<secs>\d{1,19})(?:\.(?P<nanos>\d{1,20}))?(?:,(?P<logical>-?\d{1,10}))?(?P<clock>\?)?$`)
 	signSubexp    = 1
 	secsSubexp    = 2
 	nanosSubexp   = 3
 	logicalSubexp = 4
-	flagsSubexp   = 5
+	clockSubexp   = 5
 )
 
 // ParseTimestamp attempts to parse the string generated from
@@ -180,25 +158,11 @@ func ParseTimestamp(str string) (_ Timestamp, err error) {
 			return Timestamp{}, err
 		}
 	}
+	fromClock := matches[clockSubexp] == ""
 	t := Timestamp{
-		WallTime: wallTime,
-		Logical:  int32(logical),
-	}
-	if flagsMatch := matches[flagsSubexp]; flagsMatch != "" {
-		flagStrs := strings.Split(flagsMatch, ",")
-		for _, flagStr := range flagStrs {
-			if flagStr == "" {
-				return Timestamp{}, errors.Errorf("empty flag provided")
-			}
-			flagMatch, ok := flagStringsInverted[flagStr]
-			if !ok {
-				return Timestamp{}, errors.Errorf("unknown flag %q provided", flagStr)
-			}
-			if t.IsFlagSet(flagMatch) {
-				return Timestamp{}, errors.Errorf("duplicate flag %q provided", flagStr)
-			}
-			t = t.SetFlag(flagMatch)
-		}
+		WallTime:  wallTime,
+		Logical:   int32(logical),
+		FromClock: fromClock,
 	}
 	return t, nil
 }
@@ -208,35 +172,30 @@ func (t Timestamp) AsOfSystemTime() string {
 	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
 }
 
-// IsEmpty retruns true if t is an empty Timestamp.
+// IsEmpty retruns true if t is an empty Timestamp. The method ignores the
+// FromClock flag.
 func (t Timestamp) IsEmpty() bool {
-	return t == Timestamp{}
-}
-
-// IsFlagSet returns whether the specified flag is set on the timestamp.
-func (t Timestamp) IsFlagSet(f TimestampFlag) bool {
-	return t.Flags&uint32(f) != 0
+	return t.WallTime == 0 && t.Logical == 0
 }
 
 // Add returns a timestamp with the WallTime and Logical components increased.
 // wallTime is expressed in nanos.
 func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
-	return Timestamp{
-		WallTime: t.WallTime + wallTime,
-		Logical:  t.Logical + logical,
-		Flags:    t.Flags,
+	s := Timestamp{
+		WallTime:  t.WallTime + wallTime,
+		Logical:   t.Logical + logical,
+		FromClock: t.FromClock,
 	}
+	if t.Less(s) {
+		// Adding a positive value to a Timestamp removes its FromClock flag.
+		s.FromClock = false
+	}
+	return s
 }
 
-// SetFlag returns a timestamp with the specified flag set.
-func (t Timestamp) SetFlag(f TimestampFlag) Timestamp {
-	t.Flags = t.Flags | uint32(f)
-	return t
-}
-
-// ClearFlag returns a timestamp with the specified flag cleared.
-func (t Timestamp) ClearFlag(f TimestampFlag) Timestamp {
-	t.Flags = t.Flags &^ uint32(f)
+// SetFromClock ... WIP
+func (t Timestamp) SetFromClock(val bool) Timestamp {
+	t.FromClock = val
 	return t
 }
 
@@ -252,14 +211,14 @@ func (t Timestamp) Next() Timestamp {
 			panic("cannot take the next value to a max timestamp")
 		}
 		return Timestamp{
-			WallTime: t.WallTime + 1,
-			Flags:    t.Flags,
+			WallTime:  t.WallTime + 1,
+			FromClock: t.FromClock,
 		}
 	}
 	return Timestamp{
-		WallTime: t.WallTime,
-		Logical:  t.Logical + 1,
-		Flags:    t.Flags,
+		WallTime:  t.WallTime,
+		Logical:   t.Logical + 1,
+		FromClock: t.FromClock,
 	}
 }
 
@@ -267,15 +226,15 @@ func (t Timestamp) Next() Timestamp {
 func (t Timestamp) Prev() Timestamp {
 	if t.Logical > 0 {
 		return Timestamp{
-			WallTime: t.WallTime,
-			Logical:  t.Logical - 1,
-			Flags:    t.Flags,
+			WallTime:  t.WallTime,
+			Logical:   t.Logical - 1,
+			FromClock: t.FromClock,
 		}
 	} else if t.WallTime > 0 {
 		return Timestamp{
-			WallTime: t.WallTime - 1,
-			Logical:  math.MaxInt32,
-			Flags:    t.Flags,
+			WallTime:  t.WallTime - 1,
+			Logical:   math.MaxInt32,
+			FromClock: t.FromClock,
 		}
 	}
 	panic("cannot take the previous value to a zero timestamp")
@@ -287,15 +246,15 @@ func (t Timestamp) Prev() Timestamp {
 func (t Timestamp) FloorPrev() Timestamp {
 	if t.Logical > 0 {
 		return Timestamp{
-			WallTime: t.WallTime,
-			Logical:  t.Logical - 1,
-			Flags:    t.Flags,
+			WallTime:  t.WallTime,
+			Logical:   t.Logical - 1,
+			FromClock: t.FromClock,
 		}
 	} else if t.WallTime > 0 {
 		return Timestamp{
-			WallTime: t.WallTime - 1,
-			Logical:  0,
-			Flags:    t.Flags,
+			WallTime:  t.WallTime - 1,
+			Logical:   0,
+			FromClock: t.FromClock,
 		}
 	}
 	panic("cannot take the previous value to a zero timestamp")
@@ -308,10 +267,8 @@ func (t *Timestamp) Forward(s Timestamp) bool {
 	if t.Less(s) {
 		*t = s
 		return true
-	} else if t.EqOrdering(s) && onlyLeftSynthetic(*t, s) {
-		// If the times are equal but t is synthetic while s is not, remove the
-		// synthtic flag but continue to return false.
-		*t = t.ClearFlag(TimestampFlag_SYNTHETIC)
+	} else if t.EqOrdering(s) {
+		t.FromClock = eitherFromClock(*t, s)
 	}
 	return false
 }
@@ -319,20 +276,15 @@ func (t *Timestamp) Forward(s Timestamp) bool {
 // Backward replaces the receiver with the argument, if that moves it backwards
 // in time.
 func (t *Timestamp) Backward(s Timestamp) {
+	fromClock := eitherFromClock(*t, s)
 	if s.Less(*t) {
-		// Replace t with s. If s is synthetic while t is not, remove the
-		// synthtic flag.
-		if onlyLeftSynthetic(s, *t) {
-			s = s.ClearFlag(TimestampFlag_SYNTHETIC)
-		}
 		*t = s
-	} else if onlyLeftSynthetic(*t, s) {
-		*t = t.ClearFlag(TimestampFlag_SYNTHETIC)
 	}
+	t.FromClock = fromClock
 }
 
-func onlyLeftSynthetic(l, r Timestamp) bool {
-	return l.IsFlagSet(TimestampFlag_SYNTHETIC) && !r.IsFlagSet(TimestampFlag_SYNTHETIC)
+func eitherFromClock(l, r Timestamp) bool {
+	return l.FromClock || r.FromClock
 }
 
 // GoTime converts the timestamp to a time.Time.
@@ -340,22 +292,24 @@ func (t Timestamp) GoTime() time.Time {
 	return timeutil.Unix(0, t.WallTime)
 }
 
+var trueBool = true
+
 // ToLegacyTimestamp converts a Timestamp to a LegacyTimestamp.
 func (t Timestamp) ToLegacyTimestamp() LegacyTimestamp {
-	var flags *uint32
-	if t.Flags != 0 {
-		flags = proto.Uint32(t.Flags)
+	var fromClock *bool
+	if t.FromClock {
+		fromClock = &trueBool
 	}
-	return LegacyTimestamp{WallTime: t.WallTime, Logical: t.Logical, Flags: flags}
+	return LegacyTimestamp{WallTime: t.WallTime, Logical: t.Logical, FromClock: fromClock}
 }
 
 // ToTimestamp converts a LegacyTimestamp to a Timestamp.
 func (t LegacyTimestamp) ToTimestamp() Timestamp {
-	var flags uint32
-	if t.Flags != nil {
-		flags = *t.Flags
+	var fromClock bool
+	if t.FromClock != nil {
+		fromClock = *t.FromClock
 	}
-	return Timestamp{WallTime: t.WallTime, Logical: t.Logical, Flags: flags}
+	return Timestamp{WallTime: t.WallTime, Logical: t.Logical, FromClock: fromClock}
 }
 
 // EqOrdering returns whether the receiver sorts equally to the parameter.
@@ -386,11 +340,31 @@ type ClockTimestamp Timestamp
 
 // TryToClockTimestamp attempts to downcast a Timestamp into a ClockTimestamp.
 // Returns the result and a boolean indicating whether the cast succeeded.
+//
+// TODO(nvanbenschoten): what about the migration in a mixed version cluster? In
+// such cases, old nodes will never set the FromClock flag, but will also
+// consider all timestamps to be ClockTimestamps from the perspective of being
+// able to use them to update HLC clocks. They will also need all timestamps to
+// be written as ClockTimestamps to be able to interpret MVCC. But we also can't
+// blindly consider all timestamps to be clock timestamps, because a timestamp
+// may actually be in the future once v21.1 nodes know that all v20.2 nodes have
+// been upgraded.
+//
+// The migration might look something like the following:
+// 1. introduce a new ClockTimestamps cluster version
+// 2. add client server version to BatchRequest / grab from RPC handshake.
+// 3. mark all timestamps in requests / responses from such nodes as FromClock.
+// 4. don't start creating non-clock, future timestamps until this cluster
+//    version is active.
+//
+// Or maybe a long-running migration might help. All we really need is for
+// no-one to create non-clock timestamps until everyone is upgraded and everyone
+// knows that everyone is upgraded.
 func (t Timestamp) TryToClockTimestamp() (ClockTimestamp, bool) {
-	if t.IsFlagSet(TimestampFlag_SYNTHETIC) {
+	if !t.FromClock {
 		return ClockTimestamp{}, false
 	}
-	// TODO(nvanbenschoten): unset the FromClock flag here.
+	t.FromClock = false // unset, ClockTimestamps don't carry flag
 	return ClockTimestamp(t), true
 }
 
@@ -398,7 +372,7 @@ func (t Timestamp) TryToClockTimestamp() (ClockTimestamp, bool) {
 // of whether such a cast would be legal according to the FromClock flag. The
 // method should only be used in tests.
 func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
-	// TODO(nvanbenschoten): unset the FromClock flag here.
+	t.FromClock = false // unset, ClockTimestamps don't carry flag
 	return ClockTimestamp(t)
 }
 
@@ -406,8 +380,7 @@ func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
 // timestamp's FromClock flag so that a call to TryToClockTimestamp will succeed
 // if the resulting Timestamp is never mutated.
 func (t ClockTimestamp) ToTimestamp() Timestamp {
-	// TODO(nvanbenschoten): set the FromClock flag here.
-	return Timestamp(t)
+	return Timestamp(t).SetFromClock(true)
 }
 
 // Less returns whether the receiver is less than the parameter.

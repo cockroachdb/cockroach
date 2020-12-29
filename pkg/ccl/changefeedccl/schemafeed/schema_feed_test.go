@@ -25,7 +25,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
+	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt, FromClock: true} }
 	validateFn := func(_ context.Context, _ hlc.Timestamp, desc catalog.Descriptor) error {
 		if desc.GetName() != `` {
 			return errors.Newf("descriptor: %s", desc.GetName())

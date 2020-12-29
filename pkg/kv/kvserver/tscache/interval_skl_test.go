@@ -45,6 +45,12 @@ func makeValWithoutID(ts hlc.Timestamp) cacheValue {
 	return cacheValue{ts: ts, txnID: noTxnID}
 }
 
+// TODO(nvanbenschoten): this is just a holdover until #57811 is merged.
+func stripFromClock(ts hlc.Timestamp) hlc.Timestamp {
+	ts.FromClock = false
+	return ts
+}
+
 func makeVal(ts hlc.Timestamp, txnIDStr string) cacheValue {
 	txnIDBytes := []byte(txnIDStr)
 	if len(txnIDBytes) < 16 {
@@ -861,7 +867,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 
 	// Add an initial value. Rotate the page so it's alone.
 	origKey := []byte("banana")
-	origVal := makeVal(clock.Now(), "1")
+	origVal := makeVal(stripFromClock(clock.Now()), "1")
 	s.Add(origKey, origVal)
 	s.rotatePages(s.frontPage())
 
@@ -870,7 +876,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	manual.Increment(300)
 	for i := 0; s.pages.Len() <= s.minPages; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
-		s.Add(key, makeVal(clock.Now(), "2"))
+		s.Add(key, makeVal(stripFromClock(clock.Now()), "2"))
 	}
 
 	// We should still be able to look up the initial value.
@@ -972,7 +978,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 							// Add a new value to the range.
 							ts := hlc.Timestamp{WallTime: int64(j)}
 							if useClock {
-								ts = clock.Now()
+								ts = stripFromClock(clock.Now())
 							}
 							nowVal := cacheValue{ts: ts, txnID: txnID}
 							s.AddRange(from, to, opt, nowVal)
@@ -1073,7 +1079,7 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 
 				ts := hlc.Timestamp{WallTime: int64(j)}
 				if useClock {
-					ts = clock.Now()
+					ts = stripFromClock(clock.Now())
 				}
 				a.val = cacheValue{ts: ts, txnID: txnIDs[i]}
 
@@ -1162,7 +1168,7 @@ func TestIntervalSklMaxEncodedSize(t *testing.T) {
 	manual := hlc.NewManualClock(200)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
-	ts := clock.Now()
+	ts := stripFromClock(clock.Now())
 	val := makeVal(ts, "1")
 
 	testutils.RunTrueAndFalse(t, "fit", func(t *testing.T, fit bool) {
@@ -1278,7 +1284,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 				rnd := int64(rng.Int31n(max))
 				from := []byte(fmt.Sprintf("%020d", rnd))
 				to := []byte(fmt.Sprintf("%020d", rnd+int64(size-1)))
-				s.AddRange(from, to, 0, makeVal(clock.Now(), txnID))
+				s.AddRange(from, to, 0, makeVal(stripFromClock(clock.Now()), txnID))
 			}
 		})
 
@@ -1298,7 +1304,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 
 	for i := 0; i < data; i++ {
 		from, to := makeRange(rng.Int31n(max))
-		nowVal := makeVal(clock.Now(), txnID)
+		nowVal := makeVal(stripFromClock(clock.Now()), txnID)
 		s.AddRange(from, to, excludeFrom|excludeTo, nowVal)
 	}
 
@@ -1323,7 +1329,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 							s.LookupTimestamp(key)
 						} else {
 							from, to := makeRange(keyNum)
-							nowVal := makeVal(clock.Now(), txnID)
+							nowVal := makeVal(stripFromClock(clock.Now()), txnID)
 							s.AddRange(from, to, excludeFrom|excludeTo, nowVal)
 						}
 					}

@@ -444,6 +444,7 @@ func tableSpans(tableIDs ...uint32) []roachpb.Span {
 }
 
 func newRecord(ts hlc.Timestamp, metaType string, meta []byte, spans ...roachpb.Span) ptpb.Record {
+	ts = ts.SetFromClock(false) // FromClock flag does not round-trip
 	return ptpb.Record{
 		ID:        uuid.MakeV4(),
 		Timestamp: ts,

@@ -85,16 +85,16 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 		key MVCCKey
 	}{
 		{key: MVCCKey{Key: roachpb.Key("a")}},
-		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
-		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: MVCCKey{Key: roachpb.Key("flags"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Flags: 3}}},
+		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999, FromClock: true}}},
+		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, FromClock: true}}},
+		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, FromClock: false}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
 			var encodedTS []byte
 			if !test.key.Timestamp.IsEmpty() {
 				var size int
-				if test.key.Timestamp.Flags != 0 {
+				if !test.key.Timestamp.FromClock {
 					size = 13
 				} else if test.key.Timestamp.Logical != 0 {
 					size = 12
@@ -106,8 +106,8 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 				if test.key.Timestamp.Logical != 0 {
 					binary.BigEndian.PutUint32(encodedTS[8:], uint32(test.key.Timestamp.Logical))
 				}
-				if test.key.Timestamp.Flags != 0 {
-					encodedTS[12] = uint8(test.key.Timestamp.Flags)
+				if !test.key.Timestamp.FromClock {
+					encodedTS[12] = 1
 				}
 			}
 			eKey := EngineKey{Key: test.key.Key, Version: encodedTS}

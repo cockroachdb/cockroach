@@ -78,7 +78,7 @@ func TestLimitTxnMaxTimestamp(t *testing.T) {
 			name:   "valid lease",
 			txn:    txn,
 			lease:  lease,
-			expTxn: txnWithMaxTimestamp(hlc.Timestamp{WallTime: 15}),
+			expTxn: txnWithMaxTimestamp(hlc.Timestamp{WallTime: 15, FromClock: true}),
 		},
 		{
 			name: "valid lease with start time above observed timestamp",

@@ -78,7 +78,7 @@ func TestTimestampCache(t *testing.T) {
 		}
 
 		// Sim a read of "b"-"c" at a time above the low-water mark.
-		ts := clock.Now()
+		ts := stripFromClock(clock.Now())
 		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID)
 
 		// Verify all permutations of direct and range access.
@@ -316,7 +316,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 						// transaction; otherwise each is a separate transaction.
 						testutils.RunTrueAndFalse(t, "sameTxn", func(t *testing.T, sameTxn bool) {
 							defer func() {
-								tc.clear(clock.Now())
+								tc.clear(stripFromClock(clock.Now()))
 							}()
 
 							txns := make([]txnState, len(testCase.spans))
@@ -331,16 +331,16 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 								}
 							}
 
-							tc.clear(clock.Now())
+							tc.clear(stripFromClock(clock.Now()))
 							if simultaneous {
-								now := clock.Now()
+								now := stripFromClock(clock.Now())
 								for i := range txns {
 									txns[i].ts = now
 								}
 							} else {
 								manual.Increment(1)
 								for i := range txns {
-									txns[i].ts = clock.Now()
+									txns[i].ts = stripFromClock(clock.Now())
 								}
 							}
 
@@ -368,12 +368,12 @@ func TestTimestampCacheClear(t *testing.T) {
 	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
 		key := roachpb.Key("a")
 
-		ts := clock.Now()
+		ts := stripFromClock(clock.Now())
 		tc.Add(key, nil, ts, noTxnID)
 
 		manual.Increment(5000000)
 
-		expTS := clock.Now()
+		expTS := stripFromClock(clock.Now())
 		// Clear the cache, which will reset the low water mark to
 		// the current time.
 		tc.clear(expTS)
@@ -398,7 +398,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 		txn2 := uuid.MakeV4()
 
 		// Add two non-overlapping transactions at the same timestamp.
-		ts1 := clock.Now()
+		ts1 := stripFromClock(clock.Now())
 		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1)
 		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2)
 
@@ -433,7 +433,7 @@ func TestTimestampCacheLargeKeys(t *testing.T) {
 	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
 		keyStart := roachpb.Key(make([]byte, 5*maximumSklPageSize))
 		keyEnd := keyStart.Next()
-		ts1 := clock.Now()
+		ts1 := stripFromClock(clock.Now())
 		txn1 := uuid.MakeV4()
 
 		tc.Add(keyStart, keyEnd, ts1, txn1)
@@ -459,7 +459,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 		caches := make([]Cache, len(cacheImplConstrs))
-		start := clock.Now()
+		start := stripFromClock(clock.Now())
 		for i, constr := range cacheImplConstrs {
 			tc := constr(clock)
 			tc.clear(start) // set low water mark
@@ -547,7 +547,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 
 					ts := start.Add(int64(j), 100)
 					if useClock {
-						ts = clock.Now()
+						ts = stripFromClock(clock.Now())
 					}
 
 					newVal := cacheValue{ts: ts, txnID: txnID}

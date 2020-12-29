@@ -99,7 +99,7 @@ func NewTracker() *Tracker {
 	t.mu.closedEpoch = initialEpoch
 	t.mu.leftEpoch = initialEpoch
 	t.mu.rightEpoch = initialEpoch
-	t.mu.next = hlc.Timestamp{Logical: 1}
+	t.mu.next = hlc.Timestamp{Logical: 1, FromClock: true}
 	t.mu.leftMLAI = map[roachpb.RangeID]ctpb.LAI{}
 	t.mu.rightMLAI = map[roachpb.RangeID]ctpb.LAI{}
 	return t

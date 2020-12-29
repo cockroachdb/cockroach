@@ -98,9 +98,9 @@ func TestErrorTxn(t *testing.T) {
 func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	{
 		rwueNew := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			makeTS(1, 0), makeTS(2, 0),
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
+				MaxTimestamp:       makeTS(3, 0),
 				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			})
 		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
@@ -112,8 +112,7 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	}
 
 	{
-		rwueOld := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, nil)
+		rwueOld := NewReadWithinUncertaintyIntervalError(makeTS(1, 0), makeTS(2, 0), nil)
 
 		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
@@ -136,12 +135,12 @@ func TestErrorRedaction(t *testing.T) {
 	t.Run("uncertainty-restart", func(t *testing.T) {
 		// NB: most other errors don't redact properly. More elbow grease is needed.
 		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			makeTS(1, 0), makeTS(2, 0),
 			&Transaction{
-				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
+				MaxTimestamp:       makeTS(3, 0),
 				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			}))
-		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1)
+		txn := MakeTransaction("foo", Key("bar"), 1, makeTS(1, 0), 1)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -151,7 +150,7 @@ func TestErrorRedaction(t *testing.T) {
 		var s redact.StringBuilder
 		s.Print(r)
 		act := s.RedactableString()
-		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000002,0"
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0.000000002,0?"
 		require.Equal(t, exp, string(act))
 	})
 }

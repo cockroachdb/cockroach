@@ -317,6 +317,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 // and the age of unresolved intents.
 func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("WIP")
 	defer log.Scope(t).Close(t)
 
 	cws := newCachedWriteSimulator(t)

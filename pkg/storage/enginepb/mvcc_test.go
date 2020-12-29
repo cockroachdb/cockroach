@@ -26,7 +26,7 @@ func TestFormatMVCCMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := hlc.Timestamp{Logical: 1}
+	ts := hlc.Timestamp{Logical: 1, FromClock: true}
 	tmeta := &enginepb.TxnMeta{
 		Key:            roachpb.Key("a"),
 		ID:             txnID,

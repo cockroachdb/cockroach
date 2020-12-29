@@ -102,7 +102,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 
 	ctx := context.Background()
 	k := roachpb.Key("a")
-	ts := hlc.Timestamp{WallTime: 1}
+	ts := hlc.Timestamp{WallTime: 1, FromClock: true}
 	txn := roachpb.MakeTransaction("test", k, 0, ts, 0)
 	txn.Status = roachpb.STAGING
 
@@ -149,7 +149,7 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			expError:            "timestamp change by implicitly committed transaction: 0.000000001,0->0.000000002,0",
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
-				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0).SetFromClock(true)
 				return txnCopy
 			}(),
 		},

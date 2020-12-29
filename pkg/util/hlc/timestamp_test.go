@@ -19,16 +19,17 @@ import (
 
 func makeTS(walltime int64, logical int32) Timestamp {
 	return Timestamp{
-		WallTime: walltime,
-		Logical:  logical,
+		WallTime:  walltime,
+		Logical:   logical,
+		FromClock: false,
 	}
 }
 
-func makeTSWithFlags(walltime int64, logical int32, flags TimestampFlag) Timestamp {
+func makeTSFromClock(walltime int64, logical int32) Timestamp {
 	return Timestamp{
-		WallTime: walltime,
-		Logical:  logical,
-		Flags:    uint32(flags),
+		WallTime:  walltime,
+		Logical:   logical,
+		FromClock: true,
 	}
 }
 
@@ -46,7 +47,7 @@ func TestEqOrdering(t *testing.T) {
 	if a.EqOrdering(b) {
 		t.Errorf("expected %+v != %+v", b, a)
 	}
-	b = makeTSWithFlags(1, 1, 3)
+	b = makeTSFromClock(1, 1)
 	if !a.EqOrdering(b) {
 		t.Errorf("expected %+v == %+v", b, a)
 	}
@@ -66,7 +67,7 @@ func TestLess(t *testing.T) {
 	if !b.Less(a) {
 		t.Errorf("expected %+v < %+v", b, a)
 	}
-	b = makeTSWithFlags(1, 1, 3)
+	b = makeTSFromClock(1, 1)
 	if a.Less(b) || b.Less(a) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
@@ -86,32 +87,21 @@ func TestLessEq(t *testing.T) {
 	if !b.LessEq(a) || a.LessEq(b) {
 		t.Errorf("expected %+v < %+v", b, a)
 	}
-	b = makeTSWithFlags(1, 1, 3)
+	b = makeTSFromClock(1, 1)
 	if !a.LessEq(b) || !b.LessEq(a) {
 		t.Errorf("expected %+v == %+v", a, b)
 	}
 }
 
 func TestIsEmpty(t *testing.T) {
-	a := Timestamp{}
+	a := makeTS(0, 0)
 	assert.True(t, a.IsEmpty())
 	a = makeTS(1, 0)
 	assert.False(t, a.IsEmpty())
 	a = makeTS(0, 1)
 	assert.False(t, a.IsEmpty())
-	a = makeTSWithFlags(0, 0, 3)
-	assert.False(t, a.IsEmpty())
-}
-
-func TestSetAndClearFlag(t *testing.T) {
-	a := Timestamp{}
-	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
-	a = a.SetFlag(TimestampFlag_UNKNOWN)
-	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
-	a = a.SetFlag(TimestampFlag_SYNTHETIC)
-	assert.True(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
-	a = a.ClearFlag(TimestampFlag_SYNTHETIC)
-	assert.False(t, a.IsFlagSet(TimestampFlag_SYNTHETIC))
+	a = makeTSFromClock(0, 0)
+	assert.True(t, a.IsEmpty())
 }
 
 func TestTimestampNext(t *testing.T) {
@@ -122,10 +112,10 @@ func TestTimestampNext(t *testing.T) {
 		{makeTS(1, math.MaxInt32-1), makeTS(1, math.MaxInt32)},
 		{makeTS(1, math.MaxInt32), makeTS(2, 0)},
 		{makeTS(math.MaxInt32, math.MaxInt32), makeTS(math.MaxInt32+1, 0)},
-		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 3, 3)},
-		{makeTSWithFlags(1, math.MaxInt32-1, 3), makeTSWithFlags(1, math.MaxInt32, 3)},
-		{makeTSWithFlags(1, math.MaxInt32, 3), makeTSWithFlags(2, 0, 3)},
-		{makeTSWithFlags(math.MaxInt32, math.MaxInt32, 3), makeTSWithFlags(math.MaxInt32+1, 0, 3)},
+		{makeTSFromClock(1, 2), makeTSFromClock(1, 3)},
+		{makeTSFromClock(1, math.MaxInt32-1), makeTSFromClock(1, math.MaxInt32)},
+		{makeTSFromClock(1, math.MaxInt32), makeTSFromClock(2, 0)},
+		{makeTSFromClock(math.MaxInt32, math.MaxInt32), makeTSFromClock(math.MaxInt32+1, 0)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expNext, c.ts.Next())
@@ -139,9 +129,9 @@ func TestTimestampPrev(t *testing.T) {
 		{makeTS(1, 2), makeTS(1, 1)},
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, math.MaxInt32)},
-		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 1, 3)},
-		{makeTSWithFlags(1, 1, 3), makeTSWithFlags(1, 0, 3)},
-		{makeTSWithFlags(1, 0, 3), makeTSWithFlags(0, math.MaxInt32, 3)},
+		{makeTSFromClock(1, 2), makeTSFromClock(1, 1)},
+		{makeTSFromClock(1, 1), makeTSFromClock(1, 0)},
+		{makeTSFromClock(1, 0), makeTSFromClock(0, math.MaxInt32)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.Prev())
@@ -156,10 +146,10 @@ func TestTimestampFloorPrev(t *testing.T) {
 		{makeTS(1, 2), makeTS(1, 1)},
 		{makeTS(1, 1), makeTS(1, 0)},
 		{makeTS(1, 0), makeTS(0, 0)},
-		{makeTSWithFlags(2, 0, 3), makeTSWithFlags(1, 0, 3)},
-		{makeTSWithFlags(1, 2, 3), makeTSWithFlags(1, 1, 3)},
-		{makeTSWithFlags(1, 1, 3), makeTSWithFlags(1, 0, 3)},
-		{makeTSWithFlags(1, 0, 3), makeTSWithFlags(0, 0, 3)},
+		{makeTSFromClock(2, 0), makeTSFromClock(1, 0)},
+		{makeTSFromClock(1, 2), makeTSFromClock(1, 1)},
+		{makeTSFromClock(1, 1), makeTSFromClock(1, 0)},
+		{makeTSFromClock(1, 0), makeTSFromClock(0, 0)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
@@ -167,7 +157,6 @@ func TestTimestampFloorPrev(t *testing.T) {
 }
 
 func TestTimestampForward(t *testing.T) {
-	flagSyn := TimestampFlag_SYNTHETIC
 	testCases := []struct {
 		ts, arg   Timestamp
 		expFwd    Timestamp
@@ -178,21 +167,21 @@ func TestTimestampForward(t *testing.T) {
 		{makeTS(2, 0), makeTS(2, 0), makeTS(2, 0), false},
 		{makeTS(2, 0), makeTS(2, 1), makeTS(2, 1), true},
 		{makeTS(2, 0), makeTS(3, 0), makeTS(3, 0), true},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 0), makeTSWithFlags(2, 0, flagSyn), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 1), makeTSWithFlags(2, 0, flagSyn), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), makeTS(2, 0), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 1), makeTS(2, 1), true},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(3, 0), makeTS(3, 0), true},
-		{makeTS(2, 0), makeTSWithFlags(1, 0, flagSyn), makeTS(2, 0), false},
-		{makeTS(2, 0), makeTSWithFlags(1, 1, flagSyn), makeTS(2, 0), false},
-		{makeTS(2, 0), makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), false},
-		{makeTS(2, 0), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 1, flagSyn), true},
-		{makeTS(2, 0), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), true},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 1, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), false},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 1, flagSyn), true},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), true},
+		{makeTSFromClock(2, 0), makeTS(1, 0), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTS(1, 1), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTS(2, 0), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTS(2, 1), makeTS(2, 1), true},
+		{makeTSFromClock(2, 0), makeTS(3, 0), makeTS(3, 0), true},
+		{makeTS(2, 0), makeTSFromClock(1, 0), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTSFromClock(1, 1), makeTS(2, 0), false},
+		{makeTS(2, 0), makeTSFromClock(2, 0), makeTSFromClock(2, 0), false},
+		{makeTS(2, 0), makeTSFromClock(2, 1), makeTSFromClock(2, 1), true},
+		{makeTS(2, 0), makeTSFromClock(3, 0), makeTSFromClock(3, 0), true},
+		{makeTSFromClock(2, 0), makeTSFromClock(1, 0), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTSFromClock(1, 1), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTSFromClock(2, 0), makeTSFromClock(2, 0), false},
+		{makeTSFromClock(2, 0), makeTSFromClock(2, 1), makeTSFromClock(2, 1), true},
+		{makeTSFromClock(2, 0), makeTSFromClock(3, 0), makeTSFromClock(3, 0), true},
 	}
 	for _, c := range testCases {
 		ts := c.ts
@@ -202,7 +191,6 @@ func TestTimestampForward(t *testing.T) {
 }
 
 func TestTimestampBackward(t *testing.T) {
-	flagSyn := TimestampFlag_SYNTHETIC
 	testCases := []struct {
 		ts, arg, expBwd Timestamp
 	}{
@@ -211,21 +199,21 @@ func TestTimestampBackward(t *testing.T) {
 		{makeTS(2, 0), makeTS(2, 0), makeTS(2, 0)},
 		{makeTS(2, 0), makeTS(2, 1), makeTS(2, 0)},
 		{makeTS(2, 0), makeTS(3, 0), makeTS(2, 0)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 0), makeTS(1, 0)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(1, 1), makeTS(1, 1)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0), makeTS(2, 0)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(2, 1), makeTS(2, 0)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTS(3, 0), makeTS(2, 0)},
-		{makeTS(2, 0), makeTSWithFlags(1, 0, flagSyn), makeTS(1, 0)},
-		{makeTS(2, 0), makeTSWithFlags(1, 1, flagSyn), makeTS(1, 1)},
-		{makeTS(2, 0), makeTSWithFlags(2, 0, flagSyn), makeTS(2, 0)},
-		{makeTS(2, 0), makeTSWithFlags(2, 1, flagSyn), makeTS(2, 0)},
-		{makeTS(2, 0), makeTSWithFlags(3, 0, flagSyn), makeTS(2, 0)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn), makeTSWithFlags(1, 0, flagSyn)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(1, 1, flagSyn), makeTSWithFlags(1, 1, flagSyn)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(2, 1, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
-		{makeTSWithFlags(2, 0, flagSyn), makeTSWithFlags(3, 0, flagSyn), makeTSWithFlags(2, 0, flagSyn)},
+		{makeTSFromClock(2, 0), makeTS(1, 0), makeTSFromClock(1, 0)},
+		{makeTSFromClock(2, 0), makeTS(1, 1), makeTSFromClock(1, 1)},
+		{makeTSFromClock(2, 0), makeTS(2, 0), makeTSFromClock(2, 0)},
+		{makeTSFromClock(2, 0), makeTS(2, 1), makeTSFromClock(2, 0)},
+		{makeTSFromClock(2, 0), makeTS(3, 0), makeTSFromClock(2, 0)},
+		{makeTS(2, 0), makeTSFromClock(1, 0), makeTSFromClock(1, 0)},
+		{makeTS(2, 0), makeTSFromClock(1, 1), makeTSFromClock(1, 1)},
+		{makeTS(2, 0), makeTSFromClock(2, 0), makeTSFromClock(2, 0)},
+		{makeTS(2, 0), makeTSFromClock(2, 1), makeTSFromClock(2, 0)},
+		{makeTS(2, 0), makeTSFromClock(3, 0), makeTSFromClock(2, 0)},
+		{makeTSFromClock(2, 0), makeTSFromClock(1, 0), makeTSFromClock(1, 0)},
+		{makeTSFromClock(2, 0), makeTSFromClock(1, 1), makeTSFromClock(1, 1)},
+		{makeTSFromClock(2, 0), makeTSFromClock(2, 0), makeTSFromClock(2, 0)},
+		{makeTSFromClock(2, 0), makeTSFromClock(2, 1), makeTSFromClock(2, 0)},
+		{makeTSFromClock(2, 0), makeTSFromClock(3, 0), makeTSFromClock(2, 0)},
 	}
 	for _, c := range testCases {
 		ts := c.ts
@@ -255,23 +243,22 @@ func TestTimestampFormatParseRoundTrip(t *testing.T) {
 		ts  Timestamp
 		exp string
 	}{
-		{makeTS(0, 0), "0,0"},
-		{makeTS(0, 123), "0,123"},
-		{makeTS(0, -123), "0,-123"},
-		{makeTS(1, 0), "0.000000001,0"},
-		{makeTS(-1, 0), "-0.000000001,0"},
-		{makeTS(1, 123), "0.000000001,123"},
-		{makeTS(-1, -123), "-0.000000001,-123"},
-		{makeTS(123, 0), "0.000000123,0"},
-		{makeTS(-123, 0), "-0.000000123,0"},
-		{makeTS(1234567890, 0), "1.234567890,0"},
-		{makeTS(-1234567890, 0), "-1.234567890,0"},
-		{makeTS(6661234567890, 0), "6661.234567890,0"},
-		{makeTS(-6661234567890, 0), "-6661.234567890,0"},
-		{makeTSWithFlags(0, 0, TimestampFlag_SYNTHETIC), "0,0[syn]"},
-		{makeTSWithFlags(0, 123, TimestampFlag_SYNTHETIC), "0,123[syn]"},
-		{makeTSWithFlags(1, 0, TimestampFlag_SYNTHETIC), "0.000000001,0[syn]"},
-		{makeTSWithFlags(1, 123, TimestampFlag_SYNTHETIC), "0.000000001,123[syn]"},
+		{makeTSFromClock(0, 0), "0,0"},
+		{makeTSFromClock(0, 123), "0,123"},
+		{makeTSFromClock(0, -123), "0,-123"},
+		{makeTSFromClock(1, 0), "0.000000001,0"},
+		{makeTSFromClock(-1, 0), "-0.000000001,0"},
+		{makeTSFromClock(1, 123), "0.000000001,123"},
+		{makeTSFromClock(-1, -123), "-0.000000001,-123"},
+		{makeTSFromClock(123, 0), "0.000000123,0"},
+		{makeTSFromClock(-123, 0), "-0.000000123,0"},
+		{makeTSFromClock(1234567890, 0), "1.234567890,0"},
+		{makeTSFromClock(-1234567890, 0), "-1.234567890,0"},
+		{makeTSFromClock(6661234567890, 0), "6661.234567890,0"},
+		{makeTSFromClock(-6661234567890, 0), "-6661.234567890,0"},
+		{makeTS(0, 123), "0,123?"},
+		{makeTS(1, 0), "0.000000001,0?"},
+		{makeTS(1, 123), "0.000000001,123?"},
 	}
 	for _, c := range testCases {
 		str := c.ts.String()
@@ -285,7 +272,25 @@ func TestTimestampFormatParseRoundTrip(t *testing.T) {
 
 // TestTimestampFormatParseNonRoundTrip tests the minority of timestamps that do
 // not round-trip through formatting then parsing.
-// TODO(nvanbenschoten): we'll need this in the next commit.
+func TestTimestampFormatParseNonRoundTrip(t *testing.T) {
+	testCases := []struct {
+		ts    Timestamp
+		exp   string
+		expTs Timestamp
+	}{
+		// An empty non-clock timestamp does not round-trip. Instead, it is
+		// promoted to a clock timestamp for clarity.
+		{makeTS(0, 0), "0,0", makeTSFromClock(0, 0)},
+	}
+	for _, c := range testCases {
+		str := c.ts.String()
+		assert.Equal(t, c.exp, str)
+
+		parsed, err := ParseTimestamp(str)
+		assert.NoError(t, err)
+		assert.Equal(t, c.expTs, parsed)
+	}
+}
 
 // TestTimestampParseFormatNonRoundTrip tests the minority of timestamps that do
 // not round-trip through parsing then formatting.
@@ -296,18 +301,18 @@ func TestTimestampParseFormatNonRoundTrip(t *testing.T) {
 		expStr string
 	}{
 		// Logical portion can be omitted.
-		{"0", makeTS(0, 0), "0,0"},
+		{"0", makeTSFromClock(0, 0), "0,0"},
 		// Fractional portion can be omitted.
-		{"99,0", makeTS(99000000000, 0), "99.000000000,0"},
+		{"99,0", makeTSFromClock(99000000000, 0), "99.000000000,0"},
 		// Fractional and logical portion can be omitted.
-		{"99", makeTS(99000000000, 0), "99.000000000,0"},
+		{"99", makeTSFromClock(99000000000, 0), "99.000000000,0"},
 		// Other cases.
-		{"0.000000001", makeTS(1, 0), "0.000000001,0"},
-		{"99.000000001", makeTS(99000000001, 0), "99.000000001,0"},
-		{"0[syn]", makeTSWithFlags(0, 0, TimestampFlag_SYNTHETIC), "0,0[syn]"},
-		{"99[syn]", makeTSWithFlags(99000000000, 0, TimestampFlag_SYNTHETIC), "99.000000000,0[syn]"},
-		{"0.000000001[syn]", makeTSWithFlags(1, 0, TimestampFlag_SYNTHETIC), "0.000000001,0[syn]"},
-		{"99.000000001[syn]", makeTSWithFlags(99000000001, 0, TimestampFlag_SYNTHETIC), "99.000000001,0[syn]"},
+		{"0.000000001", makeTSFromClock(1, 0), "0.000000001,0"},
+		{"99.000000001", makeTSFromClock(99000000001, 0), "99.000000001,0"},
+		{"0?", makeTS(0, 0), "0,0"},
+		{"99?", makeTS(99000000000, 0), "99.000000000,0?"},
+		{"0.000000001?", makeTS(1, 0), "0.000000001,0?"},
+		{"99.000000001?", makeTS(99000000001, 0), "99.000000001,0?"},
 	}
 	for _, c := range testCases {
 		parsed, err := ParseTimestamp(c.s)
@@ -341,20 +346,12 @@ func TestTimestampParseError(t *testing.T) {
 			"failed to parse \"1.9999999999999999999,0\" as Timestamp: strconv.ParseInt: parsing \"9999999999999999999\": value out of range",
 		},
 		{
-			"0,123[]",
-			"failed to parse \"0,123\\[\\]\" as Timestamp",
+			"0,123[?]",
+			"failed to parse \"0,123\\[\\?\\]\" as Timestamp",
 		},
 		{
-			"0,123[bad]",
-			"failed to parse \"0,123\\[bad\\]\" as Timestamp: unknown flag \"bad\" provided",
-		},
-		{
-			"0,123[syn,]",
-			"failed to parse \"0,123\\[syn,\\]\" as Timestamp: empty flag provided",
-		},
-		{
-			"0,123[syn,syn]",
-			"failed to parse \"0,123\\[syn,syn\\]\" as Timestamp: duplicate flag \"syn\" provided",
+			"0,123??",
+			"failed to parse \"0,123\\?\\?\" as Timestamp",
 		},
 	} {
 		_, err := ParseTimestamp(c.s)
@@ -372,8 +369,8 @@ func BenchmarkTimestampString(b *testing.B) {
 	}
 }
 
-func BenchmarkTimestampStringWithFlags(b *testing.B) {
-	ts := makeTSWithFlags(-6661234567890, 0, TimestampFlag_SYNTHETIC)
+func BenchmarkTimestampStringFromClock(b *testing.B) {
+	ts := makeTSFromClock(-6661234567890, 0)
 
 	for i := 0; i < b.N; i++ {
 		_ = ts.String()

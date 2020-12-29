@@ -37,7 +37,7 @@ func TestEngine(t *testing.T) {
 		return v
 	}
 	ts := func(i int) hlc.Timestamp {
-		return hlc.Timestamp{WallTime: int64(i)}
+		return hlc.Timestamp{WallTime: int64(i), FromClock: true}
 	}
 
 	e, err := MakeEngine()

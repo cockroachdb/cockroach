@@ -368,6 +368,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 // transfer.
 func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("WIP")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})

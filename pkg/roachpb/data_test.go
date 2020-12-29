@@ -42,25 +42,14 @@ import (
 
 func makeClockTS(walltime int64, logical int32) hlc.ClockTimestamp {
 	return hlc.ClockTimestamp{
-		WallTime: walltime,
-		Logical:  logical,
-	}
-}
-
-func makeClockTSWithFlag(walltime int64, logical int32) hlc.ClockTimestamp {
-	return hlc.ClockTimestamp{
-		WallTime: walltime,
-		Logical:  logical,
-		Flags:    uint32(hlc.TimestampFlag_SYNTHETIC),
+		WallTime:  walltime,
+		Logical:   logical,
+		FromClock: true, // normally not set, but needed for zerofields.NoZeroField
 	}
 }
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {
 	return makeClockTS(walltime, logical).ToTimestamp()
-}
-
-func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
-	return makeClockTSWithFlag(walltime, logical).ToTimestamp()
 }
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -474,17 +463,17 @@ var nonZeroTxn = Transaction{
 		Key:            Key("foo"),
 		ID:             uuid.MakeV4(),
 		Epoch:          2,
-		WriteTimestamp: makeTSWithFlag(20, 21),
-		MinTimestamp:   makeTSWithFlag(10, 11),
+		WriteTimestamp: makeTS(20, 21),
+		MinTimestamp:   makeTS(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
 	},
 	Name:                 "name",
 	Status:               COMMITTED,
-	LastHeartbeat:        makeTSWithFlag(1, 2),
-	ReadTimestamp:        makeTSWithFlag(20, 22),
-	MaxTimestamp:         makeTSWithFlag(40, 41),
-	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeClockTSWithFlag(1, 2)}},
+	LastHeartbeat:        makeTS(1, 2),
+	ReadTimestamp:        makeTS(20, 22),
+	MaxTimestamp:         makeTS(40, 41),
+	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeClockTS(1, 2)}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},

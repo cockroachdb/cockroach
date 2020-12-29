@@ -553,14 +553,14 @@ func TestRegistrationString(t *testing.T) {
 		{
 			r: registration{
 				span:             roachpb.Span{Key: roachpb.Key("d")},
-				catchupTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1},
+				catchupTimestamp: hlc.Timestamp{WallTime: 10, Logical: 1, FromClock: true},
 			},
 			exp: `[d @ 0.000000010,1+]`,
 		},
 		{
 			r: registration{span: roachpb.Span{
 				Key: roachpb.Key("d"), EndKey: roachpb.Key("z")},
-				catchupTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9},
+				catchupTimestamp: hlc.Timestamp{WallTime: 40, Logical: 9, FromClock: true},
 			},
 			exp: `[{d-z} @ 0.000000040,9+]`,
 		},

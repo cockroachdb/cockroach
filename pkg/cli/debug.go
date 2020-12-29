@@ -471,7 +471,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			}
 			k = storage.MVCCKey{
 				Key:       bs[0],
-				Timestamp: hlc.Timestamp{WallTime: 987654321},
+				Timestamp: hlc.Timestamp{WallTime: 987654321, FromClock: true},
 			}
 		}
 

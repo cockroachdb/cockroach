@@ -34,7 +34,7 @@ func ExampleSingleStorage() {
 	fmt.Println("After adding the following entry:")
 	e1 := ctpb.Entry{
 		Full:            true,
-		ClosedTimestamp: hlc.Timestamp{WallTime: 123e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 123e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1000,
 			9: 2000,
@@ -48,7 +48,7 @@ func ExampleSingleStorage() {
 
 	fmt.Println("A new update comes in only two seconds later:")
 	e2 := ctpb.Entry{
-		ClosedTimestamp: hlc.Timestamp{WallTime: 125e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 125e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1001,
 			7: 12,
@@ -64,7 +64,7 @@ func ExampleSingleStorage() {
 
 	fmt.Println("Another update, another eight seconds later:")
 	e3 := ctpb.Entry{
-		ClosedTimestamp: hlc.Timestamp{WallTime: 133e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 133e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			9: 2020,
 			1: 999,
@@ -79,7 +79,7 @@ func ExampleSingleStorage() {
 
 	fmt.Println("Half a second later, with the next update, it will rotate:")
 	e4 := ctpb.Entry{
-		ClosedTimestamp: hlc.Timestamp{WallTime: 133e9 + 1e9/2},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 133e9 + 1e9/2, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			7: 17,
 			8: 711,
@@ -92,7 +92,7 @@ func ExampleSingleStorage() {
 
 	fmt.Println("Next update arrives a whopping 46.5s later (why not).")
 	e5 := ctpb.Entry{
-		ClosedTimestamp: hlc.Timestamp{WallTime: 180e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 180e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			1: 1004,
 			7: 19,
@@ -108,7 +108,7 @@ func ExampleSingleStorage() {
 
 	fmt.Println("Another five seconds later, another update:")
 	e6 := ctpb.Entry{
-		ClosedTimestamp: hlc.Timestamp{WallTime: 185e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 185e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			3: 1771,
 		},
@@ -256,7 +256,7 @@ func ExampleMultiStorage_epoch() {
 
 	e1 := ctpb.Entry{
 		Epoch:           10,
-		ClosedTimestamp: hlc.Timestamp{WallTime: 1e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 1e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			9: 17,
 		},
@@ -269,7 +269,7 @@ func ExampleMultiStorage_epoch() {
 	fmt.Println("The epoch changes. It can only increase, for we receive Entries in a fixed order.")
 	e2 := ctpb.Entry{
 		Epoch:           11,
-		ClosedTimestamp: hlc.Timestamp{WallTime: 2e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 2e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			9:  18,
 			10: 99,
@@ -283,7 +283,7 @@ func ExampleMultiStorage_epoch() {
 	fmt.Println("The storage itself will simply ignore such updates:")
 	e3 := ctpb.Entry{
 		Epoch:           8,
-		ClosedTimestamp: hlc.Timestamp{WallTime: 3e9},
+		ClosedTimestamp: hlc.Timestamp{WallTime: 3e9, FromClock: true},
 		MLAI: map[roachpb.RangeID]ctpb.LAI{
 			9:  19,
 			10: 199,

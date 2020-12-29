@@ -227,6 +227,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("WIP")
 	defer log.Scope(t).Close(t)
 
 	// This test prints a consistency checker diff, so it's

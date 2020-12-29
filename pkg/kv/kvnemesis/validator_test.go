@@ -61,7 +61,7 @@ func TestValidate(t *testing.T) {
 		return storage.MVCCKeyValue{
 			Key: storage.MVCCKey{
 				Key:       []byte(key),
-				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+				Timestamp: hlc.Timestamp{WallTime: int64(ts), FromClock: true},
 			},
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}

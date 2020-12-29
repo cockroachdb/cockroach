@@ -158,6 +158,7 @@ func runMetaTest(run testRun) {
 func TestPebbleEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	t.Skip("WIP")
 
 	ctx := context.Background()
 	// This test times out with the race detector enabled.

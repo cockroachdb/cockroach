@@ -429,6 +429,7 @@ func protect(
 	t *testing.T, s serverutils.TestServerInterface, p protectedts.Storage, spans ...roachpb.Span,
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
 	protectTS := s.Clock().Now()
+	protectTS = protectTS.SetFromClock(false) // FromClock flag does not round-trip
 	r = &ptpb.Record{
 		ID:        uuid.MakeV4(),
 		Timestamp: protectTS,

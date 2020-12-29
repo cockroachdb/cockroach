@@ -227,7 +227,7 @@ func TestSafeMessage(t *testing.T) {
 				mutable.NextIndexID = 4
 				mutable.Families[0].ColumnNames = append(mutable.Families[0].ColumnNames, "c")
 				mutable.Families[0].ColumnIDs = append(mutable.Families[0].ColumnIDs, 5)
-				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9}
+				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9, FromClock: true}
 				mutable.ClusterVersion = *mutable.TableDesc()
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
 			},

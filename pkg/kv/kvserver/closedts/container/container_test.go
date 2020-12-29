@@ -158,7 +158,7 @@ func TestTwoNodes(t *testing.T) {
 	// The command is forced above ts=0.2. This is just an artifact of how the
 	// Tracker is implemented - it closes out 0.1 first, so it begins by forcing
 	// commands just above that.
-	require.Equal(t, hlc.Timestamp{Logical: 2}, ts)
+	require.Equal(t, hlc.Timestamp{Logical: 2, FromClock: true}, ts)
 
 	// The clock gives a timestamp to the Provider, which should close out the
 	// current timestamp and set up 2E9-1E9=1E9 as the next one it wants to close.

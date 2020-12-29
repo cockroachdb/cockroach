@@ -35,7 +35,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	builder := storage.RocksDBBatchBuilder{}
 	builder.Put(storage.MVCCKey{
 		Key:       roachpb.Key("/db1"),
-		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
+		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64, FromClock: true},
 	}, []byte("test value"))
 	wb.Data = builder.Finish()
 	swb = stringifyWriteBatch(wb)

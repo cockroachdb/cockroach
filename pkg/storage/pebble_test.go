@@ -62,7 +62,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 				ikey := pebble.InternalKey{
 					UserKey: EncodeKey(MVCCKey{
 						Key:       key,
-						Timestamp: hlc.Timestamp{WallTime: int64(timestamp)},
+						Timestamp: hlc.Timestamp{WallTime: int64(timestamp), FromClock: true},
 					}),
 				}
 
@@ -74,7 +74,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 						return fmt.Sprintf("malformed txn timestamp: %s, expected timestamp=<value>", value)
 					}
 					meta := &enginepb.MVCCMetadata{}
-					meta.Timestamp.WallTime = int64(timestamp)
+					meta.Timestamp = hlc.Timestamp{WallTime: int64(timestamp), FromClock: true}.ToLegacyTimestamp()
 					meta.Txn = &enginepb.TxnMeta{}
 					var err error
 					value, err = protoutil.Marshal(meta)
