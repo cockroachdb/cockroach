@@ -15,7 +15,7 @@ go_test(
     name = "hash_test",
     srcs = ["hash_test.go"],
     deps = [
-        ":hash",
+        "//pkg/testutils/lint/passes/hash",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

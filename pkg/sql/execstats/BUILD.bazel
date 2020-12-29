@@ -30,6 +30,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/execstats",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/testutils/serverutils",

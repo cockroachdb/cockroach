@@ -66,6 +66,7 @@ go_test(
         "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
+        "//pkg/gossip",
         "//pkg/gossip/resolver",
         "//pkg/gossip/simulation",
         "//pkg/roachpb",

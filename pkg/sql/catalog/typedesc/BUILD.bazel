@@ -35,7 +35,6 @@ go_test(
         "type_desc_test.go",
     ],
     deps = [
-        ":typedesc",
         "//pkg/keys",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -44,6 +43,7 @@ go_test(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/privilege",
         "//pkg/sql/types",
         "//pkg/testutils",

@@ -47,6 +47,7 @@ go_test(
     ],
     embed = [":opt"],
     deps = [
+        "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils/testcat",

@@ -34,6 +34,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":tenantrate"],
     deps = [
+        "//pkg/kv/kvserver/tenantrate",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",

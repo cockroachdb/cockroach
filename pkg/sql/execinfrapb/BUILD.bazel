@@ -76,6 +76,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/netutil",
         "//pkg/util/optional",
+        "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",

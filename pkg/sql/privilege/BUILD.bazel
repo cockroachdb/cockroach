@@ -22,7 +22,7 @@ go_test(
         "privilege_test.go",
     ],
     deps = [
-        ":privilege",
+        "//pkg/sql/privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
     ],

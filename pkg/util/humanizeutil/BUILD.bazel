@@ -22,5 +22,8 @@ go_test(
         "humanize_test.go",
     ],
     embed = [":humanizeutil"],
-    deps = ["//pkg/util/leaktest"],
+    deps = [
+        "//pkg/util/humanizeutil",
+        "//pkg/util/leaktest",
+    ],
 )

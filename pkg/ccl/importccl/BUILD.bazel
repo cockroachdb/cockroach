@@ -115,6 +115,7 @@ go_test(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl/backupccl",
+        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",

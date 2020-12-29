@@ -52,6 +52,7 @@ go_test(
     embed = [":parser"],
     deps = [
         "//pkg/sql/lex",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
