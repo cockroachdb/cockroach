@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -90,6 +91,7 @@ var _ rangecache.RangeDescriptorDB = (*Connector)(nil)
 var _ config.SystemConfigProvider = (*Connector)(nil)
 
 // NewConnector creates a new Connector.
+// NOTE: Calling Start will set cfg.RPCContext.ClusterID.
 func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	cfg.AmbientCtx.AddLogTag("tenant-connector", nil)
 	return &Connector{
@@ -111,8 +113,9 @@ func (connectorFactory) NewConnector(
 	return NewConnector(cfg, addrs), nil
 }
 
-// Start launches the connector's worker thread and waits for it to receive an
-// initial GossipSubscription event.
+// Start launches the connector's worker thread and waits for it to successfully
+// connect to a KV node. Start returns once the connector has determined the
+// cluster's ID and set Connector.rpcContext.ClusterID.
 func (c *Connector) Start(ctx context.Context) error {
 	startupC := c.startupC
 	c.rpcContext.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
@@ -166,7 +169,10 @@ func (c *Connector) runGossipSubscription(ctx context.Context) {
 				continue
 			}
 			handler(c, ctx, e.Key, e.Content)
-			if c.startupC != nil {
+
+			// Signal that startup is complete once the ClusterID gossip key has
+			// been handled.
+			if c.startupC != nil && e.PatternMatched == gossip.KeyClusterID {
 				close(c.startupC)
 				c.startupC = nil
 			}
@@ -175,6 +181,8 @@ func (c *Connector) runGossipSubscription(ctx context.Context) {
 }
 
 var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, roachpb.Value){
+	// Subscribe to the ClusterID update.
+	gossip.KeyClusterID: (*Connector).updateClusterID,
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Connector).updateNodeAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
@@ -189,6 +197,22 @@ var gossipSubsPatterns = func() []string {
 	sort.Strings(patterns)
 	return patterns
 }()
+
+// updateClusterID handles updates to the "ClusterID" gossip key, and sets the
+// rpcContext so that it's available to other code running in the tenant.
+func (c *Connector) updateClusterID(ctx context.Context, key string, content roachpb.Value) {
+	bytes, err := content.GetBytes()
+	if err != nil {
+		log.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
+		return
+	}
+	clusterID, err := uuid.FromBytes(bytes)
+	if err != nil {
+		log.Errorf(ctx, "invalid ClusterID value: %v", content.RawBytes)
+		return
+	}
+	c.rpcContext.ClusterID.Set(ctx, clusterID)
+}
 
 // updateNodeAddress handles updates to "node" gossip keys, performing the
 // corresponding update to the Connector's cached NodeDescriptor set.
