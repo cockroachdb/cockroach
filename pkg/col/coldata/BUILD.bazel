@@ -56,10 +56,10 @@ genrule(
     cmd = """
       $(location //pkg/sql/colexec/execgen/cmd/execgen) \
         -fmt=false pkg/col/coldata/$@ > $@
-      $(location //vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports) -w $@
+      $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
     """,
     tools = [
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "//pkg/sql/colexec/execgen/cmd/execgen",
-        "//vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     ],
 )
