@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1312,8 +1312,9 @@ func makeNameCacheKey(parentID descpb.ID, parentSchemaID descpb.ID, name string)
 // The locking order is:
 // Manager.mu > descriptorState.mu > nameCache.mu > descriptorVersionState.mu
 type Manager struct {
-	storage storage
-	mu      struct {
+	rangeFeedFactory *rangefeed.Factory
+	storage          storage
+	mu               struct {
 		syncutil.Mutex
 		descriptors map[descpb.ID]*descriptorState
 
@@ -1353,6 +1354,7 @@ func NewLeaseManager(
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
+	rangeFeedFactory *rangefeed.Factory,
 	cfg *base.LeaseManagerConfig,
 ) *Manager {
 	lm := &Manager{
@@ -1375,7 +1377,8 @@ func NewLeaseManager(
 				Unit:        metric.Unit_COUNT,
 			}),
 		},
-		testingKnobs: testingKnobs,
+		rangeFeedFactory: rangeFeedFactory,
+		testingKnobs:     testingKnobs,
 		names: nameCache{
 			descriptors: make(map[nameCacheKey]*descriptorVersionState),
 		},
@@ -1838,54 +1841,14 @@ func (m *Manager) watchForRangefeedUpdates(
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
-	distSender := db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-	eventCh := make(chan *roachpb.RangeFeedEvent)
-	ctx, _ = s.WithCancelOnQuiesce(ctx)
-	if err := s.RunAsyncTask(ctx, "lease rangefeed", func(ctx context.Context) {
-
-		// Run the rangefeed in a loop in the case of failure, likely due to node
-		// failures or general unavailability. We'll reset the retrier if the
-		// rangefeed runs for longer than the resetThreshold.
-		const resetThreshold = 30 * time.Second
-		restartLogEvery := log.Every(10 * time.Second)
-		for i, r := 1, retry.StartWithCtx(ctx, retry.Options{
-			InitialBackoff: 100 * time.Millisecond,
-			MaxBackoff:     2 * time.Second,
-			Closer:         s.ShouldQuiesce(),
-		}); r.Next(); i++ {
-			ts := m.getResolvedTimestamp()
-			descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.GetID()))
-			span := roachpb.Span{
-				Key:    descKeyPrefix,
-				EndKey: descKeyPrefix.PrefixEnd(),
-			}
-			// Note: We don't need to use withDiff to detect version changes because
-			// the Manager already stores the relevant version information.
-			const withDiff = false
-			log.VEventf(ctx, 1, "starting rangefeed from %v on %v", ts, span)
-			start := timeutil.Now()
-			err := distSender.RangeFeed(ctx, span, ts, withDiff, eventCh)
-			if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
-				log.Warningf(ctx, "lease rangefeed failed %d times, restarting: %v",
-					log.Safe(i), log.Safe(err))
-			}
-			if ctx.Err() != nil {
-				log.VEventf(ctx, 1, "exiting rangefeed")
-				return
-			}
-			ranFor := timeutil.Since(start)
-			log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
-				log.Safe(span), ranFor)
-			if ranFor > resetThreshold {
-				i = 1
-				r.Reset()
-			}
-		}
-	}); err != nil {
-		// This will only fail if the stopper has been stopped.
-		return
+	descriptorTableStart := m.Codec().TablePrefix(keys.DescriptorTableID)
+	descriptorTableSpan := roachpb.Span{
+		Key:    descriptorTableStart,
+		EndKey: descriptorTableStart.PrefixEnd(),
 	}
-	handleEvent := func(ev *roachpb.RangeFeedValue) {
+	handleEvent := func(
+		ctx context.Context, ev *roachpb.RangeFeedValue,
+	) {
 		if len(ev.Value.RawBytes) == 0 {
 			return
 		}
@@ -1909,29 +1872,10 @@ func (m *Manager) watchForRangefeedUpdates(
 		case descUpdateCh <- &descriptor:
 		}
 	}
-	_ = s.RunAsyncTask(ctx, "lease-rangefeed", func(ctx context.Context) {
-		for {
-			select {
-			case <-m.stopper.ShouldQuiesce():
-				return
-			case <-ctx.Done():
-				return
-			case e := <-eventCh:
-				if e.Checkpoint != nil {
-					log.VEventf(ctx, 2, "got rangefeed checkpoint %v", e.Checkpoint)
-					m.setResolvedTimestamp(e.Checkpoint.ResolvedTS)
-					continue
-				}
-				if e.Error != nil {
-					log.Warningf(ctx, "got an error from a rangefeed: %v", e.Error.Error)
-					continue
-				}
-				if e.Val != nil {
-					handleEvent(e.Val)
-				}
-			}
-		}
-	})
+	// Ignore errors here because they indicate that the server is shutting down.
+	_, _ = m.rangeFeedFactory.RangeFeed(
+		ctx, "lease", descriptorTableSpan, m.getResolvedTimestamp(), handleEvent,
+	)
 }
 
 func (m *Manager) handleUpdatedSystemCfg(

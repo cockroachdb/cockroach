@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -425,6 +426,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
+	rangeFeedKnobs, _ := cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
+	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, rangeFeedKnobs)
+	if err != nil {
+		return nil, err
+	}
+
 	nodeLiveness := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
 		AmbientCtx:              cfg.AmbientCtx,
 		Clock:                   clock,
@@ -657,6 +664,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
+		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
 	})
 	if err != nil {
