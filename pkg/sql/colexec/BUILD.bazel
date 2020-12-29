@@ -159,7 +159,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
-        "//pkg/sql/colexec",
         "//pkg/sql/colexec/colbuilder",
         "//pkg/sql/colexec/colexecagg",
         "//pkg/sql/colexec/execgen",

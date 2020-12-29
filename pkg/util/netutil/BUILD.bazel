@@ -24,7 +24,7 @@ go_test(
     name = "netutil_test",
     srcs = ["addr_test.go"],
     deps = [
+        ":netutil",
         "//pkg/testutils",
-        "//pkg/util/netutil",
     ],
 )

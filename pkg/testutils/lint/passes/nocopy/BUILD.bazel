@@ -16,7 +16,7 @@ go_test(
     name = "nocopy_test",
     srcs = ["nocopy_test.go"],
     deps = [
-        "//pkg/testutils/lint/passes/nocopy",
+        ":nocopy",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

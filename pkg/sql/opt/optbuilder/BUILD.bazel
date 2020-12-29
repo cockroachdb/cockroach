@@ -87,7 +87,6 @@ go_test(
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt/memo",
-        "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",
         "//pkg/sql/opt/testutils/testcat",
