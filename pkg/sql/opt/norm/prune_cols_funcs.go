@@ -144,26 +144,26 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			// If the columns being updated are not part of the index and the
-			// index is not a partial index, then the update does not require
-			// changes to the index. Partial indexes may be updated (even when a
-			// column in the index is not changing) when rows that were not
-			// previously in the index must be added to the index because they
-			// now satisfy the partial index predicate.
+			// If the columns being updated are not part of the index, then the
+			// update does not require changes to the index. Partial indexes may
+			// be updated (even when a column in the index is not changing) when
+			// the predicate references columns that are being updated. For
+			// example, rows that were not previously in the index must be added
+			// to the index because they now satisfy the partial index
+			// predicate, requiring the index columns to be fetched.
 			//
 			// Note that we use the set of index columns where the virtual
 			// columns have been mapped to their source columns. Virtual columns
 			// are never part of the updated columns. Updates to source columns
 			// trigger index changes.
-			//
-			// TODO(mgartner): Index columns are not necessary when neither the
-			// index columns nor the columns referenced in the partial index
-			// predicate are being updated. We should prune mutation fetch
-			// columns when this is the case, rather than always marking index
-			// columns of partial indexes as "needed".
 			indexCols := tabMeta.IndexColumnsMapVirtual(i)
-			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
-			if !indexCols.Intersects(updateCols) && !isPartialIndex {
+			pred, isPartialIndex := tabMeta.PartialIndexPredicate(i)
+			indexAndPredCols := indexCols.Copy()
+			if isPartialIndex {
+				predFilters := *pred.(*memo.FiltersExpr)
+				indexAndPredCols.UnionWith(predFilters.OuterCols())
+			}
+			if !indexAndPredCols.Intersects(updateCols) {
 				continue
 			}
 
