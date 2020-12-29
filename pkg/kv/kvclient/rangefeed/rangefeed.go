@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,21 +60,40 @@ type kvDB interface {
 type Factory struct {
 	stopper *stop.Stopper
 	client  kvDB
+	knobs   TestingKnobs
 }
 
+// TestingKnobs is used to inject behavior into a rangefeed for testing.
+type TestingKnobs struct {
+
+	// OnRangefeedRestart is called when a rangefeed restarts.
+	OnRangefeedRestart func()
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (t TestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)
+
 // NewFactory constructs a new Factory.
-func NewFactory(stopper *stop.Stopper, db *kv.DB) (*Factory, error) {
+func NewFactory(stopper *stop.Stopper, db *kv.DB, knobs *TestingKnobs) (*Factory, error) {
 	kvDB, err := newDBAdapter(db)
 	if err != nil {
 		return nil, err
 	}
-	return newFactory(stopper, kvDB), nil
+	return newFactory(stopper, kvDB, knobs), nil
 }
 
-func newFactory(stopper *stop.Stopper, client kvDB) *Factory {
+func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factory {
 	return &Factory{
 		stopper: stopper,
 		client:  client,
+		knobs: func() TestingKnobs {
+			if knobs != nil {
+				return *knobs
+			}
+			return TestingKnobs{}
+		}(),
 	}
 }
 
@@ -90,6 +110,7 @@ func (f *Factory) RangeFeed(
 	r := RangeFeed{
 		client:  f.client,
 		stopper: f.stopper,
+		knobs:   &f.knobs,
 
 		initialTimestamp: initialTimestamp,
 		span:             span,
@@ -112,6 +133,7 @@ type RangeFeed struct {
 	config
 	client  kvDB
 	stopper *stop.Stopper
+	knobs   *TestingKnobs
 
 	initialTimestamp hlc.Timestamp
 
@@ -200,6 +222,9 @@ func (f *RangeFeed) run(ctx context.Context) {
 		ranFor := timeutil.Since(start)
 		log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
 			log.Safe(f.span), ranFor)
+		if f.knobs.OnRangefeedRestart != nil {
+			f.knobs.OnRangefeedRestart()
+		}
 
 		// If the rangefeed ran successfully for long enough, reset the retry
 		// state so that the exponential backoff begins from its minimum value.

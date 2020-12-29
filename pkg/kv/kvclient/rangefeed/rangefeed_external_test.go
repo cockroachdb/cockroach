@@ -60,7 +60,7 @@ func TestRangeFeedIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	f, err := rangefeed.NewFactory(tc.Stopper(), db)
+	f, err := rangefeed.NewFactory(tc.Stopper(), db, nil)
 	require.NoError(t, err)
 	rows := make(chan *roachpb.RangeFeedValue)
 	initialScanDone := make(chan struct{})

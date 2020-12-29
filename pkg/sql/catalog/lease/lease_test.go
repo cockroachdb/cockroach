@@ -17,8 +17,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -52,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -62,7 +58,6 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 type leaseTest struct {
@@ -230,6 +225,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
+			cfgCpy.RangeFeedFactory,
 			t.cfg,
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
@@ -2310,72 +2306,6 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	// Ensure that the new schema is in use on n2.
 	var i, j int
 	require.Equal(t, gosql.ErrNoRows, db2.QueryRow("SELECT i, j FROM foo").Scan(&i, &j))
-}
-
-// TestBackoffOnRangefeedFailure ensures that the backoff occurs when a
-// rangefeed fails. It observes this indirectly by looking at logs.
-func TestBackoffOnRangefeedFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var called int64
-	const timesToFail = 3
-	rpcKnobs := rpc.ContextTestingKnobs{
-		StreamClientInterceptor: func(
-			target string, class rpc.ConnectionClass,
-		) grpc.StreamClientInterceptor {
-			return func(
-				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
-				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
-			) (stream grpc.ClientStream, err error) {
-				if strings.Contains(method, "RangeFeed") &&
-					atomic.AddInt64(&called, 1) <= timesToFail {
-					return nil, errors.Errorf("boom")
-				}
-				return streamer(ctx, desc, cc, method, opts...)
-			}
-		},
-	}
-	ctx := context.Background()
-	var seen struct {
-		syncutil.Mutex
-		entries []logpb.Entry
-	}
-	restartingRE := regexp.MustCompile("restarting rangefeed.*after.*")
-	log.Intercept(ctx, func(entry logpb.Entry) {
-		if !restartingRE.MatchString(entry.Message) {
-			return
-		}
-		seen.Lock()
-		defer seen.Unlock()
-		seen.entries = append(seen.entries, entry)
-	})
-	defer log.Intercept(ctx, nil)
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					ContextTestingKnobs: rpcKnobs,
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	testutils.SucceedsSoon(t, func() error {
-		seen.Lock()
-		defer seen.Unlock()
-		if len(seen.entries) < timesToFail {
-			return errors.Errorf("seen %d, waiting for %d", len(seen.entries), timesToFail)
-		}
-		return nil
-	})
-	seen.Lock()
-	defer seen.Unlock()
-	minimumBackoff := 85 * time.Millisecond // initialBackoff less jitter
-	var totalBackoff time.Duration
-	for i := 1; i < len(seen.entries); i++ {
-		totalBackoff += time.Duration(seen.entries[i].Time - seen.entries[i-1].Time)
-	}
-	require.Greater(t, totalBackoff.Nanoseconds(), (3 * minimumBackoff).Nanoseconds())
 }
 
 // TestLeaseWithOfflineTables checks that leases on tables which had

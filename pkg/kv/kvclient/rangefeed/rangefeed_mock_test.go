@@ -12,7 +12,6 @@ package rangefeed_test
 
 import (
 	"context"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -112,7 +110,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return nil
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		require.NotNil(t, f)
 		rows := make(chan *roachpb.RangeFeedValue)
 
@@ -230,7 +228,7 @@ func TestRangeFeedMock(t *testing.T) {
 				}
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", sp, initialTS, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -278,7 +276,7 @@ func TestRangeFeedMock(t *testing.T) {
 				return ctx.Err()
 			},
 		}
-		f := rangefeed.NewFactoryWithDB(stopper, &mc)
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
 		rows := make(chan *roachpb.RangeFeedValue)
 		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
@@ -297,7 +295,7 @@ func TestRangeFeedMock(t *testing.T) {
 			EndKey: roachpb.Key("c"),
 		}
 		stopper.Stop(ctx)
-		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{})
+		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{}, nil /* knobs */)
 		r, err := f.RangeFeed(ctx, "foo", sp, hlc.Timestamp{}, func(
 			ctx context.Context, value *roachpb.RangeFeedValue,
 		) {
@@ -333,23 +331,21 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	ctx := context.Background()
 	var seen struct {
 		syncutil.Mutex
-		entries []logpb.Entry
+		n int
 	}
-	restartingRE := regexp.MustCompile("restarting rangefeed.*after.*")
-	log.Intercept(ctx, func(entry logpb.Entry) {
-		if !restartingRE.MatchString(entry.Message) {
-			return
-		}
-		seen.Lock()
-		defer seen.Unlock()
-		seen.entries = append(seen.entries, entry)
-	})
 	defer log.Intercept(ctx, nil)
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					ContextTestingKnobs: rpcKnobs,
+				},
+				RangeFeed: &rangefeed.TestingKnobs{
+					OnRangefeedRestart: func() {
+						seen.Lock()
+						defer seen.Unlock()
+						seen.n++
+					},
 				},
 			},
 		},
@@ -358,8 +354,8 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		seen.Lock()
 		defer seen.Unlock()
-		if len(seen.entries) < timesToFail {
-			return errors.Errorf("seen %d, waiting for %d", len(seen.entries), timesToFail)
+		if seen.n < timesToFail {
+			return errors.Errorf("seen %d, waiting for %d", seen.n, timesToFail)
 		}
 		return nil
 	})

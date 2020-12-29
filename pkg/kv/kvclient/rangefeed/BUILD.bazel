@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/roachpb",
@@ -49,7 +50,6 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/log/logpb",
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

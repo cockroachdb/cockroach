@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -91,6 +92,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
+	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		execCfg.NodeID,
@@ -101,6 +104,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
 		stopper,
+		rf,
 		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
