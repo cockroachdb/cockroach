@@ -476,6 +476,7 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_function_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user string_or_placeholder_list
@@ -1423,6 +1424,10 @@ drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
 
+drop_function_stmt ::=
+	'DROP' 'FUNCTION' func_def_name_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_def_name_list opt_drop_behavior
+
 explain_option_name ::=
 	non_reserved_word
 
@@ -1927,6 +1932,9 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+func_def_name_list ::=
+	( func_def_name ) ( ( ',' func_def_name ) )*
 
 kv_option ::=
 	name '=' string_or_placeholder

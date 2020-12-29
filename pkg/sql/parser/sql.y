@@ -833,6 +833,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> drop_stmt
 %type <tree.Statement> drop_ddl_stmt
 %type <tree.Statement> drop_database_stmt
+%type <tree.Statement> drop_function_stmt
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_schema_stmt
@@ -990,7 +991,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <str> db_object_name_component
 %type <*tree.UnresolvedObjectName> table_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedObjectName> func_def_name
-%type <[]*tree.UnresolvedObjectName> type_name_list
+%type <[]*tree.UnresolvedObjectName> type_name_list func_def_name_list
 %type <str> schema_name
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name
 %type <tree.ObjectNamePrefixList> schema_name_list
@@ -2232,7 +2233,7 @@ username_or_sconst:
   {
     // We use UsernameValidation because username_or_sconst and role_spec
     // are only used for usernames of existing accounts, not when
-    // creating new users or roles.	
+    // creating new users or roles.
     $$.val, _ = security.MakeSQLUsernameFromUserInput($1, security.UsernameValidation)
   }
 
@@ -3192,7 +3193,6 @@ drop_unsupported:
 | DROP EXTENSION name error { return unimplemented(sqllex, "drop extension " + $3) }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
 | DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
-| DROP FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
 | DROP opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "drop language " + $4) }
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
@@ -3421,6 +3421,7 @@ drop_ddl_stmt:
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
+| drop_function_stmt // EXTEND WITH HELP: DROP FUNCTION
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -3554,6 +3555,28 @@ drop_type_stmt:
     }
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
+
+// %Help: DROP FUNCTION - remove a function
+// %Category: DDL
+// %Text: DROP FUNCTION [IF EXISTS] <type_name> [, ...] [CASCADE | RESTRICT]
+drop_function_stmt:
+  DROP FUNCTION func_def_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      Names: $3.unresolvedObjectNames(),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP FUNCTION IF EXISTS func_def_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropFunction{
+      Names: $5.unresolvedObjectNames(),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP FUNCTION error // SHOW HELP: DROP FUNCTION
 
 target_types:
   type_name_list
@@ -11924,6 +11947,17 @@ func_name:
     fn, err := $1.unresolvedName().ToUnresolvedObjectName(aIdx)
     if err != nil { return setErr(sqllex, err) }
     $$.val = fn
+  }
+
+// func_def_name_list is a list of func_def_names.
+func_def_name_list:
+  func_def_name
+  {
+    $$.val = []*tree.UnresolvedObjectName{$1.unresolvedObjectName()}
+  }
+| func_def_name_list ',' func_def_name
+  {
+    $$.val = append($1.unresolvedObjectNames(), $3.unresolvedObjectName())
   }
 
 // func_name_no_crdb_extra is the same rule as func_name, but does not
