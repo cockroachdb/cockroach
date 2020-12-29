@@ -22,11 +22,11 @@ go_test(
     name = "colmem_test",
     srcs = ["allocator_test.go"],
     deps = [
-        ":colmem",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
         "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

@@ -22,7 +22,7 @@ go_test(
         "uint_test.go",
     ],
     deps = [
-        ":optional",
+        "//pkg/util/optional",
         "@com_github_stretchr_testify//require",
     ],
 )

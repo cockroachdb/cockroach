@@ -25,7 +25,7 @@ go_test(
     name = "lex_test",
     srcs = ["encode_test.go"],
     deps = [
-        ":lex",
+        "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/sessiondatapb",

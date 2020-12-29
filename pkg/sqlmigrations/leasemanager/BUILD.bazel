@@ -25,12 +25,12 @@ go_test(
         "main_test.go",
     ],
     deps = [
-        ":leasemanager",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sqlmigrations/leasemanager",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/hlc",

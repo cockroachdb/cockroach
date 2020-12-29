@@ -50,6 +50,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",
+        "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/spanlatch",

@@ -151,6 +151,7 @@ go_test(
         "//pkg/sql/opt/invertedexpr",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",

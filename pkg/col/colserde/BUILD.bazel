@@ -35,10 +35,10 @@ go_test(
         "record_batch_test.go",
     ],
     deps = [
-        ":colserde",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
+        "//pkg/col/colserde",
         "//pkg/col/typeconv",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",

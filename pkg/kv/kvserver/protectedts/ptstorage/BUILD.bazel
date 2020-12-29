@@ -42,6 +42,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

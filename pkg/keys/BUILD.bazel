@@ -29,6 +29,7 @@ go_test(
     ],
     embed = [":keys"],
     deps = [
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/bitarray",
