@@ -211,7 +211,6 @@ var memBufferColTypes = []*types.T{
 	types.Bytes, // span.EndKey
 	types.Int,   // ts.WallTime
 	types.Int,   // ts.Logical
-	types.Int,   // ts.Flags
 }
 
 // memBuffer is an in-memory buffer for changed KV and Resolved timestamp
@@ -267,7 +266,6 @@ func (b *memBuffer) AddKV(
 		tree.DNull,
 		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.WallTime)),
 		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.Logical)),
-		b.allocMu.a.NewDInt(tree.DInt(kv.Value.Timestamp.Flags)),
 	}
 	b.allocMu.Unlock()
 	return b.addRow(ctx, row)
@@ -286,7 +284,6 @@ func (b *memBuffer) AddResolved(
 		b.allocMu.a.NewDBytes(tree.DBytes(span.EndKey)),
 		b.allocMu.a.NewDInt(tree.DInt(ts.WallTime)),
 		b.allocMu.a.NewDInt(tree.DInt(ts.Logical)),
-		b.allocMu.a.NewDInt(tree.DInt(ts.Flags)),
 	}
 	b.allocMu.Unlock()
 	return b.addRow(ctx, row)
@@ -303,7 +300,6 @@ func (b *memBuffer) Get(ctx context.Context) (Event, error) {
 	ts := hlc.Timestamp{
 		WallTime: int64(*row[5].(*tree.DInt)),
 		Logical:  int32(*row[6].(*tree.DInt)),
-		Flags:    uint32(*row[7].(*tree.DInt)),
 	}
 	if row[2] != tree.DNull {
 		e.prevVal = roachpb.Value{

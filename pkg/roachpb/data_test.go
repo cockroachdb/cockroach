@@ -47,20 +47,19 @@ func makeClockTS(walltime int64, logical int32) hlc.ClockTimestamp {
 	}
 }
 
-func makeClockTSWithFlag(walltime int64, logical int32) hlc.ClockTimestamp {
-	return hlc.ClockTimestamp{
+func makeTS(walltime int64, logical int32) hlc.Timestamp {
+	return hlc.Timestamp{
 		WallTime: walltime,
 		Logical:  logical,
-		Flags:    uint32(hlc.TimestampFlag_SYNTHETIC),
 	}
 }
 
-func makeTS(walltime int64, logical int32) hlc.Timestamp {
-	return makeClockTS(walltime, logical).ToTimestamp()
-}
-
-func makeTSWithFlag(walltime int64, logical int32) hlc.Timestamp {
-	return makeClockTSWithFlag(walltime, logical).ToTimestamp()
+func makeSynTS(walltime int64, logical int32) hlc.Timestamp {
+	return hlc.Timestamp{
+		WallTime:  walltime,
+		Logical:   logical,
+		Synthetic: true,
+	}
 }
 
 // TestKeyNext tests that the method for creating lexicographic
@@ -474,17 +473,24 @@ var nonZeroTxn = Transaction{
 		Key:            Key("foo"),
 		ID:             uuid.MakeV4(),
 		Epoch:          2,
-		WriteTimestamp: makeTSWithFlag(20, 21),
-		MinTimestamp:   makeTSWithFlag(10, 11),
+		WriteTimestamp: makeSynTS(20, 21),
+		MinTimestamp:   makeSynTS(10, 11),
 		Priority:       957356782,
 		Sequence:       123,
 	},
-	Name:                 "name",
-	Status:               COMMITTED,
-	LastHeartbeat:        makeTSWithFlag(1, 2),
-	ReadTimestamp:        makeTSWithFlag(20, 22),
-	MaxTimestamp:         makeTSWithFlag(40, 41),
-	ObservedTimestamps:   []ObservedTimestamp{{NodeID: 1, Timestamp: makeClockTSWithFlag(1, 2)}},
+	Name:          "name",
+	Status:        COMMITTED,
+	LastHeartbeat: makeSynTS(1, 2),
+	ReadTimestamp: makeSynTS(20, 22),
+	MaxTimestamp:  makeSynTS(40, 41),
+	ObservedTimestamps: []ObservedTimestamp{{
+		NodeID: 1,
+		Timestamp: hlc.ClockTimestamp{
+			WallTime:  1,
+			Logical:   2,
+			Synthetic: true, // normally not set, but needed for zerofields.NoZeroField
+		},
+	}},
 	WriteTooOld:          true,
 	LockSpans:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:       []SequencedWrite{{Key: []byte("c"), Sequence: 1}},

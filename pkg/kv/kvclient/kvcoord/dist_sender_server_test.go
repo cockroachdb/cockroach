@@ -1190,7 +1190,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 					t.Fatal(err)
 				}
 				ts[i] = s.Clock().Now()
-				log.Infof(ctx, "%d: %s %d", i, key, ts[i])
+				log.Infof(ctx, "%d: %s %s", i, key, ts[i])
 				if i == 0 {
 					testutils.SucceedsSoon(t, func() error {
 						// Enforce that when we write the second key, it's written

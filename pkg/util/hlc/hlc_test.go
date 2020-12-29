@@ -54,7 +54,7 @@ func ExampleNewClock() {
 	}
 
 	if t.WallTime-s.WallTime > 0 {
-		log.Fatalf(context.Background(), "HLC timestamp %d deviates from physical clock %d", s, t)
+		log.Fatalf(context.Background(), "HLC timestamp %s deviates from physical clock %s", s, t)
 	}
 
 	if s.Logical > 0 {
