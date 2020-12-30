@@ -52,8 +52,9 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 // Yes, this does modify an Immutable.
 func AddColumnDropBackfillMutation(desc *tabledesc.Immutable) *tabledesc.Immutable {
 	desc.Mutations = append(desc.Mutations, descpb.DescriptorMutation{
-		State:     descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
-		Direction: descpb.DescriptorMutation_DROP,
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_DROP,
+		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.NextColumnID - 1)},
 	})
 	return desc
 }
