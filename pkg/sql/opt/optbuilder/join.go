@@ -322,14 +322,18 @@ func (jb *usingJoinBuilder) init(
 	flags memo.JoinFlags,
 	leftScope, rightScope, outScope *scope,
 ) {
-	jb.b = b
-	jb.joinType = joinType
-	jb.joinFlags = flags
-	jb.leftScope = leftScope
-	jb.rightScope = rightScope
-	jb.outScope = outScope
-	jb.hideCols = make(map[*scopeColumn]struct{})
-	jb.showCols = make(map[*scopeColumn]struct{})
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*jb = usingJoinBuilder{
+		b:          b,
+		joinType:   joinType,
+		joinFlags:  flags,
+		leftScope:  leftScope,
+		rightScope: rightScope,
+		outScope:   outScope,
+		hideCols:   make(map[*scopeColumn]struct{}),
+		showCols:   make(map[*scopeColumn]struct{}),
+	}
 }
 
 // buildUsingJoin constructs a Join operator with join columns matching the

@@ -122,10 +122,14 @@ func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary
 		panic(errors.AssertionFailedf("an empty end boundary must be inclusive"))
 	}
 
-	sp.start = start
-	sp.startBoundary = startBoundary
-	sp.end = end
-	sp.endBoundary = endBoundary
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*sp = Span{
+		start:         start,
+		startBoundary: startBoundary,
+		end:           end,
+		endBoundary:   endBoundary,
+	}
 }
 
 // Compare returns an integer indicating the ordering of the two spans. The

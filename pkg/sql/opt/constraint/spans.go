@@ -43,10 +43,12 @@ func (s *Spans) Alloc(capacity int) {
 
 // InitSingleSpan initializes the structure with a single span.
 func (s *Spans) InitSingleSpan(sp *Span) {
-	s.firstSpan = *sp
-	s.otherSpans = nil
-	s.numSpans = 1
-	s.immutable = false
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*s = Spans{
+		firstSpan: *sp,
+		numSpans:  1,
+	}
 }
 
 // Count returns the number of spans.

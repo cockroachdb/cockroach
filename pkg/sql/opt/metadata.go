@@ -118,7 +118,8 @@ type Metadata struct {
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
 
-	// NOTE! When adding fields here, update Init, CopyFrom and TestMetadata.
+	// NOTE! When adding fields here, update Init (if reusing allocated
+	// data structures is desired), CopyFrom and TestMetadata.
 }
 
 type mdDep struct {
@@ -150,41 +151,42 @@ func (n *MDDepName) equals(other *MDDepName) bool {
 func (md *Metadata) Init() {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
+	// TODO(mgartner): determine if the new clearing pattern is still optimized
+	// by Go. Look at original commit message and assembly.
 	for i := range md.schemas {
 		md.schemas[i] = nil
 	}
-	md.schemas = md.schemas[:0]
 
 	for i := range md.cols {
 		md.cols[i] = ColumnMeta{}
 	}
-	md.cols = md.cols[:0]
 
 	for i := range md.tables {
 		md.tables[i] = TableMeta{}
 	}
-	md.tables = md.tables[:0]
 
 	for i := range md.sequences {
 		md.sequences[i] = nil
 	}
-	md.sequences = md.sequences[:0]
 
 	for i := range md.deps {
 		md.deps[i] = mdDep{}
 	}
-	md.deps = md.deps[:0]
 
 	for i := range md.views {
 		md.views[i] = nil
 	}
-	md.views = md.views[:0]
 
-	md.currUniqueID = 0
-
-	md.withBindings = nil
-	md.userDefinedTypes = nil
-	md.userDefinedTypesSlice = nil
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*md = Metadata{
+		schemas:   md.schemas[:0],
+		cols:      md.cols[:0],
+		tables:    md.tables[:0],
+		sequences: md.sequences[:0],
+		deps:      md.deps[:0],
+		views:     md.views[:0],
+	}
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.

@@ -1295,7 +1295,11 @@ func (ic *Instance) Init(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	ic.requiredFilters = requiredFilters
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*ic = Instance{
+		requiredFilters: requiredFilters,
+	}
 	if len(optionalFilters) == 0 {
 		ic.allFilters = requiredFilters
 	} else {
@@ -1428,15 +1432,18 @@ func (c *indexConstraintCtx) init(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	c.md = factory.Metadata()
-	c.columns = columns
-	c.notNullCols = notNullCols
-	c.computedCols = computedCols
-	c.isInverted = isInverted
-	c.evalCtx = evalCtx
-	c.factory = factory
-
-	c.keyCtx = make([]constraint.KeyContext, len(columns))
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = indexConstraintCtx{
+		md:           factory.Metadata(),
+		columns:      columns,
+		notNullCols:  notNullCols,
+		computedCols: computedCols,
+		isInverted:   isInverted,
+		evalCtx:      evalCtx,
+		factory:      factory,
+		keyCtx:       make([]constraint.KeyContext, len(columns)),
+	}
 	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx
 		c.keyCtx[i].Columns.Init(columns[i:])

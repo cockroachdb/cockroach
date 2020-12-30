@@ -24,6 +24,9 @@ type FiltersExprMutateChecker struct {
 
 // Init initializes a FiltersExprMutateChecker with the original filters.
 func (fmc *FiltersExprMutateChecker) Init(filters FiltersExpr) {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*fmc = FiltersExprMutateChecker{}
 	fmc.hasher.Init()
 	fmc.hasher.HashFiltersExpr(filters)
 	fmc.hash = fmc.hasher.hash
