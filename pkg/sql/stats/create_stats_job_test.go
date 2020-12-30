@@ -669,6 +669,35 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 		})
 }
 
+func TestTxnApplicationName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+
+	var ts1 []uint8
+	sqlDB.QueryRow(t, `
+			INSERT INTO d.t VALUES (1)
+			RETURNING cluster_logical_timestamp();
+		`).Scan(&ts1)
+
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (2)`)
+
+	sqlDB.Exec(t, fmt.Sprintf("CREATE STATISTICS s FROM d.t"))
+
+
+	sqlDB.CheckQueryResults(t,
+		`SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE d.t]`,
+		[][]string{
+			{"s"},
+		})
+}
+
 // Create a blocking request filter for the actions related
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.
