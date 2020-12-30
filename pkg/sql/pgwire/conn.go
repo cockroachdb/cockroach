@@ -140,8 +140,6 @@ func (s *Server) serveConn(
 	reserved mon.BoundAccount,
 	authOpt authOptions,
 ) {
-	sArgs.RemoteAddr = netConn.RemoteAddr()
-
 	if log.V(2) {
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
