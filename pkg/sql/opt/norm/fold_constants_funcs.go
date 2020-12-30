@@ -542,6 +542,7 @@ func (c *CustomFuncs) FoldFunction(
 ) opt.ScalarExpr {
 	// Non-normal function classes (aggregate, window, generator) cannot be
 	// folded into a single constant.
+	// TODO(jordan): should we be folding constant-input user-defined funcs?
 	if private.Properties.Class != tree.NormalClass {
 		return nil
 	}
@@ -554,8 +555,10 @@ func (c *CustomFuncs) FoldFunction(
 	for i := range exprs {
 		exprs[i] = memo.ExtractConstDatum(args[i])
 	}
+
+	funcRef := tree.WrapFunction(private.Name)
 	fn := tree.NewTypedFuncExpr(
-		tree.ResolvableFunctionReference{},
+		funcRef,
 		0, /* aggQualifier */
 		exprs,
 		nil, /* filter */
