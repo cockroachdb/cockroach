@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 )
 
@@ -311,6 +312,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								// The tag part is going to contain a client address, with a random port number.
 								// To make the test deterministic, erase the random part.
 								tags := addrRe.ReplaceAllString(entry.Tags, ",client=XXX")
+								tags = peerRe.ReplaceAllString(tags, ",peer=XXX")
 								var maybeTags string
 								if len(tags) > 0 {
 									maybeTags = "[" + tags + "] "
@@ -437,6 +439,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 var authLogFileRe = regexp.MustCompile(`pgwire/(auth|conn|server)\.go`)
 var addrRe = regexp.MustCompile(`,client(=[^\],]*)?`)
+var peerRe = regexp.MustCompile(`,peer(=[^\],]*)?`)
 var durationRe = regexp.MustCompile(`duration: \d.*s`)
 
 // fmtErr formats an error into an expected output.
@@ -461,4 +464,106 @@ func fmtErr(err error) string {
 		return "ERROR: " + errStr
 	}
 	return "ok"
+}
+
+// TestClientAddrOverride checks that the crdb:remote_addr parameter
+// can override the client address.
+func TestClientAddrOverride(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	// Ensure that the config parameters are restored at the end of the test.
+	defer pgwire.TestingSetTrustClientProvidedRemoteAddr(false)()
+
+	// Start a server.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(security.TestUser),
+	)
+	defer cleanupFunc()
+
+	// Ensure the test user exists.
+	if _, err := db.Exec(`CREATE USER $1`, security.TestUser); err != nil {
+		t.Fatal(err)
+	}
+
+	const specialAddr = "11.22.33.44"
+	const specialPort = "5566"
+
+	// Create a custom HBA rule to refuse connections by the testuser when
+	// coming from the special address.
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`,
+		"host all "+security.TestUser+" "+specialAddr+"/32 reject\n"+
+			"host all all all cert-password\n",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Enable conn/auth logging.
+	// We can't use the cluster settings to do this, because
+	// cluster settings propagate asynchronously.
+	testServer := s.(*server.TestServer)
+	testServer.PGServer().TestingEnableConnAuthLogging()
+
+	// Inject the custom client address.
+	options, _ := url.ParseQuery(pgURL.RawQuery)
+	options["crdb:remote_addr"] = []string{specialAddr + ":" + specialPort}
+	pgURL.RawQuery = options.Encode()
+
+	t.Run("check-server-reject-override", func(t *testing.T) {
+		// Connect a first time, with trust override disabled. In that case,
+		// the server will complain that the remote override is not supported.
+		testDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer testDB.Close()
+		if err := testDB.Ping(); !testutils.IsError(err, "server not configured to accept remote address override") {
+			t.Error(err)
+		}
+	})
+
+	t.Run("check-server-hba-uses-override", func(t *testing.T) {
+		// Now recognize the override. Now we're expecting the connection
+		// to hit the HBA rule and fail with an authentication error.
+		_ = pgwire.TestingSetTrustClientProvidedRemoteAddr(true)
+
+		testDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer testDB.Close()
+		if err := testDB.Ping(); !testutils.IsError(err, "authentication rejected") {
+			t.Error(err)
+		}
+	})
+
+	t.Run("check-server-log-uses-override", func(t *testing.T) {
+		// Now we want to check that the logging tags are also updated.
+		log.Flush()
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
+			log.WithMarkedSensitiveData)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) == 0 {
+			t.Fatal("no log entries")
+		}
+		seenClient := false
+		for _, e := range entries {
+			if strings.Contains(e.Tags, "client=") {
+				seenClient = true
+				if !strings.Contains(e.Tags, "client="+string(redact.StartMarker())+specialAddr+":"+specialPort+string(redact.EndMarker())) {
+					t.Errorf("expected override addr in log tags, got %+v", e)
+				}
+			}
+		}
+		if !seenClient {
+			t.Errorf("no log entry found with the 'client' tag set")
+		}
+	})
 }

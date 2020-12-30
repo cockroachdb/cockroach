@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -574,9 +575,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	// Load the client-provided session parameters.
 	var sArgs sql.SessionArgs
-	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf); err != nil {
+	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf, conn.RemoteAddr()); err != nil {
 		return s.sendErr(ctx, conn, err)
 	}
+
+	// Populate the client address field in the context tags.
+	// Only know do we know the remote client address for sure (it may have
+	// been overridden by a status parameter).
+	ctx = logtags.AddTag(ctx, "client", sArgs.RemoteAddr.String())
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
@@ -610,10 +616,11 @@ func handleCancel(conn net.Conn) error {
 // parseClientProvidedSessionParameters reads the incoming k/v pairs
 // in the startup message into a sql.SessionArgs struct.
 func parseClientProvidedSessionParameters(
-	ctx context.Context, sv *settings.Values, buf *pgwirebase.ReadBuffer,
+	ctx context.Context, sv *settings.Values, buf *pgwirebase.ReadBuffer, origRemoteAddr net.Addr,
 ) (sql.SessionArgs, error) {
 	args := sql.SessionArgs{
 		SessionDefaults: make(map[string]string),
+		RemoteAddr:      origRemoteAddr,
 	}
 	foundBufferSize := false
 
@@ -658,6 +665,29 @@ func parseClientProvidedSessionParameters(
 			}
 			foundBufferSize = true
 
+		case "crdb:remote_addr":
+			if !trustClientProvidedRemoteAddr {
+				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+					"server not configured to accept remote address override")
+			}
+
+			hostS, portS, err := net.SplitHostPort(value)
+			if err != nil {
+				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+					"invalid address format: %v", err)
+			}
+			port, err := strconv.Atoi(portS)
+			if err != nil {
+				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+					"remote port is not numeric: %v", err)
+			}
+			ip := net.ParseIP(hostS)
+			if ip == nil {
+				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
+					"remote address is not numeric")
+			}
+			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
+
 		default:
 			exists, configurable := sql.IsSessionVariableConfigurable(key)
 
@@ -691,6 +721,27 @@ func parseClientProvidedSessionParameters(
 	}
 
 	return args, nil
+}
+
+// trustClientProvidedRemoteAddr indicates whether the server should honor
+// a `crdb:remote_addr` status parameter provided by the client during
+// session authentication. This status parameter can be set by SQL proxies
+// to feed the "real" client address, where otherwise the CockroachDB SQL
+// server would only see the address of the proxy.
+//
+// This setting is security-sensitive and should not be enabled
+// without a SQL proxy that carefuly scrubs any client-provided
+// `crdb:remote_addr` field. In particular, this setting should never
+// be set when there is no SQL proxy at all. Otherwise, a malicious
+// client could use this field to pretend being from another address
+// than its own and defeat the HBA rules.
+var trustClientProvidedRemoteAddr = envutil.EnvOrDefaultBool("COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR", false)
+
+// TestingSetTrustClientProvidedRemoteAddr is used in tests.
+func TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
+	prev := trustClientProvidedRemoteAddr
+	trustClientProvidedRemoteAddr = b
+	return func() { trustClientProvidedRemoteAddr = prev }
 }
 
 // maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
