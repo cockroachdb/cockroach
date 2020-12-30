@@ -549,10 +549,17 @@ EXPLAIN (VEC) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_
 ----
 │
 └ Node 1
+<<<<<<< HEAD:pkg/sql/opt/exec/execbuilder/testdata/tpch_vec
   └ *colexec.topKSorter
     └ *colexecsel.selEQFloat64Float64Op
       └ *colexec.hashAggregator
         └ *colexecjoin.HashJoiner
+=======
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexecsel.selEQFloat64Float64Op
+        └ *colexec.hashGroupJoiner
+>>>>>>> WIP on physical planning and plumbing:pkg/sql/logictest/testdata/logic_test/tpch_vec
           ├ *rowexec.joinReader
           │ └ *colexecjoin.HashJoiner
           │   ├ *rowexec.joinReader
@@ -789,11 +796,10 @@ EXPLAIN (VEC) SELECT c_count, count(*) AS custdist FROM ( SELECT c_custkey, coun
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *colexec.hashAggregator
-        └ *colexecjoin.HashJoiner
-          ├ *colexecsel.selNotRegexpBytesBytesConstOp
-          │ └ *colfetcher.ColBatchScan
-          └ *colfetcher.ColBatchScan
+      └ *colexec.hashGroupJoiner
+        ├ *colexecsel.selNotRegexpBytesBytesConstOp
+        │ └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchScan
 
 # Query 14
 query T
@@ -885,6 +891,7 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
 ----
 │
 └ Node 1
+<<<<<<< HEAD:pkg/sql/opt/exec/execbuilder/testdata/tpch_vec
   └ *colexec.topKSorter
     └ *colexec.hashAggregator
       └ *colexecjoin.HashJoiner
@@ -895,6 +902,18 @@ EXPLAIN (VEC) SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, s
         │   └ *colexecsel.selGTFloat64Float64ConstOp
         │     └ *colexec.orderedAggregator
         │       └ *colfetcher.ColBatchScan
+=======
+  └ *colexec.limitOp
+    └ *colexec.topKSorter
+      └ *colexec.hashGroupJoiner
+        ├ *colexecjoin.mergeJoinInnerOp
+        │ ├ *colexecjoin.mergeJoinLeftSemiOp
+        │ │ ├ *colfetcher.ColBatchScan
+        │ │ └ *colexecsel.selGTFloat64Float64ConstOp
+        │ │   └ *colexec.orderedAggregator
+        │ │     └ *colfetcher.ColBatchScan
+        │ └ *colfetcher.ColBatchScan
+>>>>>>> WIP on physical planning and plumbing:pkg/sql/logictest/testdata/logic_test/tpch_vec
         └ *colfetcher.ColBatchScan
 
 # Query 19
@@ -964,11 +983,10 @@ EXPLAIN (VEC) SELECT s_name, s_address FROM supplier, nation WHERE s_suppkey IN 
           └ *rowexec.joinReader
             └ *colexecsel.selGTInt64Float64Op
               └ *colexecproj.projMultFloat64Float64ConstOp
-                └ *colexec.hashAggregator
-                  └ *colexecjoin.HashJoiner
-                    ├ *colfetcher.ColIndexJoin
-                    │ └ *colfetcher.ColBatchScan
-                    └ *colfetcher.ColBatchScan
+                └ *colexec.hashGroupJoiner
+                  ├ *colfetcher.ColIndexJoin
+                  │ └ *colfetcher.ColBatchScan
+                  └ *colfetcher.ColBatchScan
 
 # Query 21
 query T

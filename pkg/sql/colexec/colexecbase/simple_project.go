@@ -146,3 +146,14 @@ func (d *simpleProjectOp) Reset(ctx context.Context) {
 		r.Reset(ctx)
 	}
 }
+
+// UnwrapIfSimpleProjectOp checks whether op is a simpleProjectOp and - in case
+// it is - returns the input operator as well as the projection; if op is not a
+// simpleProjectOp, then op, nil is returned.
+func UnwrapIfSimpleProjectOp(op colexecop.Operator) (colexecop.Operator, []uint32) {
+	s, ok := op.(*simpleProjectOp)
+	if !ok {
+		return op, nil
+	}
+	return s.Input, s.projection
+}

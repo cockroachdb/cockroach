@@ -12,6 +12,7 @@ package colbuilder
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -828,6 +829,18 @@ func NewColOperator(
 			result.ColumnTypes = newAggArgs.OutputTypes
 
 			if needHash {
+				if flowCtx.Local && flowCtx.EvalCtx.SessionData().ExperimentalHashGroupJoinEnabled {
+					// Attempt to use a hash-group-join operator.
+					var tryErr error
+					result.Root, tryErr = colexec.TryHashGroupJoiner(newAggArgs)
+					if tryErr != nil {
+						fmt.Printf("%s\n", tryErr)
+					} else {
+						// TODO: disk-spilling is currently broken.
+						result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+						break
+					}
+				}
 				opName := "hash-aggregator"
 				outputUnlimitedAllocator := colmem.NewAllocator(
 					ctx,

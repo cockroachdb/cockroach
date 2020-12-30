@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -79,6 +80,18 @@ func makeBatchInfoCollector(
 		componentID:          id,
 		stopwatch:            inputWatch,
 		childStatsCollectors: childStatsCollectors,
+	}
+}
+
+func init() {
+	colexec.UnwrapStatsCollector = func(op colexecop.Operator) colexecop.Operator {
+		if s, ok := op.(*vectorizedStatsCollectorImpl); ok {
+			return s.Operator
+		}
+		if s, ok := op.(*networkVectorizedStatsCollectorImpl); ok {
+			return s.Operator
+		}
+		return op
 	}
 }
 

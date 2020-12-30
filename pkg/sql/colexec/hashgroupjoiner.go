@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -30,6 +31,86 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// IsHashGroupJoinerSupported determines whether we can plan a vectorized hash
+// group-join operator instead of a hash join followed by a hash aggregator
+// (with possible projection in-between).
+//
+// numLeftInputCols and numRightInputCols specify the width of inputs to the
+// hash joiner.
+func IsHashGroupJoinerSupported(
+	numLeftInputCols, numRightInputCols uint32,
+	hj *execinfrapb.HashJoinerSpec,
+	joinPostProcessSpec *execinfrapb.PostProcessSpec,
+	agg *execinfrapb.AggregatorSpec,
+) bool {
+	// Check that the hash join core is supported.
+	if hj.Type != descpb.InnerJoin && hj.Type != descpb.RightOuterJoin {
+		// TODO(yuzefovich): relax this for left/full outer joins.
+		return false
+	}
+	if !hj.OnExpr.Empty() {
+		return false
+	}
+	// Check that the post-process spec only has a projection.
+	if joinPostProcessSpec.RenderExprs != nil ||
+		joinPostProcessSpec.Limit != 0 ||
+		joinPostProcessSpec.Offset != 0 {
+		return false
+	}
+
+	joinOutputProjection := joinPostProcessSpec.OutputColumns
+	if !joinPostProcessSpec.Projection {
+		joinOutputProjection = make([]uint32, numLeftInputCols+numRightInputCols)
+		for i := range joinOutputProjection {
+			joinOutputProjection[i] = uint32(i)
+		}
+	}
+
+	// Check that the aggregator's grouping columns are the same as the join's
+	// equality columns.
+	if len(agg.GroupCols) != len(hj.LeftEqColumns) {
+		return false
+	}
+	for _, groupCol := range agg.GroupCols {
+		// Grouping columns refer to the output columns of the join, so we need
+		// to remap it using the projection slice.
+		joinOutCol := joinOutputProjection[groupCol]
+		found := false
+		eqCols := hj.LeftEqColumns
+		if joinOutCol >= numLeftInputCols {
+			// This grouping column comes from the right side, so we'll look at
+			// the right equality columns.
+			joinOutCol -= numLeftInputCols
+			eqCols = hj.RightEqColumns
+		}
+		for _, eqCol := range eqCols {
+			if joinOutCol == eqCol {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	for i := range agg.Aggregations {
+		aggFn := &agg.Aggregations[i]
+		if !colexecagg.IsAggOptimized(aggFn.Func) {
+			// We currently only support the optimized aggregate functions.
+			// TODO(yuzefovich): add support for this.
+			return false
+		}
+		if aggFn.Distinct || aggFn.FilterColIdx != nil {
+			// We currently don't support distinct and filtering aggregations.
+			// TODO(yuzefovich): add support for this.
+			return false
+		}
+	}
+
+	return true
+}
+
 type hashGroupJoinerState int
 
 const (
@@ -39,6 +120,33 @@ const (
 	hgjOutputting
 	hgjDone
 )
+
+var UnwrapStatsCollector func(colexecop.Operator) colexecop.Operator
+
+func TryHashGroupJoiner(args *colexecagg.NewAggregatorArgs) (colexecop.Operator, error) {
+	input := args.Input
+	input = UnwrapStatsCollector(input)
+	input = MaybeUnwrapInvariantsChecker(input)
+	var joinOutputProjection []uint32
+	input, joinOutputProjection = colexecbase.UnwrapIfSimpleProjectOp(input)
+	dp, isDiskSpiller := input.(*diskSpillerBase)
+	if !isDiskSpiller {
+		return nil, errors.Newf("not a disk spiller: %T", input)
+	}
+	hj, isHashJoiner := dp.inMemoryOp.(*colexecjoin.HashJoiner)
+	if !isHashJoiner {
+		return nil, errors.Newf("not a hash joiner: %T", dp.inMemoryOp)
+	}
+	args.Allocator = hj.OutputUnlimitedAllocator
+	return newHashGroupJoiner(
+		hj.OutputUnlimitedAllocator,
+		hj.Spec,
+		hj.InputOne,
+		hj.InputTwo,
+		joinOutputProjection,
+		args,
+	), nil
+}
 
 // joinOutputProjection specifies a simple projection on top of the hash join
 // output, it can be nil if all columns from the hash join are output.

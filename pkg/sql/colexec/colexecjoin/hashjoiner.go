@@ -172,13 +172,13 @@ type HashJoiner struct {
 	// buildSideAllocator should be used when building the hash table from the
 	// right input.
 	buildSideAllocator *colmem.Allocator
-	// outputUnlimitedAllocator should *only* be used when populating the
+	// OutputUnlimitedAllocator should *only* be used when populating the
 	// output when we have already fully built the hash table from the right
 	// input and are only populating output one batch at a time. If we were to
 	// use a limited allocator, we could hit the memory limit during output
 	// population, and it would have been very hard to fall back to disk backed
 	// hash joiner because we might have already emitted partial output.
-	outputUnlimitedAllocator *colmem.Allocator
+	OutputUnlimitedAllocator *colmem.Allocator
 	// Spec holds the specification for the current hash join process.
 	Spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
@@ -320,7 +320,7 @@ func (hj *HashJoiner) Next() coldata.Batch {
 // as sets up some of the internal state of the HashJoiner.
 // - storeHashCodes indicates whether
 func (hj *HashJoiner) Build(storeHashCodes bool) {
-	hj.Ht.FullBuild(hj.inputTwo, storeHashCodes)
+	hj.Ht.FullBuild(hj.InputTwo, storeHashCodes)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
@@ -377,7 +377,7 @@ func (hj *HashJoiner) emitRight(matched bool) {
 	// limited allocator, we could hit the limit here, and it would have been
 	// very hard to fall back to disk backed hash joiner because we might have
 	// already emitted partial output.
-	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
+	hj.OutputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
 		var rightOutColOffset int
 		if hj.Spec.JoinType.ShouldIncludeLeftColsInOutput() {
 			// Set all elements in the probe columns of the output batch to null.
@@ -581,7 +581,7 @@ func (hj *HashJoiner) congregate(nResults int, batch coldata.Batch) {
 	// limited allocator, we could hit the limit here, and it would have been
 	// very hard to fall back to disk backed hash joiner because we might have
 	// already emitted partial output.
-	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
+	hj.OutputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
 		if hj.Spec.JoinType.ShouldIncludeLeftColsInOutput() {
 			outCols := hj.output.ColVecs()[:len(hj.Spec.Left.SourceTypes)]
 			for i := range hj.Spec.Left.SourceTypes {
@@ -667,7 +667,7 @@ func (hj *HashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 		// limit can only hit during the building of the hash table step at which
 		// point we haven't requested a single batch from the left.
 		return coldata.ZeroBatch
-	} else if hj.inputTwo == input {
+	} else if hj.InputTwo == input {
 		if hj.exportBufferedState.rightExported == hj.Ht.Vals.Length() {
 			return coldata.ZeroBatch
 		}
@@ -716,13 +716,13 @@ func (hj *HashJoiner) resetOutput(nResults int) {
 	// strategy, the hash-based partitioner is responsible for making sure that
 	// partitions fit within memory limit.
 	const maxOutputBatchMemSize = math.MaxInt64
-	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(
+	hj.output, _ = hj.OutputUnlimitedAllocator.ResetMaybeReallocate(
 		hj.outputTypes, hj.output, nResults, maxOutputBatchMemSize,
 	)
 }
 
 func (hj *HashJoiner) Reset(ctx context.Context) {
-	for _, input := range []colexecop.Operator{hj.InputOne, hj.inputTwo} {
+	for _, input := range []colexecop.Operator{hj.InputOne, hj.InputTwo} {
 		if r, ok := input.(colexecop.Resetter); ok {
 			r.Reset(ctx)
 		}
@@ -804,7 +804,7 @@ func MakeHashJoinerSpec(
 // NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
 // buildSideAllocator should use a limited memory account and will be used for
-// the build side whereas outputUnlimitedAllocator should use an unlimited
+// the build side whereas OutputUnlimitedAllocator should use an unlimited
 // memory account and will only be used when populating the output.
 // memoryLimit will limit the size of the batches produced by the hash joiner.
 func NewHashJoiner(
@@ -816,7 +816,7 @@ func NewHashJoiner(
 	return &HashJoiner{
 		joinHelper:                 newJoinHelper(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,
-		outputUnlimitedAllocator:   outputUnlimitedAllocator,
+		OutputUnlimitedAllocator:   outputUnlimitedAllocator,
 		Spec:                       spec,
 		outputTypes:                spec.JoinType.MakeOutputTypes(spec.Left.SourceTypes, spec.Right.SourceTypes),
 		hashTableInitialNumBuckets: initialNumBuckets,

@@ -155,7 +155,7 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	case descpb.LeftSemiJoin:
 		// With LEFT SEMI join we only need to know whether the right input is
 		// empty or not.
-		c.numRightTuples = c.inputTwo.Next().Length()
+		c.numRightTuples = c.InputTwo.Next().Length()
 		c.needLeftTuples = c.numRightTuples != 0
 	case descpb.RightSemiJoin:
 		// With RIGHT SEMI join we only need to know whether the left input is
@@ -164,7 +164,7 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	case descpb.LeftAntiJoin:
 		// With LEFT ANTI join we only need to know whether the right input is
 		// empty or not.
-		c.numRightTuples = c.inputTwo.Next().Length()
+		c.numRightTuples = c.InputTwo.Next().Length()
 		c.needLeftTuples = c.numRightTuples == 0
 	case descpb.RightAntiJoin:
 		// With RIGHT ANTI join we only need to know whether the left input is
@@ -180,7 +180,7 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	}
 	if needRightTuples || needOnlyNumRightTuples {
 		for {
-			batch := c.inputTwo.Next()
+			batch := c.InputTwo.Next()
 			if needRightTuples {
 				c.rightTuples.Enqueue(ctx, batch)
 			}
@@ -292,7 +292,7 @@ func (c *crossJoiner) Reset(ctx context.Context) {
 	if r, ok := c.InputOne.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
-	if r, ok := c.inputTwo.(colexecop.Resetter); ok {
+	if r, ok := c.InputTwo.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
 	c.crossJoinerBase.Reset(ctx)

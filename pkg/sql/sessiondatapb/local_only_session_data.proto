@@ -212,6 +212,12 @@ message LocalOnlySessionData {
   // CustomOptions contains a map of all custom session settings.
   // These session variables have at least one period in their name.
   map<string, string> custom_options = 57;
+  // ExperimentalHashGroupJoinEnabled indicates whether the physical planner
+  // will attempt to convert a hash join followed by a hash aggregator into a
+  // single hash group-join operation. The operation is only supported in the
+  // vectorized engine, so if the conversion is successful, but the old
+  // row-by-row engine is used, the query will fail.
+  bool ExperimentalHashGroupJoinEnabled = 58;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

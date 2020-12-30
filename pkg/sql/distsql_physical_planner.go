@@ -1732,6 +1732,21 @@ func (dsp *DistSQLPlanner) planAggregators(
 		aggType = execinfrapb.AggregatorSpec_SCALAR
 	}
 
+	// planHashGroupJoin tracks whether we should plan a hash group join for the
+	// first stage of aggregators (either local if multi-stage or final if
+	// single-stage), which is the case when
+	//   1. the corresponding session variable is enabled
+	//   2. the input stage are hash joiners
+	//   3. the first stage we're planning are hash aggregators
+	//   4. we can convert these two stages into a stage of hash group joiners.
+	planHashGroupJoin := planCtx.ExtendedEvalCtx.SessionData().ExperimentalHashGroupJoinEnabled
+	if planHashGroupJoin {
+		if hjSpec := p.Processors[p.ResultRouters[0]].Spec.Core.HashJoiner; hjSpec == nil {
+			// The condition 2. above is not satisfied.
+			planHashGroupJoin = false
+		}
+	}
+
 	inputTypes := p.GetResultTypes()
 
 	groupCols := make([]uint32, len(info.groupCols))
@@ -1743,6 +1758,11 @@ func (dsp *DistSQLPlanner) planAggregators(
 	for i, c := range info.groupColOrdering {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[c.ColIdx])
 		orderedGroupColSet.Add(c.ColIdx)
+	}
+
+	if planHashGroupJoin && len(groupCols) == len(orderedGroupCols) {
+		// The condition 3. above is not satisfied.
+		planHashGroupJoin = false
 	}
 
 	// We can have a local stage of distinct processors if all aggregation
@@ -1791,6 +1811,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 			// Add distinct processors local to each existing current result
 			// processor.
 			p.AddNoGroupingStage(distinctSpec, execinfrapb.PostProcessSpec{}, inputTypes, p.MergeOrdering)
+
+			// The condition 3. above is not satisfied.
+			planHashGroupJoin = false
 		}
 	}
 
@@ -4060,6 +4083,49 @@ func checkScanParallelizationIfLocal(
 	}
 	return prohibitParallelization, hasScanNodeToParallelize
 }
+
+//// tryHashGroupJoin checks that
+////   1. the last stage of processors are hash aggregators
+////   2. the second to last stage are hash joiners
+////   3. we can convert these two stages into a stage of hash group joiners
+//// and updates the plan in-place if the conversion is possible.
+//func (dsp *DistSQLPlanner) tryHashGroupJoin(plan *PhysicalPlan) {
+//	lastStageProcIdxs := plan.ResultRouters
+//	lastStageProcSpec := plan.Processors[lastStageProcIdxs[0]].Spec
+//	aggSpec := lastStageProcSpec.Core.Aggregator
+//	if aggSpec == nil || len(aggSpec.OrderedGroupCols) == len(aggSpec.GroupCols) {
+//		// The last stage are not hash aggregators.
+//		return
+//	}
+//	var prevStageProcIdxsSet util.FastIntSet
+//	for _, aggProcIdx := range lastStageProcIdxs {
+//		for _, anyStream := range plan.Streams {
+//			if anyStream.DestProcessor == aggProcIdx {
+//				prevStageProcIdxsSet.Add(int(anyStream.DestProcessor))
+//			}
+//		}
+//	}
+//	prevStageProcIdxs := make([]physicalplan.ProcessorIdx, 0, prevStageProcIdxsSet.Len())
+//	for procIdx, ok := prevStageProcIdxsSet.Next(0); ok; procIdx, ok = prevStageProcIdxsSet.Next(procIdx + 1) {
+//		prevStageProcIdxs = append(prevStageProcIdxs, physicalplan.ProcessorIdx(procIdx))
+//	}
+//	prevStageProcSpec := plan.Processors[prevStageProcIdxs[0]].Spec
+//	hjSpec := prevStageProcSpec.Core.HashJoiner
+//	if hjSpec == nil {
+//		// The second to last stage are not hash joiners.
+//		return
+//	}
+//	if !colexec.IsHashGroupJoinerSupported(
+//		uint32(len(prevStageProcSpec.Input[0].ColumnTypes)),
+//		uint32(len(prevStageProcSpec.Input[1].ColumnTypes)),
+//		hjSpec,
+//		&prevStageProcSpec.Post,
+//		aggSpec,
+//	) {
+//		// The conversion is not supported.
+//		return
+//	}
+//}
 
 // NewPlanningCtx returns a new PlanningCtx. When distribute is false, a
 // lightweight version PlanningCtx is returned that can be used when the caller
