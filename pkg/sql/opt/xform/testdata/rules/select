@@ -4754,7 +4754,7 @@ select
 
 # Query only the primary key with a remaining filter. 2+ paths in containment
 # query should favor zigzag joins.
-opt
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 project
@@ -4771,15 +4771,15 @@ project
       ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [4] = ['{"a": "b"}']
-      │    ├── right fixed columns: [4] = ['{"c": "d"}']
+      │    ├── left fixed columns: [8] = ['\x3761000112620001']
+      │    ├── right fixed columns: [8] = ['\x3763000112640001']
       │    └── filters (true)
       └── filters
            └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Query requiring a zigzag join with a remaining filter.
 # TODO(itsbilal): remove filter from index join if zigzag join covers it.
-opt
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT j, k FROM b WHERE j @> '{"a": "b", "c": "d"}'
 ----
 inner-join (lookup b)
@@ -4792,13 +4792,13 @@ inner-join (lookup b)
  ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [4] = ['{"a": "b"}']
- │    ├── right fixed columns: [4] = ['{"c": "d"}']
+ │    ├── left fixed columns: [8] = ['\x3761000112620001']
+ │    ├── right fixed columns: [8] = ['\x3763000112640001']
  │    └── filters (true)
  └── filters
       └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 inner-join (lookup b)
@@ -4811,14 +4811,14 @@ inner-join (lookup b)
  ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [4] = ['{"a": {"b": "c"}}']
- │    ├── right fixed columns: [4] = ['{"a": {"d": "e"}}']
+ │    ├── left fixed columns: [8] = ['\x3761000262000112630001']
+ │    ├── right fixed columns: [8] = ['\x3761000264000112650001']
  │    └── filters (true)
  └── filters
       └── j:4 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # Three or more paths. Should generate zigzag joins.
-opt
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a":[{"b":"c", "d":3}, 5]}'
 ----
 inner-join (lookup b)
@@ -4831,13 +4831,13 @@ inner-join (lookup b)
  ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
  │    ├── columns: k:1!null
  │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [4] = ['{"a": [{"b": "c"}]}']
- │    ├── right fixed columns: [4] = ['{"a": [{"d": 3}]}']
+ │    ├── left fixed columns: [8] = ['\x37610002000362000112630001']
+ │    ├── right fixed columns: [8] = ['\x3761000200036400012a0600']
  │    └── filters (true)
  └── filters
       └── j:4 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
-opt
+opt expect=GenerateInvertedIndexZigzagJoins
 SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
 ----
 project
@@ -4854,11 +4854,69 @@ project
       ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = [ARRAY[1]]
-      │    ├── right fixed columns: [2] = [ARRAY[3]]
+      │    ├── left fixed columns: [7] = ['\x89']
+      │    ├── right fixed columns: [7] = ['\x8b']
       │    └── filters (true)
       └── filters
            └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# The first path can't be used for a zigzag join, but the second two can.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT * FROM b WHERE j @> '{"a":{}, "b":2, "c":3}'
+----
+inner-join (lookup b)
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── key columns: [1] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+ │    ├── columns: k:1!null
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [8] = ['\x376200012a0400']
+ │    ├── right fixed columns: [8] = ['\x376300012a0600']
+ │    └── filters (true)
+ └── filters
+      └── j:4 @> '{"a": {}, "b": 2, "c": 3}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# We can't build a zigzag join over a disjunction.
+opt expect-not=GenerateInvertedIndexZigzagJoins
+SELECT * FROM b WHERE j @> '[3]' OR j @> '[[1, 2]]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /8
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: true, unique: true
+ │         │         │    └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │         │         └── span expression
+ │         │              ├── tight: true, unique: true
+ │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │         ├── key: (1)
+ │         └── scan b@j_inv_idx
+ │              ├── columns: k:1!null j_inverted_key:8!null
+ │              ├── inverted constraint: /8/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+ │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(8)
+ └── filters
+      └── (j:4 @> '[3]') OR (j:4 @> '[[1, 2]]') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # GenerateInvertedIndexZigzagJoins is disabled in the presence of a row-level
 # locking clause.
@@ -4956,8 +5014,8 @@ project
       ├── inner-join (zigzag inv_zz_partial@zz_idx,partial inv_zz_partial@zz_idx,partial)
       │    ├── columns: k:1!null
       │    ├── eq columns: [1] = [1]
-      │    ├── left fixed columns: [2] = ['{"a": 1}']
-      │    ├── right fixed columns: [2] = ['{"b": 2}']
+      │    ├── left fixed columns: [6] = ['\x376100012a0200']
+      │    ├── right fixed columns: [6] = ['\x376200012a0400']
       │    └── filters (true)
       └── filters
            ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
