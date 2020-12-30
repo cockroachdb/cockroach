@@ -1368,14 +1368,6 @@ func (ic *Instance) UnconsolidatedConstraint() *constraint.Constraint {
 	return &ic.constraint
 }
 
-// AllInvertedIndexConstraints returns all constraints that can be created on
-// the specified inverted index. Only works for inverted indexes.
-func (ic *Instance) AllInvertedIndexConstraints() ([]*constraint.Constraint, error) {
-	_, allConstraints := ic.makeInvertedIndexSpansForExpr(&ic.allFilters, nil /* constraints */, true /* allPaths */)
-
-	return allConstraints, nil
-}
-
 // RemainingFilters calculates a simplified FiltersExpr that needs to be applied
 // within the returned Spans.
 func (ic *Instance) RemainingFilters() memo.FiltersExpr {
