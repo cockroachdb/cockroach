@@ -658,7 +658,7 @@ func (s *ScanPrivate) IsLocking() bool {
 // index, nil is returned.
 func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	tabMeta := md.TableMeta(s.Table)
-	p, ok := tabMeta.PartialIndexPredicates[s.Index]
+	p, ok := tabMeta.PartialIndexPredicate(s.Index)
 	if !ok {
 		// The index is not a partial index.
 		return nil

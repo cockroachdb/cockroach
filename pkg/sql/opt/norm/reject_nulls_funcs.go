@@ -331,9 +331,11 @@ func deriveScanRejectNullCols(in memo.RelExpr) opt.ColSet {
 	scan := in.(*memo.ScanExpr)
 
 	var rejectNullCols opt.ColSet
-	for _, pred := range md.TableMeta(scan.Table).PartialIndexPredicates {
-		predFilters := *pred.(*memo.FiltersExpr)
-		rejectNullCols.UnionWith(isNotNullCols(predFilters))
+	for i, n := 0, md.Table(scan.Table).IndexCount(); i < n; i++ {
+		if pred, isPartialIndex := md.TableMeta(scan.Table).PartialIndexPredicate(i); isPartialIndex {
+			predFilters := *pred.(*memo.FiltersExpr)
+			rejectNullCols.UnionWith(isNotNullCols(predFilters))
+		}
 	}
 
 	return rejectNullCols
