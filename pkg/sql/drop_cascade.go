@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -34,6 +35,7 @@ type dropCascadeState struct {
 	td                      []toDelete
 	allTableObjectsToDelete []*tabledesc.Mutable
 	typesToDelete           []*typedesc.Mutable
+	funcsToDelete           []*funcdesc.Mutable
 
 	droppedNames []string
 }
@@ -133,29 +135,28 @@ func (d *dropCascadeState) resolveCollectedObjects(
 				}
 			}
 			d.td = append(d.td, toDelete{objName, tbDesc})
-		} else {
-			// If we couldn't resolve objName as a table, try a type.
-			found, desc, err := p.LookupObject(
-				ctx,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						RequireMutable: true,
-						IncludeOffline: true,
-					},
-					DesiredObjectKind: tree.TypeObject,
+			continue
+		}
+		// If we couldn't resolve objName as a table, try a type.
+		found, desc, err = p.LookupObject(
+			ctx,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					RequireMutable: true,
+					IncludeOffline: true,
 				},
-				objName.Catalog(),
-				objName.Schema(),
-				objName.Object(),
-			)
-			if err != nil {
-				return err
-			}
-			// If we couldn't find the object at all, then continue.
-			if !found {
-				continue
-			}
+				DesiredObjectKind: tree.TypeObject,
+			},
+			objName.Catalog(),
+			objName.Schema(),
+			objName.Object(),
+		)
+		if err != nil {
+			return err
+		}
+		if found {
+			// Delete the type.
 			typDesc, ok := desc.(*typedesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
@@ -167,7 +168,41 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			// need to do any more verification about whether or not we can drop
 			// this type.
 			d.typesToDelete = append(d.typesToDelete, typDesc)
+			continue
 		}
+		// If we couldn't resolve objName as a table or type, try a function.
+		found, desc, err = p.LookupObject(
+			ctx,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					RequireMutable: true,
+					IncludeOffline: true,
+				},
+				DesiredObjectKind: tree.FuncObject,
+			},
+			objName.Catalog(),
+			objName.Schema(),
+			objName.Object(),
+		)
+		if err != nil {
+			return err
+		}
+		if !found {
+			continue
+		}
+		// Delete the function.
+		funcDesc, ok := desc.(*funcdesc.Mutable)
+		if !ok {
+			return errors.AssertionFailedf(
+				"descriptor for %q is not Mutable",
+				objName.Object(),
+			)
+		}
+		// Functions can only depend on objects within this database, so we don't
+		// need to do any more verification about whether or not we can drop
+		// this type.
+		d.funcsToDelete = append(d.funcsToDelete, funcDesc)
 	}
 
 	allObjectsToDelete, implicitDeleteMap, err := p.accumulateAllObjectsToDelete(ctx, d.td)
@@ -206,6 +241,15 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		// Drop the types. Note that we set queueJob to be false because the types
 		// will be dropped in bulk as part of the DROP DATABASE job.
 		if err := p.dropTypeImpl(ctx, typ, "", false /* queueJob */); err != nil {
+			return err
+		}
+	}
+
+	// Now delete all of the functions.
+	for _, fn := range d.funcsToDelete {
+		// Drop the func. Note that we set queueJob to be false because the types
+		// will be dropped in bulk as part of the DROP DATABASE job.
+		if err := p.dropFuncImpl(ctx, fn, "", false /* queueJob */); err != nil {
 			return err
 		}
 	}

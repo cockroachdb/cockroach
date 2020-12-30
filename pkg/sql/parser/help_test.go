@@ -164,6 +164,9 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP DATABASE IF ??`, `DROP DATABASE`},
 		{`DROP DATABASE IF EXISTS blah ??`, `DROP DATABASE`},
 
+		{`DROP FUNCTION blah (??`, `DROP FUNCTION`},
+		{`DROP FUNCTION IF EXISTS blah (??`, `DROP FUNCTION`},
+
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
 

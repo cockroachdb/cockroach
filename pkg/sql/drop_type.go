@@ -126,31 +126,43 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 	return node, nil
 }
 
+func (p *planner) checkReferencingObjects(
+	ctx context.Context, objType string, objName string, referencingDescriptorIDs []descpb.ID,
+) error {
+	var dependentNames []string
+	if len(referencingDescriptorIDs) == 0 {
+		return nil
+	}
+	for _, id := range referencingDescriptorIDs {
+		desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+		if err != nil {
+			return errors.Wrapf(err, "type has dependent objects")
+		}
+		fqName, err := p.getQualifiedTableName(ctx, desc)
+		if err != nil {
+			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
+		}
+		dependentNames = append(dependentNames, fqName.FQString())
+	}
+	return pgerror.Newf(
+		pgcode.DependentObjectsStillExist,
+		"cannot drop %s %q because other objects (%v) still depend on it",
+		objType,
+		objName,
+		dependentNames,
+	)
+}
+
 func (p *planner) canDropTypeDesc(
 	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior,
 ) error {
 	if err := p.canModifyType(ctx, desc); err != nil {
 		return err
 	}
-	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		var dependentNames []string
-		for _, id := range desc.ReferencingDescriptorIDs {
-			desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
-			if err != nil {
-				return errors.Wrapf(err, "type has dependent objects")
-			}
-			fqName, err := p.getQualifiedTableName(ctx, desc)
-			if err != nil {
-				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
-			}
-			dependentNames = append(dependentNames, fqName.FQString())
+	if behavior != tree.DropCascade {
+		if err := p.checkReferencingObjects(ctx, "type", desc.Name, desc.ReferencingDescriptorIDs); err != nil {
+			return err
 		}
-		return pgerror.Newf(
-			pgcode.DependentObjectsStillExist,
-			"cannot drop type %q because other objects (%v) still depend on it",
-			desc.Name,
-			dependentNames,
-		)
 	}
 	return nil
 }

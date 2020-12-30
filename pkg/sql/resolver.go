@@ -965,6 +965,26 @@ func (p *planner) ResolveMutableTypeDescriptor(
 	return desc, nil
 }
 
+// ResolveMutableTypeDescriptor resolves a func descriptor for mutable access.
+func (p *planner) ResolveMutableFuncDescriptor(
+	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
+) (*funcdesc.Mutable, error) {
+	tn, desc, err := resolver.ResolveMutableFunc(ctx, p, name, required)
+	if err != nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+
+	if desc != nil {
+		// Ensure that the user can access the target schema.
+		if err := p.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+			return nil, err
+		}
+	}
+
+	return desc, nil
+}
+
 // The versions below are part of the work for #34240.
 // TODO(radu): clean these up when everything is switched over.
 
