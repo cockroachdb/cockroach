@@ -16,15 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -34,72 +29,18 @@ func processSystemConfigKVs(
 ) error {
 	tbl := systemschema.SettingsTable
 
-	a := &rowenc.DatumAlloc{}
 	codec := keys.TODOSQLCodec
 	settingsTablePrefix := codec.TablePrefix(uint32(tbl.GetID()))
-	colIdxMap := catalog.ColumnIDToOrdinalMap(tbl.PublicColumns())
+	dec := settingswatcher.MakeRowDecoder(codec)
 
 	var settingsKVs []roachpb.KeyValue
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
 		if !bytes.HasPrefix(kv.Key, settingsTablePrefix) {
 			return nil
 		}
-
-		var k, v, t string
-		// First we need to decode the setting name field from the index key.
-		{
-			types := []*types.T{tbl.PublicColumns()[0].GetType()}
-			nameRow := make([]rowenc.EncDatum, 1)
-			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
-			if err != nil {
-				return errors.Wrap(err, "failed to decode key")
-			}
-			if !matches {
-				return errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
-			}
-			if err := nameRow[0].EnsureDecoded(types[0], a); err != nil {
-				return err
-			}
-			k = string(tree.MustBeDString(nameRow[0].Datum))
-		}
-
-		// The rest of the columns are stored as a family, packed with diff-encoded
-		// column IDs followed by their values.
-		{
-			// column valueType can be null (missing) so we default it to "s".
-			t = "s"
-			bytes, err := kv.Value.GetTuple()
-			if err != nil {
-				return err
-			}
-			var colIDDiff uint32
-			var lastColID descpb.ColumnID
-			var res tree.Datum
-			for len(bytes) > 0 {
-				_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
-				if err != nil {
-					return err
-				}
-				colID := lastColID + descpb.ColumnID(colIDDiff)
-				lastColID = colID
-				if idx, ok := colIdxMap.Get(colID); ok {
-					res, bytes, err = rowenc.DecodeTableValue(a, tbl.PublicColumns()[idx].GetType(), bytes)
-					if err != nil {
-						return err
-					}
-					switch colID {
-					case tbl.PublicColumns()[1].GetID(): // value
-						v = string(tree.MustBeDString(res))
-					case tbl.PublicColumns()[3].GetID(): // valueType
-						t = string(tree.MustBeDString(res))
-					case tbl.PublicColumns()[2].GetID(): // lastUpdated
-						// TODO(dt): we could decode just the len and then seek `bytes` past
-						// it, without allocating/decoding the unused timestamp.
-					default:
-						return errors.Errorf("unknown column: %v", colID)
-					}
-				}
-			}
+		k, v, t, _, err := dec.DecodeRow(kv)
+		if err != nil {
+			return err
 		}
 		settingsKVs = append(settingsKVs, kv)
 

@@ -131,6 +131,7 @@ ALL_TESTS = [
     "//pkg/server/goroutinedumper:goroutinedumper_test",
     "//pkg/server/heapprofiler:heapprofiler_test",
     "//pkg/server/serverpb:serverpb_test",
+    "//pkg/server/settingswatcher:settingswatcher_test",
     "//pkg/server/status:status_test",
     "//pkg/server/telemetry:telemetry_test",
     "//pkg/server:server_test",

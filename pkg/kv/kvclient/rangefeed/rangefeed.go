@@ -29,7 +29,8 @@ import (
 
 // TODO(ajwerner): Expose hooks for metrics.
 // TODO(ajwerner): Expose access to checkpoints and the frontier.
-// TODO(ajwerner): Expose better control over how the retrier gets reset.
+// TODO(ajwerner): Expose better control over how the exponential backoff gets
+// reset when the feed has been running successfully for a while.
 
 // kvDB is an adapter to the underlying KV store.
 type kvDB interface {
@@ -44,7 +45,7 @@ type kvDB interface {
 		eventC chan<- *roachpb.RangeFeedEvent,
 	) error
 
-	// Scan encapsulates scanning a keyspan at a given point in time. The method
+	// Scan encapsulates scanning a key span at a given point in time. The method
 	// deals with pagination, calling the caller back for each row. Note that
 	// the API does not require that the rows be ordered to allow for future
 	// parallelism.
