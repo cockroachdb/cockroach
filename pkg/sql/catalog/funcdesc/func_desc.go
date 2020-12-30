@@ -12,6 +12,7 @@ package funcdesc
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -125,10 +126,19 @@ func (desc *Immutable) FuncDesc() *descpb.FuncDescriptor {
 	return &desc.FuncDescriptor
 }
 
+// Name returns the user-visible name of this function descriptor.
+func (desc *Immutable) Name() string {
+	// Unmangle the descriptor name.
+	return strings.TrimPrefix(desc.FuncDescriptor.Name, tree.FuncPrefix)
+}
+
 // Validate performs validation on the TypeDescriptor.
 func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
 	// Validate local properties of the descriptor.
-	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
+	if !strings.HasPrefix(desc.FuncDescriptor.Name, tree.FuncPrefix) {
+		return errors.AssertionFailedf("invalid func name %s has no magic prefix", errors.Safe(desc.Name))
+	}
+	if err := catalog.ValidateName(desc.Name(), "func"); err != nil {
 		return err
 	}
 	if desc.ID == descpb.InvalidID {
@@ -158,7 +168,8 @@ func (desc *Immutable) MakeFuncDef() (*tree.FunctionDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewFunctionDefinition(desc.Name, &props, []tree.Overload{
+	name := desc.Name()
+	return tree.NewFunctionDefinition(name, &props, []tree.Overload{
 		{
 			Types:      typs,
 			ReturnType: tree.FixedReturnType(&retType),
@@ -192,7 +203,7 @@ func (desc *Mutable) OriginalName() string {
 	if desc.ClusterVersion == nil {
 		return ""
 	}
-	return desc.ClusterVersion.Name
+	return desc.ClusterVersion.FuncDescriptor.Name
 }
 
 // OriginalID implements the MutableDescriptor interface.

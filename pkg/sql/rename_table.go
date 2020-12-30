@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -57,6 +58,10 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		toRequire = tree.ResolveRequireViewDesc
 	} else if n.IsSequence {
 		toRequire = tree.ResolveRequireSequenceDesc
+	}
+
+	if strings.HasPrefix(newTn.Object(), tree.FuncPrefix) {
+		return nil, pgerror.Newf(pgcode.ReservedName, "objects with the prefix %s are reserved for internal use", tree.FuncPrefix)
 	}
 
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &oldTn, !n.IfExists, toRequire)

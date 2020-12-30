@@ -217,7 +217,7 @@ func requiredError(kind DescriptorKind, id descpb.ID) error {
 	case TypeDescriptorKind:
 		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
 	case FuncDescriptorKind:
-		err = sqlerrors.NewUndefinedFuncError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
+		err = sqlerrors.NewUndefinedFuncError(tree.NewUnqualifiedFuncName(tree.Name(fmt.Sprintf("[%d]", id))))
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
 	}

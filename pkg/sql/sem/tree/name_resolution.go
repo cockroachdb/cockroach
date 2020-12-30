@@ -535,7 +535,7 @@ func (n *UnresolvedObjectName) ResolveFunction(
 			}
 		}
 		if !found {
-			err := pgerror.Newf(pgcode.UndefinedObject, "function %s() does not exist", ErrString(n))
+			err := pgerror.Newf(pgcode.UndefinedFunction, "function %s() does not exist", ErrString(n))
 			// Try a little harder.
 			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
 				err = errors.WithHintf(err, "did you mean %s()?", rdef.Name)

@@ -156,8 +156,8 @@ func (p *planner) createUserDefinedFunc(
 		)
 	}
 
-	// Check we are not creating a type which conflicts with an alias available
-	// as a built-in type in CockroachDB but an extension type on the public
+	// Check we are not creating a function which conflicts with an alias available
+	// as a built-in function in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
 	if funcName.Schema() == tree.PublicSchema {
 		if _, ok := tree.FunDefs[funcName.Object()]; ok {
@@ -181,9 +181,10 @@ func (p *planner) createUserDefinedFunc(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	funcKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, funcName.Object())
+	mangled := funcName.MangledName()
+	funcKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, mangled)
 	exists, collided, err := catalogkv.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, funcName.Object())
+		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, mangled)
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided, catalogkv.Immutable)
@@ -216,7 +217,7 @@ func (p *planner) createUserDefinedFunc(
 
 	newDesc := funcdesc.NewCreatedMutable(descpb.FuncDescriptor{
 		ID:             id,
-		Name:           funcName.Object(),
+		Name:           mangled,
 		Def:            tree.AsStringWithFlags(expr, tree.FmtParsable),
 		ParamNames:     paramNames,
 		ParamTypes:     paramTypes,

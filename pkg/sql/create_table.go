@@ -142,6 +142,11 @@ func getTableCreateParams(
 		}
 	}
 
+	if strings.HasPrefix(tableName.Object(), tree.FuncPrefix) {
+		return nil, 0,
+			pgerror.Newf(pgcode.ReservedName, "objects with the prefix %s are reserved for internal use", tree.FuncPrefix)
+	}
+
 	if persistence.IsTemporary() {
 		if !params.SessionData().TempTablesEnabled {
 			return nil, 0, errors.WithTelemetry(

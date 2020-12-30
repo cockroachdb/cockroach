@@ -613,7 +613,7 @@ func (tc *Collection) getTypeByName(
 // GetMutableFuncByName returns a mutable func descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetMutableFuncByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags,
 ) (found bool, _ *funcdesc.Mutable, _ error) {
 	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, true /* mutable */)
 	if err != nil || !found {
@@ -625,7 +625,7 @@ func (tc *Collection) GetMutableFuncByName(
 // GetImmutableFuncByName returns a mutable func descriptor with properties
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableFuncByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags,
 ) (found bool, _ *funcdesc.Immutable, _ error) {
 	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, false /* mutable */)
 	if err != nil || !found {
@@ -637,13 +637,12 @@ func (tc *Collection) GetImmutableFuncByName(
 // getFuncByName returns a func descriptor with properties according to the
 // provided lookup flags.
 func (tc *Collection) getFuncByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	name tree.ObjectName,
-	flags tree.ObjectLookupFlags,
-	mutable bool,
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags, mutable bool,
 ) (found bool, _ funcdesc.Descriptor, err error) {
-	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags, mutable)
+	mangled := name.MangledName()
+	log.Infof(ctx, "looking up func %s %s", name, mangled)
+	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), mangled, flags, mutable)
+	log.Infof(ctx, "%v %v %v", found, desc, err)
 	if err != nil {
 		return false, nil, err
 	} else if !found {

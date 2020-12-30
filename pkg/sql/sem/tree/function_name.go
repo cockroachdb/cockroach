@@ -98,8 +98,7 @@ type FuncName struct {
 var _ ObjectName = &FuncName{}
 
 // Satisfy the linter.
-var _ = (*TypeName).Type
-var _ = (*TypeName).FQString
+var _ = (*FuncName).FQString
 
 func NewUnqualifiedFuncName(fnc Name) *FuncName {
 	return &FuncName{objName{ObjectName: fnc}}
@@ -145,6 +144,19 @@ func (t *FuncName) FQString() string {
 }
 
 func (t *FuncName) objectName() {}
+
+// FuncPrefix is the prefix used for function names in the namespace table. This
+// is to produce a separate namespace for functions than tables/views, like
+// Postgres. We assume that people won't try to make tables that start with
+// "⋅𝘧𝘯".
+const FuncPrefix = "⋅𝘧𝘯"
+
+// MangledName returns the namespace key for this function. It should be used
+// only for the low-level lookup routines that actually read from the namespace
+// table.
+func (t *FuncName) MangledName() string {
+	return FuncPrefix + string(t.ObjectName)
+}
 
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into

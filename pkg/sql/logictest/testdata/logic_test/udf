@@ -1,12 +1,17 @@
 statement ok
-CREATE FUNCTION f (a INT, b INT) RETURNS INT AS 'SELECT a+b' LANGUAGE SQL
+CREATE FUNCTION f (a INT, b INT) RETURNS INT AS 'SELECT a+b' LANGUAGE SQL;
+CREATE SCHEMA s;
+CREATE FUNCTION s.f(a INT) RETURNS INT AS 'SELECT a' LANGUAGE SQL
+
+# Make sure functions and tables don't share a namespace.
 
 statement ok
-CREATE TABLE t (c1 INT, c2 INT);
-INSERT INTO t VALUES(1, 2), (3, 4)
+CREATE TABLE f (c1 INT, c2 INT);
+INSERT INTO f VALUES(1, 2), (3, 4)
 
-query I
-SELECT f(c1, c2) FROM t
+query II colnames
+SELECT f(c1, c2), s.f(f(c1, c2)) FROM f ORDER BY 1
 ----
-3
-7
+f  f
+3  3
+7  7
