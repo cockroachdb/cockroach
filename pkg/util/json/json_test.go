@@ -695,6 +695,12 @@ func TestJSONFetchIdx(t *testing.T) {
 			{10, json(`10`)},
 			{35, json(`35`)},
 		},
+		// Scalar values can be indexed.
+		`null`:  {{-2, nil}, {-1, json(`null`)}, {0, json(`null`)}, {1, nil}},
+		`true`:  {{-2, nil}, {-1, json(`true`)}, {0, json(`true`)}, {1, nil}},
+		`false`: {{-2, nil}, {-1, json(`false`)}, {0, json(`false`)}, {1, nil}},
+		`"foo"`: {{-2, nil}, {-1, json(`"foo"`)}, {0, json(`"foo"`)}, {1, nil}},
+		`123`:   {{-2, nil}, {-1, json(`123`)}, {0, json(`123`)}, {1, nil}},
 	}
 
 	for k, tests := range cases {
