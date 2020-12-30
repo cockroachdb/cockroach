@@ -271,6 +271,7 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 				nil, /* initialValues */
 				bootstrapVersion,
 				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
+				cfg.TestingKnobs,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -286,7 +287,9 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	if realRange {
 		if tc.bootstrapMode == bootstrapRangeOnly {
 			testDesc := testRangeDescriptor()
-			if err := stateloader.WriteInitialRangeState(ctx, tc.store.Engine(), *testDesc); err != nil {
+			if err := stateloader.WriteInitialRangeState(
+				ctx, tc.store.Engine(), *testDesc, roachpb.Version{},
+			); err != nil {
 				t.Fatal(err)
 			}
 			repl, err := newReplica(ctx, testDesc, tc.store, 1)

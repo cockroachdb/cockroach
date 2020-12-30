@@ -33,8 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -3574,6 +3576,79 @@ func TestTenantID(t *testing.T) {
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 	})
 
+}
+
+// TestRangeMigration tests the below-raft migration infrastructure. It checks
+// to see that the version recorded as part of the in-memory ReplicaState
+// is up to date, and in-sync with the persisted state. It also checks to see
+// that the right registered migration is invoked.
+func TestRangeMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// We're going to be transitioning from startV to endV. Think a cluster of
+	// binaries running vX, but with active version vX-1.
+	startV := roachpb.Version{Major: 41}
+	endV := roachpb.Version{Major: 42}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          startV,
+					DisableAutomaticVersionUpgrade: 1,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	desc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+	rangeID := desc.RangeID
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	assertVersion := func(expV roachpb.Version) {
+		repl, err := store.GetReplica(rangeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotV := repl.Version(); gotV != expV {
+			t.Fatalf("expected in-memory version %s, got %s", expV, gotV)
+		}
+
+		sl := stateloader.Make(rangeID)
+		persistedV, err := sl.LoadVersion(ctx, store.Engine())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if persistedV != expV {
+			t.Fatalf("expected persisted version %s, got %s", expV, persistedV)
+		}
+	}
+
+	assertVersion(startV)
+
+	migrated := false
+	unregister := batcheval.TestingRegisterMigrationInterceptor(endV, func() {
+		migrated = true
+	})
+	defer unregister()
+
+	kvDB := tc.Servers[0].DB()
+	req := migrateArgs(desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), endV)
+	if _, pErr := kv.SendWrappedWith(ctx, kvDB.GetFactory().NonTransactionalSender(), roachpb.Header{RangeID: desc.RangeID}, req); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if !migrated {
+		t.Fatalf("expected migration interceptor to have been called")
+	}
+	assertVersion(endV)
 }
 
 func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {

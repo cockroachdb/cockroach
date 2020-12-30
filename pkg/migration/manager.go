@@ -102,17 +102,61 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 		cluster := newCluster(m.nl, m.dialer, m.executor, m.db)
 		h := newHelper(cluster, clusterVersion)
 
-		// Push out the version gate to every node in the cluster. Each node
-		// will persist the version, bump the local version gates, and then
-		// return. The migration associated with the specific version can assume
-		// that every node in the cluster has the corresponding version
-		// activated.
+		// First run the actual migration (if any). The cluster version bump
+		// will be rolled out afterwards. This lets us provide the invariant
+		// that if a version=V is active, all data is guaranteed to have
+		// migrated.
+		if migration, ok := registry[clusterVersion]; ok {
+			if err := migration.Run(ctx, h); err != nil {
+				return err
+			}
+		}
+
+		// Next we'll push out the version gate to every node in the cluster.
+		// Each node will persist the version, bump the local version gates, and
+		// then return. The migration associated with the specific version is
+		// executed before every node in the cluster has the corresponding
+		// version activated. Migrations that depend on a certain version
+		// already being activated will need to registered using a cluster
+		// version greater than it.
 		//
-		// We'll need to first bump the fence version for each intermediate
-		// cluster version, before bumping the "real" one. Doing so allows us to
-		// provide the invariant that whenever a cluster version is active, all
-		// nodes in the cluster (including ones added concurrently during
-		// version upgrades) are running binaries that know about the version.
+		// For each intermediate version, we'll need to first bump the fence
+		// version before bumping the "real" one. Doing so allows us to provide
+		// the invariant that whenever a cluster version is active, all nodes in
+		// the cluster (including ones added concurrently during version
+		// upgrades) are running binaries that know about the version.
+
+		// Below-raft migrations mutate replica state, making use of the
+		// Migrate(version=V) primitive which they issue against the entire
+		// keyspace. These migrations typically want to rely on the invariant
+		// that there are no extant replicas in the system that haven't seen the
+		// specific Migrate command.
+		//
+		// This is partly achieved through the implementation of the Migrate
+		// command itself, which waits until it's applied on all followers[2]
+		// before returning. This also addresses the concern of extant snapshots
+		// with pre-migrated state possibly instantiating older version
+		// replicas. The intended learner replicas are listed as part of the
+		// range descriptor, and is also waited on for during command
+		// application. As for stale snapshots, if they specify a replicaID
+		// that's no longer part of the raft group, they're discarded by the
+		// recipient. Snapshots are also discarded unless they move the LAI
+		// forward.
+		//
+		// That still leaves rooms for replicas in the replica GC queue to evade
+		// detection. To address this, below-raft migrations typically take a
+		// two-phrase approach (the TruncatedAndRangeAppliedStateMigration being
+		// one example of this), where after having migrated the entire keyspace
+		// to version V, and after having prevented subsequent snapshots
+		// originating from replicas with versions < V, the migration sets out
+		// to purge outdated replicas in the system[3]. Specifically it
+		// processes all replicas in the GC queue with a version < V (which are
+		// not accessible during the application of the Migrate command).
+		//
+		// [1]: See ReplicaState.Version.
+		// [2]: See Replica.executeWriteBatch, specifically how proposals with the
+		//      Migrate request are handled downstream of raft.
+		// [3]: See PurgeOutdatedReplicas from the Migration service.
 
 		{
 			// The migrations infrastructure makes use of internal fence
@@ -120,12 +164,15 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// instructive to walk through how we expect a version migration
 			// from v21.1 to v21.2 to take place, and how we behave in the
 			// presence of new v21.1 or v21.2 nodes being added to the cluster.
+			//
 			//   - All nodes are running v21.1
 			//   - All nodes are rolled into v21.2 binaries, but with active
 			//     cluster version still as v21.1
 			//   - The first version bump will be into v21.2-1(fence), see the
 			//     migration manager above for where that happens
+			//
 			// Then concurrently:
+			//
 			//   - A new node is added to the cluster, but running binary v21.1
 			//   - We try bumping the cluster gates to v21.2-1(fence)
 			//
@@ -140,18 +187,19 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// by the join RPC).
 			//
 			// All of which is to say that once we've seen the node list
-			// stabilize (as EveryNode enforces), any new nodes that can join
-			// the cluster will run a release that support the fence version,
-			// and by design also supports the actual version (which is the
-			// direct successor of the fence).
+			// stabilize (as UntilClusterStable enforces), any new nodes that
+			// can join the cluster will run a release that support the fence
+			// version, and by design also supports the actual version (which is
+			// the direct successor of the fence).
 			fenceVersion := fenceVersionFor(ctx, clusterVersion)
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &fenceVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.BumpClusterVersion(ctx, req)
-				return err
-			})
-			if err != nil {
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.BumpClusterVersion(ctx, req)
+					return err
+				})
+			}); err != nil {
 				return err
 			}
 		}
@@ -160,11 +208,12 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// cluster version bump, cluster-wide.
 			req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.ValidateTargetClusterVersion(ctx, req)
-				return err
-			})
-			if err != nil {
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.ValidateTargetClusterVersion(ctx, req)
+					return err
+				})
+			}); err != nil {
 				return err
 			}
 		}
@@ -172,26 +221,14 @@ func (m *Manager) Migrate(ctx context.Context, from, to clusterversion.ClusterVe
 			// Finally, bump the real version cluster-wide.
 			req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 			op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
-			if err := h.EveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
-				_, err := client.BumpClusterVersion(ctx, req)
-				return err
+			if err := h.UntilClusterStable(ctx, func() error {
+				return h.ForEveryNode(ctx, op, func(ctx context.Context, client serverpb.MigrationClient) error {
+					_, err := client.BumpClusterVersion(ctx, req)
+					return err
+				})
 			}); err != nil {
 				return err
 			}
-		}
-
-		// TODO(irfansharif): We'll want to be able to override which migration
-		// is retrieved here within tests. We could make the registry be a part
-		// of the manager, and all tests to provide their own.
-
-		// Finally, run the actual migration.
-		migration, ok := registry[clusterVersion]
-		if !ok {
-			log.Infof(ctx, "no migration registered for %s, skipping", clusterVersion)
-			continue
-		}
-		if err := migration.Run(ctx, h); err != nil {
-			return err
 		}
 	}
 

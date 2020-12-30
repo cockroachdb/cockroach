@@ -901,7 +901,7 @@ func splitTriggerHelper(
 	// initial state. Additionally, since bothDeltaMS is tracking writes to
 	// both sides, we need to update it as well.
 	{
-		// Various pieces of code rely on a replica's lease never being unitialized,
+		// Various pieces of code rely on a replica's lease never being uninitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that
 		// of the original Range.  We found out about a regression here the hard way
@@ -918,8 +918,9 @@ func splitTriggerHelper(
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
-		// batch?
-		leftLease, err := MakeStateLoader(rec).LoadLease(ctx, rec.Engine())
+		// batch? We do the same thing for other usages of the state loader.
+		sl := MakeStateLoader(rec)
+		leftLease, err := sl.LoadLease(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -936,8 +937,7 @@ func splitTriggerHelper(
 		}
 		rightLease := leftLease
 		rightLease.Replica = replica
-
-		gcThreshold, err := MakeStateLoader(rec).LoadGCThreshold(ctx, rec.Engine())
+		gcThreshold, err := sl.LoadGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
@@ -966,6 +966,11 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load legacy truncated state")
 		} else if found {
 			truncStateType = stateloader.TruncatedStateLegacyReplicated
+		}
+
+		replicaVersion, err := sl.LoadVersion(ctx, rec.Engine())
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 
 		// Writing the initial state is subtle since this also seeds the Raft
@@ -1000,7 +1005,7 @@ func splitTriggerHelper(
 
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, truncStateType,
+			*gcThreshold, truncStateType, replicaVersion,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

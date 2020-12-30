@@ -286,6 +286,11 @@ func RangeLastGCKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLastGCKey()
 }
 
+// RangeVersionKey returns a system-local for the range version.
+func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeVersionKey()
+}
+
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
@@ -962,6 +967,11 @@ func (b RangeIDPrefixBuf) RangeStatsLegacyKey() roachpb.Key {
 // RangeLastGCKey returns a system-local key for the last GC.
 func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeLastGCSuffix...)
+}
+
+// RangeVersionKey returns a system-local key for the range version.
+func (b RangeIDPrefixBuf) RangeVersionKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeVersionSuffix...)
 }
 
 // RangeTombstoneKey returns a system-local key for a range tombstone.

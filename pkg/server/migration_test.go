@@ -197,3 +197,37 @@ func TestBumpClusterVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numStores = 3
+	var storeSpecs []base.StoreSpec
+	for i := 0; i < numStores; i++ {
+		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+	}
+
+	intercepted := 0
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: storeSpecs,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				PurgeOutdatedReplicasInterceptor: func() {
+					intercepted++
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	migrationServer := s.MigrationServer().(*migrationServer)
+	if _, err := migrationServer.PurgeOutdatedReplicas(context.Background(), &serverpb.PurgeOutdatedReplicasRequest{
+		Version: &clusterversion.TestingBinaryVersion,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if intercepted != numStores {
+		t.Fatalf("expected to have GC-ed replicas on %d stores, found %d", numStores, intercepted)
+	}
+}

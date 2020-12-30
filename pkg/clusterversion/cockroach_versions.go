@@ -206,6 +206,22 @@ const (
 	VirtualComputedColumns
 	// CPutInline is conditional put support for inline values.
 	CPutInline
+	// ReplicaVersions enables the versioning of Replica state.
+	ReplicaVersions
+	// TruncatedAndRangeAppliedStateMigration is part of the migration to stop
+	// using the legacy truncated state within KV. After the migration, we'll be
+	// using the unreplicated truncated state and the RangeAppliedState on all
+	// ranges. Callers that wish to assert on there no longer being any legacy
+	// will be able to do so after PostTruncatedAndRangeAppliedStateMigration is
+	// active. This lets remove any holdover code handling the possibility of
+	// replicated truncated state in 21.2.
+	//
+	// TODO(irfansharif): Do the above in 21.2.
+	TruncatedAndRangeAppliedStateMigration
+	// PostTruncatedAndRangeAppliedStateMigration is used to purge all replicas
+	// using the replicated legacy TruncatedState. It's also used in asserting
+	// that no replicated truncated state representation is found.
+	PostTruncatedAndRangeAppliedStateMigration
 
 	// Step (1): Add new versions here.
 )
@@ -339,6 +355,18 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     CPutInline,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     ReplicaVersions,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     TruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     PostTruncatedAndRangeAppliedStateMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
 	},
 
 	// Step (2): Add new versions here.

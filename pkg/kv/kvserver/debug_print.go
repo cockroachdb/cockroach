@@ -269,6 +269,9 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
 		msg = &hlc.Timestamp{}
 
+	case bytes.Equal(suffix, keys.LocalRangeVersionSuffix):
+		msg = &roachpb.Version{}
+
 	case bytes.Equal(suffix, keys.LocalRangeTombstoneSuffix):
 		msg = &roachpb.RangeTombstone{}
 

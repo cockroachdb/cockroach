@@ -305,6 +305,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.initput.sent",
 					"distsender.rpc.leaseinfo.sent",
 					"distsender.rpc.merge.sent",
+					"distsender.rpc.migrate.sent",
 					"distsender.rpc.pushtxn.sent",
 					"distsender.rpc.put.sent",
 					"distsender.rpc.queryintent.sent",

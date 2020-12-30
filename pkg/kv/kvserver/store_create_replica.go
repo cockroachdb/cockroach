@@ -180,6 +180,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// been set, not every code path which inspects the descriptor checks the
 	// destroy status.
 	repl.mu.state.Desc = uninitializedDesc
+
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
