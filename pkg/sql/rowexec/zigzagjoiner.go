@@ -431,7 +431,13 @@ func (z *zigzagJoiner) setupInfo(
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
-		info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
+		if info.index.Type == descpb.IndexDescriptor_INVERTED &&
+			columnID == info.index.InvertedColumnID() {
+			// Inverted key columns have type Bytes.
+			info.indexTypes[i] = types.Bytes
+		} else {
+			info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
+		}
 	}
 
 	// Add the outputted columns.
@@ -582,7 +588,8 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		}
 	}
 
-	keys, err := rowenc.EncodeInvertedIndexKeys(
+	// First encode datums for any non-inverted prefix columns.
+	keyPrefix, err := rowenc.EncodeInvertedIndexPrefixKeys(
 		info.index,
 		colMap,
 		decodedDatums,
@@ -591,8 +598,16 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	if len(keys) != 1 {
-		return roachpb.Span{}, errors.Errorf("%d fixed values passed in for inverted index", len(keys))
+
+	// Add the inverted key, which is already encoded as a DBytes.
+	if i, ok := colMap.Get(info.index.InvertedColumnID()); ok {
+		invertedKey, ok := decodedDatums[i].(*tree.DBytes)
+		if !ok {
+			return roachpb.Span{}, errors.AssertionFailedf("inverted key must be type DBytes")
+		}
+		keyPrefix = append(keyPrefix, []byte(*invertedKey)...)
+	} else {
+		return roachpb.Span{}, errors.AssertionFailedf("inverted column not found in colMap")
 	}
 
 	// Append remaining (non-JSON) datums to the key.
@@ -601,7 +616,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		info.indexDirs[1:],
 		colMap,
 		decodedDatums,
-		keys[0],
+		keyPrefix,
 	)
 	key := roachpb.Key(keyBytes)
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, err

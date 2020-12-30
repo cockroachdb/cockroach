@@ -172,8 +172,8 @@ func MakeSingleInvertedValSpan(val EncInvertedVal) InvertedSpan {
 	return InvertedSpan{Start: val, End: end}
 }
 
-// isSingleVal returns true iff the span is equivalent to [val, val].
-func (s InvertedSpan) isSingleVal() bool {
+// IsSingleVal returns true iff the span is equivalent to [val, val].
+func (s InvertedSpan) IsSingleVal() bool {
 	return bytes.Equal(roachpb.Key(s.Start).PrefixEnd(), s.End)
 }
 
@@ -222,7 +222,7 @@ func (is InvertedSpans) Format(tp treeprinter.Node, label string) {
 func formatSpan(span InvertedSpan) string {
 	end := span.End
 	spanEndOpenOrClosed := ')'
-	if span.isSingleVal() {
+	if span.IsSingleVal() {
 		end = span.Start
 		spanEndOpenOrClosed = ']'
 	}

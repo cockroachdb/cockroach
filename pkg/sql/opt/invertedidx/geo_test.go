@@ -492,6 +492,7 @@ func TestTryFilterGeoIndex(t *testing.T) {
 		// the index when we expect to.
 		spanExpr, _, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
 			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+			false, /* forZigZag */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
