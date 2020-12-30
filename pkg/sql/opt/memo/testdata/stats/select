@@ -881,8 +881,8 @@ inner-join (lookup t_json_arr)
  ├── inner-join (zigzag t_json_arr@b_idx t_json_arr@b_idx)
  │    ├── columns: a:1(int!null)
  │    ├── eq columns: [1] = [1]
- │    ├── left fixed columns: [2] = ['{"a": "b"}']
- │    ├── right fixed columns: [2] = ['{"c": "d"}']
+ │    ├── left fixed columns: [6] = ['\x3761000112620001']
+ │    ├── right fixed columns: [6] = ['\x3763000112640001']
  │    ├── stats: [rows=61.7283951, distinct(1)=61.7283951, null(1)=0]
  │    └── filters (true)
  └── filters

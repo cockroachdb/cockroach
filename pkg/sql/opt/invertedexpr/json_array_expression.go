@@ -18,14 +18,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// JSONOrArrayToContainingSpanExpr converts a JSON or Array datum to a
+// JSONOrArrayToContainingInvertedExpr converts a JSON or Array datum to a
 // SpanExpression that represents the key ranges of datums containing the given
 // datum according to the JSON or Array contains (@>) operator. If it is not
-// possible to create such a SpanExpression, JSONOrArrayToContainingSpanExpr
-// returns nil. If the provided datum is not a JSON or Array, returns an error.
-func JSONOrArrayToContainingSpanExpr(
+// possible to create such a SpanExpression, JSONOrArrayToContainingInvertedExpr
+// returns a NonInvertedColExpression. If the provided datum is not a JSON or
+// Array, returns an error.
+func JSONOrArrayToContainingInvertedExpr(
 	evalCtx *tree.EvalContext, d tree.Datum,
-) (*SpanExpression, error) {
+) (InvertedExpression, error) {
 	var b []byte
 	spanExpr, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
@@ -89,12 +90,5 @@ func JSONOrArrayToContainingSpanExpr(
 		return NonInvertedColExpression{}, nil
 	}
 
-	invExpr, err := convertSpanExpr(spanExpr)
-	if err != nil {
-		return nil, err
-	}
-	if newSpanExpr, ok := invExpr.(*SpanExpression); ok {
-		return newSpanExpr, nil
-	}
-	return nil, nil
+	return convertSpanExpr(spanExpr)
 }

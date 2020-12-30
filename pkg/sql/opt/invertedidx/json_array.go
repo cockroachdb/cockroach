@@ -89,16 +89,16 @@ func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 	return true
 }
 
-// getSpanExprForJSONOrArrayIndex gets a SpanExpression that constrains a
-// json or array index according to the given constant.
-func getSpanExprForJSONOrArrayIndex(
+// getInvertedExprForJSONOrArrayIndex gets an InvertedExpression that
+// constrains a json or array index according to the given constant.
+func getInvertedExprForJSONOrArrayIndex(
 	evalCtx *tree.EvalContext, d tree.Datum,
-) *invertedexpr.SpanExpression {
-	spanExpr, err := invertedexpr.JSONOrArrayToContainingSpanExpr(evalCtx, d)
+) invertedexpr.InvertedExpression {
+	invertedExpr, err := invertedexpr.JSONOrArrayToContainingInvertedExpr(evalCtx, d)
 	if err != nil {
 		panic(err)
 	}
-	return spanExpr
+	return invertedExpr
 }
 
 type jsonOrArrayInvertedExpr struct {
@@ -180,7 +180,8 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			// it for every row.
 			var spanExpr *invertedexpr.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				spanExpr = getSpanExprForJSONOrArrayIndex(evalCtx, d)
+				invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, d)
+				spanExpr, _ = invertedExpr.(*invertedexpr.SpanExpression)
 			}
 
 			return &jsonOrArrayInvertedExpr{
@@ -224,7 +225,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			return getSpanExprForJSONOrArrayIndex(g.evalCtx, d), nil
+			return getInvertedExprForJSONOrArrayIndex(g.evalCtx, d), nil
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
@@ -325,5 +326,5 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayFilterCondition(
 		}
 	}
 
-	return getSpanExprForJSONOrArrayIndex(evalCtx, d)
+	return getInvertedExprForJSONOrArrayIndex(evalCtx, d)
 }
