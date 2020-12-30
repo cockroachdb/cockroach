@@ -1624,6 +1624,51 @@ json_extract_path  25           2         3802        3802 25      {i,v}
 
 user root
 
+# Test user-defined functions.
+
+statement ok
+CREATE FUNCTION f (a INT, b INT) RETURNS INT AS 'SELECT a+b' LANGUAGE SQL
+
+query TOOOTTO colnames
+SELECT proname, pronamespace, proowner, prolang, procost, prorows, provariadic
+FROM pg_catalog.pg_proc
+WHERE proname='f'
+----
+proname  pronamespace  proowner  prolang  procost  prorows  provariadic
+f        2577395996    NULL      0        NULL     NULL     0
+
+query TTBBBB colnames
+SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
+FROM pg_catalog.pg_proc
+WHERE proname='f'
+----
+proname  protransform  proisagg  proiswindow  prosecdef  proleakproof
+f        NULL          false     false        false      false
+
+query TBBTT colnames
+SELECT proname, proisstrict, proretset, provolatile, proparallel
+FROM pg_catalog.pg_proc
+WHERE proname='f'
+----
+proname  proisstrict  proretset  provolatile  proparallel
+f        false        false      v            NULL
+
+query TIIOTTTT colnames
+SELECT proname, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargdefaults
+FROM pg_catalog.pg_proc
+WHERE proname='f'
+----
+proname  pronargs  pronargdefaults  prorettype  proargtypes  proallargtypes  proargmodes  proargdefaults
+f        2         0                20          20 20        NULL            NULL         NULL
+
+query TTTTTT colnames
+SELECT proname, protrftypes, prosrc, probin, proconfig, proacl
+FROM pg_catalog.pg_proc
+WHERE proname='f'
+----
+proname  protrftypes  prosrc  probin  proconfig  proacl
+f        NULL         a + b   NULL    NULL       NULL
+
 ## pg_catalog.pg_range
 query IIIIII colnames
 SELECT * from pg_catalog.pg_range
@@ -2105,8 +2150,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-73        20        1         1             9223372036854775807  1       1         false
-74        20        6         2             10                   5       1         false
+74        20        1         1             9223372036854775807  1       1         false
+75        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2562,7 +2607,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-617444901  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+3567335188  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2675,13 +2720,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-98  98  jt
+99  99  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-98  98    jt
+99  99    jt
 
 subtest regression_49207
 statement ok
