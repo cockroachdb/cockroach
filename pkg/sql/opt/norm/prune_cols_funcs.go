@@ -45,6 +45,15 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 func (c *CustomFuncs) NeededMutationCols(
 	private *memo.MutationPrivate, uniqueChecks memo.UniqueChecksExpr, fkChecks memo.FKChecksExpr,
 ) opt.ColSet {
+	return c.neededMutationCols(private, uniqueChecks, fkChecks, true /* includePartialIndexCols */)
+}
+
+func (c *CustomFuncs) neededMutationCols(
+	private *memo.MutationPrivate,
+	uniqueChecks memo.UniqueChecksExpr,
+	fkChecks memo.FKChecksExpr,
+	includePartialIndexCols bool,
+) opt.ColSet {
 	var cols opt.ColSet
 
 	// Add all input columns referenced by the mutation private.
@@ -60,8 +69,10 @@ func (c *CustomFuncs) NeededMutationCols(
 	addCols(private.FetchCols)
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
-	addCols(private.PartialIndexPutCols)
-	addCols(private.PartialIndexDelCols)
+	if includePartialIndexCols {
+		addCols(private.PartialIndexPutCols)
+		addCols(private.PartialIndexDelCols)
+	}
 	addCols(private.ReturnCols)
 	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {

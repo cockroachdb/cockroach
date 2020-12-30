@@ -1,0 +1,38 @@
+# =============================================================================
+# mutation.opt contains normalization rules for the mutation operators.
+# =============================================================================
+
+# SimplifyPartialIndexProjections converts partial index PUT and DEL projected
+# expressions to false when it is guaranteed that the mutation will not require
+# changes to the associated partial index. These projected expressions can only
+# be simplified to false when an UPDATE mutates neither the associated index's
+# columns nor the columns referenced in the partial index predicate.
+[SimplifyPartialIndexProjections, Normalize]
+(Update
+    $project:(Project $input:* $projections:* $passthrough:*)
+    $uniqueChecks:*
+    $fkChecks:*
+    $mutationPrivate:* &
+        ^(ColsAreEmpty
+            $simplifiableCols:(SimplifiablePartialIndexProjectCols
+                $mutationPrivate
+                $uniqueChecks
+                $fkChecks
+                $projections
+            )
+        )
+)
+=>
+(Update
+    (Project
+        $input
+        (SimplifyPartialIndexProjections
+            $projections
+            $simplifiableCols
+        )
+        $passthrough
+    )
+    $uniqueChecks
+    $fkChecks
+    $mutationPrivate
+)
