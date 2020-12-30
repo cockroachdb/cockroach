@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -96,6 +97,10 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
 	metricsRegistry         *metric.Registry
+
+	// settingsWatcher is utilized by secondary tenants to watch for settings
+	// changes. It is nil on the system tenant.
+	settingsWatcher *settingswatcher.SettingsWatcher
 
 	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
 	pgL net.Listener
@@ -636,6 +641,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		leaseMgr,
 	)
 
+	var settingsWatcher *settingswatcher.SettingsWatcher
+	if !codec.ForSystemTenant() {
+		settingsWatcher = settingswatcher.New(
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper,
+		)
+	}
+
 	return &sqlServer{
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
@@ -653,6 +665,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 		metricsRegistry:         cfg.registry,
+		settingsWatcher:         settingsWatcher,
 	}, nil
 }
 
@@ -760,6 +773,12 @@ func (s *sqlServer) preStart(
 		// doing more work than strictly necessary during the first time that the
 		// migrations are run.
 		bootstrapVersion = clusterversion.ByKey(clusterversion.Start20_2)
+	}
+
+	if s.settingsWatcher != nil {
+		if err := s.settingsWatcher.Start(ctx); err != nil {
+			return errors.Wrap(err, "initializing settings")
+		}
 	}
 
 	// Run startup migrations (note: these depend on jobs subsystem running).
