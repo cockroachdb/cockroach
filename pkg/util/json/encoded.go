@@ -716,13 +716,13 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 }
 
 func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
-	b []byte, isRoot, isObjectValue bool,
+	b []byte, isRoot, isObjectValue, uniqueOnly bool,
 ) ([]roachpb.Spans, bool, bool, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, false, false, err
 	}
-	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
+	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue, uniqueOnly)
 }
 
 // numInvertedIndexEntries implements the JSON interface.

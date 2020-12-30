@@ -26,7 +26,7 @@ func JSONOrArrayToContainingSpanExpr(
 ) (*SpanExpression, error) {
 	var b []byte
 	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
-		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
+		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion, false, /* uniqueOnly */
 	)
 	if err != nil {
 		return nil, err
