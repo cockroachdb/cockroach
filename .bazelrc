@@ -1,0 +1,3 @@
+# TODO(irfansharif): We should fold this into `dev` instead (#56965).
+
+build --ui_event_filters=-DEBUG

@@ -58,7 +58,7 @@ genrule(
       $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
     """,
     tools = [
-        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "//pkg/sql/colexec/execgen/cmd/execgen",
+        "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
 )
