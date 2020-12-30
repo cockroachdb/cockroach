@@ -1,0 +1,332 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  g INT,
+  h BOOL,
+  INDEX (c) WHERE d > 1,
+  INDEX (e) WHERE f > 1 AND g > 1
+)
+----
+
+# Simplify UPDATE partial index put/del column to false when the indexed columns
+# and columns referenced in predicates are not mutating.
+norm expect=SimplifyPartialIndexProjections
+UPDATE t SET a = 2, b = 2 WHERE k = 1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:11 a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+ ├── update-mapping:
+ │    ├── a_new:21 => a:2
+ │    └── a_new:21 => b:3
+ ├── partial index put columns: partial_index_put1:22 partial_index_put2:23
+ ├── partial index del columns: partial_index_put1:22 partial_index_put2:23
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:22!null partial_index_put2:23!null a_new:21!null k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(11-19,21-23)
+      ├── select
+      │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-19)
+      │    ├── scan t
+      │    │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    │    ├── partial index predicates
+      │    │    │    ├── secondary: filters
+      │    │    │    │    └── d:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
+      │    │    │    └── secondary: filters
+      │    │    │         ├── f:17 > 1 [outer=(17), constraints=(/17: [/2 - ]; tight)]
+      │    │    │         └── g:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-19)
+      │    └── filters
+      │         └── k:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      └── projections
+           ├── false [as=partial_index_put1:22]
+           ├── false [as=partial_index_put2:23]
+           └── 2 [as=a_new:21]
+
+# Simplify UPSERT partial index put/del column to false when the indexed columns
+# and columns referenced in predicates are not mutating.
+norm expect=SimplifyPartialIndexProjections
+UPSERT INTO t (k, a, b) VALUES (1, 2, 3)
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: k:16
+ ├── fetch columns: k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+ ├── insert-mapping:
+ │    ├── column1:11 => k:1
+ │    ├── column2:12 => a:2
+ │    ├── column3:13 => b:3
+ │    ├── column14:14 => c:4
+ │    ├── column14:14 => d:5
+ │    ├── column14:14 => e:6
+ │    ├── column14:14 => f:7
+ │    ├── column14:14 => g:8
+ │    └── column15:15 => h:9
+ ├── update-mapping:
+ │    ├── column2:12 => a:2
+ │    └── column3:13 => b:3
+ ├── partial index put columns: partial_index_put1:33 partial_index_put2:35
+ ├── partial index del columns: partial_index_del1:34 partial_index_del2:36
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:33!null partial_index_del1:34!null partial_index_put2:35!null partial_index_del2:36!null column1:11!null column2:12!null column3:13!null column14:14 column15:15 k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(11-24,33-36)
+      ├── left-join (cross)
+      │    ├── columns: column1:11!null column2:12!null column3:13!null column14:14 column15:15 k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-24)
+      │    ├── values
+      │    │    ├── columns: column1:11!null column2:12!null column3:13!null column14:14 column15:15
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11-15)
+      │    │    └── (1, 2, 3, NULL, NULL)
+      │    ├── select
+      │    │    ├── columns: k:16!null a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(16-24)
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:16!null a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    │    │    ├── partial index predicates
+      │    │    │    │    ├── secondary: filters
+      │    │    │    │    │    └── d:20 > 1 [outer=(20), constraints=(/20: [/2 - ]; tight)]
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         ├── f:22 > 1 [outer=(22), constraints=(/22: [/2 - ]; tight)]
+      │    │    │    │         └── g:23 > 1 [outer=(23), constraints=(/23: [/2 - ]; tight)]
+      │    │    │    ├── key: (16)
+      │    │    │    └── fd: (16)-->(17-24)
+      │    │    └── filters
+      │    │         └── k:16 = 1 [outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
+      │    └── filters (true)
+      └── projections
+           ├── false [as=partial_index_put1:33]
+           ├── false [as=partial_index_del1:34]
+           ├── false [as=partial_index_put2:35]
+           └── false [as=partial_index_del2:36]
+
+# Simplify INSERT ... ON CONFLICT ... DO UPDATE partial index put/del column to
+# false when the indexed columns and columns referenced in predicates are not
+# mutating.
+norm expect=SimplifyPartialIndexProjections
+INSERT INTO t (k, a, b) VALUES (1, 2, 3) ON CONFLICT (k) DO UPDATE SET a = t.a + 1, b = t.b + 1
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: k:16
+ ├── fetch columns: k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+ ├── insert-mapping:
+ │    ├── column1:11 => k:1
+ │    ├── column2:12 => a:2
+ │    ├── column3:13 => b:3
+ │    ├── column14:14 => c:4
+ │    ├── column14:14 => d:5
+ │    ├── column14:14 => e:6
+ │    ├── column14:14 => f:7
+ │    ├── column14:14 => g:8
+ │    └── column15:15 => h:9
+ ├── update-mapping:
+ │    ├── upsert_a:29 => a:2
+ │    └── upsert_b:30 => b:3
+ ├── partial index put columns: partial_index_put1:37 partial_index_put2:39
+ ├── partial index del columns: partial_index_del1:38 partial_index_del2:40
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:37!null partial_index_del1:38!null partial_index_put2:39!null partial_index_del2:40!null upsert_a:29 upsert_b:30 column1:11!null column2:12!null column3:13!null column14:14 column15:15 k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      ├── cardinality: [1 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(11-24,29,30,37-40)
+      ├── left-join (cross)
+      │    ├── columns: column1:11!null column2:12!null column3:13!null column14:14 column15:15 k:16 a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-24)
+      │    ├── values
+      │    │    ├── columns: column1:11!null column2:12!null column3:13!null column14:14 column15:15
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11-15)
+      │    │    └── (1, 2, 3, NULL, NULL)
+      │    ├── select
+      │    │    ├── columns: k:16!null a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(16-24)
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:16!null a:17 b:18 c:19 d:20 e:21 f:22 g:23 h:24
+      │    │    │    ├── partial index predicates
+      │    │    │    │    ├── secondary: filters
+      │    │    │    │    │    └── d:20 > 1 [outer=(20), constraints=(/20: [/2 - ]; tight)]
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         ├── f:22 > 1 [outer=(22), constraints=(/22: [/2 - ]; tight)]
+      │    │    │    │         └── g:23 > 1 [outer=(23), constraints=(/23: [/2 - ]; tight)]
+      │    │    │    ├── key: (16)
+      │    │    │    └── fd: (16)-->(17-24)
+      │    │    └── filters
+      │    │         └── k:16 = 1 [outer=(16), constraints=(/16: [/1 - /1]; tight), fd=()-->(16)]
+      │    └── filters (true)
+      └── projections
+           ├── false [as=partial_index_put1:37]
+           ├── false [as=partial_index_del1:38]
+           ├── false [as=partial_index_put2:39]
+           ├── false [as=partial_index_del2:40]
+           ├── CASE WHEN k:16 IS NULL THEN column2:12 ELSE a:17 + 1 END [as=upsert_a:29, outer=(12,16,17), immutable]
+           └── CASE WHEN k:16 IS NULL THEN column3:13 ELSE b:18 + 1 END [as=upsert_b:30, outer=(13,16,18), immutable]
+
+# Do not simplify partial index put/del column to false when the indexed columns
+# are mutating.
+norm expect-not=SimplifyPartialIndexProjections
+UPDATE t SET c = 1, e = 1 WHERE k = 1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:11 a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+ ├── update-mapping:
+ │    ├── c_new:21 => c:4
+ │    └── c_new:21 => e:6
+ ├── partial index put columns: partial_index_put1:22 partial_index_put2:23
+ ├── partial index del columns: partial_index_put1:22 partial_index_put2:23
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:22 partial_index_put2:23 c_new:21!null k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(11-19,21-23)
+      ├── select
+      │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-19)
+      │    ├── scan t
+      │    │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    │    ├── partial index predicates
+      │    │    │    ├── secondary: filters
+      │    │    │    │    └── d:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
+      │    │    │    └── secondary: filters
+      │    │    │         ├── f:17 > 1 [outer=(17), constraints=(/17: [/2 - ]; tight)]
+      │    │    │         └── g:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-19)
+      │    └── filters
+      │         └── k:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      └── projections
+           ├── d:15 > 1 [as=partial_index_put1:22, outer=(15)]
+           ├── (f:17 > 1) AND (g:18 > 1) [as=partial_index_put2:23, outer=(17,18)]
+           └── 1 [as=c_new:21]
+
+# Do not simplify partial index put/del column to false when the columns
+# referenced in partial index predicates are mutating.
+norm expect-not=SimplifyPartialIndexProjections
+UPDATE t SET d = d + 1, g = g + 1 WHERE k = 1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:11 a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+ ├── update-mapping:
+ │    ├── d_new:21 => d:5
+ │    └── g_new:22 => g:8
+ ├── partial index put columns: partial_index_put1:23 partial_index_put2:25
+ ├── partial index del columns: partial_index_del1:24 partial_index_del2:26
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put1:23 partial_index_del1:24 partial_index_put2:25 partial_index_del2:26 k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19 d_new:21 g_new:22
+      ├── cardinality: [0 - 1]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(11-19,21-26)
+      ├── project
+      │    ├── columns: d_new:21 g_new:22 k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-19,21,22)
+      │    ├── select
+      │    │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(11-19)
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    │    │    ├── partial index predicates
+      │    │    │    │    ├── secondary: filters
+      │    │    │    │    │    └── d:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
+      │    │    │    │    └── secondary: filters
+      │    │    │    │         ├── f:17 > 1 [outer=(17), constraints=(/17: [/2 - ]; tight)]
+      │    │    │    │         └── g:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
+      │    │    │    ├── key: (11)
+      │    │    │    └── fd: (11)-->(12-19)
+      │    │    └── filters
+      │    │         └── k:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      │    └── projections
+      │         ├── d:15 + 1 [as=d_new:21, outer=(15), immutable]
+      │         └── g:18 + 1 [as=g_new:22, outer=(18), immutable]
+      └── projections
+           ├── d_new:21 > 1 [as=partial_index_put1:23, outer=(21)]
+           ├── d:15 > 1 [as=partial_index_del1:24, outer=(15)]
+           ├── (f:17 > 1) AND (g_new:22 > 1) [as=partial_index_put2:25, outer=(17,22)]
+           └── (f:17 > 1) AND (g:18 > 1) [as=partial_index_del2:26, outer=(17,18)]
+
+# Do not simplify partial index put/del column to false when it is also an
+# update column.
+norm
+UPDATE t SET h = d > 1 WHERE k = 1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:11 a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+ ├── update-mapping:
+ │    └── h_new:21 => h:9
+ ├── partial index put columns: h_new:21 partial_index_put2:22
+ ├── partial index del columns: h_new:21 partial_index_put2:22
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: partial_index_put2:22!null h_new:21 k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(11-19,21,22)
+      ├── select
+      │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(11-19)
+      │    ├── scan t
+      │    │    ├── columns: k:11!null a:12 b:13 c:14 d:15 e:16 f:17 g:18 h:19
+      │    │    ├── partial index predicates
+      │    │    │    ├── secondary: filters
+      │    │    │    │    └── d:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
+      │    │    │    └── secondary: filters
+      │    │    │         ├── f:17 > 1 [outer=(17), constraints=(/17: [/2 - ]; tight)]
+      │    │    │         └── g:18 > 1 [outer=(18), constraints=(/18: [/2 - ]; tight)]
+      │    │    ├── key: (11)
+      │    │    └── fd: (11)-->(12-19)
+      │    └── filters
+      │         └── k:11 = 1 [outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+      └── projections
+           ├── false [as=partial_index_put2:22]
+           └── d:15 > 1 [as=h_new:21, outer=(15)]
