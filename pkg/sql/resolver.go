@@ -687,6 +687,8 @@ type internalLookupCtx struct {
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
+	funcDescs   map[descpb.ID]*funcdesc.Immutable
+	funcIDs     []descpb.ID
 
 	// fallback is utilized in GetDesc
 	fallback catalog.DescGetter
@@ -700,6 +702,9 @@ func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.
 		return desc, nil
 	}
 	if desc, ok := l.typDescs[id]; ok {
+		return desc, nil
+	}
+	if desc, ok := l.funcDescs[id]; ok {
 		return desc, nil
 	}
 	if desc, ok := l.tbDescs[id]; ok {
@@ -775,7 +780,8 @@ func newInternalLookupCtx(
 	}
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
-	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+	funcDescs := make(map[descpb.ID]*funcdesc.Immutable)
+	var tbIDs, typIDs, dbIDs, schemaIDs, funcIDs []descpb.ID
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -805,6 +811,12 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
+		case *funcdesc.Immutable:
+			funcDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
+				// Only make the schema visible for iteration if the prefix was included.
+				funcIDs = append(funcIDs, desc.GetID())
+			}
 		}
 	}
 
@@ -816,9 +828,11 @@ func newInternalLookupCtx(
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,
+		funcDescs:   funcDescs,
 		tbIDs:       tbIDs,
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
+		funcIDs:     funcIDs,
 		fallback:    fallback,
 	}
 }
