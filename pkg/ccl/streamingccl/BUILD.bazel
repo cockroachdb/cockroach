@@ -2,8 +2,25 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "streamingccl",
-    srcs = ["event.go"],
+    srcs = [
+        "event.go",
+        "stream_ingestion_job.go",
+        "stream_ingestion_processor_planning.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
+    deps = [
+        "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/physicalplan",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
 )
