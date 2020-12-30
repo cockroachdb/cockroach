@@ -16,20 +16,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// JSONOrArrayToContainingSpanExpr converts a JSON or Array datum to a
+// JSONOrArrayToContainingInvertedExpr converts a JSON or Array datum to a
 // SpanExpression that represents the key ranges of datums containing the given
 // datum according to the JSON or Array contains (@>) operator. If it is not
-// possible to create such a SpanExpression, JSONOrArrayToContainingSpanExpr
-// returns nil. If the provided datum is not a JSON or Array, returns an error.
-func JSONOrArrayToContainingSpanExpr(
-	evalCtx *tree.EvalContext, d tree.Datum,
-) (*SpanExpression, error) {
+// possible to create such a SpanExpression, JSONOrArrayToContainingInvertedExpr
+// returns a NonInvertedColExpression. If the provided datum is not a JSON or
+// Array, returns an error.
+//
+// If the parameter uniqueOnly is true, only unique spans will be returned
+// if possible. If this is not possible, returns a NonInvertedColExpression.
+// This is useful for building zigzag joins.
+func JSONOrArrayToContainingInvertedExpr(
+	evalCtx *tree.EvalContext, d tree.Datum, uniqueOnly bool,
+) (InvertedExpression, error) {
 	var b []byte
 	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
-		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion, false, /* uniqueOnly */
+		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion, uniqueOnly,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if uniqueOnly && !unique {
+		// It was not possible to find unique spans.
+		return NonInvertedColExpression{}, nil
 	}
 	if len(spansSlice) == 0 {
 		// This can happen if the input is ARRAY[NULL].
@@ -63,5 +72,5 @@ func JSONOrArrayToContainingSpanExpr(
 		spanExpr.Unique = unique
 		return spanExpr, nil
 	}
-	return nil, nil
+	return NonInvertedColExpression{}, nil
 }

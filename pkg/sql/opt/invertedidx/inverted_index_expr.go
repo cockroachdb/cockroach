@@ -59,6 +59,10 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 // condition is derived, it is returned with ok=true. If no condition can be
 // derived, then TryFilterInvertedIndex returns ok=false.
 //
+// If forZigZag is true, returns a span expression that can be used to build
+// a zigzag join. If it's not possible to derive such a span expression, then
+// TryFilterInvertedIndex returns ok=false.
+//
 // In addition to the inverted filter condition (spanExpr), returns:
 // - a constraint of the prefix columns if there are any,
 // - remaining filters that must be applied if the span expression is not tight,
@@ -72,6 +76,7 @@ func TryFilterInvertedIndex(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	forZigZag bool,
 ) (
 	spanExpr *invertedexpr.SpanExpression,
 	constraint *constraint.Constraint,
@@ -92,6 +97,10 @@ func TryFilterInvertedIndex(
 	var typ *types.T
 	var filterPlanner invertedFilterPlanner
 	if geoindex.IsGeographyConfig(config) {
+		if forZigZag {
+			// We don't support zigzag joins with geography indexes.
+			return nil, nil, nil, nil, false
+		}
 		filterPlanner = &geoFilterPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -100,6 +109,10 @@ func TryFilterInvertedIndex(
 		}
 		typ = types.Geography
 	} else if geoindex.IsGeometryConfig(config) {
+		if forZigZag {
+			// We don't support zigzag joins with geometry indexes.
+			return nil, nil, nil, nil, false
+		}
 		filterPlanner = &geoFilterPlanner{
 			factory:     factory,
 			tabID:       tabID,
@@ -109,8 +122,9 @@ func TryFilterInvertedIndex(
 		typ = types.Geometry
 	} else {
 		filterPlanner = &jsonOrArrayFilterPlanner{
-			tabID: tabID,
-			index: index,
+			tabID:     tabID,
+			index:     index,
+			forZigZag: forZigZag,
 		}
 		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
@@ -150,6 +164,11 @@ func TryFilterInvertedIndex(
 		pfState.Typ = typ
 	}
 
+	if forZigZag && !spanExpr.Unique {
+		// It was not possible to generate spans that are guaranteed not to produce
+		// duplicate primary keys.
+		return nil, nil, nil, nil, false
+	}
 	return spanExpr, constraint, remainingFilters, pfState, true
 }
 

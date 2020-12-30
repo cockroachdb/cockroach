@@ -405,6 +405,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 		// unique, and remainingFilters.
 		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
 			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+			false, /* forZigZag */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)

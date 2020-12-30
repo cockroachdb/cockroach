@@ -89,16 +89,20 @@ func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 	return true
 }
 
-// getSpanExprForJSONOrArrayIndex gets a SpanExpression that constrains a
-// json or array index according to the given constant.
-func getSpanExprForJSONOrArrayIndex(
-	evalCtx *tree.EvalContext, d tree.Datum,
-) *invertedexpr.SpanExpression {
-	spanExpr, err := invertedexpr.JSONOrArrayToContainingSpanExpr(evalCtx, d)
+// getInvertedExprForJSONOrArrayIndex gets an InvertedExpression that
+// constrains a json or array index according to the given constant.
+//
+// If the parameter uniqueOnly is true, only unique spans will be returned
+// if possible. If this is not possible, returns a NonInvertedColExpression.
+// This is useful for building zigzag joins.
+func getInvertedExprForJSONOrArrayIndex(
+	evalCtx *tree.EvalContext, d tree.Datum, uniqueOnly bool,
+) invertedexpr.InvertedExpression {
+	invertedExpr, err := invertedexpr.JSONOrArrayToContainingInvertedExpr(evalCtx, d, uniqueOnly)
 	if err != nil {
 		panic(err)
 	}
-	return spanExpr
+	return invertedExpr
 }
 
 type jsonOrArrayInvertedExpr struct {
@@ -180,7 +184,8 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			// it for every row.
 			var spanExpr *invertedexpr.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				spanExpr = getSpanExprForJSONOrArrayIndex(evalCtx, d)
+				invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, d, false /* uniqueOnly */)
+				spanExpr, _ = invertedExpr.(*invertedexpr.SpanExpression)
 			}
 
 			return &jsonOrArrayInvertedExpr{
@@ -224,7 +229,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			return getSpanExprForJSONOrArrayIndex(g.evalCtx, d), nil
+			return getInvertedExprForJSONOrArrayIndex(g.evalCtx, d, false /* uniqueOnly */), nil
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
@@ -259,8 +264,9 @@ func (g *jsonOrArrayDatumsToInvertedExpr) PreFilter(
 }
 
 type jsonOrArrayFilterPlanner struct {
-	tabID opt.TableID
-	index cat.Index
+	tabID     opt.TableID
+	index     cat.Index
+	forZigZag bool
 }
 
 var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
@@ -325,5 +331,5 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayFilterCondition(
 		}
 	}
 
-	return getSpanExprForJSONOrArrayIndex(evalCtx, d)
+	return getInvertedExprForJSONOrArrayIndex(evalCtx, d, j.forZigZag)
 }
