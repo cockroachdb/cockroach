@@ -156,11 +156,11 @@ type TableMeta struct {
 	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
 
-	// PartialIndexPredicates is a map from index ordinals on the table to
+	// partialIndexPredicates is a map from index ordinals on the table to
 	// *FiltersExprs representing the predicate on the corresponding partial
 	// index. If an index is not a partial index, it will not have an entry in
 	// the map.
-	PartialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
+	partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
@@ -254,10 +254,36 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 // AddPartialIndexPredicate adds a partial index predicate to the table's
 // metadata.
 func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
-	if tm.PartialIndexPredicates == nil {
-		tm.PartialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
+	if tm.partialIndexPredicates == nil {
+		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
 	}
-	tm.PartialIndexPredicates[ord] = pred
+	tm.partialIndexPredicates[ord] = pred
+}
+
+// PartialIndexPredicate returns the given index's predicate scalar expression,
+// if the index is a partial index. Returns ok=false if the index is not a
+// partial index. Panics if the index is a partial index but a predicate scalar
+// expression does not exist in the table metadata.
+func (tm *TableMeta) PartialIndexPredicate(ord cat.IndexOrdinal) (pred ScalarExpr, ok bool) {
+	if _, isPartialIndex := tm.Table.Index(ord).Predicate(); !isPartialIndex {
+		return nil, false
+	}
+	pred, ok = tm.partialIndexPredicates[ord]
+	if !ok {
+		panic(errors.AssertionFailedf("partial index predicate does not exist in table metadata"))
+	}
+	return pred, true
+}
+
+// PartialIndexPredicatesForFormattingOnly returns the partialIndexPredicates
+// map.
+//
+// WARNING: The returned map is NOT a source-of-truth for determining if an
+// index is a partial index. This function should only be used to show the
+// partial index expressions that have been built for a table when formatting
+// opt expressions. Use PartialIndexPredicate in all other cases.
+func (tm *TableMeta) PartialIndexPredicatesForFormattingOnly() map[cat.IndexOrdinal]ScalarExpr {
+	return tm.partialIndexPredicates
 }
 
 // TableAnnotation returns the given annotation that is associated with the
