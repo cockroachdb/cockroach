@@ -84,7 +84,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -1967,7 +1966,7 @@ func (s *SQLServer) startServeSQL(
 
 	stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, pgL, func(conn net.Conn) {
-			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
+			connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
 			tcpKeepAlive.configure(connCtx, conn)
 
 			if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
@@ -1995,7 +1994,7 @@ func (s *SQLServer) startServeSQL(
 
 		stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
-				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
+				connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Ops.Errorf(connCtx, "%v", err)
 				}
