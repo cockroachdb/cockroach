@@ -180,11 +180,15 @@ type mutationBuilder struct {
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
-	mb.b = b
-	mb.md = b.factory.Metadata()
-	mb.opName = opName
-	mb.tab = tab
-	mb.alias = alias
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*mb = mutationBuilder{
+		b:      b,
+		md:     b.factory.Metadata(),
+		opName: opName,
+		tab:    tab,
+		alias:  alias,
+	}
 
 	n := tab.ColumnCount()
 	mb.targetColList = make(opt.ColList, 0, n)

@@ -735,10 +735,14 @@ type subqueryHoister struct {
 }
 
 func (r *subqueryHoister) init(c *CustomFuncs, input memo.RelExpr) {
-	r.c = c
-	r.f = c.f
-	r.mem = c.mem
-	r.hoisted = input
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*r = subqueryHoister{
+		c:       c,
+		f:       c.f,
+		mem:     c.mem,
+		hoisted: input,
+	}
 }
 
 // input returns a single expression tree that contains the input expression

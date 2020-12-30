@@ -141,9 +141,13 @@ type forcingCoster struct {
 }
 
 func (fc *forcingCoster) Init(o *xform.Optimizer, groups *memoGroups) {
-	fc.o = o
-	fc.groups = groups
-	fc.inner = o.Coster()
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*fc = forcingCoster{
+		o:      o,
+		groups: groups,
+		inner:  o.Coster(),
+	}
 }
 
 // RestrictGroupToMember forces the expression in the given location to be the

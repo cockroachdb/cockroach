@@ -68,6 +68,9 @@ type Statistics struct {
 
 // Init initializes the data members of Statistics.
 func (s *Statistics) Init(relProps *Relational) (zeroCardinality bool) {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Reusing fields must be done explicitly.
+	*s = Statistics{}
 	if relProps.Cardinality.IsZero() {
 		s.RowCount = 0
 		s.Selectivity = 0

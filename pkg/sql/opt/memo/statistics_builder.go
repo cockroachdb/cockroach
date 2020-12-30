@@ -167,8 +167,12 @@ type statisticsBuilder struct {
 }
 
 func (sb *statisticsBuilder) init(evalCtx *tree.EvalContext, md *opt.Metadata) {
-	sb.evalCtx = evalCtx
-	sb.md = md
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*sb = statisticsBuilder{
+		evalCtx: evalCtx,
+		md:      md,
+	}
 }
 
 func (sb *statisticsBuilder) clear() {
