@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1887,6 +1888,118 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 	schema: vtable.PGCatalogProc,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
+		addProcRow := func(nspOid *tree.DOid, name string, props *tree.FunctionProperties, overloads []tree.Overload,
+		) error {
+			isAggregate := props.Class == tree.AggregateClass
+			isWindow := props.Class == tree.WindowClass
+			for _, builtin := range overloads {
+				dName := tree.NewDName(name)
+				var dSrc *tree.DString
+				if builtin.UserDef != nil {
+					dSrc = tree.NewDString(tree.AsStringWithFlags(builtin.UserDef, tree.FmtParsable))
+				} else {
+					dSrc = tree.NewDString(name)
+				}
+
+				var retType tree.Datum
+				isRetSet := false
+				if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
+					var retOid oid.Oid
+					if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
+						isRetSet = true
+						// Functions returning tables with zero, or more than one
+						// columns are marked to return "anyelement"
+						// (e.g. `unnest`)
+						retOid = oid.T_anyelement
+						if len(fixedRetType.TupleContents()) == 1 {
+							// Functions returning tables with exactly one column
+							// are marked to return the type of that column
+							// (e.g. `generate_series`).
+							retOid = fixedRetType.TupleContents()[0].Oid()
+						}
+					} else {
+						retOid = fixedRetType.Oid()
+					}
+					retType = tree.NewDOid(tree.DInt(retOid))
+				}
+
+				argTypes := builtin.Types
+				dArgTypes := tree.NewDArray(types.Oid)
+				for _, argType := range argTypes.Types() {
+					if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+						return err
+					}
+				}
+
+				var argmodes tree.Datum
+				var variadicType tree.Datum
+				switch v := argTypes.(type) {
+				case tree.VariadicType:
+					if len(v.FixedTypes) == 0 {
+						argmodes = proArgModeVariadic
+					} else {
+						ary := tree.NewDArray(types.String)
+						for range v.FixedTypes {
+							if err := ary.Append(tree.NewDString("i")); err != nil {
+								return err
+							}
+						}
+						if err := ary.Append(tree.NewDString("v")); err != nil {
+							return err
+						}
+						argmodes = ary
+					}
+					variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
+				case tree.HomogeneousType:
+					argmodes = proArgModeVariadic
+					argType := types.Any
+					oid := argType.Oid()
+					variadicType = tree.NewDOid(tree.DInt(oid))
+				default:
+					argmodes = tree.DNull
+					variadicType = oidZero
+				}
+				provolatile, proleakproof := builtin.Volatility.ToPostgres()
+
+				err := addRow(
+					h.BuiltinOid(name, &builtin),             // oid
+					dName,                                    // proname
+					nspOid,                                   // pronamespace
+					tree.DNull,                               // proowner
+					oidZero,                                  // prolang
+					tree.DNull,                               // procost
+					tree.DNull,                               // prorows
+					variadicType,                             // provariadic
+					tree.DNull,                               // protransform
+					tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
+					tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
+					tree.DBoolFalse,                          // prosecdef
+					tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
+					tree.DBoolFalse,                          // proisstrict
+					tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
+					tree.NewDString(provolatile),             // provolatile
+					tree.DNull,                               // proparallel
+					tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
+					tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
+					retType,                                         // prorettype
+					tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
+					tree.DNull,                                      // proallargtypes
+					argmodes,                                        // proargmodes
+					tree.DNull,                                      // proargnames
+					tree.DNull,                                      // proargdefaults
+					tree.DNull,                                      // protrftypes
+					dSrc,                                            // prosrc
+					tree.DNull,                                      // probin
+					tree.DNull,                                      // proconfig
+					tree.DNull,                                      // proacl
+				)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
@@ -1902,110 +2015,30 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						continue
 					}
 					props, overloads := builtins.GetBuiltinProperties(name)
-					isAggregate := props.Class == tree.AggregateClass
-					isWindow := props.Class == tree.WindowClass
-					for _, builtin := range overloads {
-						dName := tree.NewDName(name)
-						dSrc := tree.NewDString(name)
-
-						var retType tree.Datum
-						isRetSet := false
-						if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
-							var retOid oid.Oid
-							if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
-								isRetSet = true
-								// Functions returning tables with zero, or more than one
-								// columns are marked to return "anyelement"
-								// (e.g. `unnest`)
-								retOid = oid.T_anyelement
-								if len(fixedRetType.TupleContents()) == 1 {
-									// Functions returning tables with exactly one column
-									// are marked to return the type of that column
-									// (e.g. `generate_series`).
-									retOid = fixedRetType.TupleContents()[0].Oid()
-								}
-							} else {
-								retOid = fixedRetType.Oid()
-							}
-							retType = tree.NewDOid(tree.DInt(retOid))
-						}
-
-						argTypes := builtin.Types
-						dArgTypes := tree.NewDArray(types.Oid)
-						for _, argType := range argTypes.Types() {
-							if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
-								return err
-							}
-						}
-
-						var argmodes tree.Datum
-						var variadicType tree.Datum
-						switch v := argTypes.(type) {
-						case tree.VariadicType:
-							if len(v.FixedTypes) == 0 {
-								argmodes = proArgModeVariadic
-							} else {
-								ary := tree.NewDArray(types.String)
-								for range v.FixedTypes {
-									if err := ary.Append(tree.NewDString("i")); err != nil {
-										return err
-									}
-								}
-								if err := ary.Append(tree.NewDString("v")); err != nil {
-									return err
-								}
-								argmodes = ary
-							}
-							variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
-						case tree.HomogeneousType:
-							argmodes = proArgModeVariadic
-							argType := types.Any
-							oid := argType.Oid()
-							variadicType = tree.NewDOid(tree.DInt(oid))
-						default:
-							argmodes = tree.DNull
-							variadicType = oidZero
-						}
-						provolatile, proleakproof := builtin.Volatility.ToPostgres()
-
-						err := addRow(
-							h.BuiltinOid(name, &builtin),             // oid
-							dName,                                    // proname
-							nspOid,                                   // pronamespace
-							tree.DNull,                               // proowner
-							oidZero,                                  // prolang
-							tree.DNull,                               // procost
-							tree.DNull,                               // prorows
-							variadicType,                             // provariadic
-							tree.DNull,                               // protransform
-							tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
-							tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
-							tree.DBoolFalse,                          // prosecdef
-							tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
-							tree.DBoolFalse,                          // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
-							tree.NewDString(provolatile),             // provolatile
-							tree.DNull,                               // proparallel
-							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
-							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-							retType,                                         // prorettype
-							tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
-							tree.DNull,                                      // proallargtypes
-							argmodes,                                        // proargmodes
-							tree.DNull,                                      // proargnames
-							tree.DNull,                                      // proargdefaults
-							tree.DNull,                                      // protrftypes
-							dSrc,                                            // prosrc
-							tree.DNull,                                      // probin
-							tree.DNull,                                      // proconfig
-							tree.DNull,                                      // proacl
-						)
+					if err := addProcRow(nspOid, name, props, overloads); err != nil {
+						return err
+					}
+				}
+				return forEachFuncDesc(ctx, p, dbContext,
+					func(db *dbdesc.Immutable, sc string, fnDesc *funcdesc.Immutable) error {
+						def, err := fnDesc.MakeFuncDef()
 						if err != nil {
 							return err
 						}
-					}
-				}
-				return nil
+						props := def.FunctionProperties
+						overloads := make([]tree.Overload, len(def.Definition))
+						for i := range def.Definition {
+							overload, ok := def.Definition[i].(*tree.Overload)
+							if !ok {
+								return errors.AssertionFailedf("expected an Overloads in user-defined function %s, found %v",
+									def.Name, def.Definition[i])
+							}
+
+							overloads[i] = *overload
+						}
+						nspOid := h.NamespaceOid(fnDesc.GetParentSchemaID(), sc)
+						return addProcRow(nspOid, fnDesc.Name, &props, overloads)
+					})
 			})
 	},
 }
