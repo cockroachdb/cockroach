@@ -220,7 +220,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 10
+const NumJobTypes = 11
 
 func init() {
 	if len(Type_name) != NumJobTypes {

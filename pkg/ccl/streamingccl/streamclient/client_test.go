@@ -18,12 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockStreamClient struct{}
+type testStreamClient struct{}
 
-var _ Client = mockStreamClient{}
+var _ Client = testStreamClient{}
 
 // GetTopology implements the Client interface.
-func (sc mockStreamClient) GetTopology(_ StreamAddress) (Topology, error) {
+func (sc testStreamClient) GetTopology(_ StreamAddress) (Topology, error) {
 	return Topology{Partitions: []PartitionAddress{
 		"s3://my_bucket/my_stream/partition_1",
 		"s3://my_bucket/my_stream/partition_2",
@@ -31,7 +31,7 @@ func (sc mockStreamClient) GetTopology(_ StreamAddress) (Topology, error) {
 }
 
 // ConsumePartition implements the Client interface.
-func (sc mockStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (chan Event, error) {
+func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (chan Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
 		Value: roachpb.Value{
@@ -51,7 +51,7 @@ func (sc mockStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (ch
 // TestExampleClientUsage serves as documentation to indicate how a stream
 // client could be used.
 func TestExampleClientUsage(t *testing.T) {
-	client := mockStreamClient{}
+	client := testStreamClient{}
 	sa := StreamAddress("s3://my_bucket/my_stream")
 	topology, err := client.GetTopology(sa)
 	require.NoError(t, err)
