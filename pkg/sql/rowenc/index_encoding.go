@@ -756,6 +756,28 @@ func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 func EncodeInvertedIndexKeys(
 	index *descpb.IndexDescriptor, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
 ) (key [][]byte, err error) {
+	keyPrefix, err = EncodeInvertedIndexPrefixKeys(index, colMap, values, keyPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var val tree.Datum
+	if i, ok := colMap.Get(index.InvertedColumnID()); ok {
+		val = values[i]
+	} else {
+		val = tree.DNull
+	}
+	if !geoindex.IsEmptyConfig(&index.GeoConfig) {
+		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, index)
+	}
+	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.Version)
+}
+
+// EncodeInvertedIndexPrefixKeys encodes the non-inverted prefix columns if
+// the given index is a multi-column inverted index.
+func EncodeInvertedIndexPrefixKeys(
+	index *descpb.IndexDescriptor, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
+) (_ []byte, err error) {
 	numColumns := len(index.ColumnIDs)
 
 	// If the index is a multi-column inverted index, we encode the non-inverted
@@ -775,17 +797,7 @@ func EncodeInvertedIndexKeys(
 			return nil, err
 		}
 	}
-
-	var val tree.Datum
-	if i, ok := colMap.Get(index.ColumnIDs[numColumns-1]); ok {
-		val = values[i]
-	} else {
-		val = tree.DNull
-	}
-	if !geoindex.IsEmptyConfig(&index.GeoConfig) {
-		return EncodeGeoInvertedIndexTableKeys(val, keyPrefix, index)
-	}
-	return EncodeInvertedIndexTableKeys(val, keyPrefix, index.Version)
+	return keyPrefix, nil
 }
 
 // EncodeInvertedIndexTableKeys produces one inverted index key per element in
