@@ -145,6 +145,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		}
 
 		go func() {
+			defer func() { _ = conn.Close() }()
 			s.metrics.CurConnCount.Inc(1)
 			defer s.metrics.CurConnCount.Dec(1)
 			tBegin := timeutil.Now()
