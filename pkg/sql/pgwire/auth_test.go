@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -39,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 )
 
@@ -187,9 +190,9 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		testServer.PGServer().TestingEnableConnAuthLogging()
-
 		pgServer := s.(*server.TestServer).PGServer()
+		pgServer.TestingEnableConnLogging()
+		pgServer.TestingEnableAuthLogging()
 
 		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
 		if err != nil {
@@ -311,6 +314,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								// The tag part is going to contain a client address, with a random port number.
 								// To make the test deterministic, erase the random part.
 								tags := addrRe.ReplaceAllString(entry.Tags, ",client=XXX")
+								tags = peerRe.ReplaceAllString(tags, ",peer=XXX")
 								var maybeTags string
 								if len(tags) > 0 {
 									maybeTags = "[" + tags + "] "
@@ -437,6 +441,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 var authLogFileRe = regexp.MustCompile(`pgwire/(auth|conn|server)\.go`)
 var addrRe = regexp.MustCompile(`,client(=[^\],]*)?`)
+var peerRe = regexp.MustCompile(`,peer(=[^\],]*)?`)
 var durationRe = regexp.MustCompile(`duration: \d.*s`)
 
 // fmtErr formats an error into an expected output.
@@ -462,3 +467,164 @@ func fmtErr(err error) string {
 	}
 	return "ok"
 }
+
+// TestClientAddrOverride checks that the crdb:remote_addr parameter
+// can override the client address.
+func TestClientAddrOverride(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	// Start a server.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, s.ServingSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(security.TestUser),
+	)
+	defer cleanupFunc()
+
+	// Ensure the test user exists.
+	if _, err := db.Exec(`CREATE USER $1`, security.TestUser); err != nil {
+		t.Fatal(err)
+	}
+
+	// Enable conn/auth logging.
+	// We can't use the cluster settings to do this, because
+	// cluster settings for booleans propagate asynchronously.
+	testServer := s.(*server.TestServer)
+	pgServer := testServer.PGServer()
+	pgServer.TestingEnableAuthLogging()
+
+	testCases := []struct {
+		specialAddr string
+		specialPort string
+	}{
+		{"11.22.33.44", "5566"},    // IPv4
+		{"[11:22:33::44]", "5566"}, // IPv6
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s:%s", tc.specialAddr, tc.specialPort), func(t *testing.T) {
+			// Create a custom HBA rule to refuse connections by the testuser
+			// when coming from the special address.
+			addr := tc.specialAddr
+			mask := "32"
+			if addr[0] == '[' {
+				// An IPv6 address. The CIDR format in HBA rules does not
+				// require the square brackets.
+				addr = addr[1 : len(addr)-1]
+				mask = "128"
+			}
+			hbaConf := "host all " + security.TestUser + " " + addr + "/" + mask + " reject\n" +
+				"host all all all cert-password\n"
+			if _, err := db.Exec(
+				`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`,
+				hbaConf,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait until the configuration has propagated back to the
+			// test client. We need to wait because the cluster setting
+			// change propagates asynchronously.
+			expConf, err := pgwire.ParseAndNormalize(hbaConf)
+			if err != nil {
+				// The SET above succeeded so we don't expect a problem here.
+				t.Fatal(err)
+			}
+			testutils.SucceedsSoon(t, func() error {
+				curConf := pgServer.GetAuthenticationConfiguration()
+				if expConf.String() != curConf.String() {
+					return errors.Newf(
+						"HBA config not yet loaded\ngot:\n%s\nexpected:\n%s",
+						curConf, expConf)
+				}
+				return nil
+			})
+
+			// Inject the custom client address.
+			options, _ := url.ParseQuery(pgURL.RawQuery)
+			options["crdb:remote_addr"] = []string{tc.specialAddr + ":" + tc.specialPort}
+			pgURL.RawQuery = options.Encode()
+
+			t.Run("check-server-reject-override", func(t *testing.T) {
+				// Connect a first time, with trust override disabled. In that case,
+				// the server will complain that the remote override is not supported.
+				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(false)
+
+				testDB, err := gosql.Open("postgres", pgURL.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer testDB.Close()
+				if err := testDB.Ping(); !testutils.IsError(err, "server not configured to accept remote address override") {
+					t.Error(err)
+				}
+			})
+
+			// Wait two full microseconds: we're parsing the log output below, and
+			// the logging format has a microsecond precision on timestamps. We need to ensure that this check will not pick up log entries
+			// from a previous test.
+			time.Sleep(2 * time.Microsecond)
+			testStartTime := timeutil.Now()
+
+			t.Run("check-server-hba-uses-override", func(t *testing.T) {
+				// Now recognize the override. Now we're expecting the connection
+				// to hit the HBA rule and fail with an authentication error.
+				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(true)
+
+				testDB, err := gosql.Open("postgres", pgURL.String())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer testDB.Close()
+				if err := testDB.Ping(); !testutils.IsError(err, "authentication rejected") {
+					t.Error(err)
+				}
+			})
+
+			t.Run("check-server-log-uses-override", func(t *testing.T) {
+				// Wait for the disconnection event in logs.
+				testutils.SucceedsSoon(t, func() error {
+					log.Flush()
+					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
+						log.WithMarkedSensitiveData)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(entries) == 0 {
+						return errors.New("entry not found")
+					}
+					return nil
+				})
+
+				// Now we want to check that the logging tags are also updated.
+				log.Flush()
+				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
+					log.WithMarkedSensitiveData)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(entries) == 0 {
+					t.Fatal("no entries")
+				}
+				seenClient := false
+				for _, e := range entries {
+					t.Log(e.Tags)
+					if strings.Contains(e.Tags, "client=") {
+						seenClient = true
+						if !strings.Contains(e.Tags, "client="+string(redact.StartMarker())+tc.specialAddr+":"+tc.specialPort+string(redact.EndMarker())) {
+							t.Fatalf("expected override addr in log tags, got %+v", e)
+						}
+					}
+				}
+				if !seenClient {
+					t.Fatal("no log entry found with the 'client' tag set")
+				}
+			})
+		})
+	}
+}
+
+var sessionTerminatedRe = regexp.MustCompile("session terminated")
