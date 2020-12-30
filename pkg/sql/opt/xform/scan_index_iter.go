@@ -209,7 +209,7 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 			continue
 		}
 
-		pred, isPartialIndex := it.tabMeta.PartialIndexPredicates[ord]
+		pred, isPartialIndex := it.tabMeta.PartialIndexPredicate(ord)
 
 		// Skip over partial indexes if rejectPartialIndexes is set.
 		if it.hasRejectFlags(rejectPartialIndexes) && isPartialIndex {

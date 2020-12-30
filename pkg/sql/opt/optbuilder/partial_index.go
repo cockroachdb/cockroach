@@ -25,7 +25,7 @@ import (
 // Note: This function should only be used to build partial index or arbiter
 // predicate expressions that have only a table's ordinary columns in scope and
 // that are not part of the relational expression tree. For example, this is
-// used to populate the TableMeta.PartialIndexPredicates cache and for
+// used to populate the partial index predicates map in TableMeta and for
 // determining arbiter indexes in UPSERT and INSERT ON CONFLICT mutations. But
 // it is not used for building synthesized mutation columns that determine
 // whether to issue PUT or DEL operations on a partial index for a mutated row;
