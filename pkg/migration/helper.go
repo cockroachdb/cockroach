@@ -70,42 +70,14 @@ func newHelper(c cluster, cv clusterversion.ClusterVersion) *Helper {
 	return &Helper{c: c, cv: cv}
 }
 
-// EveryNode invokes the given closure (named by the informational parameter op)
-// across every node in the cluster[*]. The mechanism for ensuring that we've
-// done so, while accounting for the possibility of new nodes being added to the
-// cluster in the interim, is provided by the following structure:
-//   (a) We'll retrieve the list of node IDs for all nodes in the system
-//   (b) For each node, we'll invoke the closure
-//   (c) We'll retrieve the list of node IDs again to account for the
-//       possibility of a new node being added during (b)
-//   (d) If there any discrepancies between the list retrieved in (a)
-//       and (c), we'll invoke the closure each node again
-//   (e) We'll continue to loop around until the node ID list stabilizes
-//
-// [*]: We can be a bit more precise here. What EveryNode gives us is a strict
-// causal happened-before relation between running the given closure against
-// every node that's currently a member of the cluster, and the next node that
-// joins the cluster. Put another way: using EveryNode callers will have managed
-// to run something against all nodes without a new node joining half-way
-// through (which could have allowed it to pick up some state off one of the
-// existing nodes that hadn't heard from us yet).
-//
-// To consider one example of how this primitive is used, let's consider our use
-// of it to bump the cluster version. After we return, given all nodes in the
-// cluster will have their cluster versions bumped, and future node additions
-// will observe the latest version (through the join RPC). This lets us author
-// migrations that can assume that a certain version gate has been enabled on
-// all nodes in the cluster, and will always be enabled for any new nodes in the
-// system.
-//
-// Given that it'll always be possible for new nodes to join after an EveryNode
-// round, it means that some migrations may have to be split up into two version
-// bumps: one that phases out the old version (i.e. stops creation of stale data
-// or behavior) and a clean-up version, which removes any vestiges of the stale
-// data/behavior, and which, when active, ensures that the old data has vanished
-// from the system. This is similar in spirit to how schema changes are split up
-// into multiple smaller steps that are carried out sequentially.
-func (h *Helper) EveryNode(
+// ForEveryNode is a short hand to execute the given closure (named by the
+// informational parameter op) against every node in the cluster at a given
+// point in time. Given it's possible for nodes to join or leave the cluster
+// during (we don't make any guarantees for the ordering of cluster membership
+// events), we only expect this to be used in conjunction with
+// UntilClusterStable (see the comment there for how these two primitives can be
+// put together).
+func (h *Helper) ForEveryNode(
 	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
 ) error {
 	ns, err := h.c.nodes(ctx)
@@ -115,29 +87,79 @@ func (h *Helper) EveryNode(
 
 	// We'll want to rate limit outgoing RPCs (limit pulled out of thin air).
 	qp := quotapool.NewIntPool("every-node", 25)
-	for {
-		log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), ns)
+	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), ns)
+	grp := ctxgroup.WithContext(ctx)
 
-		grp := ctxgroup.WithContext(ctx)
-		for _, node := range ns {
-			id := node.id // copy out of the loop variable
-			alloc, err := qp.Acquire(ctx, 1)
+	for _, node := range ns {
+		id := node.id // copy out of the loop variable
+		alloc, err := qp.Acquire(ctx, 1)
+		if err != nil {
+			return err
+		}
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer alloc.Release()
+
+			conn, err := h.c.dial(ctx, id)
 			if err != nil {
 				return err
 			}
+			client := serverpb.NewMigrationClient(conn)
+			return fn(ctx, client)
+		})
+	}
+	return grp.Wait()
+}
 
-			grp.GoCtx(func(ctx context.Context) error {
-				defer alloc.Release()
+// UntilClusterStable invokes the given closure until the cluster membership is
+// stable, i.e once the set of nodes in the cluster before and after the closure
+// are identical, and no nodes have restarted in the interim, we can return to
+// the caller[*].
+//
+// The mechanism for doing so, while accounting for the possibility of new nodes
+// being added to the cluster in the interim, is provided by the following
+// structure:
+//   (a) We'll retrieve the list of node IDs for all nodes in the system
+//   (b) We'll invoke the closure
+//   (c) We'll retrieve the list of node IDs again to account for the
+//       possibility of a new node being added during (b), or a node
+//       restarting
+//   (d) If there any discrepancies between the list retrieved in (a)
+//       and (c), we'll invoke the closure again
+//   (e) We'll continue to loop around until the node ID list stabilizes
+//
+// [*]: We can be a bit more precise here. What UntilClusterStable gives us is a
+// strict causal happened-before relation between running the given closure and
+// the next node that joins the cluster. Put another way: using
+// UntilClusterStable callers will have managed to run something without a new
+// node joining half-way through (which could have allowed it to pick up some
+// state off one of the existing nodes that hadn't heard from us yet).
+//
+// To consider an example of how this primitive is used, let's consider our use
+// of it to bump the cluster version. We use in conjunction with ForEveryNode,
+// where after we return, we can rely on the guarantee that all nodes in the
+// cluster will have their cluster versions bumped. This then implies that
+// future node additions will observe the latest version (through the join RPC).
+// That in turn lets us author migrations that can assume that a certain version
+// gate has been enabled on all nodes in the cluster, and will always be enabled
+// for any new nodes in the system.
+//
+// Given that it'll always be possible for new nodes to join after an
+// UntilClusterStable round, it means that some migrations may have to be split
+// up into two version bumps: one that phases out the old version (i.e. stops
+// creation of stale data or behavior) and a clean-up version, which removes any
+// vestiges of the stale data/behavior, and which, when active, ensures that the
+// old data has vanished from the system. This is similar in spirit to how
+// schema changes are split up into multiple smaller steps that are carried out
+// sequentially.
+func (h *Helper) UntilClusterStable(ctx context.Context, fn func() error) error {
+	ns, err := h.c.nodes(ctx)
+	if err != nil {
+		return err
+	}
 
-				conn, err := h.c.dial(ctx, id)
-				if err != nil {
-					return err
-				}
-				client := serverpb.NewMigrationClient(conn)
-				return fn(ctx, client)
-			})
-		}
-		if err := grp.Wait(); err != nil {
+	for {
+		if err := fn(); err != nil {
 			return err
 		}
 
@@ -228,6 +250,12 @@ func (h *Helper) IterateRangeDescriptors(
 // DB provides exposes the underlying *kv.DB instance.
 func (h *Helper) DB() *kv.DB {
 	return h.c.db()
+}
+
+// ClusterVersion exposes the cluster version associated with the ongoing
+// migration.
+func (h *Helper) ClusterVersion() clusterversion.ClusterVersion {
+	return h.cv
 }
 
 type clusterImpl struct {
