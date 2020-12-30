@@ -822,6 +822,7 @@ DOCGEN_TARGETS := \
 	bin/.docgen_functions \
 	docs/generated/redact_safe.md \
 	bin/.docgen_http \
+	bin/.docgen_logformats \
 	docs/generated/logging.md \
 	docs/generated/eventlog.md
 
@@ -1514,6 +1515,10 @@ bin/.docgen_bnfs: bin/docgen
 
 bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
+	touch $@
+
+bin/.docgen_logformats: bin/docgen
+	docgen logformats docs/generated/logformats.md
 	touch $@
 
 bin/.docgen_http: bin/docgen $(PROTOC)
