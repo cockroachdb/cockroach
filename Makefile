@@ -1695,6 +1695,7 @@ bins = \
   bin/github-pull-request-make \
   bin/gossipsim \
   bin/langgen \
+  bin/dev \
   bin/protoc-gen-gogoroach \
   bin/publish-artifacts \
   bin/publish-provisional-artifacts \
