@@ -12,13 +12,16 @@ package funcdesc
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -34,6 +37,7 @@ type Descriptor interface {
 	catalog.Descriptor
 	FuncDesc() *descpb.FuncDescriptor
 	Validate(context.Context, catalog.DescGetter) error
+	Name() string
 }
 
 // Immutable is a custom type for wrapping FuncDescriptors
@@ -50,6 +54,18 @@ type Immutable struct {
 func NewImmutable(desc descpb.FuncDescriptor) *Immutable {
 	m := makeImmutable(desc)
 	return &m
+}
+
+// NewImmutableWithIsUncommittedVersion returns a Immutable from the given
+// FuncDescriptor and allows the caller to mark the func as corresponding to
+// an uncommitted version. This should be used when constructing a new copy of
+// an Immutable from an existing descriptor which may have a new version.
+func NewImmutableWithIsUncommittedVersion(
+	tbl descpb.FuncDescriptor, isUncommittedVersion bool,
+) *Immutable {
+	desc := makeImmutable(tbl)
+	desc.isUncommittedVersion = isUncommittedVersion
+	return &desc
 }
 
 func makeImmutable(desc descpb.FuncDescriptor) Immutable {
@@ -170,25 +186,71 @@ func (desc *Immutable) MakeFuncDef() (*tree.FunctionDefinition, error) {
 		DistsqlBlocklist: true,
 		Class:            tree.UserDefinedClass,
 	}
-	typs := make(tree.ArgTypes, len(desc.ParamTypes))
-	for i := range typs {
-		typs[i].Typ = desc.ParamTypes[i]
-		typs[i].Name = desc.ParamNames[i]
-	}
-	retType := desc.ReturnType
-	expr, err := parser.ParseExpr(desc.Def)
-	if err != nil {
-		return nil, err
-	}
 	name := desc.Name()
-	return tree.NewFunctionDefinition(name, &props, []tree.Overload{
-		{
+	overloads := make([]tree.Overload, len(desc.Overloads))
+	for i := range desc.Overloads {
+		o := &desc.Overloads[i]
+		typs := make(tree.ArgTypes, len(o.ParamTypes))
+		for j := range typs {
+			typs[j].Typ = o.ParamTypes[j]
+			typs[j].Name = o.ParamNames[j]
+		}
+		retType := o.ReturnType
+		expr, err := parser.ParseExpr(o.Def)
+		if err != nil {
+			return nil, err
+		}
+		overloads[i] = tree.Overload{
 			Types:      typs,
 			ReturnType: tree.FixedReturnType(&retType),
 			Volatility: tree.VolatilityVolatile,
 			UserDef:    expr,
-		},
-	}), nil
+		}
+	}
+	return tree.NewFunctionDefinition(name, &props, overloads), nil
+}
+
+// ContainsUserDefinedTypes returns true if this descriptor contains
+// user-defined types.
+func (desc *Immutable) ContainsUserDefinedTypes() bool {
+	for i := range desc.Overloads {
+		for _, t := range desc.Overloads[i].ParamTypes {
+			if t.UserDefined() {
+				return true
+			}
+		}
+		if desc.Overloads[i].ReturnType.UserDefined() {
+			return true
+		}
+	}
+	return false
+}
+
+func (desc *Immutable) GetAllReferencedTypeIDs() (descpb.IDs, error) {
+	// For each of the collected type IDs in the table descriptor expressions,
+	// collect the closure of ID's referenced.
+	ids := make(map[descpb.ID]struct{})
+	addIDsInType := func(t *types.T) {
+		for id := range typedesc.GetTypeDescriptorClosure(t) {
+			ids[id] = struct{}{}
+		}
+	}
+	for i := range desc.Overloads {
+		o := &desc.Overloads[i]
+		for i := range o.ParamTypes {
+			addIDsInType(o.ParamTypes[i])
+		}
+		addIDsInType(&o.ReturnType)
+	}
+
+	// Construct the output.
+	result := make(descpb.IDs, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+	// Sort the output so that the order is deterministic.
+	sort.Sort(result)
+	return result, nil
 }
 
 type Mutable struct {

@@ -572,19 +572,23 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	// Validate that all of the referencing descriptors exist.
-	tableExists := func(id descpb.ID) func(got catalog.Descriptor) error {
+	objectExists := func(id descpb.ID) func(got catalog.Descriptor) error {
 		return func(got catalog.Descriptor) error {
-			if _, isTable := got.(catalog.TableDescriptor); !isTable {
-				return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
+			if _, ok := got.(catalog.TableDescriptor); ok {
+				return nil
 			}
-			return nil
+			// We can't check that the catalog.Descriptor is a funcdesc.Descriptor,
+			// because funcdesc imports typedesc.
+			if got.TypeName() == "func" {
+				return nil
+			}
+			return errors.AssertionFailedf("referencing descriptor %d does not exist", id)
 		}
 	}
 	if !desc.Dropped() {
-
 		for _, id := range desc.ReferencingDescriptorIDs {
 			reqs = append(reqs, id)
-			checks = append(checks, tableExists(id))
+			checks = append(checks, objectExists(id))
 		}
 	}
 
@@ -641,32 +645,51 @@ func (desc *Immutable) MakeTypesT(
 func HydrateTypesInTableDescriptor(
 	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
 ) error {
-	hydrateCol := func(col *descpb.ColumnDescriptor) error {
-		if col.Type.UserDefined() {
-			// Look up its type descriptor.
-			name, typDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(col.Type))
-			if err != nil {
-				return err
-			}
-			// Note that this will no-op if the type is already hydrated.
-			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, &name, res); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 	for i := range desc.Columns {
-		if err := hydrateCol(&desc.Columns[i]); err != nil {
+		if err := hydrateType(ctx, desc.Columns[i].Type, res); err != nil {
 			return err
 		}
 	}
 	for i := range desc.Mutations {
 		mut := &desc.Mutations[i]
 		if col := mut.GetColumn(); col != nil {
-			if err := hydrateCol(col); err != nil {
+			if err := hydrateType(ctx, col.Type, res); err != nil {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func hydrateType(ctx context.Context, typ *types.T, res catalog.TypeDescriptorResolver) error {
+	if typ.UserDefined() {
+		// Look up its type descriptor.
+		name, typDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(typ))
+		if err != nil {
+			return err
+		}
+		// Note that this will no-op if the type is already hydrated.
+		if err := typDesc.HydrateTypeInfoWithName(ctx, typ, &name, res); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HydrateTypesInFuncDescriptor uses typeLookup to install metadata in the
+// types present in a func descriptor. typeLookup retrieves the fully
+// qualified name and descriptor for a particular ID.
+func HydrateTypesInFuncDescriptor(
+	ctx context.Context, desc *descpb.FuncDescriptor, res catalog.TypeDescriptorResolver,
+) error {
+	for i := range desc.Overloads {
+		o := &desc.Overloads[i]
+		for j := range o.ParamTypes {
+			if err := hydrateType(ctx, o.ParamTypes[j], res); err != nil {
+				return err
+			}
+		}
+		return hydrateType(ctx, &o.ReturnType, res)
 	}
 	return nil
 }

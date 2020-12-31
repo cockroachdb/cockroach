@@ -42,3 +42,15 @@ SELECT "s p a c e"(3)
 ----
 s p a c e
 3
+
+statement ok
+CREATE TYPE t AS ENUM ('foo');
+CREATE FUNCTION g (a t) RETURNS t AS 'SELECT a' LANGUAGE SQL
+
+query T
+SELECT g('foo')
+----
+foo
+
+statement error cannot drop type "t" because other objects \(\[g\]\) still depend on it
+DROP TYPE t

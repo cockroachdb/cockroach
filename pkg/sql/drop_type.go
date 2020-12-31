@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -116,15 +117,22 @@ func (p *planner) checkReferencingObjects(
 		return nil
 	}
 	for _, id := range referencingDescriptorIDs {
-		desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
 		if err != nil {
 			return errors.Wrapf(err, "type has dependent objects")
 		}
-		fqName, err := p.getQualifiedTableName(ctx, desc)
-		if err != nil {
-			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
+		var fqString string
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			fqName, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return errors.Wrapf(err, "type %q has dependent objects", desc.GetName())
+			}
+			fqString = fqName.FQString()
+		case funcdesc.Descriptor:
+			fqString = t.Name()
 		}
-		dependentNames = append(dependentNames, fqName.FQString())
+		dependentNames = append(dependentNames, fqString)
 	}
 	return pgerror.Newf(
 		pgcode.DependentObjectsStillExist,
@@ -232,6 +240,20 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 	for _, id := range typeIDs {
 		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, desc.ID)
 		if err := p.removeTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) addBackRefsFromAllTypesInFunc(ctx context.Context, desc *funcdesc.Mutable) error {
+	typeIDs, err := desc.GetAllReferencedTypeIDs()
+	if err != nil {
+		return err
+	}
+	for _, id := range typeIDs {
+		jobDesc := fmt.Sprintf("adding type back reference %d for func %d", id, desc.ID)
+		if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
 			return err
 		}
 	}
