@@ -1145,31 +1145,12 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var cmdFilters tests.CommandFilters
 	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
 
-	var clockUpdate int32
 	testKey := []byte("test_key")
 	storeTestingKnobs := &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 		DisableMaxOffsetCheck: true,
-		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
-			if atomic.LoadInt32(&clockUpdate) > 0 {
-				return
-			}
-
-			// Hack to advance the transaction timestamp on a transaction restart.
-			for _, union := range ba.Requests {
-				if req, ok := union.GetInner().(*roachpb.ScanRequest); ok {
-					if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
-						atomic.AddInt32(&clockUpdate, 1)
-						now := c.NowAsClockTimestamp()
-						now.WallTime += advancement.Nanoseconds()
-						c.Update(now)
-						break
-					}
-				}
-			}
-		},
 	}
 
 	const refreshAttempts = 3
@@ -1183,24 +1164,32 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	var restartDone int32
+	var clockUpdate, restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			// Allow a set number of restarts so that the auto retry on the
-			// first few uncertainty interval errors also fails.
-			if atomic.LoadInt32(&restartDone) > refreshAttempts {
-				return nil
-			}
-
 			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
-					atomic.AddInt32(&restartDone, 1)
-					// Return ReadWithinUncertaintyIntervalError to update the transaction timestamp on retry.
-					txn := args.Hdr.Txn
-					txn.ResetObservedTimestamps()
-					now := s.Clock().NowAsClockTimestamp()
-					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), txn), txn)
+					if atomic.LoadInt32(&clockUpdate) == 0 {
+						atomic.AddInt32(&clockUpdate, 1)
+						// Hack to advance the transaction timestamp on a
+						// transaction restart.
+						now := s.Clock().NowAsClockTimestamp()
+						now.WallTime += advancement.Nanoseconds()
+						s.Clock().Update(now)
+					}
+
+					// Allow a set number of restarts so that the auto retry on
+					// the first few uncertainty interval errors also fails.
+					if atomic.LoadInt32(&restartDone) <= refreshAttempts {
+						atomic.AddInt32(&restartDone, 1)
+						// Return ReadWithinUncertaintyIntervalError to update
+						// the transaction timestamp on retry.
+						txn := args.Hdr.Txn
+						txn.ResetObservedTimestamps()
+						now := s.Clock().NowAsClockTimestamp()
+						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now.ToTimestamp(), txn), txn)
+					}
 				}
 			}
 			return nil
