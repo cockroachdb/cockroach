@@ -75,10 +75,6 @@ type StoreTestingKnobs struct {
 	// or data.
 	TestingRangefeedFilter kvserverbase.ReplicaRangefeedFilter
 
-	// A hack to manipulate the clock before sending a batch request to a replica.
-	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once
-	// we make TestServer take a ManualClock.
-	ClockBeforeSend func(*hlc.Clock, roachpb.BatchRequest)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.
