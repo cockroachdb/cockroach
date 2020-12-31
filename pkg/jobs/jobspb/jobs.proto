@@ -513,7 +513,7 @@ message CreateStatsDetails {
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
   double max_fraction_idle = 7;
-
+  string application_name = 8;
   // Fully qualified table name.
   string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];
 }

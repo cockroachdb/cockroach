@@ -271,6 +271,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			FQTableName:     fqTableName,
 			Table:           tableDesc.TableDescriptor,
 			ColumnStats:     colStats,
+			ApplicationName: n.p.extendedEvalCtx.SessionData.ApplicationName,
 			Statement:       eventLogStatement,
 			AsOf:            asOf,
 			MaxFractionIdle: n.Options.Throttling,
@@ -560,7 +561,7 @@ func (r *createStatsResumer) Resume(
 		return logEventInternalForSQLStatements(ctx, evalCtx.ExecCfg, txn,
 			details.Table.ID,
 			evalCtx.SessionData.User(),
-			details.Name,
+			details.ApplicationName,
 			details.Statement,
 			&eventpb.CreateStatistics{
 				TableName: details.FQTableName,
