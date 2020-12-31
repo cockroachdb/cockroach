@@ -238,6 +238,11 @@ func (p *planner) createUserDefinedFunc(
 		return err
 	}
 
+	// Install back references to types used by this func.
+	if err := params.p.addBackRefsFromAllTypesInFunc(params.ctx, newDesc); err != nil {
+		return err
+	}
+
 	// Log the event.
 	return p.logEvent(params.ctx,
 		newDesc.GetID(),
