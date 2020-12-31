@@ -78,10 +78,6 @@ func (s *Store) Send(
 		return nil, roachpb.NewError(err)
 	}
 
-	if s.cfg.TestingKnobs.ClockBeforeSend != nil {
-		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
-	}
-
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
