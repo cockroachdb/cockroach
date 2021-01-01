@@ -44,8 +44,8 @@ func TestPutAzure(t *testing.T) {
 		t,
 		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 			bucket, "listing-test",
-			cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
 			cloudimpl.AzureAccountKeyParam, url.QueryEscape(accountKey),
+			cloudimpl.AzureAccountNameParam, url.QueryEscape(accountName),
 		),
 		security.RootUser, nil, nil,
 	)
