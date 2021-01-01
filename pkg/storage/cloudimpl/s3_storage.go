@@ -49,7 +49,8 @@ const (
 	aes256Enc serverSideEncMode = "AES256"
 )
 
-func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
+// S3URI returns the string URI for a given bucket and path.
+func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	q := make(url.Values)
 	setIf := func(key, value string) {
 		if value != "" {
@@ -65,7 +66,14 @@ func s3QueryParams(conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 
-	return q.Encode()
+	s3URL := url.URL{
+		Scheme:   "s3",
+		Host:     bucket,
+		Path:     path,
+		RawQuery: q.Encode(),
+	}
+
+	return s3URL.String()
 }
 
 // MakeS3Storage returns an instance of S3 ExternalStorage.
@@ -297,13 +305,8 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 						}
 						fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(*fileObject.Key, s.prefix), "/"))
 					} else {
-						s3URL := url.URL{
-							Scheme:   "s3",
-							Host:     *s.bucket,
-							Path:     *fileObject.Key,
-							RawQuery: s3QueryParams(s.conf),
-						}
-						fileList = append(fileList, s3URL.String())
+
+						fileList = append(fileList, S3URI(*s.bucket, *fileObject.Key, s.conf))
 					}
 				}
 			}
