@@ -1379,12 +1379,17 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		tenantArgs := base.TestTenantArgs{
 			TenantID:                    roachpb.MakeTenantID(10),
 			AllowSettingClusterSettings: true,
-			DeterministicExplainAnalyze: true,
+			TestingKnobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					DeterministicExplainAnalyze: true,
+				},
+			},
 		}
-		t.tenantAddr, _, err = t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
+		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
 		}
+		t.tenantAddr = tenant.SQLAddr()
 
 		// Open a connection to this tenant to set any cluster settings specified
 		// by the test config.

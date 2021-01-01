@@ -58,9 +58,6 @@ type TestingKnobs struct {
 	OverrideReportingURL **url.URL
 }
 
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*TestingKnobs) ModuleTestingKnobs() {}
-
 // ClusterInfo contains cluster information that will become part of URLs.
 type ClusterInfo struct {
 	ClusterID  uuid.UUID
