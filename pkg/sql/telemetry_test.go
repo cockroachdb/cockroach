@@ -13,6 +13,7 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"regexp"
 	"sort"
@@ -22,7 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -77,125 +80,185 @@ func TestTelemetry(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1min under race")
 
-	ctx := context.Background()
 	// Note: these tests cannot be run in parallel (with each other or with other
 	// tests) because telemetry counters are global.
 	datadriven.Walk(t, "testdata/telemetry", func(t *testing.T, path string) {
 		// Disable cloud info reporting (it would make these tests really slow).
 		defer cloudinfo.Disable()()
 
-		diagSrv := diagutils.NewServer()
-		defer diagSrv.Close()
+		var test telemetryTest
+		test.Start(t)
+		defer test.Close()
 
-		diagSrvURL := diagSrv.URL()
-		params := base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
-						OverrideReportingURL: &diagSrvURL,
-					},
-				},
-			},
-		}
-		s, sqlConn, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+		// Run test against physical CRDB cluster.
+		t.Run("server", func(t *testing.T) {
+			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
+				sqlServer := test.server.SQLServer().(*sql.Server)
+				return test.RunTest(td, test.serverDB, test.server.ReportDiagnostics, sqlServer)
+			})
+		})
 
-		runner := sqlutils.MakeSQLRunner(sqlConn)
-		// Disable automatic reporting so it doesn't interfere with the test.
-		runner.Exec(t, "SET CLUSTER SETTING diagnostics.reporting.enabled = false")
-		runner.Exec(t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false")
-		// Disable plan caching to get accurate counts if the same statement is
-		// issued multiple times.
-		runner.Exec(t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
-
-		var allowlist featureAllowlist
-		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
-			switch td.Cmd {
-			case "exec":
-				_, err := sqlConn.Exec(td.Input)
-				if err != nil {
-					if errors.HasAssertionFailure(err) {
-						td.Fatalf(t, "%+v", err)
-					}
-					return fmt.Sprintf("error: %v\n", err)
-				}
-				return ""
-
-			case "schema":
-				s.ReportDiagnostics(ctx)
-				last := diagSrv.LastRequestData()
-				var buf bytes.Buffer
-				for i := range last.Schema {
-					buf.WriteString(formatTableDescriptor(&last.Schema[i]))
-				}
-				return buf.String()
-
-			case "feature-allowlist":
-				var err error
-				allowlist, err = makeAllowlist(strings.Split(td.Input, "\n"))
-				if err != nil {
-					td.Fatalf(t, "error parsing feature regex: %s", err)
-				}
-				return ""
-
-			case "feature-usage", "feature-counters":
-				// Report diagnostics once to reset the counters.
-				s.ReportDiagnostics(ctx)
-				_, err := sqlConn.Exec(td.Input)
-				var buf bytes.Buffer
-				if err != nil {
-					fmt.Fprintf(&buf, "error: %v\n", err)
-				}
-				s.ReportDiagnostics(ctx)
-				last := diagSrv.LastRequestData()
-				usage := last.FeatureUsage
-				keys := make([]string, 0, len(usage))
-				for k, v := range usage {
-					if v == 0 {
-						// Ignore zero values (shouldn't happen in practice)
-						continue
-					}
-					if !allowlist.Match(k) {
-						// Feature key not in allowlist.
-						continue
-					}
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-				for _, k := range keys {
-					// Report either just the key or the key and the count.
-					if td.Cmd == "feature-counters" {
-						fmt.Fprintf(tw, "%s\t%d\n", k, usage[k])
-					} else {
-						fmt.Fprintf(tw, "%s\n", k)
-					}
-				}
-				_ = tw.Flush()
-				return buf.String()
-
-			case "sql-stats":
-				// Report diagnostics once to reset the stats.
-				s.SQLServer().(*sql.Server).ResetSQLStats(ctx)
-				s.ReportDiagnostics(ctx)
-
-				_, err := sqlConn.Exec(td.Input)
-				var buf bytes.Buffer
-				if err != nil {
-					fmt.Fprintf(&buf, "error: %v\n", err)
-				}
-				s.SQLServer().(*sql.Server).ResetSQLStats(ctx)
-				s.ReportDiagnostics(ctx)
-				last := diagSrv.LastRequestData()
-				buf.WriteString(formatSQLStats(last.SqlStats))
-				return buf.String()
-
-			default:
-				td.Fatalf(t, "unknown command %s", td.Cmd)
-				return ""
+		// Run test against logical tenant cluster.
+		t.Run("tenant", func(t *testing.T) {
+			// TODO(andyk): Re-enable these tests once tenant clusters fully
+			// support the features they're using.
+			switch path {
+			case "testdata/telemetry/execution",
+				"testdata/telemetry/planning",
+				"testdata/telemetry/sql-stats":
+				skip.WithIssue(t, 47893, "tenant clusters do not support SQL features used by this test")
 			}
+
+			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
+				sqlServer := test.server.SQLServer().(*sql.Server)
+				reporter := test.tenant.DiagnosticsReporter().(*diagnostics.Reporter)
+				return test.RunTest(td, test.tenantDB, reporter.ReportDiagnostics, sqlServer)
+			})
 		})
 	})
+}
+
+type telemetryTest struct {
+	t         *testing.T
+	diagSrv   *diagutils.Server
+	server    serverutils.TestServerInterface
+	serverDB  *gosql.DB
+	tenant    serverutils.TestTenantInterface
+	tenantDB  *gosql.DB
+	allowlist featureAllowlist
+}
+
+func (tt *telemetryTest) Start(t *testing.T) {
+	tt.t = t
+	tt.diagSrv = diagutils.NewServer()
+
+	diagSrvURL := tt.diagSrv.URL()
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+					OverrideReportingURL: &diagSrvURL,
+				},
+			},
+		},
+	}
+	tt.server, tt.serverDB, _ = serverutils.StartServer(tt.t, params)
+	tt.prepareCluster(tt.serverDB)
+
+	tt.tenant, tt.tenantDB = serverutils.StartTenant(tt.t, tt.server, base.TestTenantArgs{
+		TenantID:                    roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+		AllowSettingClusterSettings: true,
+		TestingKnobs:                params.Knobs,
+	})
+	tt.prepareCluster(tt.tenantDB)
+}
+
+func (tt *telemetryTest) Close() {
+	tt.server.Stopper().Stop(context.Background())
+	tt.diagSrv.Close()
+}
+
+func (tt *telemetryTest) RunTest(
+	td *datadriven.TestData,
+	db *gosql.DB,
+	reportDiags func(ctx context.Context),
+	sqlServer *sql.Server,
+) string {
+	ctx := context.Background()
+	switch td.Cmd {
+	case "exec":
+		_, err := db.Exec(td.Input)
+		if err != nil {
+			if errors.HasAssertionFailure(err) {
+				td.Fatalf(tt.t, "%+v", err)
+			}
+			return fmt.Sprintf("error: %v\n", err)
+		}
+		return ""
+
+	case "schema":
+		reportDiags(ctx)
+		last := tt.diagSrv.LastRequestData()
+		var buf bytes.Buffer
+		for i := range last.Schema {
+			buf.WriteString(formatTableDescriptor(&last.Schema[i]))
+		}
+		return buf.String()
+
+	case "feature-allowlist":
+		var err error
+		tt.allowlist, err = makeAllowlist(strings.Split(td.Input, "\n"))
+		if err != nil {
+			td.Fatalf(tt.t, "error parsing feature regex: %s", err)
+		}
+		return ""
+
+	case "feature-usage", "feature-counters":
+		// Report diagnostics once to reset the counters.
+		reportDiags(ctx)
+		_, err := db.Exec(td.Input)
+		var buf bytes.Buffer
+		if err != nil {
+			fmt.Fprintf(&buf, "error: %v\n", err)
+		}
+		reportDiags(ctx)
+		last := tt.diagSrv.LastRequestData()
+		usage := last.FeatureUsage
+		keys := make([]string, 0, len(usage))
+		for k, v := range usage {
+			if v == 0 {
+				// Ignore zero values (shouldn't happen in practice)
+				continue
+			}
+			if !tt.allowlist.Match(k) {
+				// Feature key not in allowlist.
+				continue
+			}
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+		for _, k := range keys {
+			// Report either just the key or the key and the count.
+			if td.Cmd == "feature-counters" {
+				fmt.Fprintf(tw, "%s\t%d\n", k, usage[k])
+			} else {
+				fmt.Fprintf(tw, "%s\n", k)
+			}
+		}
+		_ = tw.Flush()
+		return buf.String()
+
+	case "sql-stats":
+		// Report diagnostics once to reset the stats.
+		sqlServer.ResetSQLStats(ctx)
+		reportDiags(ctx)
+
+		_, err := db.Exec(td.Input)
+		var buf bytes.Buffer
+		if err != nil {
+			fmt.Fprintf(&buf, "error: %v\n", err)
+		}
+		sqlServer.ResetSQLStats(ctx)
+		reportDiags(ctx)
+		last := tt.diagSrv.LastRequestData()
+		buf.WriteString(formatSQLStats(last.SqlStats))
+		return buf.String()
+
+	default:
+		td.Fatalf(tt.t, "unknown command %s", td.Cmd)
+		return ""
+	}
+}
+
+func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
+	runner := sqlutils.MakeSQLRunner(db)
+	// Disable automatic reporting so it doesn't interfere with the test.
+	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.enabled = false")
+	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false")
+	// Disable plan caching to get accurate counts if the same statement is
+	// issued multiple times.
+	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
 }
 
 type featureAllowlist []*regexp.Regexp
