@@ -29,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestServerInterface defines test server functionality that tests need; it is
@@ -49,6 +51,10 @@ type TestServerInterface interface {
 
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
+
+	// ClusterID returns the cluster ID as understood by this node in the
+	// cluster.
+	ClusterID() uuid.UUID
 
 	// ServingRPCAddr returns the server's advertised address.
 	ServingRPCAddr() string
@@ -203,7 +209,7 @@ type TestServerInterface interface {
 	ReportDiagnostics(ctx context.Context)
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant(params base.TestTenantArgs) (pgAddr string, httpAddr string, _ error)
+	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
@@ -211,6 +217,9 @@ type TestServerInterface interface {
 	// Calling this multiple times is undefined (but see
 	// TestCluster.ScratchRange() which is idempotent).
 	ScratchRange() (roachpb.Key, error)
+
+	// MetricsRecorder periodically records node-level and store-level metrics.
+	MetricsRecorder() *status.MetricsRecorder
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -239,7 +248,8 @@ func StartServer(
 	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	goDB := OpenDBConn(t, server, params, server.Stopper())
+	goDB := OpenDBConn(
+		t, server.ServingSQLAddr(), params.UseDatabase, params.Insecure, server.Stopper())
 	return server, goDB, server.DB()
 }
 
@@ -255,12 +265,12 @@ func NewServer(params base.TestServerArgs) TestServerInterface {
 
 // OpenDBConn sets up a gosql DB connection to the given server.
 func OpenDBConn(
-	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+	t testing.TB, sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) *gosql.DB {
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
-	pgURL.Path = params.UseDatabase
-	if params.Insecure {
+		t, sqlAddr, "StartServer" /* prefix */, url.User(security.RootUser))
+	pgURL.Path = useDatabase
+	if insecure {
 		pgURL.RawQuery = "sslmode=disable"
 	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
@@ -290,27 +300,22 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // StartTenant starts a tenant SQL server connecting to the supplied test
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
-func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArgs) *gosql.DB {
-	pgAddr, _, err := ts.StartTenant(params)
+func StartTenant(
+	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
+) (TestTenantInterface, *gosql.DB) {
+	tenant, err := ts.StartTenant(params)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, pgAddr, t.Name() /* prefix */, url.User(security.RootUser))
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	stopper := params.Stopper
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
-	stopper.AddCloser(stop.CloserFn(func() {
-		cleanupGoDB()
-	}))
-	return db
+
+	goDB := OpenDBConn(
+		t, tenant.SQLAddr(), "", false /* insecure */, stopper)
+	return tenant, goDB
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

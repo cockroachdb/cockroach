@@ -1331,10 +1331,15 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
 	if cfg.useTenant {
 		var err error
-		t.tenantAddr, _, err = t.cluster.Server(t.nodeIdx).StartTenant(base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: true})
+		tenantArgs := base.TestTenantArgs{
+			TenantID:                    roachpb.MakeTenantID(10),
+			AllowSettingClusterSettings: true,
+		}
+		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
 		}
+		t.tenantAddr = tenant.SQLAddr()
 
 		// Open a connection to this tenant to set any cluster settings specified
 		// by the test config.
