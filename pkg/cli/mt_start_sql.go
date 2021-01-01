@@ -97,7 +97,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		tempStorageMaxSizeBytes,
 	)
 
-	addr, httpAddr, instanceID, err := server.StartTenant(
+	_, addr, httpAddr, instanceID, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
