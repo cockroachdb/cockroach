@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -60,6 +62,7 @@ type TestingKnobs struct {
 // ClusterInfo contains cluster information that will become part of URLs.
 type ClusterInfo struct {
 	ClusterID  uuid.UUID
+	TenantID   roachpb.TenantID
 	IsInsecure bool
 	IsInternal bool
 }
@@ -71,36 +74,55 @@ func BuildUpdatesURL(clusterInfo *ClusterInfo, nodeInfo *NodeInfo, knobs *Testin
 	if knobs != nil && knobs.OverrideUpdatesURL != nil {
 		url = *knobs.OverrideUpdatesURL
 	}
-	return addInfoToURL(url, clusterInfo, nodeInfo)
+	return addInfoToURL(url, clusterInfo, nodeInfo, &SQLInstanceInfo{})
 }
 
-// BuildReportingURL creates a URL to report diagnostics.
+// BuildReportingURL creates a URL to report diagnostics. If this is a CRDB
+// node, then nodeInfo is filled (and nodeInfo.NodeID is non-zero). Otherwise,
+// this is a SQL-only tenant and sqlInfo is filled.
+//
 // If an empty updates URL is set (via empty environment variable), returns nil.
-func BuildReportingURL(clusterInfo *ClusterInfo, nodeInfo *NodeInfo, knobs *TestingKnobs) *url.URL {
+func BuildReportingURL(
+	clusterInfo *ClusterInfo, nodeInfo *NodeInfo, sqlInfo *SQLInstanceInfo, knobs *TestingKnobs,
+) *url.URL {
 	url := reportingURL
 	if knobs != nil && knobs.OverrideReportingURL != nil {
 		url = *knobs.OverrideReportingURL
 	}
-	return addInfoToURL(url, clusterInfo, nodeInfo)
+	return addInfoToURL(url, clusterInfo, nodeInfo, sqlInfo)
 }
 
-func addInfoToURL(url *url.URL, clusterInfo *ClusterInfo, nodeInfo *NodeInfo) *url.URL {
+func addInfoToURL(
+	url *url.URL, clusterInfo *ClusterInfo, nodeInfo *NodeInfo, sqlInfo *SQLInstanceInfo,
+) *url.URL {
 	if url == nil {
 		return nil
 	}
 	result := *url
 	q := result.Query()
-	b := &nodeInfo.Build
+
+	// If this is a SQL-only instance, then NodeID will be zero.
+	var b build.Info
+	if nodeInfo.NodeID != 0 {
+		b = nodeInfo.Build
+		q.Set("nodeid", strconv.Itoa(int(nodeInfo.NodeID)))
+		q.Set("uptime", strconv.Itoa(int(nodeInfo.Uptime)))
+		q.Set("licensetype", nodeInfo.LicenseType)
+	} else {
+		b = sqlInfo.Build
+		q.Set("sqlid", strconv.Itoa(int(sqlInfo.SQLInstanceID)))
+		q.Set("uptime", strconv.Itoa(int(sqlInfo.Uptime)))
+		q.Set("licensetype", sqlInfo.LicenseType)
+	}
+
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", clusterInfo.ClusterID.String())
-	q.Set("nodeid", strconv.Itoa(int(nodeInfo.NodeID)))
-	q.Set("uptime", strconv.Itoa(int(nodeInfo.Uptime)))
+	q.Set("tenantid", clusterInfo.TenantID.String())
 	q.Set("insecure", strconv.FormatBool(clusterInfo.IsInsecure))
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
-	q.Set("licensetype", nodeInfo.LicenseType)
 	result.RawQuery = q.Encode()
 	return &result
 }
