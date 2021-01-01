@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -66,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -99,6 +101,7 @@ type SQLServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
 	metricsRegistry         *metric.Registry
+	diagnosticsReporter     *diagnostics.Reporter
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -210,8 +213,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.SQLConfig.TenantID)
-	if override := cfg.SQLConfig.TenantIDCodecOverride; override != (roachpb.TenantID{}) {
-		codec = keys.MakeSQLCodec(override)
+	if knobs := cfg.TestingKnobs.TenantTestingKnobs; knobs != nil {
+		override := knobs.(*sql.TenantTestingKnobs).TenantIDCodecOverride
+		if override != (roachpb.TenantID{}) {
+			codec = keys.MakeSQLCodec(override)
+		}
 	}
 
 	// Create blob service for inter-node file sharing.
@@ -636,6 +642,27 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs,
 	)
 
+	var reporter *diagnostics.Reporter
+	if cfg.tenantConnect != nil {
+		reporter = &diagnostics.Reporter{
+			StartTime:     timeutil.Now(),
+			AmbientCtx:    &cfg.AmbientCtx,
+			Config:        cfg.BaseConfig.Config,
+			Settings:      cfg.Settings,
+			ClusterID:     cfg.rpcContext.ClusterID.Get,
+			TenantID:      cfg.rpcContext.TenantID,
+			SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
+			SQLServer:     pgServer.SQLServer,
+			InternalExec:  cfg.circularInternalExecutor,
+			DB:            cfg.db,
+			Recorder:      cfg.recorder,
+			Locality:      cfg.Locality,
+		}
+		if cfg.TestingKnobs.Server != nil {
+			reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		}
+	}
+
 	return &SQLServer{
 		stopper:                 cfg.stopper,
 		sqlIDContainer:          cfg.nodeIDContainer,
@@ -655,6 +682,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 		metricsRegistry:         cfg.registry,
+		diagnosticsReporter:     reporter,
 	}, nil
 }
 
@@ -805,4 +833,11 @@ func (s *SQLServer) start(
 // reused once an instance is stopped.
 func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 	return s.sqlIDContainer.SQLInstanceID()
+}
+
+// StartDiagnostics starts periodic diagnostics reporting.
+// NOTE: This is not called in start so that it's disabled by default for
+// testing.
+func (s *SQLServer) StartDiagnostics(ctx context.Context) {
+	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }
