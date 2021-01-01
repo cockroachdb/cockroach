@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -46,7 +47,7 @@ func TestSQLServer(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	db := serverutils.StartTenant(
+	_, db := serverutils.StartTenant(
 		t,
 		tc.Server(0),
 		base.TestTenantArgs{TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])},
@@ -72,7 +73,7 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	// StartTenant with the default permissions to
-	db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: false})
+	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), AllowSettingClusterSettings: false})
 	defer db.Close()
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.vectorize=off`)
 	var pqErr *pq.Error
@@ -89,10 +90,14 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	_, _, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+	_, err := tc.Server(0).StartTenant(base.TestTenantArgs{
 		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
-		// Configure the SQL server to access the wrong tenant keyspace.
-		TenantIDCodecOverride: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[1]),
+		TestingKnobs: base.TestingKnobs{
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				// Configure the SQL server to access the wrong tenant keyspace.
+				TenantIDCodecOverride: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[1]),
+			},
+		},
 	})
 	require.Error(t, err)
 	require.Regexp(t, `Unauthenticated desc = requested key /Tenant/11/System/"system-version/" not fully contained in tenant keyspace /Tenant/1{0-1}`, err)
@@ -107,12 +112,12 @@ func TestTenantHTTP(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	_, httpAddr, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+	tenant, err := tc.Server(0).StartTenant(base.TestTenantArgs{
 		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
 	})
 	require.NoError(t, err)
 	t.Run("prometheus", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/_status/vars")
+		resp, err := httputil.Get(ctx, "http://"+tenant.HTTPAddr()+"/_status/vars")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -121,7 +126,7 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "sql_ddl_started_count_internal")
 	})
 	t.Run("pprof", func(t *testing.T) {
-		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/debug/pprof/goroutine?debug=2")
+		resp, err := httputil.Get(ctx, "http://"+tenant.HTTPAddr()+"/debug/pprof/goroutine?debug=2")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()

@@ -485,6 +485,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/server/diagnostics",
         "//pkg/server/diagnosticspb",
         "//pkg/server/serverpb",
         "//pkg/server/status/statuspb",
