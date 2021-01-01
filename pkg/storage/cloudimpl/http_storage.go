@@ -138,6 +138,7 @@ type resumingHTTPReader struct {
 	body      io.ReadCloser
 	canResume bool  // Can we resume if download aborts prematurely?
 	pos       int64 // How much data was received so far.
+	size      int64 // total file size
 	ctx       context.Context
 	url       string
 	client    *httpStorage
@@ -146,21 +147,18 @@ type resumingHTTPReader struct {
 var _ io.ReadCloser = &resumingHTTPReader{}
 
 func newResumingHTTPReader(
-	ctx context.Context, client *httpStorage, url string,
+	ctx context.Context, client *httpStorage, url string, offset int64,
 ) (*resumingHTTPReader, error) {
 	r := &resumingHTTPReader{
 		ctx:    ctx,
 		client: client,
 		url:    url,
+		pos:    offset,
 	}
 
-	resp, err := r.sendRequest(nil)
-	if err != nil {
+	if err := r.sendRequest(); err != nil {
 		return nil, err
 	}
-
-	r.canResume = resp.Header.Get("Accept-Ranges") == "bytes"
-	r.body = resp.Body
 	return r, nil
 }
 
@@ -171,74 +169,83 @@ func (r *resumingHTTPReader) Close() error {
 	return nil
 }
 
-// checkHTTPContentRangeHeader parses Content-Range header and
-// ensures that range start offset is the same as 'pos'
+// checkHTTPContentRangeHeader parses Content-Range header and ensures that
+// range start offset is the same as the expected 'pos'. It returns the total
+// size of the remote object as extracted from the header.
 // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
-func checkHTTPContentRangeHeader(h string, pos int64) error {
+func checkHTTPContentRangeHeader(h string, pos int64) (int64, error) {
 	if len(h) == 0 {
-		return errors.New("http server does not honor download resume")
+		return 0, errors.New("http server does not honor download resume")
 	}
 
 	h = strings.TrimPrefix(h, "bytes ")
 	dash := strings.IndexByte(h, '-')
 	if dash <= 0 {
-		return errors.Errorf("malformed Content-Range header: %s", h)
+		return 0, errors.Errorf("malformed Content-Range header: %s", h)
 	}
 
 	resume, err := strconv.ParseInt(h[:dash], 10, 64)
 	if err != nil {
-		return errors.Errorf("malformed start offset in Content-Range header: %s", h)
+		return 0, errors.Errorf("malformed start offset in Content-Range header: %s", h)
 	}
 
 	if resume != pos {
-		return errors.Errorf(
+		return 0, errors.Errorf(
 			"expected resume position %d, found %d instead in Content-Range header: %s",
 			pos, resume, h)
 	}
-	return nil
+
+	slash := strings.IndexByte(h, '/')
+	if slash <= 0 {
+		return 0, errors.Errorf("malformed Content-Range header: %s", h)
+	}
+	size, err := strconv.ParseInt(h[slash+1:], 10, 64)
+	if err != nil {
+		return 0, errors.Errorf("malformed slash offset in Content-Range header: %s", h)
+	}
+
+	return size, nil
 }
 
-func (r *resumingHTTPReader) sendRequest(
-	reqHeaders map[string]string,
-) (resp *http.Response, err error) {
+func (r *resumingHTTPReader) sendRequest() error {
+	var headers map[string]string
+	if r.pos > 0 {
+		headers = map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)}
+	}
+	if r.body != nil {
+		if err := r.body.Close(); err != nil {
+			return err
+		}
+		r.body = nil
+	}
+
 	for attempt, retries := 0, retry.StartWithCtx(r.ctx, HTTPRetryOptions); retries.Next(); attempt++ {
-		resp, err := r.client.req(r.ctx, "GET", r.url, nil, reqHeaders)
+		resp, err := r.client.req(r.ctx, "GET", r.url, nil, headers)
 		if err == nil {
-			return resp, nil
+			if r.pos == 0 {
+				r.size = resp.ContentLength
+			} else {
+				r.size, err = checkHTTPContentRangeHeader(resp.Header.Get("Content-Range"), r.pos)
+				if err != nil {
+					return err
+				}
+			}
+			r.body = resp.Body
+			r.canResume = resp.Header.Get("Accept-Ranges") == "bytes"
+			return nil
 		}
 
 		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
 
 		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
-			return nil, err
+			return err
 		}
 	}
 	if r.ctx.Err() == nil {
-		return nil, errors.New("too many retries; giving up")
+		return errors.New("too many retries; giving up")
 	}
 
-	return nil, r.ctx.Err()
-}
-
-// requestNextRanges issues additional http request
-// to continue downloading next range of bytes.
-func (r *resumingHTTPReader) requestNextRange() (err error) {
-	if err := r.body.Close(); err != nil {
-		return err
-	}
-
-	r.body = nil
-	var resp *http.Response
-	resp, err = r.sendRequest(map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)})
-
-	if err == nil {
-		err = checkHTTPContentRangeHeader(resp.Header.Get("Content-Range"), r.pos)
-	}
-
-	if err == nil {
-		r.body = resp.Body
-	}
-	return
+	return r.ctx.Err()
 }
 
 // Read implements io.Reader interface to read the data from the underlying
@@ -259,7 +266,7 @@ func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
 				err = errors.Wrap(err, "multiple Read calls return no data")
 				return
 			}
-			err = r.requestNextRange()
+			err = r.sendRequest()
 		}
 	}
 
@@ -268,7 +275,14 @@ func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
 
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	return newResumingHTTPReader(ctx, h, basename)
+	return newResumingHTTPReader(ctx, h, basename, 0)
+}
+
+func (h *httpStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
+	r, err := newResumingHTTPReader(ctx, h, basename, offset)
+	return r, r.size, err
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {

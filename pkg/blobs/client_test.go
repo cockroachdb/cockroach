@@ -178,7 +178,7 @@ func TestBlobClientReadFile(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			reader, err := blobClient.ReadFile(ctx, tc.filename)
+			reader, _, err := blobClient.ReadFile(ctx, tc.filename, 0)
 			if err != nil {
 				if testutils.IsError(err, tc.err) {
 					// correct error was returned
