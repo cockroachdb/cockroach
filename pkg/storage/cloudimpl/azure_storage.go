@@ -148,13 +148,21 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 			continue
 		}
 		if matches {
-			azureURL := url.URL{
-				Scheme:   "azure",
-				Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
-				Path:     blob.Name,
-				RawQuery: azureQueryParams(s.conf),
+			if patternSuffix != "" {
+				if !strings.HasPrefix(blob.Name, s.prefix) {
+					// TODO(dt): return a nice rel-path instead of erroring out.
+					return nil, errors.New("pattern matched file outside of path")
+				}
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(blob.Name, s.prefix), "/"))
+			} else {
+				azureURL := url.URL{
+					Scheme:   "azure",
+					Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
+					Path:     blob.Name,
+					RawQuery: azureQueryParams(s.conf),
+				}
+				fileList = append(fileList, azureURL.String())
 			}
-			fileList = append(fileList, azureURL.String())
 		}
 	}
 
