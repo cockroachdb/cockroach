@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "test_cluster_shim.go",
         "test_server_shim.go",
+        "test_tenant_shim.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/serverutils",
     visibility = ["//visibility:public"],
@@ -14,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
+        "//pkg/server/status",
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/testutils/sqlutils",

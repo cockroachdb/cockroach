@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -585,45 +586,73 @@ func makeSQLServerArgs(
 	}, nil
 }
 
+// TestTenant is an in-memory instantiation of the SQL-only process created for
+// each active Cockroach tenant. TestTenant provides tests with access to
+// internal methods and state on SQLServer. It is typically started in tests by
+// calling the TestServerInterface.StartTenant method or by calling the wrapper
+// serverutils.StartTenant method.
+type TestTenant struct {
+	*SQLServer
+	sqlAddr  string
+	httpAddr string
+}
+
+// SQLAddr is part of the TestTenantInterface interface.
+func (t *TestTenant) SQLAddr() string {
+	return t.sqlAddr
+}
+
+// HTTPAddr is part of the TestTenantInterface interface.
+func (t *TestTenant) HTTPAddr() string {
+	return t.httpAddr
+}
+
+// PGServer is part of the TestTenantInterface interface.
+func (t *TestTenant) PGServer() interface{} {
+	return t.pgServer
+}
+
+// DiagnosticsReporter is part of the TestTenantInterface interface.
+func (t *TestTenant) DiagnosticsReporter() interface{} {
+	return t.diagnosticsReporter
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	params base.TestTenantArgs,
-) (pgAddr string, httpAddr string, _ error) {
+) (serverutils.TestTenantInterface, error) {
 	ctx := context.Background()
 
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
 		); err != nil {
-			return "", "", err
+			return nil, err
 		}
 	}
 
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
-	sqlCfg.TenantIDCodecOverride = params.TenantIDCodecOverride
 	baseCfg := makeTestBaseConfig(st)
+	baseCfg.TestingKnobs = params.TestingKnobs
 	if params.AllowSettingClusterSettings {
 		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
-	baseCfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		DeterministicExplainAnalyze: params.DeterministicExplainAnalyze,
-	}
 	stopper := params.Stopper
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
-	_, addr, httpAddr, _, err := StartTenant(
+	sqlServer, addr, httpAddr, _, err := StartTenant(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)
-	return addr, httpAddr, err
+	return &TestTenant{SQLServer: sqlServer, sqlAddr: addr, httpAddr: httpAddr}, err
 }
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -1297,6 +1326,11 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 		return nil, err
 	}
 	return desc.StartKey.AsRawKey(), nil
+}
+
+// MetricsRecorder periodically records node-level and store-level metrics.
+func (ts *TestServer) MetricsRecorder() *status.MetricsRecorder {
+	return ts.node.recorder
 }
 
 type testServerFactoryImpl struct{}
