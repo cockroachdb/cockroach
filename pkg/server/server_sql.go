@@ -74,7 +74,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-type sqlServer struct {
+// SQLServer encapsulates the part of a CRDB server that is dedicated to SQL
+// processing. All SQL commands are reduced to primitive operations on the
+// lower-level KV layer. Multi-tenant installations of CRDB run zero or more
+// standalone SQLServer instances per tenant (the KV layer is shared across all
+// tenants).
+type SQLServer struct {
+	stopper          *stop.Stopper
+	sqlIDContainer   *base.SQLIDContainer
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
@@ -206,7 +213,7 @@ type sqlServerArgs struct {
 	sqlStatusServer serverpb.SQLStatusServer
 }
 
-func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
+func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
@@ -630,7 +637,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		leaseMgr,
 	)
 
-	return &sqlServer{
+	return &SQLServer{
+		stopper:                 cfg.stopper,
+		sqlIDContainer:          cfg.nodeIDContainer,
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
 		execCfg:                 execCfg,
@@ -650,7 +659,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	}, nil
 }
 
-func (s *sqlServer) preStart(
+func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
@@ -809,4 +818,11 @@ func (s *sqlServer) preStart(
 	)
 
 	return nil
+}
+
+// SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID
+// is guaranteed to be unique across all currently running instances, but may be
+// reused once an instance is stopped.
+func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
+	return s.sqlIDContainer.SQLInstanceID()
 }

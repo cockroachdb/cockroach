@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -59,13 +60,6 @@ const (
 
 	updateCheckJitterSeconds = 120
 )
-
-var diagnosticReportFrequency = settings.RegisterDurationSetting(
-	"diagnostics.reporting.interval",
-	"interval at which diagnostics data should be reported",
-	time.Hour,
-	settings.NonNegativeDuration,
-).WithPublic()
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
 func addJitter(d time.Duration, jitterSec int) time.Duration {
@@ -195,6 +189,7 @@ func (s *Server) checkForUpdates(ctx context.Context) bool {
 
 	clusterInfo := diagnosticspb.ClusterInfo{
 		ClusterID:  s.ClusterID(),
+		TenantID:   s.rpcContext.TenantID,
 		IsInsecure: s.cfg.Insecure,
 		IsInternal: sql.ClusterIsInternal(&s.st.SV),
 	}
@@ -257,7 +252,7 @@ func (s *Server) maybeReportDiagnostics(ctx context.Context, now, scheduled time
 		s.ReportDiagnostics(ctx)
 	}
 
-	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
+	return scheduled.Add(diagnostics.ReportFrequency.Get(&s.st.SV))
 }
 
 func (s *Server) collectNodeInfo(ctx context.Context) diagnosticspb.NodeInfo {
@@ -425,6 +420,7 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 
 	clusterInfo := diagnosticspb.ClusterInfo{
 		ClusterID:  s.ClusterID(),
+		TenantID:   s.rpcContext.TenantID,
 		IsInsecure: s.cfg.Insecure,
 		IsInternal: sql.ClusterIsInternal(&s.st.SV),
 	}
@@ -432,7 +428,7 @@ func (s *Server) ReportDiagnostics(ctx context.Context) {
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs = &s.cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
-	reportingURL := diagnosticspb.BuildReportingURL(&clusterInfo, &report.Node, knobs)
+	reportingURL := diagnosticspb.BuildReportingURL(&clusterInfo, report, knobs)
 	if reportingURL == nil {
 		return
 	}
