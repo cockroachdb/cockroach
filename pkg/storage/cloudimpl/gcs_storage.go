@@ -236,24 +236,34 @@ func (r *resumingGoogleStorageReader) Close() error {
 	return nil
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	reader, _, err := g.ReadFileAt(ctx, basename, 0)
+	return reader, err
+}
+
+func (g *gcsStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	reader := &resumingGoogleStorageReader{
 		ctx:    ctx,
 		bucket: g.bucket,
 		object: path.Join(g.prefix, basename),
 	}
+	reader.pos = offset
+
 	if err := reader.openStream(); err != nil {
 		// The Google SDK has a specialized ErrBucketDoesNotExist error, but
 		// the code path from this method first triggers an ErrObjectNotExist in
 		// both scenarios - when a Bucket does not exist or an Object does not
 		// exist.
 		if errors.Is(err, gcs.ErrObjectNotExist) {
-			return nil, errors.Wrapf(ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
+			return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
 		}
-		return nil, err
+		return nil, 0, err
 	}
-	return reader, nil
+	return reader, reader.data.Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {

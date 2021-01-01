@@ -107,22 +107,40 @@ func (s *azureStorage) WriteFile(
 	return errors.Wrapf(err, "write file: %s", basename)
 }
 
+// ReadFile is shorthand for ReadFileAt with offset 0.
 func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	reader, _, err := s.ReadFileAt(ctx, basename, 0)
+	return reader, err
+}
+
+func (s *azureStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (io.ReadCloser, int64, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	blob := s.getBlob(basename)
-	get, err := blob.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
+	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		if azerr := (azblob.StorageError)(nil); errors.As(err, &azerr) {
 			switch azerr.ServiceCode() {
 			// TODO(adityamaru): Investigate whether both these conditions are required.
 			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
-				return nil, errors.Wrapf(ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
+				return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
 			}
 		}
-		return nil, errors.Wrap(err, "failed to create azure reader")
+		return nil, 0, errors.Wrap(err, "failed to create azure reader")
+	}
+	var size int64
+	if offset == 0 {
+		size = get.ContentLength()
+	} else {
+		size, err = checkHTTPContentRangeHeader(get.ContentRange(), offset)
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
-	return reader, nil
+
+	return reader, size, nil
 }
 
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
@@ -148,13 +166,21 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 			continue
 		}
 		if matches {
-			azureURL := url.URL{
-				Scheme:   "azure",
-				Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
-				Path:     blob.Name,
-				RawQuery: azureQueryParams(s.conf),
+			if patternSuffix != "" {
+				if !strings.HasPrefix(blob.Name, s.prefix) {
+					// TODO(dt): return a nice rel-path instead of erroring out.
+					return nil, errors.New("pattern matched file outside of path")
+				}
+				fileList = append(fileList, strings.TrimPrefix(strings.TrimPrefix(blob.Name, s.prefix), "/"))
+			} else {
+				azureURL := url.URL{
+					Scheme:   "azure",
+					Host:     strings.TrimPrefix(s.container.URL().Path, "/"),
+					Path:     blob.Name,
+					RawQuery: azureQueryParams(s.conf),
+				}
+				fileList = append(fileList, azureURL.String())
 			}
-			fileList = append(fileList, azureURL.String())
 		}
 	}
 

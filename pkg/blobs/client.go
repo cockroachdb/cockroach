@@ -29,7 +29,7 @@ type BlobClient interface {
 	// ReadFile fetches the named payload from the requested node,
 	// and stores it in memory. It then returns an io.ReadCloser to
 	// read the contents.
-	ReadFile(ctx context.Context, file string) (io.ReadCloser, error)
+	ReadFile(ctx context.Context, file string, offset int64) (io.ReadCloser, int64, error)
 
 	// WriteFile sends the named payload to the requested node.
 	// This method will read entire content of file and send
@@ -60,16 +60,19 @@ func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
 	return &remoteClient{blobClient: blobClient}
 }
 
-func (c *remoteClient) ReadFile(ctx context.Context, file string) (io.ReadCloser, error) {
-	// Check that file exists before reading from it
-	_, err := c.Stat(ctx, file)
+func (c *remoteClient) ReadFile(
+	ctx context.Context, file string, offset int64,
+) (io.ReadCloser, int64, error) {
+	// Check that file exists before reading from it and get size to return.
+	st, err := c.Stat(ctx, file)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	stream, err := c.blobClient.GetStream(ctx, &blobspb.GetRequest{
 		Filename: file,
+		Offset:   offset,
 	})
-	return newGetStreamReader(stream), errors.Wrap(err, "fetching file")
+	return newGetStreamReader(stream), st.Filesize, errors.Wrap(err, "fetching file")
 }
 
 func (c *remoteClient) WriteFile(
@@ -134,8 +137,10 @@ func newLocalClient(externalIODir string) (BlobClient, error) {
 	return &localClient{localStorage: storage}, nil
 }
 
-func (c *localClient) ReadFile(ctx context.Context, file string) (io.ReadCloser, error) {
-	return c.localStorage.ReadFile(file)
+func (c *localClient) ReadFile(
+	ctx context.Context, file string, offset int64,
+) (io.ReadCloser, int64, error) {
+	return c.localStorage.ReadFile(file, offset)
 }
 
 func (c *localClient) WriteFile(ctx context.Context, file string, content io.ReadSeeker) error {
