@@ -1,6 +1,8 @@
 <table>
 <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>backup.collect_full_file_checksums.enabled</code></td><td>boolean</td><td><code>false</code></td><td>collect and record SHA512 checksums of backup files in addition to their internal block-level checksums</td></tr>
+<tr><td><code>backup.verify_full_file_checksums.enabled</code></td><td>boolean</td><td><code>false</code></td><td>verify the extra full-file checksums, if present, before reading backup data files</td></tr>
 <tr><td><code>cloudstorage.gs.default.key</code></td><td>string</td><td><code></code></td><td>if set, JSON key to use during Google Cloud Storage operations</td></tr>
 <tr><td><code>cloudstorage.http.custom_ca</code></td><td>string</td><td><code></code></td><td>custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage</td></tr>
 <tr><td><code>cloudstorage.timeout</code></td><td>duration</td><td><code>10m0s</code></td><td>the timeout for import/export storage operations</td></tr>

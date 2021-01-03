@@ -540,6 +540,12 @@ func restore(
 
 	for i := range importSpans {
 		importSpans[i].ProgressIdx = int64(i)
+		// If we're not verifying checksums, blank them if present.
+		if !verifyChecksums.Get(&execCtx.ExecCfg().Settings.SV) {
+			for j := range importSpans[i].Files {
+				importSpans[i].Files[j].Sha512 = nil
+			}
+		}
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 

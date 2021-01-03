@@ -77,6 +77,18 @@ var featureRestoreEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
 
+var collectChecksums = settings.RegisterBoolSetting(
+	"backup.collect_full_file_checksums.enabled",
+	"collect and record SHA512 checksums of backup files in addition to their internal block-level checksums",
+	false,
+).WithPublic()
+
+var verifyChecksums = settings.RegisterBoolSetting(
+	"backup.verify_full_file_checksums.enabled",
+	"verify the extra full-file checksums, if present, before reading backup data files",
+	false,
+).WithPublic()
+
 // rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
 // non-empty db qualifiers with `newDB`.
 //

@@ -186,6 +186,7 @@ func runBackupProcessor(
 					MVCCFilter:                          spec.MVCCFilter,
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
+					OmitChecksum:                        !collectChecksums.Get(&settings.SV),
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
