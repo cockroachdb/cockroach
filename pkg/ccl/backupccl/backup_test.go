@@ -3959,12 +3959,11 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer f.Close()
-	// The last eight bytes of an SST file store a nonzero magic number. We can
-	// blindly null out those bytes and guarantee that the checksum will change.
-	if _, err := f.Seek(-8, io.SeekEnd); err != nil {
+	// mess with some bytes.
+	if _, err := f.Seek(-65, io.SeekEnd); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if _, err := f.Write(make([]byte, 8)); err != nil {
+	if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := f.Sync(); err != nil {
