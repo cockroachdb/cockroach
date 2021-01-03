@@ -11,6 +11,8 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"crypto/sha512"
+	"io"
 	"io/ioutil"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,11 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	gogotypes "github.com/gogo/protobuf/types"
 )
 
@@ -177,6 +180,20 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
 	var iters []storage.SimpleMVCCIterator
+
+	// In the loop below, each file is opened, some checks are done and then an
+	// iterator is created for that file and added to iters. Once the iterator is
+	// created, it owns the file and will Close it, but until then we need to
+	// ensure we close it (e.g. if we return early before handing it to our iter).
+	// Thus the loop below stores its intermediate file in `f` and we defer a func
+	// closing over f that can close if if we return mid-loop.
+	var f vfs.File
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+	}()
+
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, newSpanKey)
 
@@ -191,44 +208,50 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}()
 
 		const maxAttempts = 3
-		var fileContents []byte
+
 		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			f, err := dir.ReadFile(ctx, file.Path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			fileContents, err = ioutil.ReadAll(f)
+			var err error
+			f, err = cloudimpl.NewFileWrapper(ctx, dir, file.Path)
 			return err
 		}); err != nil {
 			return summary, errors.Wrapf(err, "fetching %q", file.Path)
 		}
-		dataSize := int64(len(fileContents))
-		log.Eventf(ctx, "fetched file (%s)", humanizeutil.IBytes(dataSize))
 
+		// If the file is encrypted, download and decrypt it and make a new file on
+		// the decrypted content. In either case, keep the original/underlying raw
+		// file reader if we need to check checksums.
+		// TODO(dt): use streaming decryption on the fly wrapper from #58181.
+		var raw io.Reader = f
 		if rd.spec.Encryption != nil {
-			fileContents, err = storageccl.DecryptFile(fileContents, rd.spec.Encryption.Key)
+			ciphertext, err := ioutil.ReadAll(f)
 			if err != nil {
 				return summary, err
 			}
+			f.Close()
+			content, err := storageccl.DecryptFile(ciphertext, rd.spec.Encryption.Key)
+			if err != nil {
+				return summary, err
+			}
+			f = vfs.NewMemFile(content)
+			raw = bytes.NewReader(ciphertext)
 		}
 
 		if len(file.Sha512) > 0 {
-			checksum, err := storageccl.SHA512ChecksumData(fileContents)
-			if err != nil {
+			h := sha512.New()
+			if _, err := io.Copy(h, raw); err != nil {
 				return summary, err
 			}
-			if !bytes.Equal(checksum, file.Sha512) {
+			if !bytes.Equal(h.Sum(nil), file.Sha512) {
 				return summary, errors.Errorf("checksum mismatch for %s", file.Path)
 			}
 		}
 
-		iter, err := storage.NewMemSSTIterator(fileContents, false)
+		iter, err := storage.NewSSTIterator(f)
 		if err != nil {
 			return summary, err
 		}
-
 		defer iter.Close()
+		f = nil // prevent double-Close now that the iter owns it.
 		iters = append(iters, iter)
 	}
 

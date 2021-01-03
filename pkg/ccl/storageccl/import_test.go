@@ -72,7 +72,7 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst, err := storage.NewSSTIterator(filepath.Join(dir, path))
+		sst, err := storage.NewFileSSTIterator(filepath.Join(dir, path))
 		if err != nil {
 			t.Fatal(err)
 		}

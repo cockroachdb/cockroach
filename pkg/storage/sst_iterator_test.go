@@ -105,7 +105,7 @@ func TestSSTIterator(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 
-		iter, err := NewSSTIterator(path)
+		iter, err := NewFileSSTIterator(path)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}

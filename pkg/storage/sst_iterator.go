@@ -35,11 +35,11 @@ type sstIterator struct {
 	verify bool
 }
 
-// NewSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
+// NewFileSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
 // It's compatible with sstables written by `RocksDBSstFileWriter` and
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
-func NewSSTIterator(path string) (SimpleMVCCIterator, error) {
+func NewFileSSTIterator(path string) (SimpleMVCCIterator, error) {
 	file, err := vfs.Default.Open(path)
 	if err != nil {
 		return nil, err
@@ -65,6 +65,17 @@ func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 		return nil, err
 	}
 	return &sstIterator{sst: sst, verify: verify}, nil
+}
+
+// NewSSTIterator opens a pebble sstable iterator to do MVCC-aware iteration.
+func NewSSTIterator(src vfs.File) (SimpleMVCCIterator, error) {
+	sst, err := sstable.NewReader(src, sstable.ReaderOptions{
+		Comparer: EngineComparer,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &sstIterator{sst: sst}, nil
 }
 
 // Close implements the SimpleMVCCIterator interface.
