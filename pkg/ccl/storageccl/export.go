@@ -179,6 +179,7 @@ func evalExport(
 		}
 
 		if args.Encryption != nil {
+			// TODO(dt): cluster version gate use EncryptFileChunked.
 			data, err = EncryptFile(data, args.Encryption.Key)
 			if err != nil {
 				return result.Result{}, err
