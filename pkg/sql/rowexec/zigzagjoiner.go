@@ -419,11 +419,7 @@ func (z *zigzagJoiner) setupInfo(
 	info.table = &tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
-	if indexOrdinal == 0 {
-		info.index = info.table.GetPrimaryIndex()
-	} else {
-		info.index = &info.table.GetPublicNonPrimaryIndexes()[indexOrdinal-1]
-	}
+	info.index = info.table.ActiveIndexes()[indexOrdinal].IndexDesc()
 
 	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
