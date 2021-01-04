@@ -33,8 +33,12 @@ type CustomFuncs struct {
 
 // Init initializes a new CustomFuncs with the given factory.
 func (c *CustomFuncs) Init(f *Factory) {
-	c.f = f
-	c.mem = f.Memo()
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = CustomFuncs{
+		f:   f,
+		mem: f.Memo(),
+	}
 }
 
 // Succeeded returns true if a result expression is not nil.

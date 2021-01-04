@@ -30,8 +30,12 @@ type CustomFuncs struct {
 
 // Init initializes a new CustomFuncs with the given explorer.
 func (c *CustomFuncs) Init(e *explorer) {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = CustomFuncs{
+		e: e,
+	}
 	c.CustomFuncs.Init(e.f)
-	c.e = e
 	c.im.Init(e.f, e.mem.Metadata(), e.evalCtx)
 }
 

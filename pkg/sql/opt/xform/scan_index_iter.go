@@ -88,12 +88,16 @@ func (it *scanIndexIter) Init(
 	filters memo.FiltersExpr,
 	rejectFlags indexRejectFlags,
 ) {
-	it.mem = mem
-	it.im = im
-	it.tabMeta = mem.Metadata().TableMeta(scanPrivate.Table)
-	it.scanPrivate = scanPrivate
-	it.filters = filters
-	it.rejectFlags = rejectFlags
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*it = scanIndexIter{
+		mem:         mem,
+		im:          im,
+		tabMeta:     mem.Metadata().TableMeta(scanPrivate.Table),
+		scanPrivate: scanPrivate,
+		filters:     filters,
+		rejectFlags: rejectFlags,
+	}
 	it.filtersMutateChecker.Init(it.filters)
 }
 

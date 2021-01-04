@@ -20,7 +20,11 @@ type uniquifier struct {
 }
 
 func (u *uniquifier) init() {
-	u.seen = make(map[string]struct{})
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*u = uniquifier{
+		seen: make(map[string]struct{}),
+	}
 }
 
 func (u *uniquifier) makeUnique(s string) string {

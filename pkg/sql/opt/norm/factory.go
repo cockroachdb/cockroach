@@ -95,16 +95,21 @@ type Factory struct {
 // changed using FoldingControl().AllowStableFolds().
 func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
-	if f.mem == nil {
-		f.mem = &memo.Memo{}
+	mem := f.mem
+	if mem == nil {
+		mem = &memo.Memo{}
 	}
-	f.mem.Init(evalCtx)
+	mem.Init(evalCtx)
 
-	f.evalCtx = evalCtx
-	f.catalog = catalog
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*f = Factory{
+		mem:     mem,
+		evalCtx: evalCtx,
+		catalog: catalog,
+	}
+
 	f.funcs.Init(f)
-	f.matchedRule = nil
-	f.appliedRule = nil
 	f.foldingControl.DisallowStableFolds()
 }
 

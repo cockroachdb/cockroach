@@ -101,18 +101,19 @@ type Optimizer struct {
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
 func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
-	o.evalCtx = evalCtx
-	o.catalog = catalog
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*o = Optimizer{
+		evalCtx:  evalCtx,
+		catalog:  catalog,
+		f:        o.f,
+		stateMap: make(map[groupStateKey]*groupState),
+	}
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
 	o.coster = &o.defaultCoster
-	o.stateMap = make(map[groupStateKey]*groupState)
-	o.matchedRule = nil
-	o.appliedRule = nil
-	o.disabledRules = util.FastIntSet{}
-	o.jb = JoinOrderBuilder{}
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
 		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
 	}
