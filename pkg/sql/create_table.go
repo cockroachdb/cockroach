@@ -977,8 +977,8 @@ func addIndexForFK(
 		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
-		added := tbl.GetPublicNonPrimaryIndexes()[len(tbl.GetPublicNonPrimaryIndexes())-1]
-		return added.ID, nil
+		added := tbl.PublicNonPrimaryIndexes()[len(tbl.PublicNonPrimaryIndexes())-1]
+		return added.GetID(), nil
 	}
 
 	// TODO (lucy): In the EmptyTable case, we add an index mutation, making this
@@ -1700,10 +1700,9 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	for i := range desc.GetPublicNonPrimaryIndexes() {
-		idx := &desc.GetPublicNonPrimaryIndexes()[i]
+	for _, idx := range desc.PublicNonPrimaryIndexes() {
 		// Increment the counter if this index could be storing data across multiple column families.
-		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
+		if idx.NumStoredColumns() > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 		}
 	}

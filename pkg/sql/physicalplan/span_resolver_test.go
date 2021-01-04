@@ -169,7 +169,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 func splitRangeAtVal(
 	ts *server.TestServer, tableDesc *tabledesc.Immutable, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
-	if len(tableDesc.GetPublicNonPrimaryIndexes()) != 0 {
+	if len(tableDesc.PublicNonPrimaryIndexes()) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
 	}
