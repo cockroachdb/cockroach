@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -1642,11 +1641,6 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	t := m.mu.descriptors[id]
 	if t == nil && create {
 		t = &descriptorState{id: id, stopper: m.stopper}
-		if id >= 4294867200 {
-			stack := debug.Stack()
-			log.Warningf(context.TODO(), "adding questionable descriptor %d to lease manager: %v %s",
-				id, t, string(stack))
-		}
 		m.mu.descriptors[id] = t
 	}
 	return t
