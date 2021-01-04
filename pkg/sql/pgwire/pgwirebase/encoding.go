@@ -796,9 +796,6 @@ func DecodeOidDatum(
 		}
 		switch typ.Family() {
 		case types.EnumFamily:
-			if code != FormatText {
-				return nil, pgerror.Newf(pgcode.Syntax, "expected FormatText for ENUM value encoding")
-			}
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
