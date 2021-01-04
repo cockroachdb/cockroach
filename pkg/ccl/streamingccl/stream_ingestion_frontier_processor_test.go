@@ -1,0 +1,207 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package streamingccl
+
+import (
+	"context"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
+)
+
+type partitionToEvent map[streamclient.PartitionAddress][]streamclient.Event
+
+func TestStreamIngestionFrontierProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
+	kvDB := tc.Server(0).DB()
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
+	defer testDiskMonitor.Stop(ctx)
+
+	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			Settings:    st,
+			DB:          kvDB,
+			DiskMonitor: testDiskMonitor,
+			JobRegistry: registry,
+		},
+		EvalCtx: &evalCtx,
+	}
+
+	out := &distsqlutils.RowBuffer{}
+	post := execinfrapb.PostProcessSpec{}
+
+	var spec execinfrapb.StreamIngestionDataSpec
+	pa1 := streamclient.PartitionAddress("s3://my_streams/stream/partition1")
+	pa2 := streamclient.PartitionAddress("s3://my_streams/stream/partition2")
+
+	v := roachpb.MakeValueFromString("value_1")
+	v.Timestamp = hlc.Timestamp{WallTime: 1}
+	sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
+
+	for _, tc := range []struct {
+		name                      string
+		events                    partitionToEvent
+		expectedFrontierTimestamp hlc.Timestamp
+		noProgress                bool
+	}{
+		{
+			name: "same-resolved-ts-across-partitions",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
+			noProgress:                false,
+		},
+		{
+			// No progress should be reported to the job since partition 2 has not
+			// emitted a resolved ts.
+			name: "no-checkpoints",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeKVEvent(sampleKV),
+			}, pa2: []streamclient.Event{
+				streamclient.MakeKVEvent(sampleKV),
+			}},
+			noProgress: true,
+		},
+		{
+			// No progress should be reported to the job since partition 2 has not
+			// emitted a resolved ts.
+			name: "no-checkpoint-from-one-partition",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamclient.Event{}},
+			noProgress: true,
+		},
+		{
+			name: "one-partition-ahead-of-the-other",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+			}},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
+			noProgress:                false,
+		},
+		{
+			name: "some-interleaved-timestamps",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 3}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 5}),
+			}},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
+			noProgress:                false,
+		},
+		{
+			name: "some-interleaved-logical-timestamps",
+			events: partitionToEvent{pa1: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}),
+			}, pa2: []streamclient.Event{
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 1}),
+				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
+			}},
+			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
+			noProgress:                false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec.PartitionAddress = []streamclient.PartitionAddress{pa1, pa2}
+			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
+			require.NoError(t, err)
+			sip, ok := proc.(*streamIngestionProcessor)
+			if !ok {
+				t.Fatal("expected the processor that's created to be a split and scatter processor")
+			}
+
+			// Inject a mock client with the events being tested against.
+			sip.client = &mockStreamClient{
+				partitionEvents: tc.events,
+			}
+
+			// Create a frontier processor.
+			var frontierSpec execinfrapb.StreamIngestionFrontierSpec
+			pa1Key := roachpb.Key(pa1)
+			pa2Key := roachpb.Key(pa2)
+			frontierSpec.TrackedSpans = []roachpb.Span{{Key: pa1Key, EndKey: pa1Key.Next()}, {Key: pa2Key,
+				EndKey: pa2Key.Next()}}
+
+			// Create a mock ingestion job.
+			record := jobs.Record{
+				Description: "fake ingestion job",
+				Username:    security.TestUserName(),
+				Details:     jobspb.StreamIngestionDetails{StreamAddress: "foo"},
+				// We don't use this so it does not matter what we set it too, as long
+				// as it is non-nil.
+				Progress: jobspb.ImportProgress{},
+			}
+			record.CreatedBy = &jobs.CreatedByInfo{
+				Name: "ingestion",
+			}
+			job, err := registry.CreateJobWithTxn(ctx, record, nil /* txn */)
+			require.NoError(t, err)
+			frontierSpec.JobID = *job.ID()
+
+			frontierPost := execinfrapb.PostProcessSpec{}
+			frontierOut := distsqlutils.RowBuffer{}
+			frontierProc, err := newStreamIngestionFrontierProcessor(&flowCtx, 0, /* processorID*/
+				frontierSpec, sip, &frontierPost, &frontierOut)
+			require.NoError(t, err)
+			fp, ok := frontierProc.(*streamIngestionFrontier)
+			if !ok {
+				t.Fatal("expected the processor that's created to be a stream ingestion frontier")
+			}
+			fp.Run(context.Background())
+
+			if !frontierOut.ProducerClosed() {
+				t.Fatal("producer for StreamFrontierProcessor not closed")
+			}
+
+			jobWithProgress, err := registry.LoadJob(ctx, *job.ID())
+			require.NoError(t, err)
+			progress := jobWithProgress.Progress()
+			if tc.noProgress {
+				require.Equal(t, (*hlc.Timestamp)(nil), progress.GetHighWater())
+			} else {
+				require.Equal(t, tc.expectedFrontierTimestamp, *progress.GetHighWater())
+			}
+		})
+	}
+}

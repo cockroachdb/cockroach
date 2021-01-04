@@ -185,6 +185,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_SchemaChangeGC{SchemaChangeGC: &d}
 	case TypeSchemaChangeDetails:
 		return &Payload_TypeSchemaChange{TypeSchemaChange: &d}
+	case StreamIngestionDetails:
+		return &Payload_StreamIngestion{StreamIngestion: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}

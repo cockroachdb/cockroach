@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamingccl",
     srcs = [
+        "stream_ingestion_frontier_processor.go",
         "stream_ingestion_job.go",
         "stream_ingestion_processor.go",
         "stream_ingestion_processor_planning.go",
@@ -27,10 +28,14 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/util/hlc",
+        "//pkg/util/log/logcrash",
         "//pkg/util/protoutil",
+        "//pkg/util/span",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -38,6 +43,7 @@ go_test(
     name = "streamingccl_test",
     srcs = [
         "main_test.go",
+        "stream_ingestion_frontier_processor_test.go",
         "stream_ingestion_processor_test.go",
     ],
     embed = [":streamingccl"],
@@ -46,6 +52,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/utilccl",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security",
@@ -62,6 +69,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

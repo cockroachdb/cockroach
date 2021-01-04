@@ -17,17 +17,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/logtags"
 )
 
+func init() {
+	rowexec.NewStreamIngestionFrontierProcessor = newStreamIngestionFrontierProcessor
+}
+
 func distStreamIngestionPlanSpecs(
-	topology streamclient.Topology, nodes []roachpb.NodeID,
-) ([]*execinfrapb.StreamIngestionDataSpec, error) {
+	topology streamclient.Topology, nodes []roachpb.NodeID, jobID int64,
+) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
 	streamIngestionSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0, len(nodes))
 
+	trackedSpans := make([]roachpb.Span, 0)
 	for i, partition := range topology.Partitions {
 		// Round robin assign the stream partitions to nodes. Partitions 0 through
 		// len(nodes) - 1 creates the spec. Future partitions just add themselves to
@@ -40,9 +46,22 @@ func distStreamIngestionPlanSpecs(
 		}
 		n := i % len(nodes)
 		streamIngestionSpecs[n].PartitionAddress = append(streamIngestionSpecs[n].PartitionAddress, partition)
+		partitionKey := roachpb.Key(partition)
+		// We create "fake" spans to uniquely identify the partition. This is used
+		// to keep track of the resolved ts received for a particular partition in
+		// the frontier processor.
+		trackedSpans = append(trackedSpans, roachpb.Span{
+			Key:    partitionKey,
+			EndKey: partitionKey.Next(),
+		})
 	}
 
-	return streamIngestionSpecs, nil
+	// Create a spec for the StreamIngestionFrontier processor on the coordinator
+	// node.
+	streamIngestionFrontierSpec := &execinfrapb.StreamIngestionFrontierSpec{JobID: jobID,
+		TrackedSpans: trackedSpans}
+
+	return streamIngestionSpecs, streamIngestionFrontierSpec, nil
 }
 
 func distStreamIngest(
@@ -52,6 +71,7 @@ func distStreamIngest(
 	planCtx *sql.PlanningCtx,
 	dsp *sql.DistSQLPlanner,
 	streamIngestionSpecs []*execinfrapb.StreamIngestionDataSpec,
+	streamIngestionFrontierSpec *execinfrapb.StreamIngestionFrontierSpec,
 ) error {
 	ctx = logtags.AddTag(ctx, "stream-ingest-distsql", nil)
 	evalCtx := execCtx.ExtendedEvalContext()
@@ -76,12 +96,17 @@ func distStreamIngest(
 		execinfrapb.Ordering{},
 	)
 
-	// TODO(adityamaru): It is likely that we will add a StreamIngestFrontier
-	// processor on the coordinator node. All the StreamIngestionProcessors will
-	// feed their results into this frontier. This is similar to the relationship
-	// between the ChangeAggregator and ChangeFrontier processors. The
-	// StreamIngestFrontier will be responsible for updating the job watermark
-	// with the min of the resolved ts outputted by all the processors.
+	execCfg := execCtx.ExecCfg()
+	gatewayNodeID, err := execCfg.NodeID.OptionalNodeIDErr(48274)
+	if err != nil {
+		return err
+	}
+
+	// The ResultRouters from the previous stage will feed in to the
+	// StreamIngestionFrontier processor.
+	p.AddSingleGroupStage(gatewayNodeID,
+		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
+		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
 	// TODO(adityamaru): Once result types are updated, add PlanToStreamColMap.
 	dsp.FinalizePlan(planCtx, p)

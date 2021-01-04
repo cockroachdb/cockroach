@@ -567,6 +567,7 @@ message Payload {
     CreateStatsDetails createStats = 15;
     SchemaChangeGCDetails schemaChangeGC = 21;
     TypeSchemaChangeDetails typeSchemaChange = 22;
+    StreamIngestionDetails streamIngestion = 23;
   }
 }
 
