@@ -598,6 +598,28 @@ var logicTestConfigs = []testClusterConfig{
 		isCCLConfig:       true,
 	},
 	{
+		name:              "multiregion-invalid-locality",
+		numNodes:          3,
+		overrideAutoStats: "false",
+		localities: map[int]roachpb.Locality{
+			1: {
+				Tiers: []roachpb.Tier{
+					{Key: "invalid-region-setup", Value: "test1"},
+					{Key: "availability-zone", Value: "test1-az1"},
+				},
+			},
+			2: {
+				Tiers: []roachpb.Tier{},
+			},
+			3: {
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: "test1"},
+					{Key: "availability-zone", Value: "test1-az3"},
+				},
+			},
+		},
+	},
+	{
 		name:              "multiregion-9node-3region-3azs",
 		numNodes:          9,
 		overrideAutoStats: "false",
@@ -1022,6 +1044,9 @@ type logicQuery struct {
 	kvOpTypes        []string
 	keyPrefixFilters []string
 
+	// nodeIdx determines which node on the cluster to execute a query on for the given query.
+	nodeIdx int
+
 	// noticetrace indicates we're comparing the output of a notice trace.
 	noticetrace bool
 
@@ -1228,7 +1253,23 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
 	pgURL.Path = "test"
+	db := t.openDB(pgURL)
 
+	// The default value for extra_float_digits assumed by tests is
+	// 0. However, lib/pq by default configures this to 2 during
+	// connection initialization, so we need to set it back to 0 before
+	// we run anything.
+	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
+		t.Fatal(err)
+	}
+	t.clients[user] = db
+	t.db = db
+	t.user = user
+
+	return cleanupFunc
+}
+
+func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	base, err := pq.NewConnector(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
@@ -1243,20 +1284,8 @@ func (t *logicTest) setUser(user string) func() {
 			t.noticeBuffer = append(t.noticeBuffer, "HINT: "+notice.Hint)
 		}
 	})
-	db := gosql.OpenDB(connector)
 
-	// The default value for extra_float_digits assumed by tests is
-	// 0. However, lib/pq by default configures this to 2 during
-	// connection initialization, so we need to set it back to 0 before
-	// we run anything.
-	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
-		t.Fatal(err)
-	}
-	t.clients[user] = db
-	t.db = db
-	t.user = user
-
-	return cleanupFunc
+	return gosql.OpenDB(connector)
 }
 
 // newCluster creates a new cluster. It should be called after the logic tests's
@@ -2057,6 +2086,15 @@ func (t *logicTest) processSubtest(
 							query.noticetrace = true
 
 						default:
+							if strings.HasPrefix(opt, "nodeidx=") {
+								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
+								if err != nil {
+									return errors.Wrapf(err, "error parsing nodeidx")
+								}
+								query.nodeIdx = int(idx)
+								break
+							}
+
 							return errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
 						}
 					}
@@ -2537,7 +2575,21 @@ func (t *logicTest) execQuery(query logicQuery) error {
 
 	t.noticeBuffer = nil
 
-	rows, err := t.db.Query(query.sql)
+	db := t.db
+	if query.nodeIdx != 0 {
+		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
+		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
+		defer cleanupFunc()
+		pgURL.Path = "test"
+
+		db = t.openDB(pgURL)
+		defer func() {
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
+	rows, err := db.Query(query.sql)
 	if err == nil {
 		sqlutils.VerifyStatementPrettyRoundtrip(t.t(), query.sql)
 

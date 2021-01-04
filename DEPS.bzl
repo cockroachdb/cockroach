@@ -3001,9 +3001,8 @@ def go_deps():
         name = "org_golang_x_tools",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/tools",
-        replace = "github.com/cockroachdb/tools",
-        sum = "h1:TZHlzTz/OL/BaGcWzajnqbmf6Tn+399ylrK/at75zXM=",
-        version = "v0.0.0-20201202174556-f18ddc082e74",
+        sum = "h1:5xKxdl/RhlelmSPaxyVeq5PYSmJ4H14yeQT58qP1F6o=",
+        version = "v0.0.0-20210104081019-d8d6ddbec6ee",
     )
     go_repository(
         name = "org_golang_x_xerrors",
