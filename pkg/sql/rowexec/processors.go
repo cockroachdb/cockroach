@@ -365,6 +365,9 @@ var NewSplitAndScatterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.Spli
 // NewRestoreDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewRestoreDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.RestoreDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
+// NewStreamIngestionDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewStreamIngestionDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
 // NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 

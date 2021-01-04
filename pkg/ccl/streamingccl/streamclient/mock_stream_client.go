@@ -8,11 +8,7 @@
 
 package streamclient
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-)
+import "time"
 
 // MockStreamClient is a mock stream client.
 type MockStreamClient struct{}
@@ -32,6 +28,6 @@ func (m *MockStreamClient) GetTopology(address StreamAddress) (Topology, error) 
 // ConsumePartition implements the StreamClient interface.
 func (m *MockStreamClient) ConsumePartition(
 	address PartitionAddress, startTime time.Time,
-) (chan streamingccl.Event, error) {
+) (chan Event, error) {
 	panic("unimplemented mock method")
 }

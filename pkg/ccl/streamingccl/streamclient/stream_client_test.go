@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -32,9 +31,7 @@ func (sc testStreamClient) GetTopology(_ StreamAddress) (Topology, error) {
 }
 
 // ConsumePartition implements the StreamClient interface.
-func (sc testStreamClient) ConsumePartition(
-	_ PartitionAddress, _ time.Time,
-) (chan streamingccl.Event, error) {
+func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (chan Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
 		Value: roachpb.Value{
@@ -43,9 +40,9 @@ func (sc testStreamClient) ConsumePartition(
 		},
 	}
 
-	events := make(chan streamingccl.Event, 100)
-	events <- streamingccl.MakeKVEvent(sampleKV)
-	events <- streamingccl.MakeCheckpointEvent(timeutil.Now())
+	events := make(chan Event, 100)
+	events <- MakeKVEvent(sampleKV)
+	events <- MakeCheckpointEvent(timeutil.Now())
 	close(events)
 
 	return events, nil

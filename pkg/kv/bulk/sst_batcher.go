@@ -112,6 +112,16 @@ func MakeSSTBatcher(
 	return b, err
 }
 
+// MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
+// that might be received from a cluster to cluster stream.
+func MakeStreamSSTBatcher(
+	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+) (*SSTBatcher, error) {
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: false, skipDuplicates: true}
+	err := b.Reset(ctx)
+	return b, err
+}
+
 func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)

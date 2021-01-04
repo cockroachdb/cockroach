@@ -18,12 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/logtags"
 )
-
-// TODO(adityamaru): Figure out what the processors will return.
-var streamIngestionResultTypes = []*types.T{}
 
 func distStreamIngestionPlanSpecs(
 	topology streamclient.Topology, nodes []roachpb.NodeID,
@@ -38,12 +34,12 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				PartitionAddress: make(map[int32]string),
+				PartitionAddress: make([]streamclient.PartitionAddress, 0),
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
 		n := i % len(nodes)
-		streamIngestionSpecs[n].PartitionAddress[int32(i)] = string(partition)
+		streamIngestionSpecs[n].PartitionAddress = append(streamIngestionSpecs[n].PartitionAddress, partition)
 	}
 
 	return streamIngestionSpecs, nil

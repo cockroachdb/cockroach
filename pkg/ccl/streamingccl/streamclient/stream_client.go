@@ -8,11 +8,7 @@
 
 package streamclient
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-)
+import "time"
 
 // StreamAddress is the location of the stream. The topology of a stream should
 // be resolvable given a stream address.
@@ -42,5 +38,5 @@ type StreamClient interface {
 
 	// ConsumePartition returns a channel on which we can start listening for
 	// events from a given partition that occur after a startTime.
-	ConsumePartition(address PartitionAddress, startTime time.Time) (chan streamingccl.Event, error)
+	ConsumePartition(address PartitionAddress, startTime time.Time) (chan Event, error)
 }
