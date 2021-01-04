@@ -862,6 +862,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 
+### Multi-region functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="gateway_region"></a><code>gateway_region() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
+the locality flag on node startup. Returns an error if no region is set.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Multi-tenancy functions
 
 <table>
