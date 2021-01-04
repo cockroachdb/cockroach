@@ -96,7 +96,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.2.0
 	github.com/kisielk/gotool v1.0.0
-	github.com/knz/go-libedit v0.0.0-00010101000000-000000000000
+	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.2.1
 	github.com/kr/text v0.2.0
@@ -156,7 +156,7 @@ require (
 	golang.org/x/sys v0.0.0-20201223074533-0d417f636930
 	golang.org/x/text v0.3.3
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
+	golang.org/x/tools v0.0.0-20210104081019-d8d6ddbec6ee
 	google.golang.org/api v0.1.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1
@@ -190,5 +190,3 @@ replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.
 //
 // While this is necessary, make sure that the require block above does not diverge.
 replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
-
-replace golang.org/x/tools => github.com/cockroachdb/tools v0.0.0-20201202174556-f18ddc082e74
