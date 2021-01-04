@@ -84,8 +84,9 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 				}
 			}
 		}
-		for _, idx := range droppedDesc.AllNonDropIndexes() {
-			for _, ref := range idx.InterleavedBy {
+		for _, idx := range droppedDesc.NonDropIndexes() {
+			for i := 0; i < idx.NumInterleavedBy(); i++ {
+				ref := idx.GetInterleavedBy(i)
 				if _, ok := td[ref.Table]; !ok {
 					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 						return nil, err
@@ -300,13 +301,14 @@ func (p *planner) dropTableImpl(
 	tableDesc.InboundFKs = nil
 
 	// Remove interleave relationships.
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		if len(idx.Interleave.Ancestors) > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
+	for _, idx := range tableDesc.NonDropIndexes() {
+		if idx.NumInterleaveAncestors() > 0 {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx.IndexDesc()); err != nil {
 				return droppedViews, err
 			}
 		}
-		for _, ref := range idx.InterleavedBy {
+		for i := 0; i < idx.NumInterleavedBy(); i++ {
+			ref := idx.GetInterleavedBy(i)
 			if err := p.removeInterleave(ctx, ref); err != nil {
 				return droppedViews, err
 			}

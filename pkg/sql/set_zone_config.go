@@ -360,10 +360,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	var specifiers []tree.ZoneSpecifier
 	if n.zoneSpecifier.TargetsPartition() && n.allIndexes {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.AlterAllPartitions)
-		for _, idx := range table.AllNonDropIndexes() {
-			if p := tabledesc.FindIndexPartitionByName(idx, string(n.zoneSpecifier.Partition)); p != nil {
+		for _, idx := range table.NonDropIndexes() {
+			if p := tabledesc.FindIndexPartitionByName(idx.IndexDesc(), string(n.zoneSpecifier.Partition)); p != nil {
 				zs := n.zoneSpecifier
-				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.Name)
+				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.GetName())
 				specifiers = append(specifiers, zs)
 			}
 		}
