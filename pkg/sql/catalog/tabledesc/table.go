@@ -339,9 +339,9 @@ func FindFKReferencedIndex(
 ) (*descpb.IndexDescriptor, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
-	primaryIndex := referencedTable.GetPrimaryIndex()
+	primaryIndex := referencedTable.PrimaryIndexInterface()
 	if primaryIndex.IsValidReferencedIndex(referencedColIDs) {
-		return primaryIndex, nil
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
 	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
@@ -363,8 +363,8 @@ func FindFKOriginIndex(
 ) (*descpb.IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
-	if primaryIndex := originTable.GetPrimaryIndex(); primaryIndex.IsValidOriginIndex(originColIDs) {
-		return primaryIndex, nil
+	if primaryIndex := originTable.PrimaryIndexInterface(); primaryIndex.IsValidOriginIndex(originColIDs) {
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
 	for _, idx := range originTable.PublicNonPrimaryIndexes() {
