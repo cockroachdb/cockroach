@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -373,7 +374,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
 		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := ScanMetaKVs(ctx, p.txn, span)
+		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
 		if err != nil {
 			return err
 		}
