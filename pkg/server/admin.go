@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -1867,7 +1868,7 @@ func (s *adminServer) DataDistribution(
 		acct := s.memMonitor.MakeBoundAccount()
 		defer acct.Close(txnCtx)
 
-		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    keys.UserTableDataMin,
 			EndKey: keys.MaxKey,
 		})
