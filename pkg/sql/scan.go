@@ -298,7 +298,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = n.desc.GetPrimaryIndex()
+	n.index = n.desc.PrimaryIndexInterface().IndexDesc()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)

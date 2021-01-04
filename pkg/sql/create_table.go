@@ -785,9 +785,9 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, len(target.GetPrimaryIndex().ColumnNames))
-		for i, n := range target.GetPrimaryIndex().ColumnNames {
-			referencedColNames[i] = tree.Name(n)
+		referencedColNames = make(tree.NameList, target.PrimaryIndexInterface().NumColumns())
+		for i := range referencedColNames {
+			referencedColNames[i] = tree.Name(target.PrimaryIndexInterface().GetColumnName(i))
 		}
 	}
 
@@ -1025,7 +1025,7 @@ func addInterleave(
 	if err != nil {
 		return err
 	}
-	parentIndex := parentTable.GetPrimaryIndex()
+	parentIndex := parentTable.PrimaryIndexInterface()
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
@@ -1035,12 +1035,12 @@ func addInterleave(
 		typeOfIndex = "index"
 	}
 
-	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
+	if len(interleave.Fields) != parentIndex.NumColumns() {
 		return pgerror.Newf(
 			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
 			&interleave.Fields,
-			strings.Join(parentIndex.ColumnNames, ", "),
+			strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
 		)
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
@@ -1053,7 +1053,8 @@ func addInterleave(
 		)
 	}
 
-	for i, targetColID := range parentIndex.ColumnIDs {
+	for i := 0; i < parentIndex.NumColumns(); i++ {
+		targetColID := parentIndex.GetColumnID(i)
 		targetCol, err := parentTable.FindColumnByID(targetColID)
 		if err != nil {
 			return err
@@ -1071,22 +1072,25 @@ func addInterleave(
 				strings.Join(index.ColumnNames, ", "),
 			)
 		}
-		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
+		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.GetColumnDirection(i) {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
 				&interleave.Fields,
-				strings.Join(parentIndex.ColumnNames, ", "),
+				strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
 			)
 		}
 	}
 
-	ancestorPrefix := append(
-		[]descpb.InterleaveDescriptor_Ancestor(nil), parentIndex.Interleave.Ancestors...)
+	ancestorPrefix := make([]descpb.InterleaveDescriptor_Ancestor, parentIndex.NumInterleaveAncestors())
+	for i := range ancestorPrefix {
+		ancestorPrefix[i] = parentIndex.GetInterleaveAncestor(i)
+	}
+
 	intl := descpb.InterleaveDescriptor_Ancestor{
 		TableID:         parentTable.ID,
-		IndexID:         parentIndex.ID,
-		SharedPrefixLen: uint32(len(parentIndex.ColumnIDs)),
+		IndexID:         parentIndex.GetID(),
+		SharedPrefixLen: uint32(parentIndex.NumColumns()),
 	}
 	for _, ancestor := range ancestorPrefix {
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
@@ -1643,7 +1647,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if len(desc.GetPrimaryIndex().ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if desc.PrimaryIndexInterface().NumColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -1703,19 +1707,19 @@ func NewTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex(), n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.PrimaryIndexInterface().IndexDesc(), n.Interleave); err != nil {
 			return nil, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.PrimaryIndexInterface().IndexDesc(), n.PartitionBy)
 		if err != nil {
 			return nil, err
 		}
 		{
-			newPrimaryIndex := *desc.GetPrimaryIndex()
+			newPrimaryIndex := *desc.PrimaryIndexInterface().IndexDesc()
 			newPrimaryIndex.Partitioning = partitioning
 			desc.SetPrimaryIndex(newPrimaryIndex)
 		}

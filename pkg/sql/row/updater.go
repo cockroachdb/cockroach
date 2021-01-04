@@ -98,7 +98,8 @@ func MakeUpdater(
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
-	for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
+	for i := 0; i < tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
+		colID := tableDesc.PrimaryIndexInterface().GetColumnID(i)
 		primaryIndexCols.Add(colID)
 	}
 
@@ -211,7 +212,8 @@ func MakeUpdater(
 
 		// Fetch all columns in the primary key so that we can construct the
 		// keys when writing out the new kvs to the primary index.
-		for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
+		for i := 0; i < tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
+			colID := tableDesc.PrimaryIndexInterface().GetColumnID(i)
 			if err := maybeAddCol(colID); err != nil {
 				return Updater{}, err
 			}
