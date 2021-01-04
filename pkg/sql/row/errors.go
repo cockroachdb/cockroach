@@ -154,25 +154,32 @@ func DecodeRowInfo(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	index, err := tableDesc.FindIndexByID(indexID)
+	index, err := tableDesc.FindIndexWithID(indexID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	var rf Fetcher
 
-	colIDs := index.ColumnIDs
-	if allColumns {
-		if index.ID == tableDesc.GetPrimaryIndexID() {
-			publicColumns := tableDesc.GetPublicColumns()
-			colIDs = make([]descpb.ColumnID, len(publicColumns))
-			for i := range publicColumns {
-				colIDs[i] = publicColumns[i].ID
-			}
-		} else {
-			colIDs, _ = index.FullColumnIDs()
-			colIDs = append(colIDs, index.StoreColumnIDs...)
+	var colIDs []descpb.ColumnID
+	if !allColumns {
+		colIDs = make([]descpb.ColumnID, index.NumColumns())
+		for i := range colIDs {
+			colIDs[i] = index.GetColumnID(i)
 		}
+	} else if index.Primary() {
+		publicColumns := tableDesc.GetPublicColumns()
+		colIDs = make([]descpb.ColumnID, len(publicColumns))
+		for i := range publicColumns {
+			colIDs[i] = publicColumns[i].ID
+		}
+	} else {
+		colIDs = make([]descpb.ColumnID, 0, index.NumColumns()+index.NumExtraColumns()+index.NumStoredColumns())
+		_ = index.ForEachColumnID(func(id descpb.ColumnID) error {
+			colIDs = append(colIDs, id)
+			return nil
+		})
 	}
+
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(colIDs)-1)
 
@@ -189,7 +196,7 @@ func DecodeRowInfo(
 
 	tableArgs := FetcherTableArgs{
 		Desc:             tableDesc,
-		Index:            index,
+		Index:            index.IndexDesc(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
@@ -232,7 +239,7 @@ func DecodeRowInfo(
 		}
 		values[i] = datums[i].String()
 	}
-	return index, names, values, nil
+	return index.IndexDesc(), names, values, nil
 }
 
 func (f *singleKVFetcher) close(context.Context) {}
