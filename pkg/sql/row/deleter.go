@@ -67,8 +67,8 @@ func MakeDeleter(
 			}
 			return nil
 		}
-		for j := 0; j < tableDesc.PrimaryIndexInterface().NumColumns(); j++ {
-			colID := tableDesc.PrimaryIndexInterface().GetColumnID(j)
+		for j := 0; j < tableDesc.GetPrimaryIndex().NumColumns(); j++ {
+			colID := tableDesc.GetPrimaryIndex().GetColumnID(j)
 			if err := maybeAddCol(colID); err != nil {
 				return Deleter{}
 			}

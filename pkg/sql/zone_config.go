@@ -317,7 +317,7 @@ func resolveSubzone(
 	indexName := string(zs.TableOrIndex.Index)
 	var index catalog.Index
 	if indexName == "" {
-		index = table.PrimaryIndexInterface()
+		index = table.GetPrimaryIndex()
 		indexName = index.GetName()
 	} else {
 		var err error
