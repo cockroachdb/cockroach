@@ -1721,7 +1721,7 @@ func newOptVirtualTable(
 
 	// Build the indexes (add 1 to account for lack of primary index in
 	// indexes slice).
-	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.GetPublicNonPrimaryIndexes()))
+	ot.indexes = make([]optVirtualIndex, len(ot.desc.ActiveIndexes()))
 	// Set up the primary index.
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
@@ -1734,17 +1734,16 @@ func newOptVirtualTable(
 		},
 	}
 
-	for i := range ot.desc.GetPublicNonPrimaryIndexes() {
-		idxDesc := &ot.desc.GetPublicNonPrimaryIndexes()[i]
-		if len(idxDesc.ColumnIDs) > 1 {
+	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
+		if idx.NumColumns() > 1 {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
 		// Add 1, since the 0th index will the primary that we added above.
-		ot.indexes[i+1] = optVirtualIndex{
+		ot.indexes[idx.Ordinal()] = optVirtualIndex{
 			tab:          ot,
-			desc:         idxDesc,
-			indexOrdinal: i + 1,
+			desc:         idx.IndexDesc(),
+			indexOrdinal: idx.Ordinal(),
 			// The virtual indexes don't return the bogus PK key?
 			numCols: ot.ColumnCount(),
 		}
