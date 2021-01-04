@@ -298,15 +298,15 @@ type JoinOrderBuilder struct {
 // graph is reset, so a JoinOrderBuilder can be reused. Callback functions are
 // not reset.
 func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
-	jb.f = f
-	jb.evalCtx = evalCtx
-
-	jb.vertexes = []memo.RelExpr{}
-	jb.edges = []edge{}
-	jb.nonInnerEdges = edgeSet{}
-	jb.innerEdges = edgeSet{}
-	jb.plans = map[vertexSet]memo.RelExpr{}
-	jb.joinCount = 0
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*jb = JoinOrderBuilder{
+		f:             f,
+		evalCtx:       evalCtx,
+		plans:         make(map[vertexSet]memo.RelExpr),
+		onReorderFunc: jb.onReorderFunc,
+		onAddJoinFunc: jb.onAddJoinFunc,
+	}
 }
 
 // Reorder adds all valid orderings of the given join to the memo.

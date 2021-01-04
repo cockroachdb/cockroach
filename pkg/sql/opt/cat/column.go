@@ -185,24 +185,24 @@ func (c *Column) InitNonVirtual(
 	if kind == VirtualInverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
 	}
-	c.ordinal = ordinal
-	c.stableID = stableID
-	c.name = name
-	c.kind = kind
-	c.datumType = datumType
-	c.nullable = nullable
-	c.hidden = hidden
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Column{
+		ordinal:                     ordinal,
+		stableID:                    stableID,
+		name:                        name,
+		kind:                        kind,
+		datumType:                   datumType,
+		nullable:                    nullable,
+		hidden:                      hidden,
+		invertedSourceColumnOrdinal: -1,
+	}
 	if defaultExpr != nil {
 		c.defaultExpr = *defaultExpr
-	} else {
-		c.defaultExpr = ""
 	}
 	if computedExpr != nil {
 		c.computedExpr = *computedExpr
-	} else {
-		c.computedExpr = ""
 	}
-	c.invertedSourceColumnOrdinal = -1
 }
 
 // InitVirtualInverted is used by catalog implementations to populate a
@@ -210,16 +210,18 @@ func (c *Column) InitNonVirtual(
 func (c *Column) InitVirtualInverted(
 	ordinal int, name tree.Name, datumType *types.T, nullable bool, invertedSourceColumnOrdinal int,
 ) {
-	c.ordinal = ordinal
-	c.stableID = 0
-	c.name = name
-	c.kind = VirtualInverted
-	c.datumType = datumType
-	c.nullable = nullable
-	c.hidden = true
-	c.defaultExpr = ""
-	c.computedExpr = ""
-	c.invertedSourceColumnOrdinal = invertedSourceColumnOrdinal
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Column{
+		ordinal:                     ordinal,
+		stableID:                    0,
+		name:                        name,
+		kind:                        VirtualInverted,
+		datumType:                   datumType,
+		nullable:                    nullable,
+		hidden:                      true,
+		invertedSourceColumnOrdinal: invertedSourceColumnOrdinal,
+	}
 }
 
 // InitVirtualComputed is used by catalog implementations to populate a
@@ -233,15 +235,18 @@ func (c *Column) InitVirtualComputed(
 	hidden bool,
 	computedExpr string,
 ) {
-	c.ordinal = ordinal
-	c.stableID = stableID
-	c.name = name
-	c.kind = Ordinary
-	c.datumType = datumType
-	c.nullable = nullable
-	c.hidden = hidden
-	c.defaultExpr = ""
-	c.computedExpr = computedExpr
-	c.virtualComputed = true
-	c.invertedSourceColumnOrdinal = -1
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Column{
+		ordinal:                     ordinal,
+		stableID:                    stableID,
+		name:                        name,
+		kind:                        Ordinary,
+		datumType:                   datumType,
+		nullable:                    nullable,
+		hidden:                      hidden,
+		computedExpr:                computedExpr,
+		virtualComputed:             true,
+		invertedSourceColumnOrdinal: -1,
+	}
 }

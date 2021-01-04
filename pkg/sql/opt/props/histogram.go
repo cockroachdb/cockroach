@@ -48,9 +48,13 @@ func (h *Histogram) String() string {
 func (h *Histogram) Init(
 	evalCtx *tree.EvalContext, col opt.ColumnID, buckets []cat.HistogramBucket,
 ) {
-	h.evalCtx = evalCtx
-	h.col = col
-	h.buckets = buckets
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*h = Histogram{
+		evalCtx: evalCtx,
+		col:     col,
+		buckets: buckets,
+	}
 }
 
 // copy returns a deep copy of the histogram.
@@ -466,12 +470,16 @@ type histogramIter struct {
 // histogram. If desc is true, the iterator starts from the end of the
 // histogram and moves backwards.
 func (hi *histogramIter) init(h *Histogram, desc bool) {
-	hi.idx = -1
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*hi = histogramIter{
+		idx:  -1,
+		h:    h,
+		desc: desc,
+	}
 	if desc {
 		hi.idx = h.BucketCount()
 	}
-	hi.h = h
-	hi.desc = desc
 	hi.next()
 }
 
@@ -767,11 +775,15 @@ const (
 )
 
 func (w *histogramWriter) init(buckets []cat.HistogramBucket) {
-	w.cells = [][]string{
-		make([]string, len(buckets)*2),
-		make([]string, len(buckets)*2),
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*w = histogramWriter{
+		cells: [][]string{
+			make([]string, len(buckets)*2),
+			make([]string, len(buckets)*2),
+		},
+		colWidths: make([]int, len(buckets)*2),
 	}
-	w.colWidths = make([]int, len(buckets)*2)
 
 	for i, b := range buckets {
 		w.cells[counts][i*2] = fmt.Sprintf(" %.5g ", b.NumRange)

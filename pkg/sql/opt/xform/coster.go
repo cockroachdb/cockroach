@@ -407,9 +407,13 @@ var fnCost = map[string]memo.Cost{
 
 // Init initializes a new coster structure with the given memo.
 func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64) {
-	c.mem = mem
-	c.locality = evalCtx.Locality
-	c.perturbation = perturbation
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = coster{
+		mem:          mem,
+		locality:     evalCtx.Locality,
+		perturbation: perturbation,
+	}
 }
 
 // ComputeCost calculates the estimated cost of the top-level operator in a

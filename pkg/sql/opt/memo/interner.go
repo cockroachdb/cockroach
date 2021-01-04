@@ -277,7 +277,13 @@ type hasher struct {
 }
 
 func (h *hasher) Init() {
-	h.hash = offset64
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*h = hasher{
+		bytes:  h.bytes,
+		bytes2: h.bytes2,
+		hash:   offset64,
+	}
 }
 
 // ----------------------------------------------------------------------

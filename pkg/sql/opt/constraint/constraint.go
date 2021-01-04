@@ -52,15 +52,23 @@ func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 			panic(errors.AssertionFailedf("spans must be ordered and non-overlapping"))
 		}
 	}
-	c.Columns = keyCtx.Columns
-	c.Spans = *spans
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Constraint{
+		Columns: keyCtx.Columns,
+		Spans:   *spans,
+	}
 	c.Spans.makeImmutable()
 }
 
 // InitSingleSpan initializes the constraint to the columns in the key context
 // and with one span.
 func (c *Constraint) InitSingleSpan(keyCtx *KeyContext, span *Span) {
-	c.Columns = keyCtx.Columns
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*c = Constraint{
+		Columns: keyCtx.Columns,
+	}
 	c.Spans.InitSingleSpan(span)
 }
 

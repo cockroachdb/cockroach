@@ -49,8 +49,12 @@ type logicalPropsBuilder struct {
 }
 
 func (b *logicalPropsBuilder) init(evalCtx *tree.EvalContext, mem *Memo) {
-	b.evalCtx = evalCtx
-	b.mem = mem
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*b = logicalPropsBuilder{
+		evalCtx: evalCtx,
+		mem:     mem,
+	}
 	b.sb.init(evalCtx, mem.Metadata())
 }
 
@@ -1948,7 +1952,9 @@ type joinPropsHelper struct {
 }
 
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
-	h.join = joinExpr
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*h = joinPropsHelper{join: joinExpr}
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:

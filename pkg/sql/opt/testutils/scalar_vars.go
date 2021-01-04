@@ -37,6 +37,9 @@ type ScalarVars struct {
 // The not-null columns can be retrieved via NotNullCols().
 //
 func (sv *ScalarVars) Init(md *opt.Metadata, vars []string) error {
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*sv = ScalarVars{}
 	// We use the same syntax that is used with CREATE TABLE, so reuse the parsing
 	// logic.
 	varDef := strings.Join(vars, ", ")

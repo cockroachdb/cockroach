@@ -104,9 +104,13 @@ type newRuleGen struct {
 }
 
 func (g *newRuleGen) init(compiled *lang.CompiledExpr, md *metadata, w *matchWriter) {
-	g.compiled = compiled
-	g.md = md
-	g.w = w
+	// This initialization pattern ensures that fields are not unwittingly
+	// reused. Field reuse must be explicit.
+	*g = newRuleGen{
+		compiled: compiled,
+		md:       md,
+		w:        w,
+	}
 }
 
 // genRule generates match and replace code for one rule within the scope of
