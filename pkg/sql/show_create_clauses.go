@@ -136,7 +136,7 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexByID(descpb.IndexID(indexComment.subID))
+		idx, err := table.FindIndexWithID(descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}
@@ -145,7 +145,7 @@ func showComments(
 		f.FormatNode(&tree.CommentOnIndex{
 			Index: tree.TableIndexName{
 				Table: *tn,
-				Index: tree.UnrestrictedName(idx.Name),
+				Index: tree.UnrestrictedName(idx.GetName()),
 			},
 			Comment: &indexComment.comment,
 		})

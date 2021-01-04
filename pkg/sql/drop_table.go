@@ -258,11 +258,11 @@ func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyRef
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	idx, err := table.FindIndexByID(ref.Index)
+	idx, err := table.FindIndexWithID(ref.Index)
 	if err != nil {
 		return err
 	}
-	idx.Interleave.Ancestors = nil
+	idx.IndexDesc().Interleave.Ancestors = nil
 	// No job description, since this is presumably part of some larger schema change.
 	return p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "")
 }
@@ -644,10 +644,11 @@ func (p *planner) removeInterleaveBackReference(
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	targetIdx, err := t.FindIndexByID(ancestor.IndexID)
+	targetIdxI, err := t.FindIndexWithID(ancestor.IndexID)
 	if err != nil {
 		return err
 	}
+	targetIdx := targetIdxI.IndexDesc()
 	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
 		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
