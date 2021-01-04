@@ -110,11 +110,13 @@ func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescripto
 	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
 	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
 	w.Printf(", Indexes: [")
-	formatSafeIndex(w, desc.GetPrimaryIndex(), nil)
-	for i := range desc.GetPublicNonPrimaryIndexes() {
-		w.Printf(", ")
-		formatSafeIndex(w, &desc.GetPublicNonPrimaryIndexes()[i], nil)
-	}
+	_ = desc.ForEachActiveIndex(func(idx catalog.Index) error {
+		if !idx.Primary() {
+			w.Printf(", ")
+		}
+		formatSafeIndex(w, idx.IndexDesc(), nil)
+		return nil
+	})
 	w.Printf("]")
 }
 

@@ -13,6 +13,7 @@ package catalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -112,22 +112,51 @@ type TableDescriptor interface {
 	GetFormatVersion() descpb.FormatVersion
 
 	GetPrimaryIndexID() descpb.IndexID
-	GetPrimaryIndex() *descpb.IndexDescriptor
+	GetPrimaryIndex() *descpb.IndexDescriptor // deprecated
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
-	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor
-	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error
-	AllNonDropIndexes() []*descpb.IndexDescriptor
-	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
+	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor                                             // deprecated
+	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error // deprecated
+	AllNonDropIndexes() []*descpb.IndexDescriptor                                                     // deprecated
+	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error                          // deprecated
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
-	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
-	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
+	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)               // deprecated
+	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error) // deprecated
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
-	PartialIndexOrds() util.FastIntSet
-	WritableIndexes() []descpb.IndexDescriptor
-	DeletableIndexes() []descpb.IndexDescriptor
-	DeleteOnlyIndexes() []descpb.IndexDescriptor
+	WritableIndexes() []descpb.IndexDescriptor   // deprecated
+	DeletableIndexes() []descpb.IndexDescriptor  // deprecated
+	DeleteOnlyIndexes() []descpb.IndexDescriptor // deprecated
+
+	PrimaryIndexInterface() Index
+	AllIndexes() []Index
+	ActiveIndexes() []Index
+	NonDropIndexes() []Index
+	PartialIndexes() []Index
+	PublicNonPrimaryIndexes() []Index
+	WritableNonPrimaryIndexes() []Index
+	DeletableNonPrimaryIndexes() []Index
+	DeleteOnlyNonPrimaryIndexes() []Index
+
+	ForEachIndex(opts IndexOpts, f func(idx Index) error) error
+	ForEachActiveIndex(f func(idx Index) error) error
+	ForEachNonDropIndex(f func(idx Index) error) error
+	ForEachPartialIndex(f func(idx Index) error) error
+	ForEachPublicNonPrimaryIndex(f func(idx Index) error) error
+	ForEachWritableNonPrimaryIndex(f func(idx Index) error) error
+	ForEachDeletableNonPrimaryIndex(f func(idx Index) error) error
+	ForEachDeleteOnlyNonPrimaryIndex(f func(idx Index) error) error
+
+	FindIndex(opts IndexOpts, test func(idx Index) bool) Index
+	FindActiveIndex(test func(idx Index) bool) Index
+	FindNonDropIndex(test func(idx Index) bool) Index
+	FindPartialIndex(test func(idx Index) bool) Index
+	FindPublicNonPrimaryIndex(test func(idx Index) bool) Index
+	FindWritableNonPrimaryIndex(test func(idx Index) bool) Index
+	FindDeletableNonPrimaryIndex(test func(idx Index) bool) Index
+	FindDeleteOnlyNonPrimaryIndex(test func(idx Index) bool) Index
+
+	FindIndexWithID(id descpb.IndexID) (Index, error)
+	FindIndexWithName(name string) (Index, error)
 
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
@@ -185,6 +214,61 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor
+}
+
+// Index is an interface around the index descriptor types.
+type Index interface {
+	IndexDesc() *descpb.IndexDescriptor
+	IndexDescDeepCopy() descpb.IndexDescriptor
+
+	Ordinal() int
+	Primary() bool
+	Public() bool
+	WriteAndDeleteOnly() bool
+	DeleteOnly() bool
+	Adding() bool
+	Dropped() bool
+
+	GetID() descpb.IndexID
+	GetName() string
+	IsInterleaved() bool
+	IsPartial() bool
+	IsUnique() bool
+	IsDisabled() bool
+	IsSharded() bool
+	IsCreatedExplicitly() bool
+	GetPredicate() string
+	GetType() descpb.IndexDescriptor_Type
+	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
+	IsValidReferencedIndex(referencedColIDs descpb.ColumnIDs) bool
+	GetGeoConfig() geoindex.Config
+	GetSharded() descpb.ShardedDescriptor
+	GetShardColumnName() string
+	GetVersion() descpb.IndexDescriptorVersion
+	GetEncodingType() descpb.IndexDescriptorEncodingType
+	GetPartitioning() descpb.PartitioningDescriptor
+	FindPartitionByName(name string) descpb.PartitioningDescriptor
+	PartitionNames() []string
+	NumInterleaveAncestors() int
+	GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor
+	NumInterleavedBy() int
+	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
+	NumColumns() int
+	GetColumnID(columnOrdinal int) descpb.ColumnID
+	GetColumnName(columnOrdinal int) string
+	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
+	ContainsColumnID(colID descpb.ColumnID) bool
+	InvertedColumnID() descpb.ColumnID
+	InvertedColumnName() string
+	ForEachColumnID(func(id descpb.ColumnID) error) error
+	NumStoredColumns() int
+	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
+	GetStoredColumnName(storedColumnOrdinal int) string
+	HasOldStoredColumns() bool
+	NumExtraColumns() int
+	GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID
+	NumCompositeColumns() int
+	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
