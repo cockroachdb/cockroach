@@ -406,7 +406,9 @@ func backupPlanHook(
 		// the var, instead of defering the Close() method directly on this specifc
 		// instance.
 		defer func() {
-			defaultStore.Close()
+			if defaultStore != nil {
+				defaultStore.Close()
+			}
 		}()
 
 		var encryption *roachpb.FileEncryptionOptions
