@@ -465,40 +465,40 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname       attname   atttypmod  attbyval  attstorage  attalign  attnotnull  atthasdef  attidentity  attgenerated
-t1            p         -1         NULL      NULL        NULL      true        false
-t1            a         -1         NULL      NULL        NULL      false       false
-t1            b         -1         NULL      NULL        NULL      false       false
-t1            c         -1         NULL      NULL        NULL      false       true
-t1            d         9          NULL      NULL        NULL      false       false
-t1            e         5          NULL      NULL        NULL      false       false
-t1            f         655371     NULL      NULL        NULL      false       false
-t1            g         -1         NULL      NULL        NULL      false       false                   s
-t1            h         16         NULL      NULL        NULL      false       false
-t1            i         24         NULL      NULL        NULL      false       false
-t1            j         -1         NULL      NULL        NULL      false       false
-t1            k         14         NULL      NULL        NULL      false       false
-primary       p         -1         NULL      NULL        NULL      true        false
-t1_a_key      a         -1         NULL      NULL        NULL      false       false
-index_key     b         -1         NULL      NULL        NULL      false       false
-index_key     c         -1         NULL      NULL        NULL      false       true
-t2            t1_id     -1         NULL      NULL        NULL      false       false
-t2            rowid     -1         NULL      NULL        NULL      true        true
-primary       rowid     -1         NULL      NULL        NULL      true        true
-t2_t1_id_idx  t1_id     -1         NULL      NULL        NULL      false       false
-t3            a         -1         NULL      NULL        NULL      false       false
-t3            b         -1         NULL      NULL        NULL      false       false
-t3            c         -1         NULL      NULL        NULL      false       true
-t3            rowid     -1         NULL      NULL        NULL      true        true
-primary       rowid     -1         NULL      NULL        NULL      true        true
-t3_a_b_idx    a         -1         NULL      NULL        NULL      false       false
-t3_a_b_idx    b         -1         NULL      NULL        NULL      false       false
-v1            p         -1         NULL      NULL        NULL      false       false
-v1            a         -1         NULL      NULL        NULL      false       false
-v1            b         -1         NULL      NULL        NULL      false       false
-v1            c         -1         NULL      NULL        NULL      false       false
-mv1           ?column?  -1         NULL      NULL        NULL      false       false
-mv1           rowid     -1         NULL      NULL        NULL      true        true
-primary       rowid     -1         NULL      NULL        NULL      true        true
+t1            p         -1         NULL      NULL        NULL      true        false      ·            ·
+t1            a         -1         NULL      NULL        NULL      false       false      ·            ·
+t1            b         -1         NULL      NULL        NULL      false       false      ·            ·
+t1            c         -1         NULL      NULL        NULL      false       true       ·            ·
+t1            d         9          NULL      NULL        NULL      false       false      ·            ·
+t1            e         5          NULL      NULL        NULL      false       false      ·            ·
+t1            f         655371     NULL      NULL        NULL      false       false      ·            ·
+t1            g         -1         NULL      NULL        NULL      false       false      ·            s
+t1            h         16         NULL      NULL        NULL      false       false      ·            ·
+t1            i         24         NULL      NULL        NULL      false       false      ·            ·
+t1            j         -1         NULL      NULL        NULL      false       false      ·            ·
+t1            k         14         NULL      NULL        NULL      false       false      ·            ·
+primary       p         -1         NULL      NULL        NULL      true        false      ·            ·
+t1_a_key      a         -1         NULL      NULL        NULL      false       false      ·            ·
+index_key     b         -1         NULL      NULL        NULL      false       false      ·            ·
+index_key     c         -1         NULL      NULL        NULL      false       true       ·            ·
+t2            t1_id     -1         NULL      NULL        NULL      false       false      ·            ·
+t2            rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+t2_t1_id_idx  t1_id     -1         NULL      NULL        NULL      false       false      ·            ·
+t3            a         -1         NULL      NULL        NULL      false       false      ·            ·
+t3            b         -1         NULL      NULL        NULL      false       false      ·            ·
+t3            c         -1         NULL      NULL        NULL      false       true       ·            ·
+t3            rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+t3_a_b_idx    a         -1         NULL      NULL        NULL      false       false      ·            ·
+t3_a_b_idx    b         -1         NULL      NULL        NULL      false       false      ·            ·
+v1            p         -1         NULL      NULL        NULL      false       false      ·            ·
+v1            a         -1         NULL      NULL        NULL      false       false      ·            ·
+v1            b         -1         NULL      NULL        NULL      false       false      ·            ·
+v1            c         -1         NULL      NULL        NULL      false       false      ·            ·
+mv1           ?column?  -1         NULL      NULL        NULL      false       false      ·            ·
+mv1           rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -2903,3 +2903,16 @@ query TT
 SELECT pg_typeof(confkey), pg_typeof(conkey) FROM pg_constraint WHERE conname = 'fk_b_to_a'
 ----
 smallint[]  smallint[]
+
+# Postgres always uses "char" (oid=18) and not CHAR (oid=1042) for character
+# columns in pg_catalog. (Nor does it use CHAR[] (oid=1014).) See #57301.
+
+query I
+SELECT count(*)
+FROM pg_class c
+JOIN pg_attribute a ON a.attrelid = c.oid
+JOIN pg_type t ON t.oid = a.atttypid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'pg_catalog' AND (t.oid = 1042 OR t.oid = 1014)
+----
+0
