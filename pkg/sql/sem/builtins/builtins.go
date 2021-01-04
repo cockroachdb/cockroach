@@ -105,6 +105,7 @@ const (
 	categoryFuzzyStringMatching = "Fuzzy String Matching"
 	categoryIDGeneration        = "ID generation"
 	categoryJSON                = "JSONB"
+	categoryMultiRegion         = "Multi-region"
 	categoryMultiTenancy        = "Multi-tenancy"
 	categorySequences           = "Sequence"
 	categorySpatial             = "Spatial"
@@ -4711,6 +4712,27 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info:       "Returns the number of nonnull arguments.",
 			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"gateway_region": makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, arg tree.Datums) (tree.Datum, error) {
+				region, found := evalCtx.Locality.Find("region")
+				if !found {
+					return nil, pgerror.Newf(
+						pgcode.ConfigFile,
+						"no region set on the locality flag on this node",
+					)
+				}
+				return tree.NewDString(region), nil
+			},
+			Info: `Returns the region of the connection's current node as defined by
+the locality flag on node startup. Returns an error if no region is set.`,
+			Volatility: tree.VolatilityStable,
 		},
 	),
 }
