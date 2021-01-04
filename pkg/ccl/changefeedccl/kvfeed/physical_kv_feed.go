@@ -11,6 +11,7 @@ package kvfeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -101,7 +102,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 					// Changefeeds don't care about these at all, so throw them out.
 					continue
 				}
-				if err := p.memBuf.AddResolved(ctx, t.Span, t.ResolvedTS, false); err != nil {
+				if err := p.memBuf.AddResolved(ctx, t.Span, t.ResolvedTS, jobspb.ResolvedSpan_NONE); err != nil {
 					return err
 				}
 			default:

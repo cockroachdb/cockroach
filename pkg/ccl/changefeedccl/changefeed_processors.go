@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -452,7 +453,7 @@ func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error 
 		ca.spansToFlush = append(ca.spansToFlush, resolvedSpan)
 	}
 
-	boundaryReached := resolvedSpan != nil && resolvedSpan.BoundaryReached
+	boundaryReached := resolvedSpan != nil && resolvedSpan.DeprecatedBoundaryReached
 	if len(ca.spansToFlush) == 0 ||
 		(timeutil.Since(ca.lastFlush) < ca.flushFrequency && !boundaryReached) {
 		return nil
@@ -821,6 +822,10 @@ type changeFrontier struct {
 	// by the KV feed based on OptSchemaChangeEvents and OptSchemaChangePolicy.
 	schemaChangeBoundary hlc.Timestamp
 
+	// boundaryType indicates the type of the schemaChangeBoundary and thus the
+	// action which should be taken when the frontier reaches that boundary.
+	boundaryType jobspb.ResolvedSpan_BoundaryType
+
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error
@@ -1030,11 +1035,31 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 			return cf.ProcessRowHelper(cf.resolvedBuf.Pop()), nil
 		}
 
-		if cf.schemaChangeBoundaryReached() && cf.shouldFailOnSchemaChange() {
+		if cf.schemaChangeBoundaryReached() &&
+			(cf.boundaryType == jobspb.ResolvedSpan_EXIT ||
+				cf.boundaryType == jobspb.ResolvedSpan_RESTART) {
+			err := pgerror.Newf(pgcode.SchemaChangeOccurred,
+				"schema change occurred at %v", cf.schemaChangeBoundary.Next().AsOfSystemTime())
+
+			// Detect whether this boundary should be used to kill or restart the
+			// changefeed.
+			if cf.boundaryType == jobspb.ResolvedSpan_RESTART {
+				// The code to restart the changefeed is only supported once 21.1 is
+				// activated.
+				//
+				// TODO(ajwerner): Remove this gate in 21.2.
+				if cf.EvalCtx.Settings.Version.IsActive(
+					cf.Ctx, clusterversion.ChangefeedsSupportPrimaryIndexChanges,
+				) {
+					err = MarkRetryableError(err)
+				} else {
+					err = errors.Wrap(err, "primary key change occurred")
+				}
+
+			}
 			// TODO(ajwerner): make this more useful by at least informing the client
 			// of which tables changed.
-			cf.MoveToDraining(pgerror.Newf(pgcode.SchemaChangeOccurred,
-				"schema change occurred at %v", cf.schemaChangeBoundary.Next().AsOfSystemTime()))
+			cf.MoveToDraining(err)
 			break
 		}
 
@@ -1081,6 +1106,20 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 			`unmarshalling resolved span: %x`, raw)
 	}
 
+	// Change aggregators running on v20.2 nodes will not know about the new
+	// BoundaryType field added in v21.1 and thus will only have the boolean
+	// populated. This code translates the boolean into the BoundaryType for the
+	// types that are possible in the mixed version state.
+	//
+	// TODO(ajwerner): Remove this code in 21.2.
+	if resolved.DeprecatedBoundaryReached && resolved.BoundaryType == jobspb.ResolvedSpan_NONE {
+		if cf.shouldFailOnSchemaChange() {
+			resolved.BoundaryType = jobspb.ResolvedSpan_EXIT
+		} else {
+			resolved.BoundaryType = jobspb.ResolvedSpan_BACKFILL
+		}
+	}
+
 	// Inserting a timestamp less than the one the changefeed flow started at
 	// could potentially regress the job progress. This is not expected, but it
 	// was a bug at one point, so assert to prevent regressions.
@@ -1095,14 +1134,24 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 		return nil
 	}
 
-	// We want to ensure that we mark the schemaChangeBoundary and then we want to detect when
-	// the frontier reaches to or past the schemaChangeBoundary.
-	if resolved.BoundaryReached && (cf.schemaChangeBoundary.IsEmpty() || resolved.Timestamp.Less(cf.schemaChangeBoundary)) {
+	// We want to ensure that we mark the schemaChangeBoundary and then we want
+	// to detect when the frontier reaches to or past the schemaChangeBoundary.
+	// The behavior when the boundary is reached is controlled by the
+	// boundaryType.
+	switch resolved.BoundaryType {
+	case jobspb.ResolvedSpan_NONE:
+		if !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Less(resolved.Timestamp) {
+			cf.schemaChangeBoundary = hlc.Timestamp{}
+			cf.boundaryType = jobspb.ResolvedSpan_NONE
+		}
+	case jobspb.ResolvedSpan_BACKFILL, jobspb.ResolvedSpan_EXIT, jobspb.ResolvedSpan_RESTART:
+		if !cf.schemaChangeBoundary.IsEmpty() && resolved.Timestamp.Less(cf.schemaChangeBoundary) {
+			return errors.AssertionFailedf("received boundary timestamp %v < %v "+
+				"of type %v before reaching existing boundary of type %v",
+				resolved.Timestamp, cf.schemaChangeBoundary, resolved.BoundaryType, cf.boundaryType)
+		}
 		cf.schemaChangeBoundary = resolved.Timestamp
-	}
-	// If we've moved past a schemaChangeBoundary, make sure to clear it.
-	if !resolved.BoundaryReached && !cf.schemaChangeBoundary.IsEmpty() && cf.schemaChangeBoundary.Less(resolved.Timestamp) {
-		cf.schemaChangeBoundary = hlc.Timestamp{}
+		cf.boundaryType = resolved.BoundaryType
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
