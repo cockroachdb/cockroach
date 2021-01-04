@@ -6293,13 +6293,13 @@ CREATE INDEX i ON t.test (a) WHERE b > 2
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	indexDesc, _, err := tableDesc.FindIndexByName("i")
+	index, err := tableDesc.FindIndexWithName("i")
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Collect all the keys in the partial index.
-	span := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
+	span := tableDesc.IndexSpan(keys.SystemSQLCodec, index.GetID())
 	keys, err := kvDB.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)

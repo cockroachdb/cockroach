@@ -480,20 +480,14 @@ func (mt mutationTest) writeIndexMutation(
 	ctx context.Context, index string, m descpb.DescriptorMutation,
 ) {
 	tableDesc := mt.tableDesc
-	idx, _, err := tableDesc.FindIndexByName(index)
+	idx, err := tableDesc.FindIndexWithName(index)
 	if err != nil {
 		mt.Fatal(err)
 	}
 	// The rewrite below potentially invalidates the original object with an overwrite.
 	// Clarify what's going on.
-	idxCopy := *idx
-	for i, index := range tableDesc.GetPublicNonPrimaryIndexes() {
-		if idxCopy.ID == index.ID {
-			tableDesc.RemovePublicNonPrimaryIndex(i + 1)
-			break
-		}
-	}
-
+	idxCopy := *idx.IndexDesc()
+	tableDesc.RemovePublicNonPrimaryIndex(idx.Ordinal())
 	m.Descriptor_ = &descpb.DescriptorMutation_Index{Index: &idxCopy}
 	mt.writeMutation(ctx, m)
 }
