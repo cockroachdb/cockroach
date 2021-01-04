@@ -785,9 +785,9 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, target.PrimaryIndexInterface().NumColumns())
+		referencedColNames = make(tree.NameList, target.GetPrimaryIndex().NumColumns())
 		for i := range referencedColNames {
-			referencedColNames[i] = tree.Name(target.PrimaryIndexInterface().GetColumnName(i))
+			referencedColNames[i] = tree.Name(target.GetPrimaryIndex().GetColumnName(i))
 		}
 	}
 
@@ -1025,7 +1025,7 @@ func addInterleave(
 	if err != nil {
 		return err
 	}
-	parentIndex := parentTable.PrimaryIndexInterface()
+	parentIndex := parentTable.GetPrimaryIndex()
 
 	// typeOfIndex is used to give more informative error messages.
 	var typeOfIndex string
@@ -1647,7 +1647,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if desc.PrimaryIndexInterface().NumColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if desc.GetPrimaryIndex().NumColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -1707,19 +1707,19 @@ func NewTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, desc.PrimaryIndexInterface().IndexDesc(), n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex().IndexDesc(), n.Interleave); err != nil {
 			return nil, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, desc.PrimaryIndexInterface().IndexDesc(), n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex().IndexDesc(), n.PartitionBy)
 		if err != nil {
 			return nil, err
 		}
 		{
-			newPrimaryIndex := *desc.PrimaryIndexInterface().IndexDesc()
+			newPrimaryIndex := *desc.GetPrimaryIndex().IndexDesc()
 			newPrimaryIndex.Partitioning = partitioning
 			desc.SetPrimaryIndex(newPrimaryIndex)
 		}

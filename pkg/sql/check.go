@@ -96,8 +96,8 @@ func matchFullUnacceptableKeyQuery(
 		srcNotNullExistsClause[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
 	}
 
-	for i := 0; i < srcTbl.PrimaryIndexInterface().NumColumns(); i++ {
-		id := srcTbl.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < srcTbl.GetPrimaryIndex().NumColumns(); i++ {
+		id := srcTbl.GetPrimaryIndex().GetColumnID(i)
 		alreadyPresent := false
 		for _, otherID := range fk.OriginColumnIDs {
 			if id == otherID {
@@ -160,8 +160,8 @@ func nonMatchingRowQuery(
 		return "", nil, err
 	}
 	// Get primary key columns not included in the FK
-	for i := 0; i < srcTbl.PrimaryIndexInterface().NumColumns(); i++ {
-		pkColID := srcTbl.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < srcTbl.GetPrimaryIndex().NumColumns(); i++ {
+		pkColID := srcTbl.GetPrimaryIndex().GetColumnID(i)
 		found := false
 		for _, id := range fk.OriginColumnIDs {
 			if pkColID == id {

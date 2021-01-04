@@ -999,7 +999,7 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) EncD
 func TestingMakePrimaryIndexKey(
 	desc catalog.TableDescriptor, vals ...interface{},
 ) (roachpb.Key, error) {
-	index := desc.PrimaryIndexInterface()
+	index := desc.GetPrimaryIndex()
 	if len(vals) > index.NumColumns() {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), index.NumColumns())
 	}
