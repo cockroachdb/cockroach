@@ -387,7 +387,10 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		return dec.FetchValIdx(idx)
 	}
 
-	if j.Type() == ArrayJSONType {
+	switch j.typ {
+	case NumberJSONType, StringJSONType, TrueJSONType, FalseJSONType, NullJSONType:
+		return fetchValIdxForScalar(j, idx), nil
+	case ArrayJSONType:
 		if idx < 0 {
 			idx = j.containerLen + idx
 		}
@@ -404,8 +407,11 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		}
 
 		return newEncoded(entry, j.arrayGetDataRange(begin, end))
+	case ObjectJSONType:
+		return nil, nil
+	default:
+		return nil, errors.AssertionFailedf("unknown json type: %v", errors.Safe(j.typ))
 	}
-	return nil, nil
 }
 
 func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
