@@ -28,13 +28,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-// mockStreamClient will always return the given slice of events when consuming
-// a stream partition.
+// mockStreamClient will return the slice of events associated to the stream
+// partition being consumed. Stream partitions are identified by unique
+// partition addresses.
 type mockStreamClient struct {
-	partitionEvents []streamclient.Event
+	partitionEvents map[streamclient.PartitionAddress][]streamclient.Event
 }
 
 var _ streamclient.Client = &mockStreamClient{}
@@ -48,11 +50,17 @@ func (m *mockStreamClient) GetTopology(
 
 // ConsumePartition implements the StreamClient interface.
 func (m *mockStreamClient) ConsumePartition(
-	_ streamclient.PartitionAddress, _ time.Time,
+	address streamclient.PartitionAddress, _ time.Time,
 ) (chan streamclient.Event, error) {
-	eventCh := make(chan streamclient.Event, len(m.partitionEvents))
+	var events []streamclient.Event
+	var ok bool
+	if events, ok = m.partitionEvents[address]; !ok {
+		return nil, errors.Newf("No events found for paritition %s", address)
+	}
 
-	for _, event := range m.partitionEvents {
+	eventCh := make(chan streamclient.Event, len(events))
+
+	for _, event := range events {
 		eventCh <- event
 	}
 	close(eventCh)
@@ -88,7 +96,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.PartitionAddress = []streamclient.PartitionAddress{"s3://my_streams/stream/partition1", "s3://my_streams/stream/partition2"}
+	pa1 := streamclient.PartitionAddress("s3://my_streams/stream/partition1")
+	pa2 := streamclient.PartitionAddress("s3://my_streams/stream/partition2")
+	spec.PartitionAddress = []streamclient.PartitionAddress{pa1, pa2}
 	proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 	require.NoError(t, err)
 	sip, ok := proc.(*streamIngestionProcessor)
@@ -100,15 +110,16 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
 	sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
+	events := []streamclient.Event{
+		streamclient.MakeKVEvent(sampleKV),
+		streamclient.MakeKVEvent(sampleKV),
+		streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+		streamclient.MakeKVEvent(sampleKV),
+		streamclient.MakeKVEvent(sampleKV),
+		streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+	}
 	sip.client = &mockStreamClient{
-		partitionEvents: []streamclient.Event{
-			streamclient.MakeKVEvent(sampleKV),
-			streamclient.MakeKVEvent(sampleKV),
-			streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-			streamclient.MakeKVEvent(sampleKV),
-			streamclient.MakeKVEvent(sampleKV),
-			streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-		},
+		partitionEvents: map[streamclient.PartitionAddress][]streamclient.Event{pa1: events, pa2: events},
 	}
 
 	sip.Run(context.Background())
