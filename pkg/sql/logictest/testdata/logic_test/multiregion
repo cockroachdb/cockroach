@@ -17,6 +17,20 @@ CREATE DATABASE multi_region_test_db PRIMARY REGION "test2" REGIONS "test1", "te
 statement ok
 CREATE DATABASE multi_region_test_explicit_primary_region_db PRIMARY REGION "test1" REGIONS "test1", "test2", "test3" SURVIVE REGION FAILURE
 
+query T
+SELECT gateway_region()
+----
+test1
+
+query T nodeidx=3
+SELECT gateway_region()
+----
+test2
+
+query T nodeidx=6
+SELECT gateway_region()
+----
+test3
 
 # Ensure that the region types were created for all the MR databases above.
 query IITI colnames
