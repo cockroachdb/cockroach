@@ -274,13 +274,25 @@ func (cb *cascadeBuilder) planCascade(
 
 	o.Memo().SetRoot(relExpr, &physical.Required{})
 
-	// 3. Optimize the expression.
+	// 3. Assign placeholders if they exist.
+	if factory.Memo().HasPlaceholders() {
+		// Construct a new memo that is copied from the memo created above, but with
+		// placeholders assigned. Stable operators can be constant-folded at this
+		// time.
+		preparedMemo := o.DetachMemo()
+		factory.FoldingControl().AllowStableFolds()
+		if err := factory.AssignPlaceholders(preparedMemo); err != nil {
+			return nil, errors.Wrap(err, "while assigning placeholders in cascade expression")
+		}
+	}
+
+	// 4. Optimize the expression.
 	optimizedExpr, err := o.Optimize()
 	if err != nil {
 		return nil, errors.Wrap(err, "while optimizing cascade expression")
 	}
 
-	// 4. Execbuild the optimized expression.
+	// 5. Execbuild the optimized expression.
 	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx, allowAutoCommit)
 	if bufferRef != nil {
 		// Set up the With binding.
