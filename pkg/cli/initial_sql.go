@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,12 +28,12 @@ import (
 // If adminUser is non-empty, an admin user with that name is
 // created upon initialization. Its password is then also returned.
 func runInitialSQL(
-	ctx context.Context, s *server.Server, startSingleNode bool, adminUser string,
-) (adminPassword string, err error) {
+	ctx context.Context, s *server.Server, startSingleNode bool, adminUser, adminPassword string,
+) error {
 	newCluster := s.InitialStart() && s.NodeID() == server.FirstNodeID
 	if !newCluster {
 		// The initial SQL code only runs the first time the cluster is initialized.
-		return "", nil
+		return nil
 	}
 
 	if startSingleNode {
@@ -43,31 +42,24 @@ func runInitialSQL(
 		// churn.
 		if err := cliDisableReplication(ctx, s); err != nil {
 			log.Ops.Errorf(ctx, "could not disable replication: %v", err)
-			return "", err
+			return err
 		}
 		log.Ops.Infof(ctx, "Replication was disabled for this cluster.\n"+
 			"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
 	}
 
 	if adminUser != "" && !s.Insecure() {
-		adminPassword, err = createAdminUser(ctx, s, adminUser)
-		if err != nil {
-			return "", err
+		if err := createAdminUser(ctx, s, adminUser, adminPassword); err != nil {
+			return err
 		}
 	}
 
-	return adminPassword, nil
+	return nil
 }
 
 // createAdminUser creates an admin user with the given name.
-func createAdminUser(
-	ctx context.Context, s *server.Server, adminUser string,
-) (adminPassword string, err error) {
-	adminPassword, err = security.GenerateRandomPassword()
-	if err != nil {
-		return "", err
-	}
-	if err := s.RunLocalSQL(ctx,
+func createAdminUser(ctx context.Context, s *server.Server, adminUser, adminPassword string) error {
+	return s.RunLocalSQL(ctx,
 		func(ctx context.Context, ie *sql.InternalExecutor) error {
 			_, err := ie.Exec(ctx, "admin-user", nil, "CREATE USER $1 WITH PASSWORD $2", adminUser, adminPassword)
 			if err != nil {
@@ -76,10 +68,7 @@ func createAdminUser(
 			// TODO(knz): Demote the admin user to an operator privilege with fewer options.
 			_, err = ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("GRANT admin TO %s", tree.Name(adminUser)))
 			return err
-		}); err != nil {
-		return "", err
-	}
-	return adminPassword, nil
+		})
 }
 
 // cliDisableReplication changes the replication factor on

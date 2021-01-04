@@ -598,7 +598,7 @@ If problems persist, please see %s.`
 			// Run SQL for new clusters.
 			// TODO(knz): If/when we want auto-creation of an initial admin user,
 			// this can be achieved here.
-			if _, err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */); err != nil {
+			if err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
 				return err
 			}
 
