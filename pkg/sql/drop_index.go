@@ -118,12 +118,12 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// If we couldn't find the index by name, this is either a legitimate error or
 		// this statement contains an 'IF EXISTS' qualifier. Both of these cases are
 		// handled by `dropIndexByName()` below so we just ignore the error here.
-		idxDesc, dropped, _ := tableDesc.FindIndexByName(string(index.idxName))
+		idx, _ := tableDesc.FindIndexWithName(string(index.idxName))
 		var shardColName string
 		// If we're dropping a sharded index, record the name of its shard column to
 		// potentially drop it if no other index refers to it.
-		if idxDesc != nil && idxDesc.IsSharded() && !dropped {
-			shardColName = idxDesc.Sharded.Name
+		if idx != nil && idx.IsSharded() && !idx.Dropped() {
+			shardColName = idx.GetShardColumnName()
 		}
 
 		if err := params.p.dropIndexByName(
@@ -241,7 +241,7 @@ func (p *planner) dropIndexByName(
 	constraintBehavior dropIndexConstraintBehavior,
 	jobDesc string,
 ) error {
-	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
+	idxI, err := tableDesc.FindIndexWithName(string(idxName))
 	if err != nil {
 		// Only index names of the form "table@idx" throw an error here if they
 		// don't exist.
@@ -252,10 +252,11 @@ func (p *planner) dropIndexByName(
 		// Index does not exist, but we want it to: error out.
 		return pgerror.WithCandidateCode(err, pgcode.UndefinedObject)
 	}
-	if dropped {
+	if idxI.Dropped() {
 		return nil
 	}
 
+	idx := idxI.IndexDesc()
 	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint && !idx.CreatedExplicitly {
 		return errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,

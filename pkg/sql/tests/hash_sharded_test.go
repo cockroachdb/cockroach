@@ -30,11 +30,11 @@ import (
 func getShardColumnID(
 	t *testing.T, tableDesc *tabledesc.Immutable, shardedIndexName string,
 ) descpb.ColumnID {
-	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
+	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	shardCol, _, err := tableDesc.FindColumnByName(tree.Name(idx.Sharded.Name))
+	shardCol, _, err := tableDesc.FindColumnByName(tree.Name(idx.GetShardColumnName()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func getShardColumnID(
 func verifyTableDescriptorState(
 	t *testing.T, tableDesc *tabledesc.Immutable, shardedIndexName string,
 ) {
-	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
+	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func verifyTableDescriptorState(
 	if !foundCheckConstraint {
 		t.Fatalf(`Could not find hidden check constraint for shard column`)
 	}
-	if idx.ColumnIDs[0] != shardColID {
+	if idx.GetColumnID(0) != shardColID {
 		t.Fatalf(`Expected shard column to be the first column in the set of index columns`)
 	}
 }
@@ -113,12 +113,12 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 
 		// Ensure that secondary indexes on table `kv` have the shard column in their
 		// `ExtraColumnIDs` field so they can reconstruct the sharded primary key.
-		fooDesc, _, err := tableDesc.FindIndexByName("foo")
+		foo, err := tableDesc.FindIndexWithName("foo")
 		if err != nil {
 			t.Fatal(err)
 		}
 		foundShardColumn := false
-		for _, colID := range fooDesc.ExtraColumnIDs {
+		for _, colID := range foo.IndexDesc().ExtraColumnIDs {
 			if colID == shardColID {
 				foundShardColumn = true
 				break

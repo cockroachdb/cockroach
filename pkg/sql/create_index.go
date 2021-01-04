@@ -371,9 +371,9 @@ func maybeCreateAndAddShardCol(
 
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
-	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
+	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
 	if err == nil {
-		if dropped {
+		if foundIndex.Dropped() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", string(n.n.Name))
 		}

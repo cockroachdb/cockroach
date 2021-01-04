@@ -120,7 +120,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	nameExists := func(name string) bool {
-		_, _, err := tableDesc.FindIndexByName(name)
+		_, err := tableDesc.FindIndexWithName(name)
 		return err == nil
 	}
 
