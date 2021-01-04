@@ -719,7 +719,7 @@ func newOptTable(
 	for i := range ot.indexes {
 		var idxDesc *descpb.IndexDescriptor
 		if i == 0 {
-			idxDesc = desc.GetPrimaryIndex()
+			idxDesc = desc.PrimaryIndexInterface().IndexDesc()
 		} else {
 			idxDesc = secondaryIndexes[i-1].IndexDesc()
 		}
@@ -1121,7 +1121,7 @@ func (oi *optIndex) init(
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedVirtualColOrd = invertedVirtualColOrd
-	if desc == tab.desc.GetPrimaryIndex() {
+	if desc == tab.desc.PrimaryIndexInterface().IndexDesc() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.

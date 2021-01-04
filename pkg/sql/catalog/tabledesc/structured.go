@@ -239,13 +239,6 @@ func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
-// GetPrimaryIndex returns a pointer to the primary index of the table
-// descriptor.
-// This method is deprecated, use PrimaryIndexInterface instead.
-func (desc *wrapper) GetPrimaryIndex() *descpb.IndexDescriptor {
-	return &desc.PrimaryIndex
-}
-
 // GetParentSchemaID returns the ParentSchemaID if the descriptor has
 // one. If the descriptor was created before the field was added, then the
 // descriptor belongs to a table under the `public` physical schema. The static

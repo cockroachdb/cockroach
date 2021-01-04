@@ -194,7 +194,7 @@ func TestNextRowSingle(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
+						tableDesc.Name, tableDesc.PrimaryIndexInterface().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -314,7 +314,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
+						tableDesc.Name, tableDesc.PrimaryIndexInterface().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}

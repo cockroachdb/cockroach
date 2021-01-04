@@ -1312,7 +1312,8 @@ CREATE TABLE information_schema.statistics (
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for _, col := range table.GetPrimaryIndex().ColumnNames {
+						for i := 0; i < table.PrimaryIndexInterface().NumColumns(); i++ {
+							col := table.PrimaryIndexInterface().GetColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
@@ -1345,7 +1346,8 @@ CREATE TABLE information_schema.statistics (
 						//
 						// Note that simply iterating over implicitCols map
 						// produces non-deterministic output.
-						for _, col := range table.GetPrimaryIndex().ColumnNames {
+						for i := 0; i < table.PrimaryIndexInterface().NumColumns(); i++ {
+							col := table.PrimaryIndexInterface().GetColumnName(i)
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
 								if err := appendRow(index.IndexDesc(), col, sequence,
