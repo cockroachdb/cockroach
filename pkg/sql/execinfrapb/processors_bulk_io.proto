@@ -144,6 +144,20 @@ message StreamIngestionDataSpec {
   optional string stream_address = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress",(gogoproto.nullable) = false];
 }
 
+message StreamIngestionFrontierSpec {
+  // HighWaterAtStart is set by the ingestion job when initializing the frontier
+  // processor. It is used as sanity check by the frontier processor to ensure
+  // that it does not receive updates at a timestamp lower than this field. This
+  // consequently prevents the job progress from regressing during ingestion.
+  optional util.hlc.Timestamp high_water_at_start = 1 [(gogoproto.nullable) = false];
+  // TrackedSpans is the entire span set being watched. The spans do not really
+  // represent KV spans but uniquely identify the partitions in the ingestion
+  // stream. Once all the partitions in the ingestion stream have been resolved
+  // at a certain timestamp, then it's safe to resolve the ingestion at that
+  // timestamp.
+  repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+}
+
 message BackupDataSpec {
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
