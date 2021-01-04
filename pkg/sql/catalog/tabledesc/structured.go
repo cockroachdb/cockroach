@@ -2041,7 +2041,7 @@ func (desc *Immutable) validateTableIndexes(columnNames map[string]descpb.Column
 		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
 			for i := range desc.Indexes {
 				if desc.Indexes[i].Name == index.Name {
-					// This error should be caught in MakeIndexDescriptor.
+					// This error should be caught in MakeIndexDescriptor or NewTableDesc.
 					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
 				}
 			}
