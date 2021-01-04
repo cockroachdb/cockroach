@@ -30,7 +30,8 @@ func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	streamAddress streamingccl.StreamAddress,
-	job *jobs.Job,
+	progress jobspb.Progress,
+	jobID int64,
 ) error {
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)
@@ -42,6 +43,12 @@ func ingest(
 		return err
 	}
 
+	// TODO(adityamaru): If the job is being resumed it is possible that it has
+	// check-pointed a resolved ts up to which all of its processors had ingested
+	// KVs. We can skip to ingesting after this resolved ts. Plumb the
+	// initialHighwatermark to the ingestion processor spec based on what we read
+	// from the job progress.
+
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
@@ -51,7 +58,8 @@ func ingest(
 	}
 
 	// Construct stream ingestion processor specs.
-	streamIngestionSpecs, err := distStreamIngestionPlanSpecs(topology, nodes)
+	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(topology,
+		nodes, jobID)
 	if err != nil {
 		return err
 	}
@@ -59,7 +67,8 @@ func ingest(
 	// Plan and run the DistSQL flow.
 	// TODO: Updates from this flow need to feed back into the job to update the
 	// progress.
-	err = distStreamIngest(ctx, execCtx, nodes, planCtx, dsp, streamIngestionSpecs)
+	err = distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
+		streamIngestionFrontierSpec)
 	if err != nil {
 		return err
 	}
@@ -72,7 +81,8 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, details.StreamAddress, s.job)
+	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
+		*s.job.ID())
 	if err != nil {
 		return err
 	}
