@@ -415,6 +415,12 @@ func (c *TableFeed) Next() (*TestFeedMessage, error) {
 		var toSend []*TestFeedMessage
 		if err := crdb.ExecuteTx(context.Background(), c.db, nil, func(tx *gosql.Tx) error {
 
+			// Avoid anything that might somehow look like deadlock under stressrace.
+			_, err := tx.Exec("SET TRANSACTION PRIORITY LOW")
+			if err != nil {
+				return err
+			}
+
 			toSend = nil // reset for this iteration
 			// TODO(dan): It's a bummer that this mutates the sqlsink table. I
 			// originally tried paging through message_id by repeatedly generating a
