@@ -286,8 +286,8 @@ func (n *scrubNode) startScrubTable(
 func getPrimaryColIdxs(
 	tableDesc *tabledesc.Immutable, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
-	for i := 0; i < tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
-		colID := tableDesc.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
 		rowIdx := -1
 		for idx, col := range columns {
 			if col.ID == colID {
@@ -299,7 +299,7 @@ func getPrimaryColIdxs(
 			return nil, errors.Errorf(
 				"could not find primary index column in projection: columnID=%d columnName=%s",
 				colID,
-				tableDesc.PrimaryIndexInterface().GetColumnName(i))
+				tableDesc.GetPrimaryIndex().GetColumnName(i))
 		}
 		primaryColIdxs = append(primaryColIdxs, rowIdx)
 	}
