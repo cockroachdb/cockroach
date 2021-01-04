@@ -1061,8 +1061,13 @@ type logicTest struct {
 	subtestT *testing.T
 	rng      *rand.Rand
 	cfg      testClusterConfig
-	// the number of nodes in the cluster.
+	// cluster is the test cluster against which we are testing. This cluster
+	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
+	// sharedIODir is the ExternalIO directory that is shared between all clusters
+	// created in the same logicTest. It is populated during setup() of the logic
+	// test.
+	sharedIODir string
 	// the index of the node (within the cluster) against which we run the test
 	// statements.
 	nodeIdx int
@@ -1075,9 +1080,18 @@ type logicTest struct {
 	// client currently in use. This can change during processing
 	// of a test input file when encountering the "user" directive.
 	// see setUser() for details.
-	user         string
-	db           *gosql.DB
-	cleanupFuncs []func()
+	user string
+	db   *gosql.DB
+	// clusterCleanupFuncs contains the cleanup methods that are specific to a
+	// cluster. These will be called during cluster tear-down. Note that 1 logic
+	// test may reset its cluster throughout a test. Cleanup methods that should
+	// be stored here include PGUrl connections for the users for a cluster.
+	clusterCleanupFuncs []func()
+	// testCleanupFuncs are cleanup methods that are only called when closing a
+	// test (rather than a specific cluster). One test may reset a cluster with a
+	// new one, but keep some shared resources across the entire test. An example
+	// would be an IO directory used throughout the test.
+	testCleanupFuncs []func()
 	// progress holds the number of tests executed so far.
 	progress int
 	// failures holds the number of tests failed so far, when
@@ -1175,22 +1189,12 @@ func (t *logicTest) emit(line string) {
 func (t *logicTest) close() {
 	t.traceStop()
 
-	for _, cleanup := range t.cleanupFuncs {
+	t.shutdownCluster()
+
+	for _, cleanup := range t.testCleanupFuncs {
 		cleanup()
 	}
-	t.cleanupFuncs = nil
-
-	if t.cluster != nil {
-		t.cluster.Stopper().Stop(context.TODO())
-		t.cluster = nil
-	}
-	if t.clients != nil {
-		for _, c := range t.clients {
-			c.Close()
-		}
-		t.clients = nil
-	}
-	t.db = nil
+	t.testCleanupFuncs = nil
 }
 
 // out emits a message both on stdout and the log files if
@@ -1255,10 +1259,11 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
-	t.cfg = cfg
-	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
-	// MySQL or Postgres instance.
+// newCluster creates a new cluster. It should be called after the logic tests's
+// server args are configured. That is, either during setup() when creating the
+// initial cluster to be used in a test, or when creating additional test
+// clusters, after logicTest.setup() has been called.
+func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
@@ -1269,6 +1274,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 	} else {
 		tempStorageConfig = base.DefaultTestTempStorageConfigWithSize(cluster.MakeTestingClusterSettings(), serverArgs.tempStorageDiskLimit)
 	}
+
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Specify a fixed memory limit (some test cases verify OOM conditions; we
@@ -1291,8 +1297,8 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 					DeterministicExplainAnalyze: true,
 				},
 			},
-			ClusterName: "testclustername",
-			UseDatabase: "test",
+			ClusterName:   "testclustername",
+			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -1304,6 +1310,7 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		GenerateMockContentionEvents:         true,
 		CheckVectorizedFlowIsClosedCorrectly: true,
 	}
+	cfg := t.cfg
 	if cfg.sqlExecUseDisk {
 		distSQLKnobs.ForceDiskSpill = true
 	}
@@ -1524,10 +1531,48 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser))
+	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(security.RootUser))
+}
 
+// shutdownCluster performs the necessary cleanup to shutdown the current test
+// cluster.
+func (t *logicTest) shutdownCluster() {
+	for _, cleanup := range t.clusterCleanupFuncs {
+		cleanup()
+	}
+	t.clusterCleanupFuncs = nil
+
+	if t.cluster != nil {
+		t.cluster.Stopper().Stop(context.TODO())
+		t.cluster = nil
+	}
+	if t.clients != nil {
+		for _, c := range t.clients {
+			c.Close()
+		}
+		t.clients = nil
+	}
+	t.db = nil
+}
+
+// setup creates the initial cluster for the logic test and populates the
+// relevant fields on logicTest. It is expected to be called only once, and
+// before processing any test files - unless a mock logicTest is created (see
+// parallelTest.processTestFile).
+func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
+	t.cfg = cfg
+	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
+	// MySQL or Postgres instance.
+	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
+	t.sharedIODir = tempExternalIODir
+	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
+
+	t.newCluster(serverArgs)
+
+	// Only create the test database on the initial cluster, since cluster restore
+	// expects an empty cluster.
 	if _, err := t.db.Exec(`
-CREATE DATABASE test;
+CREATE DATABASE test; USE test;
 `); err != nil {
 		t.Fatal(err)
 	}
