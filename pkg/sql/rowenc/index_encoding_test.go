@@ -1241,10 +1241,11 @@ func ExtractIndexKey(
 		return entry.Key, nil
 	}
 
-	index, err := tableDesc.FindIndexByID(indexID)
+	indexI, err := tableDesc.FindIndexWithID(indexID)
 	if err != nil {
 		return nil, err
 	}
+	index := indexI.IndexDesc()
 
 	// Extract the values for index.ColumnIDs.
 	indexTypes, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs, nil)
