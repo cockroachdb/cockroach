@@ -50,8 +50,14 @@ func MakeInserter(
 	insertCols []descpb.ColumnDescriptor,
 	alloc *rowenc.DatumAlloc,
 ) (Inserter, error) {
+	writableIndexes := tableDesc.WritableNonPrimaryIndexes()
+	writableIndexDescs := make([]descpb.IndexDescriptor, len(writableIndexes))
+	for i, index := range writableIndexes {
+		writableIndexDescs[i] = *index.IndexDesc()
+	}
+
 	ri := Inserter{
-		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableIndexes()),
+		Helper:                newRowHelper(codec, tableDesc, writableIndexDescs),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),

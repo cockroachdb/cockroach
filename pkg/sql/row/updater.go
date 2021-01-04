@@ -112,7 +112,7 @@ func MakeUpdater(
 
 	// needsUpdate returns true if the given index may need to be updated for
 	// the current UPDATE mutation.
-	needsUpdate := func(index descpb.IndexDescriptor) bool {
+	needsUpdate := func(index catalog.Index) bool {
 		// If the UPDATE is set to only update columns and not secondary
 		// indexes, return false.
 		if updateType == UpdaterOnlyColumns {
@@ -133,7 +133,7 @@ func MakeUpdater(
 		if index.IsPartial() {
 			return true
 		}
-		return index.RunOverAllColumns(func(id descpb.ColumnID) error {
+		return index.ForEachColumnID(func(id descpb.ColumnID) error {
 			if _, ok := updateColIDtoRowIndex.Get(id); ok {
 				return returnTruePseudoError
 			}
@@ -141,25 +141,23 @@ func MakeUpdater(
 		}) != nil
 	}
 
-	writableIndexes := tableDesc.WritableIndexes()
-	includeIndexes := make([]descpb.IndexDescriptor, 0, len(writableIndexes))
-	for _, index := range writableIndexes {
-		if needsUpdate(index) {
-			includeIndexes = append(includeIndexes, index)
-		}
-	}
-
 	// Columns of the table to update, including those in delete/write-only state
 	tableCols := tableDesc.DeletableColumns()
 
+	includeIndexes := make([]descpb.IndexDescriptor, 0, len(tableDesc.WritableNonPrimaryIndexes()))
 	var deleteOnlyIndexes []descpb.IndexDescriptor
-	for _, idx := range tableDesc.DeleteOnlyIndexes() {
-		if needsUpdate(idx) {
+	for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
+		if !needsUpdate(index) {
+			continue
+		}
+		if !index.DeleteOnly() {
+			includeIndexes = append(includeIndexes, *index.IndexDesc())
+		} else {
 			if deleteOnlyIndexes == nil {
 				// Allocate at most once.
-				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes()))
+				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
 			}
-			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
+			deleteOnlyIndexes = append(deleteOnlyIndexes, *index.IndexDesc())
 		}
 	}
 
