@@ -117,7 +117,7 @@ type TableDescriptor interface {
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 
-	PrimaryIndexInterface() Index
+	GetPrimaryIndex() Index
 	AllIndexes() []Index
 	ActiveIndexes() []Index
 	NonDropIndexes() []Index

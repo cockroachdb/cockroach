@@ -313,7 +313,7 @@ func (p *planner) dropIndexByName(
 	// is another index that could replace the one we are deleting for a given
 	// foreign key constraint.
 	remainingIndexes := make([]*descpb.IndexDescriptor, 1, len(tableDesc.ActiveIndexes()))
-	remainingIndexes[0] = tableDesc.PrimaryIndexInterface().IndexDesc()
+	remainingIndexes[0] = tableDesc.GetPrimaryIndex().IndexDesc()
 	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
 		if index.GetID() != idx.ID {
 			remainingIndexes = append(remainingIndexes, index.IndexDesc())

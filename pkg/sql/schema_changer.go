@@ -1176,7 +1176,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// existing indexes on the table.
 				if mutation.Direction == descpb.DescriptorMutation_ADD {
 					desc := fmt.Sprintf("REFRESH MATERIALIZED VIEW %q cleanup", scTable.Name)
-					pkJob, err := sc.createIndexGCJob(ctx, scTable.PrimaryIndexInterface().IndexDesc(), txn, desc)
+					pkJob, err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex().IndexDesc(), txn, desc)
 					if err != nil {
 						return err
 					}
