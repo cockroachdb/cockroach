@@ -2392,6 +2392,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				coid := tree.MustBeDOid(constraint)
 				ooid := oid.Oid(int(coid.DInt))
 
+				// The zero-value OID doesn't refer to any type.
+				if ooid == 0 {
+					return false, nil
+				}
+
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
