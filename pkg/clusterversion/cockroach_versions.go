@@ -222,6 +222,9 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
+	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
+	// nodes support detecting and restarting on primary index changes.
+	ChangefeedsSupportPrimaryIndexChanges
 
 	// Step (1): Add new versions here.
 )
@@ -367,6 +370,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     PostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
+	},
+	{
+		Key:     ChangefeedsSupportPrimaryIndexChanges,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
 	},
 
 	// Step (2): Add new versions here.

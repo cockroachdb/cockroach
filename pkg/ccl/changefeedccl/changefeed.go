@@ -310,7 +310,7 @@ func emitEntries(
 				}
 			}
 			if input.resolved != nil {
-				boundaryReached = boundaryReached || input.resolved.BoundaryReached
+				boundaryReached = boundaryReached || input.resolved.DeprecatedBoundaryReached
 				_ = sf.Forward(input.resolved.Span, input.resolved.Timestamp)
 				resolvedSpans = append(resolvedSpans, *input.resolved)
 			}

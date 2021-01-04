@@ -173,6 +173,11 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	} else if m == nil {
 		t.Fatal(`expected message`)
 	}
+	return extractResolvedTimestamp(t, m)
+}
+
+func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
+	t.Helper()
 	if m.Key != nil {
 		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
 	}
