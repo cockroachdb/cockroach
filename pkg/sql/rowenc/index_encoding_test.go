@@ -233,7 +233,7 @@ func TestIndexKey(t *testing.T) {
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			codec, tableDesc, &tableDesc.GetPublicNonPrimaryIndexes()[0], colMap, testValues, true /* includeEmpty */)
+			codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0].IndexDesc(), colMap, testValues, true /* includeEmpty */)
 		if len(secondaryIndexEntry) != 1 {
 			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
 		}
@@ -276,7 +276,7 @@ func TestIndexKey(t *testing.T) {
 		}
 
 		checkEntry(tableDesc.GetPrimaryIndex(), primaryIndexKV)
-		checkEntry(&tableDesc.GetPublicNonPrimaryIndexes()[0], secondaryIndexKV)
+		checkEntry(tableDesc.PublicNonPrimaryIndexes()[0].IndexDesc(), secondaryIndexKV)
 	}
 }
 
@@ -377,8 +377,8 @@ func TestInvertedIndexKey(t *testing.T) {
 			indexKeyTest{50, nil, nil,
 				primaryValues, secondaryValues,
 			})
-		for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-			tableDesc.GetPublicNonPrimaryIndexes()[i].Version = version
+		for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
+			idx.IndexDesc().Version = version
 		}
 
 		testValues := append(primaryValues, secondaryValues...)
@@ -386,7 +386,7 @@ func TestInvertedIndexKey(t *testing.T) {
 		codec := keys.SystemSQLCodec
 
 		secondaryIndexEntries, err := EncodeSecondaryIndex(
-			codec, tableDesc, &tableDesc.GetPublicNonPrimaryIndexes()[0], colMap, testValues, true /* includeEmpty */)
+			codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0].IndexDesc(), colMap, testValues, true /* includeEmpty */)
 		if err != nil {
 			t.Fatal(err)
 		}
