@@ -305,14 +305,6 @@ func DecodeDatum(
 	id := t.Oid()
 	switch code {
 	case FormatText:
-		switch t.Family() {
-		case types.EnumFamily:
-			if err := validateStringBytes(b); err != nil {
-				return nil, err
-			}
-			return tree.MakeDEnumFromLogicalRepresentation(t, string(b))
-		}
-
 		switch id {
 		case oid.T_bool:
 			t, err := strconv.ParseBool(string(b))
@@ -774,6 +766,13 @@ func DecodeDatum(
 	}
 
 	// Types with identical text/binary handling.
+	switch t.Family() {
+	case types.EnumFamily:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		return tree.MakeDEnumFromLogicalRepresentation(t, string(b))
+	}
 	switch id {
 	case oid.T_text, oid.T_varchar:
 		if err := validateStringBytes(b); err != nil {
