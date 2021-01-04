@@ -679,7 +679,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STRICT STRING STORAGE STORE STORED STORING SUBSTRING
-%token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION
+%token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
@@ -886,7 +886,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_indexes_stmt
 %type <tree.Statement> show_partitions_stmt
 %type <tree.Statement> show_jobs_stmt
-%type <tree.Statement> show_queries_stmt
+%type <tree.Statement> show_statements_stmt
 %type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_range_for_row_stmt
 %type <tree.Statement> show_locality_stmt
@@ -909,6 +909,8 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
+
+%type <str> statements_or_queries
 
 %type <str> session_var
 %type <*string> comment_text
@@ -2956,7 +2958,7 @@ cancel_jobs_stmt:
 // %Text:
 // CANCEL QUERIES [IF EXISTS] <selectclause>
 // CANCEL QUERY [IF EXISTS] <expr>
-// %SeeAlso: SHOW QUERIES
+// %SeeAlso: SHOW STATEMENTS
 cancel_queries_stmt:
   CANCEL QUERY a_expr
   {
@@ -4346,7 +4348,7 @@ zone_value:
 // %Text:
 // SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
 // SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
-// PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
+// PARTITIONS, SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
@@ -4368,7 +4370,7 @@ show_stmt:
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_locality_stmt
 | show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
-| show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
+| show_statements_stmt      // EXTEND WITH HELP: SHOW STATEMENTS
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_range_for_row_stmt
 | show_regions_stmt         // EXTEND WITH HELP: SHOW REGIONS
@@ -4734,21 +4736,21 @@ show_constraints_stmt:
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
-// %Help: SHOW QUERIES - list running queries
+// %Help: SHOW STATEMENTS - list running statements
 // %Category: Misc
-// %Text: SHOW [ALL] [CLUSTER | LOCAL] QUERIES
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] STATEMENTS
 // %SeeAlso: CANCEL QUERIES
-show_queries_stmt:
-  SHOW opt_cluster QUERIES
+show_statements_stmt:
+  SHOW opt_cluster statements_or_queries
   {
     $$.val = &tree.ShowQueries{All: false, Cluster: $2.bool()}
   }
-| SHOW opt_cluster QUERIES error // SHOW HELP: SHOW QUERIES
-| SHOW ALL opt_cluster QUERIES
+| SHOW opt_cluster statements_or_queries error // SHOW HELP: SHOW STATEMENTS
+| SHOW ALL opt_cluster statements_or_queries
   {
     $$.val = &tree.ShowQueries{All: true, Cluster: $3.bool()}
   }
-| SHOW ALL opt_cluster QUERIES error // SHOW HELP: SHOW QUERIES
+| SHOW ALL opt_cluster statements_or_queries error // SHOW HELP: SHOW STATEMENTS
 
 opt_cluster:
   /* EMPTY */
@@ -4757,6 +4759,12 @@ opt_cluster:
   { $$.val = true }
 | LOCAL
   { $$.val = false }
+
+// SHOW QUERIES is now an alias for SHOW STATEMENTS
+// https://github.com/cockroachdb/cockroach/issues/56240
+statements_or_queries:
+  STATEMENTS
+| QUERIES
 
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
@@ -12276,6 +12284,7 @@ unreserved_keyword:
 | SPLIT
 | SQL
 | START
+| STATEMENTS
 | STATISTICS
 | STDIN
 | STORAGE
