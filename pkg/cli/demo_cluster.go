@@ -288,8 +288,8 @@ func (c *transientCluster) start(
 	// initial replication factor for small clusters and creating the
 	// admin user.
 	const demoUsername = "demo"
-	demoPassword, err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername)
-	if err != nil {
+	demoPassword := genDemoPassword(demoUsername)
+	if err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername, demoPassword); err != nil {
 		return err
 	}
 	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
@@ -914,4 +914,20 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 	if justOne && numNodesLive > 1 {
 		fmt.Fprintln(w, `To display connection parameters for other nodes, use \demo ls.`)
 	}
+}
+
+// genDemoPassword generates a password that prevents accidental
+// misuse of the DB console started by demo shells.
+// It also prevents beginner or naive programmers from scripting the
+// demo shell, before they fully understand the notion of API
+// stability and the lack of forward or backward compatibility in
+// features of 'cockroach demo'. (What we are saying here is that
+// someone needs to be "advanced enough" to script the derivation of
+// the demo password, at which point we're expecting them to properly
+// weigh the trade-off between working to script "demo" which may
+// require non-trivial changes to their script from one version to the
+// next, and starting a regular server with "start-single-node".)
+func genDemoPassword(username string) string {
+	mypid := os.Getpid()
+	return fmt.Sprintf("%s%d", username, mypid)
 }
