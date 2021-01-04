@@ -2242,6 +2242,8 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tbody>
 <tr><td><a name="ascii"></a><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the character code of the first character in <code>val</code>. Despite the name, the function supports Unicode too.</p>
 </span></td></tr>
+<tr><td><a name="bisect_bytes"></a><code>bisect_bytes(prev: <a href="bytes.html">bytes</a>, next: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Return a byte string that sorts between the two input bytes. NULL values are treated as negative/positive infinity when used as the prev/next argument. Bytes passed to bisect_bytes must not end with the reserved byte ‘0’. Suggested usage is to use the outputs of bisect_bytes as inputs to future calls.</p>
+</span></td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>

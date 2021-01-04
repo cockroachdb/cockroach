@@ -5,6 +5,7 @@ go_library(
     srcs = ["enum.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/enum",
     visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors"],
 )
 
 go_test(

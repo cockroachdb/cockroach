@@ -331,7 +331,10 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 	// Construct the new enum member. New enum values are added in the READ_ONLY
 	// capability to ensure that they aren't written before all other nodes know
 	// how to decode the physical representation.
-	newPhysicalRep := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
+	newPhysicalRep, err := enum.GenByteStringBetween(getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing)
+	if err != nil {
+		return err
+	}
 	newMember := descpb.TypeDescriptor_EnumMember{
 		LogicalRepresentation:  string(node.NewVal),
 		PhysicalRepresentation: newPhysicalRep,

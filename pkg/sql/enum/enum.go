@@ -10,7 +10,10 @@
 
 package enum
 
-import "bytes"
+import (
+	"bytes"
+	"github.com/cockroachdb/errors"
+)
 
 // Note that while maxToken is outside the range of a single
 // byte, we never actually insert it in GenByteStringBetween.
@@ -43,12 +46,8 @@ func (s ByteSpacing) String() string {
 	panic("unknown spacing type")
 }
 
-// GenByteStringBetween generates a byte string that sorts
-// between the two input strings. If prev is length 0, it is
-// treated as negative infinity. If next is length 0, it is
-// treated as positive infinity. Importantly, the input strings
-// cannot end with minToken.
-func GenByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) []byte {
+// genByteStringBetween implements the main logic of GenByteStringBetween.
+func genByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) []byte {
 	result := make([]byte, 0)
 	if len(prev) == 0 && len(next) == 0 {
 		// If both prev and next are unbounded, return the midpoint.
@@ -87,7 +86,7 @@ func GenByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) []byte 
 	// the remainder of prev and posinf.
 	if mid == p {
 		result = append(result, byte(p))
-		rest := GenByteStringBetween(slice(prev, pos+1), nil, spacing)
+		rest := genByteStringBetween(slice(prev, pos+1), nil, spacing)
 		return append(result, rest...)
 	}
 
@@ -95,6 +94,28 @@ func GenByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) []byte 
 	// So, occupy that spot and return.
 	result = append(result, byte(mid))
 	return result
+}
+
+// GenByteStringBetween generates a byte string that sorts
+// between the two input strings. If prev is length 0, it is
+// treated as negative infinity. If next is length 0, it is
+// treated as positive infinity. Importantly, the input strings
+// cannot end with minToken -- GenByteStringBetween verifies this
+// for each of the input strings.
+func GenByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) ([]byte, error) {
+	verify := func(b []byte, argname string) error {
+		if len(b) != 0 && b[len(b)-1] == byte(minToken) {
+			return errors.Newf("argument %s ends with reserved token %d", argname, minToken)
+		}
+		return nil
+	}
+	if err := verify(prev, "prev"); err != nil {
+		return nil, err
+	}
+	if err := verify(next, "next"); err != nil {
+		return nil, err
+	}
+	return genByteStringBetween(prev, next, spacing), nil
 }
 
 // Utility functions for GenByteStringBetween.
@@ -151,7 +172,7 @@ func genEvenlySpacedHelper(result [][]byte, lo, hi int, bot, top []byte) {
 		return
 	}
 	mid := lo + (hi-lo)/2
-	midBytes := GenByteStringBetween(bot, top, SpreadSpacing)
+	midBytes := genByteStringBetween(bot, top, SpreadSpacing)
 	result[mid] = midBytes
 	genEvenlySpacedHelper(result, lo, mid, bot, midBytes)
 	genEvenlySpacedHelper(result, mid+1, hi, midBytes, top)
