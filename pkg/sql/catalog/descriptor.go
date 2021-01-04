@@ -123,9 +123,6 @@ type TableDescriptor interface {
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error) // deprecated
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
-	WritableIndexes() []descpb.IndexDescriptor   // deprecated
-	DeletableIndexes() []descpb.IndexDescriptor  // deprecated
-	DeleteOnlyIndexes() []descpb.IndexDescriptor // deprecated
 
 	PrimaryIndexInterface() Index
 	AllIndexes() []Index
