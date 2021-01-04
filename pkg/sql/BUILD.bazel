@@ -285,6 +285,7 @@ go_library(
         "//pkg/sql/gcjob/gcjobnotifier",
         "//pkg/sql/lex",
         "//pkg/sql/mutations",
+        "//pkg/sql/oidext",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",

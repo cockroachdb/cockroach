@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2399,6 +2400,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						return false, err
 					}
 					return true, nil
+				}
+
+				// This oid is not a user-defined type and we didn't find it in the
+				// map of predefined types, return false. Note that in common usage we
+				// only really expect the value 0 here (which cockroach uses internally
+				// in the typelem field amongst others). Users, however, may join on
+				// this index with any value.
+				if ooid <= oidext.CockroachPredefinedOIDMax {
+					return false, nil
 				}
 
 				// Check if it is a user defined type.
