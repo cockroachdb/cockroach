@@ -14,16 +14,8 @@ test       root
 query TTTT
 SHOW GRANTS ON DATABASE test
 ----
-test  crdb_internal       admin  ALL
-test  crdb_internal       root   ALL
-test  information_schema  admin  ALL
-test  information_schema  root   ALL
-test  pg_catalog          admin  ALL
-test  pg_catalog          root   ALL
-test  pg_extension        admin  ALL
-test  pg_extension        root   ALL
-test  public              admin  ALL
-test  public              root   ALL
+test  public  admin  ALL
+test  public  root   ALL
 
 statement ok
 CREATE TABLE kv (
@@ -70,16 +62,8 @@ u          root
 query TTTT
 SHOW GRANTS ON DATABASE u
 ----
-u  crdb_internal       admin  ALL
-u  crdb_internal       root   ALL
-u  information_schema  admin  ALL
-u  information_schema  root   ALL
-u  pg_catalog          admin  ALL
-u  pg_catalog          root   ALL
-u  pg_extension        admin  ALL
-u  pg_extension        root   ALL
-u  public              admin  ALL
-u  public              root   ALL
+u  public  admin  ALL
+u  public  root   ALL
 
 statement ok
 SET DATABASE = u

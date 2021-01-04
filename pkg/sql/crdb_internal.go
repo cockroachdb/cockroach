@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
@@ -81,47 +82,48 @@ const CrdbInternalName = sessiondata.CRDBInternalSchemaName
 var crdbInternal = virtualSchema{
 	name: CrdbInternalName,
 	tableDefs: map[descpb.ID]virtualSchemaDef{
-		catconstants.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
-		catconstants.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
-		catconstants.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
-		catconstants.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
-		catconstants.CrdbInternalClusterTransactionsTableID:  crdbInternalClusterTxnsTable,
-		catconstants.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
-		catconstants.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
-		catconstants.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
-		catconstants.CrdbInternalCreateTypeStmtsTableID:      crdbInternalCreateTypeStmtsTable,
-		catconstants.CrdbInternalDatabasesTableID:            crdbInternalDatabasesTable,
-		catconstants.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
-		catconstants.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
-		catconstants.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
-		catconstants.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
-		catconstants.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
-		catconstants.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
-		catconstants.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
-		catconstants.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
-		catconstants.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
-		catconstants.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
-		catconstants.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
-		catconstants.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
-		catconstants.CrdbInternalLocalTransactionsTableID:    crdbInternalLocalTxnsTable,
-		catconstants.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
-		catconstants.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
-		catconstants.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
-		catconstants.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
-		catconstants.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
-		catconstants.CrdbInternalRangesViewID:                crdbInternalRangesView,
-		catconstants.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
-		catconstants.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
-		catconstants.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
-		catconstants.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
-		catconstants.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
-		catconstants.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
-		catconstants.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
-		catconstants.CrdbInternalTablesTableLastStatsID:      crdbInternalTablesTableLastStats,
-		catconstants.CrdbInternalTablesTableID:               crdbInternalTablesTable,
-		catconstants.CrdbInternalTransactionStatsTableID:     crdbInternalTransactionStatisticsTable,
-		catconstants.CrdbInternalTxnStatsTableID:             crdbInternalTxnStatsTable,
-		catconstants.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+		catconstants.CrdbInternalBackwardDependenciesTableID:      crdbInternalBackwardDependenciesTable,
+		catconstants.CrdbInternalBuildInfoTableID:                 crdbInternalBuildInfoTable,
+		catconstants.CrdbInternalBuiltinFunctionsTableID:          crdbInternalBuiltinFunctionsTable,
+		catconstants.CrdbInternalClusterQueriesTableID:            crdbInternalClusterQueriesTable,
+		catconstants.CrdbInternalClusterTransactionsTableID:       crdbInternalClusterTxnsTable,
+		catconstants.CrdbInternalClusterSessionsTableID:           crdbInternalClusterSessionsTable,
+		catconstants.CrdbInternalClusterSettingsTableID:           crdbInternalClusterSettingsTable,
+		catconstants.CrdbInternalCreateStmtsTableID:               crdbInternalCreateStmtsTable,
+		catconstants.CrdbInternalCreateTypeStmtsTableID:           crdbInternalCreateTypeStmtsTable,
+		catconstants.CrdbInternalDatabasesTableID:                 crdbInternalDatabasesTable,
+		catconstants.CrdbInternalFeatureUsageID:                   crdbInternalFeatureUsage,
+		catconstants.CrdbInternalForwardDependenciesTableID:       crdbInternalForwardDependenciesTable,
+		catconstants.CrdbInternalGossipNodesTableID:               crdbInternalGossipNodesTable,
+		catconstants.CrdbInternalGossipAlertsTableID:              crdbInternalGossipAlertsTable,
+		catconstants.CrdbInternalGossipLivenessTableID:            crdbInternalGossipLivenessTable,
+		catconstants.CrdbInternalGossipNetworkTableID:             crdbInternalGossipNetworkTable,
+		catconstants.CrdbInternalIndexColumnsTableID:              crdbInternalIndexColumnsTable,
+		catconstants.CrdbInternalJobsTableID:                      crdbInternalJobsTable,
+		catconstants.CrdbInternalKVNodeStatusTableID:              crdbInternalKVNodeStatusTable,
+		catconstants.CrdbInternalKVStoreStatusTableID:             crdbInternalKVStoreStatusTable,
+		catconstants.CrdbInternalLeasesTableID:                    crdbInternalLeasesTable,
+		catconstants.CrdbInternalLocalQueriesTableID:              crdbInternalLocalQueriesTable,
+		catconstants.CrdbInternalLocalTransactionsTableID:         crdbInternalLocalTxnsTable,
+		catconstants.CrdbInternalLocalSessionsTableID:             crdbInternalLocalSessionsTable,
+		catconstants.CrdbInternalLocalMetricsTableID:              crdbInternalLocalMetricsTable,
+		catconstants.CrdbInternalPartitionsTableID:                crdbInternalPartitionsTable,
+		catconstants.CrdbInternalPredefinedCommentsTableID:        crdbInternalPredefinedCommentsTable,
+		catconstants.CrdbInternalRangesNoLeasesTableID:            crdbInternalRangesNoLeasesTable,
+		catconstants.CrdbInternalRangesViewID:                     crdbInternalRangesView,
+		catconstants.CrdbInternalRuntimeInfoTableID:               crdbInternalRuntimeInfoTable,
+		catconstants.CrdbInternalSchemaChangesTableID:             crdbInternalSchemaChangesTable,
+		catconstants.CrdbInternalSessionTraceTableID:              crdbInternalSessionTraceTable,
+		catconstants.CrdbInternalSessionVariablesTableID:          crdbInternalSessionVariablesTable,
+		catconstants.CrdbInternalStmtStatsTableID:                 crdbInternalStmtStatsTable,
+		catconstants.CrdbInternalTableColumnsTableID:              crdbInternalTableColumnsTable,
+		catconstants.CrdbInternalTableIndexesTableID:              crdbInternalTableIndexesTable,
+		catconstants.CrdbInternalTablesTableLastStatsID:           crdbInternalTablesTableLastStats,
+		catconstants.CrdbInternalTablesTableID:                    crdbInternalTablesTable,
+		catconstants.CrdbInternalTransactionStatsTableID:          crdbInternalTransactionStatisticsTable,
+		catconstants.CrdbInternalTxnStatsTableID:                  crdbInternalTxnStatsTable,
+		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
+		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -3660,5 +3662,37 @@ CREATE TABLE crdb_internal.predefined_comments (
 		}
 
 		return nil
+	},
+}
+
+var crdbInternalClusterDatabasePrivilegesTable = virtualSchemaTable{
+	comment: `virtual table with database privileges`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_database_privileges (
+	database_name   STRING NOT NULL,
+	grantee         STRING NOT NULL,
+	privilege_type  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
+			func(db *dbdesc.Immutable) error {
+				privs := db.Privileges.Show(privilege.Database)
+				dbNameStr := tree.NewDString(db.GetName())
+				// TODO(knz): This should filter for the current user, see
+				// https://github.com/cockroachdb/cockroach/issues/35572
+				for _, u := range privs {
+					userNameStr := tree.NewDString(u.User)
+					for _, priv := range u.Privileges {
+						if err := addRow(
+							dbNameStr,             // database_name
+							userNameStr,           // grantee
+							tree.NewDString(priv), // privilege_type
+						); err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			})
 	},
 }

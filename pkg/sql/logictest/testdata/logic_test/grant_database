@@ -8,17 +8,9 @@ CREATE DATABASE a
 query TTTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-database_name  schema_name         grantee  privilege_type
-a              crdb_internal       admin    ALL
-a              crdb_internal       root     ALL
-a              information_schema  admin    ALL
-a              information_schema  root     ALL
-a              pg_catalog          admin    ALL
-a              pg_catalog          root     ALL
-a              pg_extension        admin    ALL
-a              pg_extension        root     ALL
-a              public              admin    ALL
-a              public              root     ALL
+database_name  schema_name  grantee  privilege_type
+a              public       admin    ALL
+a              public       root     ALL
 
 statement error user root must have exactly ALL privileges on system database with ID=.*
 REVOKE SELECT ON DATABASE a FROM root
@@ -47,26 +39,10 @@ REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 query TTTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  ALL
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  ALL
-a  information_schema  admin      ALL
-a  information_schema  readwrite  ALL
-a  information_schema  root       ALL
-a  information_schema  test-user  ALL
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  ALL
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  ALL
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  ALL
-a  pg_extension        root       ALL
-a  pg_extension        test-user  ALL
-a  public              admin      ALL
-a  public              readwrite  ALL
-a  public              root       ALL
-a  public              test-user  ALL
+a  public  admin      ALL
+a  public  readwrite  ALL
+a  public  root       ALL
+a  public  test-user  ALL
 
 # Create table to inherit DB permissions.
 statement ok
@@ -84,16 +60,8 @@ a              public       t           test-user  ALL
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  ALL
-a  crdb_internal       test-user  ALL
-a  information_schema  readwrite  ALL
-a  information_schema  test-user  ALL
-a  pg_catalog          readwrite  ALL
-a  pg_catalog          test-user  ALL
-a  pg_extension        readwrite  ALL
-a  pg_extension        test-user  ALL
-a  public              readwrite  ALL
-a  public              test-user  ALL
+a  public  readwrite  ALL
+a  public  test-user  ALL
 
 statement ok
 REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
@@ -101,60 +69,36 @@ REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
 query TTTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  GRANT
-a  information_schema  admin      ALL
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  GRANT
-a  information_schema  root       ALL
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  GRANT
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  GRANT
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  GRANT
-a  pg_extension        root       ALL
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  GRANT
-a  public              admin      ALL
-a  public              readwrite  CREATE
-a  public              readwrite  GRANT
-a  public              root       ALL
-a  public              test-user  CREATE
-a  public              test-user  GRANT
+a  public  admin      ALL
+a  public  readwrite  CREATE
+a  public  readwrite  DELETE
+a  public  readwrite  DROP
+a  public  readwrite  GRANT
+a  public  readwrite  SELECT
+a  public  readwrite  ZONECONFIG
+a  public  root       ALL
+a  public  test-user  CREATE
+a  public  test-user  DELETE
+a  public  test-user  DROP
+a  public  test-user  GRANT
+a  public  test-user  SELECT
+a  public  test-user  ZONECONFIG
 
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  GRANT
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  GRANT
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  GRANT
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  GRANT
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  GRANT
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  GRANT
-a  public              readwrite  CREATE
-a  public              readwrite  GRANT
-a  public              test-user  CREATE
-a  public              test-user  GRANT
+a  public  readwrite  CREATE
+a  public  readwrite  DELETE
+a  public  readwrite  DROP
+a  public  readwrite  GRANT
+a  public  readwrite  SELECT
+a  public  readwrite  ZONECONFIG
+a  public  test-user  CREATE
+a  public  test-user  DELETE
+a  public  test-user  DROP
+a  public  test-user  GRANT
+a  public  test-user  SELECT
+a  public  test-user  ZONECONFIG
 
 statement ok
 REVOKE SELECT ON DATABASE a FROM "test-user"
@@ -162,36 +106,19 @@ REVOKE SELECT ON DATABASE a FROM "test-user"
 query TTTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin      ALL
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  GRANT
-a  crdb_internal       root       ALL
-a  crdb_internal       test-user  CREATE
-a  crdb_internal       test-user  GRANT
-a  information_schema  admin      ALL
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  GRANT
-a  information_schema  root       ALL
-a  information_schema  test-user  CREATE
-a  information_schema  test-user  GRANT
-a  pg_catalog          admin      ALL
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  GRANT
-a  pg_catalog          root       ALL
-a  pg_catalog          test-user  CREATE
-a  pg_catalog          test-user  GRANT
-a  pg_extension        admin      ALL
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  GRANT
-a  pg_extension        root       ALL
-a  pg_extension        test-user  CREATE
-a  pg_extension        test-user  GRANT
-a  public              admin      ALL
-a  public              readwrite  CREATE
-a  public              readwrite  GRANT
-a  public              root       ALL
-a  public              test-user  CREATE
-a  public              test-user  GRANT
+a  public  admin      ALL
+a  public  readwrite  CREATE
+a  public  readwrite  DELETE
+a  public  readwrite  DROP
+a  public  readwrite  GRANT
+a  public  readwrite  SELECT
+a  public  readwrite  ZONECONFIG
+a  public  root       ALL
+a  public  test-user  CREATE
+a  public  test-user  DELETE
+a  public  test-user  DROP
+a  public  test-user  GRANT
+a  public  test-user  ZONECONFIG
 
 statement ok
 REVOKE ALL ON DATABASE a FROM "test-user"
@@ -199,16 +126,12 @@ REVOKE ALL ON DATABASE a FROM "test-user"
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  crdb_internal       readwrite  CREATE
-a  crdb_internal       readwrite  GRANT
-a  information_schema  readwrite  CREATE
-a  information_schema  readwrite  GRANT
-a  pg_catalog          readwrite  CREATE
-a  pg_catalog          readwrite  GRANT
-a  pg_extension        readwrite  CREATE
-a  pg_extension        readwrite  GRANT
-a  public              readwrite  CREATE
-a  public              readwrite  GRANT
+a  public  readwrite  CREATE
+a  public  readwrite  DELETE
+a  public  readwrite  DROP
+a  public  readwrite  GRANT
+a  public  readwrite  SELECT
+a  public  readwrite  ZONECONFIG
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
@@ -216,16 +139,8 @@ REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 query TTTT
 SHOW GRANTS ON DATABASE a
 ----
-a  crdb_internal       admin  ALL
-a  crdb_internal       root   ALL
-a  information_schema  admin  ALL
-a  information_schema  root   ALL
-a  pg_catalog          admin  ALL
-a  pg_catalog          root   ALL
-a  pg_extension        admin  ALL
-a  pg_extension        root   ALL
-a  public              admin  ALL
-a  public              root   ALL
+a  public  admin  ALL
+a  public  root   ALL
 
 query TTTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"

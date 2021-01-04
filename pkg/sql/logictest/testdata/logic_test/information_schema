@@ -223,6 +223,7 @@ select table_schema, table_name FROM information_schema.tables
 ----
 crdb_internal       backward_dependencies
 crdb_internal       builtin_functions
+crdb_internal       cluster_database_privileges
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
@@ -376,6 +377,7 @@ SELECT table_name FROM "".information_schema.tables WHERE table_catalog = 'other
 ----
 backward_dependencies
 builtin_functions
+cluster_database_privileges
 cluster_queries
 cluster_sessions
 cluster_settings
@@ -548,6 +550,7 @@ SELECT * FROM system.information_schema.tables
 table_catalog  table_schema        table_name                         table_type   is_insertable_into  version
 system         crdb_internal       backward_dependencies              SYSTEM VIEW  NO                  1
 system         crdb_internal       builtin_functions                  SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_database_privileges        SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_queries                    SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_sessions                   SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                   SYSTEM VIEW  NO                  1
@@ -1614,6 +1617,9 @@ DROP DATABASE constraint_column CASCADE
 statement ok
 CREATE DATABASE other_db; SET DATABASE = other_db
 
+statement ok
+CREATE SCHEMA other_schema
+
 query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
@@ -1622,6 +1628,8 @@ admin    other_db       crdb_internal       ALL             NULL
 root     other_db       crdb_internal       ALL             NULL
 admin    other_db       information_schema  ALL             NULL
 root     other_db       information_schema  ALL             NULL
+admin    other_db       other_schema        ALL             NULL
+root     other_db       other_schema        ALL             NULL
 admin    other_db       pg_catalog          ALL             NULL
 root     other_db       pg_catalog          ALL             NULL
 admin    other_db       pg_extension        ALL             NULL
@@ -1638,14 +1646,47 @@ SELECT * FROM information_schema.schema_privileges
 grantee   table_catalog  table_schema        privilege_type  is_grantable
 admin     other_db       crdb_internal       ALL             NULL
 root      other_db       crdb_internal       ALL             NULL
+testuser  other_db       crdb_internal       USAGE           NULL
 admin     other_db       information_schema  ALL             NULL
 root      other_db       information_schema  ALL             NULL
+testuser  other_db       information_schema  USAGE           NULL
+admin     other_db       other_schema        ALL             NULL
+root      other_db       other_schema        ALL             NULL
 admin     other_db       pg_catalog          ALL             NULL
 root      other_db       pg_catalog          ALL             NULL
+testuser  other_db       pg_catalog          USAGE           NULL
 admin     other_db       pg_extension        ALL             NULL
 root      other_db       pg_extension        ALL             NULL
+testuser  other_db       pg_extension        USAGE           NULL
 admin     other_db       public              ALL             NULL
 root      other_db       public              ALL             NULL
+testuser  other_db       public              USAGE           NULL
+
+statement ok
+GRANT CREATE ON SCHEMA other_schema TO testuser
+
+query TTTTT colnames
+SELECT * FROM information_schema.schema_privileges
+----
+grantee   table_catalog  table_schema        privilege_type  is_grantable
+admin     other_db       crdb_internal       ALL             NULL
+root      other_db       crdb_internal       ALL             NULL
+testuser  other_db       crdb_internal       USAGE           NULL
+admin     other_db       information_schema  ALL             NULL
+root      other_db       information_schema  ALL             NULL
+testuser  other_db       information_schema  USAGE           NULL
+admin     other_db       other_schema        ALL             NULL
+root      other_db       other_schema        ALL             NULL
+testuser  other_db       other_schema        CREATE          NULL
+admin     other_db       pg_catalog          ALL             NULL
+root      other_db       pg_catalog          ALL             NULL
+testuser  other_db       pg_catalog          USAGE           NULL
+admin     other_db       pg_extension        ALL             NULL
+root      other_db       pg_extension        ALL             NULL
+testuser  other_db       pg_extension        USAGE           NULL
+admin     other_db       public              ALL             NULL
+root      other_db       public              ALL             NULL
+testuser  other_db       public              USAGE           NULL
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
@@ -1656,6 +1697,7 @@ SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, 
 grantor  grantee  table_catalog  table_schema        table_name                         privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       backward_dependencies              SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_database_privileges        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES
@@ -2034,6 +2076,7 @@ SELECT * FROM system.information_schema.role_table_grants
 grantor  grantee  table_catalog  table_schema        table_name                         privilege_type  is_grantable  with_hierarchy
 NULL     public   system         crdb_internal       backward_dependencies              SELECT          NULL          YES
 NULL     public   system         crdb_internal       builtin_functions                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_database_privileges        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_queries                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES

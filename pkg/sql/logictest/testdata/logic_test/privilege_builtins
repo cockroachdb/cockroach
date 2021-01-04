@@ -1,8 +1,29 @@
 statement ok
-CREATE USER bar
+CREATE USER bar; CREATE USER all_user_db; CREATE USER all_user_schema
+
+statement ok
+CREATE SCHEMA test_schema
 
 statement ok
 GRANT CREATE ON DATABASE test TO bar
+
+statement ok
+GRANT SELECT ON DATABASE test to testuser
+
+statement ok
+GRANT CREATE ON SCHEMA test_schema TO bar
+
+statement ok
+GRANT CREATE ON SCHEMA test_schema TO testuser
+
+statement ok
+GRANT USAGE ON SCHEMA test_schema TO testuser
+
+statement ok
+GRANT ALL ON DATABASE test to all_user_db;
+
+statement ok
+GRANT ALL ON SCHEMA test_schema to all_user_schema;
 
 statement ok
 CREATE TABLE t (a INT, b INT);
@@ -595,6 +616,55 @@ SELECT has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION'),
        has_schema_privilege('bar', 'public', 'CREATE WITH GRANT OPTION, USAGE WITH GRANT OPTION')
 ----
 false  false  false
+
+query BBB
+SELECT has_schema_privilege('testuser', 'public', 'CREATE'),
+       has_schema_privilege('testuser', 'public', 'USAGE'),
+       has_schema_privilege('testuser', 'public', 'CREATE, USAGE')
+----
+false  true  false
+
+query BBB
+SELECT has_schema_privilege('bar', 'test_schema', 'CREATE'),
+       has_schema_privilege('bar', 'test_schema', 'USAGE'),
+       has_schema_privilege('bar', 'test_schema', 'CREATE, USAGE')
+----
+true  false  false
+
+query BBB
+SELECT has_schema_privilege('testuser', 'test_schema', 'CREATE'),
+       has_schema_privilege('testuser', 'test_schema', 'USAGE'),
+       has_schema_privilege('testuser', 'test_schema', 'CREATE, USAGE')
+----
+true  true  true
+
+query BBB
+SELECT has_schema_privilege('all_user_db', 'public', 'CREATE'),
+       has_schema_privilege('all_user_db', 'public', 'USAGE'),
+       has_schema_privilege('all_user_db', 'public', 'CREATE, USAGE')
+----
+true  true  true
+
+query BBB
+SELECT has_schema_privilege('all_user_db', 'test_schema', 'CREATE'),
+       has_schema_privilege('all_user_db', 'test_schema', 'USAGE'),
+       has_schema_privilege('all_user_db', 'test_schema', 'CREATE, USAGE')
+----
+false  false  false
+
+query BBB
+SELECT has_schema_privilege('all_user_schema', 'public', 'CREATE'),
+       has_schema_privilege('all_user_schema', 'public', 'USAGE'),
+       has_schema_privilege('all_user_schema', 'public', 'CREATE, USAGE')
+----
+false  false  false
+
+query BBB
+SELECT has_schema_privilege('all_user_schema', 'test_schema', 'CREATE'),
+       has_schema_privilege('all_user_schema', 'test_schema', 'USAGE'),
+       has_schema_privilege('all_user_schema', 'test_schema', 'CREATE, USAGE')
+----
+true  true  true
 
 
 ## has_sequence_privilege
