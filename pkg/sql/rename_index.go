@@ -52,7 +52,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	idx, _, err := tableDesc.FindIndexByName(string(n.Index.Index))
+	idx, err := tableDesc.FindIndexWithName(string(n.Index.Index))
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -66,7 +66,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, err
 	}
 
-	return &renameIndexNode{n: n, idx: idx, tableDesc: tableDesc}, nil
+	return &renameIndexNode{n: n, idx: idx.IndexDesc(), tableDesc: tableDesc}, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -98,7 +98,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if _, _, err := tableDesc.FindIndexByName(string(n.n.NewName)); err == nil {
+	if _, err := tableDesc.FindIndexWithName(string(n.n.NewName)); err == nil {
 		return pgerror.Newf(pgcode.DuplicateRelation, "index name %q already exists", string(n.n.NewName))
 	}
 
