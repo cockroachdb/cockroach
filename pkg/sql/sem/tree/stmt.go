@@ -865,7 +865,7 @@ func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
 func (*ShowQueries) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowQueries) StatementTag() string { return "SHOW QUERIES" }
+func (*ShowQueries) StatementTag() string { return "SHOW STATEMENTS" }
 
 // StatementType implements the Statement interface.
 func (*ShowJobs) StatementType() StatementType { return Rows }

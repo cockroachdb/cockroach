@@ -1298,9 +1298,9 @@ var specs = []stmtSpec{
 		name: "show_partitions_stmt",
 	},
 	{
-		name:   "show_queries",
-		stmt:   "show_queries_stmt",
-		inline: []string{"opt_cluster"},
+		name:   "show_statements",
+		stmt:   "show_statements_stmt",
+		inline: []string{"opt_cluster", "statements_or_queries"},
 	},
 	{
 		name: "show_roles_stmt",

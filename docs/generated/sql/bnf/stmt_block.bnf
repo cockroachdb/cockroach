@@ -214,7 +214,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_locality_stmt
 	| show_schedules_stmt
-	| show_queries_stmt
+	| show_statements_stmt
 	| show_ranges_stmt
 	| show_range_for_row_stmt
 	| show_regions_stmt
@@ -654,9 +654,9 @@ show_schedules_stmt ::=
 	| 'SHOW' schedule_state 'SCHEDULES' opt_schedule_executor_type
 	| 'SHOW' 'SCHEDULE' a_expr
 
-show_queries_stmt ::=
-	'SHOW' opt_cluster 'QUERIES'
-	| 'SHOW' 'ALL' opt_cluster 'QUERIES'
+show_statements_stmt ::=
+	'SHOW' opt_cluster statements_or_queries
+	| 'SHOW' 'ALL' opt_cluster statements_or_queries
 
 show_ranges_stmt ::=
 	'SHOW' 'RANGES' 'FROM' 'TABLE' table_name
@@ -1057,6 +1057,7 @@ unreserved_keyword ::=
 	| 'SPLIT'
 	| 'SQL'
 	| 'START'
+	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
 	| 'STORAGE'
@@ -1517,6 +1518,10 @@ schedule_state ::=
 opt_cluster ::=
 	'CLUSTER'
 	| 'LOCAL'
+
+statements_or_queries ::=
+	'STATEMENTS'
+	| 'QUERIES'
 
 opt_compact ::=
 	'COMPACT'

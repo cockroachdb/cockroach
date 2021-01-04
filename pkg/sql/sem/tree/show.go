@@ -227,7 +227,7 @@ func (node *ShowDatabaseIndexes) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowQueries represents a SHOW QUERIES statement.
+// ShowQueries represents a SHOW STATEMENTS statement.
 type ShowQueries struct {
 	All     bool
 	Cluster bool
@@ -240,9 +240,9 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 		ctx.WriteString("ALL ")
 	}
 	if node.Cluster {
-		ctx.WriteString("CLUSTER QUERIES")
+		ctx.WriteString("CLUSTER STATEMENTS")
 	} else {
-		ctx.WriteString("LOCAL QUERIES")
+		ctx.WriteString("LOCAL STATEMENTS")
 	}
 }
 
