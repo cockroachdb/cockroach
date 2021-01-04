@@ -116,7 +116,6 @@ type TableDescriptor interface {
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor // deprecated
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error) // deprecated
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 

@@ -228,9 +228,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					idx.Partitioning = partitioning
 				}
-				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
+				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
 				if err == nil {
-					if dropped {
+					if foundIndex.Dropped() {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"index %q being dropped, try again later", d.Name)
 					}
