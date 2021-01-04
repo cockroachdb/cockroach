@@ -350,9 +350,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	for _, index := range desc.AllNonDropIndexes() {
-		if len(index.Interleave.Ancestors) > 0 {
-			if err := params.p.finalizeInterleave(params.ctx, desc, index); err != nil {
+	for _, index := range desc.NonDropIndexes() {
+		if index.NumInterleaveAncestors() > 0 {
+			if err := params.p.finalizeInterleave(params.ctx, desc, index.IndexDesc()); err != nil {
 				return err
 			}
 		}
@@ -1682,14 +1682,14 @@ func NewTableDesc(
 
 	// Assign any implicitly added shard columns to the column family of the first column
 	// in their corresponding set of index columns.
-	for _, index := range desc.AllNonDropIndexes() {
-		if index.IsSharded() && !columnsInExplicitFamilies[index.Sharded.Name] {
+	for _, index := range desc.NonDropIndexes() {
+		if index.IsSharded() && !columnsInExplicitFamilies[index.GetShardColumnName()] {
 			// Ensure that the shard column wasn't explicitly assigned a column family
 			// during table creation (this will happen when a create statement is
 			// "roundtripped", for example).
-			family := tabledesc.GetColumnFamilyForShard(&desc, index.Sharded.ColumnNames)
+			family := tabledesc.GetColumnFamilyForShard(&desc, index.GetSharded().ColumnNames)
 			if family != "" {
-				if err := desc.AddColumnToFamilyMaybeCreate(index.Sharded.Name, family, false, false); err != nil {
+				if err := desc.AddColumnToFamilyMaybeCreate(index.GetShardColumnName(), family, false, false); err != nil {
 					return nil, err
 				}
 			}
@@ -2134,47 +2134,50 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 		}
 		if opts.Has(tree.LikeTableOptIndexes) {
-			for _, idx := range td.AllNonDropIndexes() {
+			for _, idx := range td.NonDropIndexes() {
 				indexDef := tree.IndexTableDef{
-					Name:     tree.Name(idx.Name),
-					Inverted: idx.Type == descpb.IndexDescriptor_INVERTED,
-					Storing:  make(tree.NameList, 0, len(idx.StoreColumnNames)),
-					Columns:  make(tree.IndexElemList, 0, len(idx.ColumnNames)),
+					Name:     tree.Name(idx.GetName()),
+					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
+					Storing:  make(tree.NameList, 0, idx.NumStoredColumns()),
+					Columns:  make(tree.IndexElemList, 0, idx.NumColumns()),
 				}
-				columnNames := idx.ColumnNames
+				numColumns := idx.NumColumns()
 				if idx.IsSharded() {
 					indexDef.Sharded = &tree.ShardedIndexDef{
-						ShardBuckets: tree.NewDInt(tree.DInt(idx.Sharded.ShardBuckets)),
+						ShardBuckets: tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets)),
 					}
-					columnNames = idx.Sharded.ColumnNames
+					numColumns = len(idx.GetSharded().ColumnNames)
 				}
-				for i, name := range columnNames {
+				for j := 0; j < numColumns; j++ {
+					name := idx.GetColumnName(j)
+					if idx.IsSharded() {
+						name = idx.GetSharded().ColumnNames[j]
+					}
 					elem := tree.IndexElem{
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					if idx.ColumnDirections[i] == descpb.IndexDescriptor_DESC {
+					if idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC {
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				for _, name := range idx.StoreColumnNames {
-					indexDef.Storing = append(indexDef.Storing, tree.Name(name))
+				for j := 0; j < idx.NumStoredColumns(); j++ {
+					indexDef.Storing = append(indexDef.Storing, tree.Name(idx.GetStoredColumnName(j)))
 				}
 				var def tree.TableDef = &indexDef
-				if idx.Unique {
-					isPK := idx.ID == td.GetPrimaryIndexID()
-					if isPK && td.IsPrimaryIndexDefaultRowID() {
+				if idx.IsUnique() {
+					if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
 						continue
 					}
 
 					def = &tree.UniqueConstraintTableDef{
 						IndexTableDef: indexDef,
-						PrimaryKey:    isPK,
+						PrimaryKey:    idx.Primary(),
 					}
 				}
 				if idx.IsPartial() {
-					indexDef.Predicate, err = parser.ParseExpr(idx.Predicate)
+					indexDef.Predicate, err = parser.ParseExpr(idx.GetPredicate())
 					if err != nil {
 						return nil, err
 					}
