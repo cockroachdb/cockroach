@@ -268,18 +268,6 @@ func (desc *wrapper) IsPhysicalTable() bool {
 	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
 }
 
-// FindIndexByID finds an index (active or inactive) with the specified ID.
-// Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
-// callers can use returned values to modify the TableDesc.
-// This method is deprecated, use FindIndexWithID instead.
-func (desc *wrapper) FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error) {
-	idx, err := desc.FindIndexWithID(id)
-	if err != nil {
-		return nil, err
-	}
-	return idx.IndexDesc(), nil
-}
-
 // KeysPerRow returns the maximum number of keys used to encode a row for the
 // given index. If a secondary index doesn't store any columns, then it only
 // has one k/v pair, but if it stores some columns, it can return up to one
@@ -288,11 +276,11 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 	if desc.PrimaryIndex.ID == indexID {
 		return len(desc.Families), nil
 	}
-	idx, err := desc.FindIndexByID(indexID)
+	idx, err := desc.FindIndexWithID(indexID)
 	if err != nil {
 		return 0, err
 	}
-	if len(idx.StoreColumnIDs) == 0 {
+	if idx.NumStoredColumns() == 0 {
 		return 1, nil
 	}
 	return len(desc.Families), nil
@@ -649,7 +637,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			}
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
-			referencedIndex, err := tbl.FindIndexByID(ref.Index)
+			referencedIndex, err := tbl.FindIndexWithID(ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -658,7 +646,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				OriginTableID:       desc.ID,
 				OriginColumnIDs:     idx.ColumnIDs[:numCols],
 				ReferencedTableID:   ref.Table,
-				ReferencedColumnIDs: referencedIndex.ColumnIDs[:numCols],
+				ReferencedColumnIDs: referencedIndex.IndexDesc().ColumnIDs[:numCols],
 				Name:                ref.Name,
 				Validity:            ref.Validity,
 				OnDelete:            ref.OnDelete,
@@ -687,10 +675,11 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		}
 
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
-			originIndex, err := otherTable.FindIndexByID(ref.Index)
+			originIndexI, err := otherTable.FindIndexWithID(ref.Index)
 			if err != nil {
 				return false, err
 			}
+			originIndex := originIndexI.IndexDesc()
 			// There are two cases. Either the other table is old (not upgraded yet),
 			// or it's new (already upgraded).
 			var inFK descpb.ForeignKeyConstraint
@@ -1423,12 +1412,12 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			return nil, nil, errors.Wrapf(err,
 				"missing table=%d index=%d", errors.Safe(tableID), errors.Safe(indexID))
 		}
-		targetIndex, err := targetTable.FindIndexByID(indexID)
+		targetIndex, err := targetTable.FindIndexWithID(indexID)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
 				"missing table=%s index=%d", targetTable.GetName(), errors.Safe(indexID))
 		}
-		return targetTable, targetIndex, nil
+		return targetTable, targetIndex.IndexDesc(), nil
 	}
 
 	// Check foreign keys.
@@ -1483,7 +1472,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 				// that it shouldn't be possible for this index to not exist. See
 				// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
 				// called from the drop index implementation.)
-				originalOriginIndex, err := desc.FindIndexByID(backref.Index)
+				originalOriginIndex, err := desc.FindIndexWithID(backref.Index)
 				if err != nil {
 					return errors.AssertionFailedf(
 						"missing index %d on %q from pre-19.2 foreign key "+
@@ -1560,7 +1549,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			// that it shouldn't be possible for this index to not exist. See
 			// planner.MaybeUpgradeDependentOldForeignKeyVersionTables, which is
 			// called from the drop index implementation.)
-			originalReferencedIndex, err := desc.FindIndexByID(fk.Index)
+			originalReferencedIndex, err := desc.FindIndexWithID(fk.Index)
 			if err != nil {
 				return errors.AssertionFailedf(
 					"missing index %d on %q from pre-19.2 foreign key forward reference %q on %q",
@@ -1622,23 +1611,23 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 					"invalid interleave backreference table=%d index=%d",
 					backref.Table, backref.Index)
 			}
-			targetIndex, err := targetTable.FindIndexByID(backref.Index)
+			targetIndex, err := targetTable.FindIndexWithID(backref.Index)
 			if err != nil {
 				return errors.Wrapf(err,
 					"invalid interleave backreference table=%s index=%d",
 					targetTable.GetName(), backref.Index)
 			}
-			if len(targetIndex.Interleave.Ancestors) == 0 {
+			if targetIndex.NumInterleaveAncestors() == 0 {
 				return errors.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.GetName(), targetIndex.Name)
+					desc.Name, index.Name, targetTable.GetName(), targetIndex.GetName())
 			}
 			// The last ancestor is required to be a backreference.
-			ancestor := targetIndex.Interleave.Ancestors[len(targetIndex.Interleave.Ancestors)-1]
+			ancestor := targetIndex.GetInterleaveAncestor(targetIndex.NumInterleaveAncestors() - 1)
 			if ancestor.TableID != desc.ID || ancestor.IndexID != index.ID {
 				return errors.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.GetName(), targetIndex.Name)
+					desc.Name, index.Name, targetTable.GetName(), targetIndex.GetName())
 			}
 		}
 	}
@@ -3389,25 +3378,25 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 			// Promote the new primary index into the primary index position on the descriptor,
 			// and remove it from the secondary indexes list.
-			newIndex, err := desc.FindIndexByID(args.NewPrimaryIndexId)
+			newIndex, err := desc.FindIndexWithID(args.NewPrimaryIndexId)
 			if err != nil {
 				return err
 			}
-			if args.NewPrimaryIndexName == "" {
-				newIndex.Name = PrimaryKeyIndexName
-			} else {
-				newIndex.Name = args.NewPrimaryIndexName
-			}
 
 			{
-				primaryIndex := *protoutil.Clone(newIndex).(*descpb.IndexDescriptor)
+				primaryIndex := newIndex.IndexDescDeepCopy()
+				if args.NewPrimaryIndexName == "" {
+					primaryIndex.Name = PrimaryKeyIndexName
+				} else {
+					primaryIndex.Name = args.NewPrimaryIndexName
+				}
 				// The primary index "implicitly" stores all columns in the table.
 				// Explicitly including them in the stored columns list is incorrect.
 				primaryIndex.StoreColumnNames, primaryIndex.StoreColumnIDs = nil, nil
 				desc.SetPrimaryIndex(primaryIndex)
 			}
 
-			idx, err := getIndexIdxByID(newIndex.ID)
+			idx, err := getIndexIdxByID(newIndex.GetID())
 			if err != nil {
 				return err
 			}
@@ -3419,7 +3408,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				newID := args.NewIndexes[j]
 				// All our new indexes have been inserted into the table descriptor by now, since the primary key swap
 				// is the last mutation processed in a group of mutations under the same mutation ID.
-				newIndex, err := desc.FindIndexByID(newID)
+				newIndex, err := desc.FindIndexWithID(newID)
 				if err != nil {
 					return err
 				}
@@ -3432,7 +3421,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 					return err
 				}
 				oldIndexCopy := protoutil.Clone(oldIndex).(*descpb.IndexDescriptor)
-				newIndex.Name = oldIndexCopy.Name
+				newIndex.IndexDesc().Name = oldIndexCopy.Name
 				// Splice out old index from the indexes list.
 				desc.RemovePublicNonPrimaryIndex(oldIndexIdx)
 				// Add a drop mutation for the old index. The code that calls this function will schedule
