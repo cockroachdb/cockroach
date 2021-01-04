@@ -217,16 +217,24 @@ vectorized: true
     │ columns: (col0, col3, col4)
     │ estimated row count: 311 (missing stats)
     │
-    └── • filter
+    └── • render
         │ columns: (col0, col3, col4, rowid)
         │ estimated row count: 311 (missing stats)
-        │ filter: (col0 <= 0) AND (col4 <= 5.38)
+        │ render 0: col0
+        │ render 1: col3
+        │ render 2: col4
+        │ render 3: rowid
         │
-        └── • scan
-              columns: (col0, col3, col4, rowid)
-              estimated row count: 1,000 (missing stats)
-              table: tab4@primary
-              spans: FULL SCAN
+        └── • filter
+            │ columns: (col0, col3, col4, rowid)
+            │ estimated row count: 311 (missing stats)
+            │ filter: (col0 <= 0) AND (col4 <= 5.38)
+            │
+            └── • scan
+                  columns: (col0, col3, col4, rowid)
+                  estimated row count: 1,000 (missing stats)
+                  table: tab4@primary
+                  spans: FULL SCAN
 
 # ------------------------------------------------------------------------------
 # Correlated subqueries.
