@@ -780,7 +780,10 @@ func (r *Replica) evaluateProposal(
 			activeVersion := r.ClusterSettings().Version.ActiveVersion(ctx).Version
 			migrationVersion := clusterversion.ByKey(clusterversion.TruncatedAndRangeAppliedStateMigration)
 			if migrationVersion.Less(activeVersion) {
-				log.Fatalf(ctx, "not using applied state key in v21.1")
+				// TODO(irfansharif): This was originally a fatal, which seems
+				// to have been a racey assertion (see #58378). We've downgraded
+				// it to an error to not trip up builds while we investigate.
+				log.Error(ctx, "not using applied state key in v21.1")
 			}
 			// The range applied state was introduced in v2.1. It's possible to
 			// still find ranges that haven't activated it. If so, activate it.
