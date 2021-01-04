@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq/oid"
@@ -704,8 +703,6 @@ func (c *conn) handleSimpleQuery(
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-
-	tracing.AnnotateTrace()
 
 	startParse := timeutil.Now()
 	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)

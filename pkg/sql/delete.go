@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var deleteNodePool = sync.Pool{
@@ -90,8 +89,6 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	if d.run.done {
 		return false, nil
 	}
-
-	tracing.AnnotateTrace()
 
 	// Advance one batch. First, clear the last batch.
 	d.run.td.clearLastBatch(params.ctx)
