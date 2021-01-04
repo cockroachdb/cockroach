@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamingest",
     srcs = [
+        "stream_ingestion_frontier_processor.go",
         "stream_ingestion_job.go",
         "stream_ingestion_processor.go",
         "stream_ingestion_processor_planning.go",
@@ -28,10 +29,13 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/span",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -39,6 +43,7 @@ go_test(
     name = "streamingest_test",
     srcs = [
         "main_test.go",
+        "stream_ingestion_frontier_processor_test.go",
         "stream_ingestion_job_test.go",
         "stream_ingestion_processor_test.go",
     ],
@@ -72,6 +77,7 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

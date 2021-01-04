@@ -118,6 +118,7 @@ message ProcessorCoreUnion {
   optional RestoreDataSpec restoreData = 33;
   optional FiltererSpec filterer = 34;
   optional StreamIngestionDataSpec streamIngestionData = 35;
+  optional StreamIngestionFrontierSpec streamIngestionFrontier = 36;
 
   reserved 6, 12;
 }
