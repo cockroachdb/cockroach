@@ -464,16 +464,6 @@ func (desc *wrapper) ForeachNonDropColumn(f func(column *descpb.ColumnDescriptor
 	return nil
 }
 
-// ForeachIndex runs a function on the set of indexes as specified by opts.
-// This method is deprecated, use ForEachIndex instead.
-func (desc *wrapper) ForeachIndex(
-	opts catalog.IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
-) error {
-	return desc.ForEachIndex(opts, func(idx catalog.Index) error {
-		return f(idx.IndexDesc(), idx.Primary())
-	})
-}
-
 // ForeachDependedOnBy runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *wrapper) ForeachDependedOnBy(
@@ -1465,15 +1455,13 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		// un-upgraded foreign key references on the other table. This logic
 		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
 		unupgradedFKsPresent := false
-		if err := referencedTable.ForeachIndex(catalog.IndexOpts{}, func(
-			referencedIdx *descpb.IndexDescriptor, isPrimary bool,
-		) error {
+		if err := referencedTable.ForEachIndex(catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
 			if found {
 				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
 				// a way to break out of the index loop.
 				return nil
 			}
-			if len(referencedIdx.ReferencedBy) > 0 {
+			if len(referencedIdx.IndexDesc().ReferencedBy) > 0 {
 				unupgradedFKsPresent = true
 			} else {
 				return nil
@@ -1485,8 +1473,8 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			}
 			// Now check the backreferences. Backreferences in ReferencedBy only had
 			// Index and Table populated.
-			for i := range referencedIdx.ReferencedBy {
-				backref := &referencedIdx.ReferencedBy[i]
+			for i := range referencedIdx.IndexDesc().ReferencedBy {
+				backref := &referencedIdx.IndexDesc().ReferencedBy[i]
 				if backref.Table != desc.ID {
 					continue
 				}
@@ -1546,15 +1534,13 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		// un-upgraded foreign key references on the other table. This logic
 		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
 		unupgradedFKsPresent := false
-		if err := originTable.ForeachIndex(catalog.IndexOpts{}, func(
-			originIdx *descpb.IndexDescriptor, isPrimary bool,
-		) error {
+		if err := originTable.ForEachIndex(catalog.IndexOpts{}, func(originIdx catalog.Index) error {
 			if found {
 				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
 				// a way to break out of the index loop.
 				return nil
 			}
-			fk := originIdx.ForeignKey
+			fk := originIdx.IndexDesc().ForeignKey
 			if fk.IsSet() {
 				unupgradedFKsPresent = true
 			} else {

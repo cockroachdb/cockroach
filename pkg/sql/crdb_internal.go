@@ -1823,12 +1823,8 @@ CREATE TABLE crdb_internal.create_statements (
 		if createNofk == "" {
 			createNofk = stmt
 		}
-		hasPartitions := false
-		_ = table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
-			if idxDesc.Partitioning.NumColumns != 0 {
-				hasPartitions = true
-			}
-			return nil
+		hasPartitions := nil != table.FindIndex(catalog.IndexOpts{}, func(idx catalog.Index) bool {
+			return idx.GetPartitioning().NumColumns != 0
 		})
 		return addRow(
 			dbDescID,
@@ -2056,22 +2052,22 @@ CREATE TABLE crdb_internal.table_indexes (
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
 					// indexes are not reported as a part of ForeachIndex.
-					return table.ForeachIndex(catalog.IndexOpts{
+					return table.ForEachIndex(catalog.IndexOpts{
 						NonPhysicalPrimaryIndex: true,
-					}, func(idx *descpb.IndexDescriptor, isPrimary bool) error {
+					}, func(idx catalog.Index) error {
 						row = row[:0]
 						idxType := secondary
-						if isPrimary {
+						if idx.Primary() {
 							idxType = primary
 						}
 						row = append(row,
 							tableID,
 							tableName,
-							tree.NewDInt(tree.DInt(idx.ID)),
-							tree.NewDString(idx.Name),
+							tree.NewDInt(tree.DInt(idx.GetID())),
+							tree.NewDString(idx.GetName()),
 							idxType,
-							tree.MakeDBool(tree.DBool(idx.Unique)),
-							tree.MakeDBool(idx.Type == descpb.IndexDescriptor_INVERTED),
+							tree.MakeDBool(tree.DBool(idx.IsUnique())),
+							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 						)
 						return pusher.pushRow(row...)
 					})
@@ -2116,7 +2112,8 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
 
-				reportIndex := func(idx *descpb.IndexDescriptor) error {
+				reportIndex := func(idxI catalog.Index) error {
+					idx := idxI.IndexDesc()
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					idxName := tree.NewDString(idx.Name)
 
@@ -2184,11 +2181,7 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				return table.ForeachIndex(catalog.IndexOpts{
-					NonPhysicalPrimaryIndex: true,
-				}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
-					return reportIndex(idxDesc)
-				})
+				return table.ForEachIndex(catalog.IndexOpts{NonPhysicalPrimaryIndex: true}, reportIndex)
 			})
 	},
 }
@@ -2220,17 +2213,19 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
+
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
 			db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn,
 		) error {
 			tableID := tree.NewDInt(tree.DInt(table.GetID()))
 			tableName := tree.NewDString(table.GetName())
 
-			reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
-				for _, interleaveParent := range idx.Interleave.Ancestors {
+			reportIdxDeps := func(idx catalog.Index) error {
+				for i := 0; i < idx.NumInterleaveAncestors(); i++ {
+					interleaveParent := idx.GetInterleaveAncestor(i)
 					if err := addRow(
 						tableID, tableName,
-						tree.NewDInt(tree.DInt(idx.ID)),
+						tree.NewDInt(tree.DInt(idx.GetID())),
 						tree.DNull,
 						tree.NewDInt(tree.DInt(interleaveParent.TableID)),
 						interleaveDep,
@@ -2268,10 +2263,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			}
 
 			// Record the backward references of the primary index.
-			if err := table.ForeachIndex(catalog.IndexOpts{},
-				func(idxDesc *descpb.IndexDescriptor, _ bool) error {
-					return reportIdxDeps(idxDesc)
-				}); err != nil {
+			if err := table.ForEachIndex(catalog.IndexOpts{}, reportIdxDeps); err != nil {
 				return err
 			}
 
@@ -2367,11 +2359,12 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
-				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
-					for _, interleaveRef := range idx.InterleavedBy {
+				reportIdxDeps := func(idx catalog.Index) error {
+					for i := 0; i < idx.NumInterleavedBy(); i++ {
+						interleaveRef := idx.GetInterleavedBy(i)
 						if err := addRow(
 							tableID, tableName,
-							tree.NewDInt(tree.DInt(idx.ID)),
+							tree.NewDInt(tree.DInt(idx.GetID())),
 							tree.NewDInt(tree.DInt(interleaveRef.Table)),
 							interleaveDep,
 							tree.NewDInt(tree.DInt(interleaveRef.Index)),
@@ -2399,9 +2392,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
-					return reportIdxDeps(idxDesc)
-				}); err != nil {
+				if err := table.ForEachIndex(catalog.IndexOpts{}, reportIdxDeps); err != nil {
 					return err
 				}
 				reportDependedOnBy := func(
@@ -3415,10 +3406,10 @@ CREATE TABLE crdb_internal.partitions (
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
-					return table.ForeachIndex(catalog.IndexOpts{
+					return table.ForEachIndex(catalog.IndexOpts{
 						AddMutations: true,
-					}, func(index *descpb.IndexDescriptor, _ bool) error {
-						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
+					}, func(index catalog.Index) error {
+						return addPartitioningRows(ctx, p, dbName, table, index.IndexDesc(), &index.IndexDesc().Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})
