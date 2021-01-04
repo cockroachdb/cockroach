@@ -1429,6 +1429,22 @@ func (jsonString) FetchValKey(string) (JSON, error) { return nil, nil }
 func (jsonNumber) FetchValKey(string) (JSON, error) { return nil, nil }
 func (jsonArray) FetchValKey(string) (JSON, error)  { return nil, nil }
 
+func fetchValIdxForScalar(j JSON, idx int) JSON {
+	// The 0'th element (and -1'st element with negative indexing) of a scalar
+	// JSON value is the scalar itself. This effectively treats scalar values as
+	// single element arrays.
+	if idx == 0 || idx == -1 {
+		return j
+	}
+	return nil
+}
+
+func (j jsonNull) FetchValIdx(idx int) (JSON, error)   { return fetchValIdxForScalar(j, idx), nil }
+func (j jsonTrue) FetchValIdx(idx int) (JSON, error)   { return fetchValIdxForScalar(j, idx), nil }
+func (j jsonFalse) FetchValIdx(idx int) (JSON, error)  { return fetchValIdxForScalar(j, idx), nil }
+func (j jsonString) FetchValIdx(idx int) (JSON, error) { return fetchValIdxForScalar(j, idx), nil }
+func (j jsonNumber) FetchValIdx(idx int) (JSON, error) { return fetchValIdxForScalar(j, idx), nil }
+
 func (j jsonArray) FetchValIdx(idx int) (JSON, error) {
 	if idx < 0 {
 		idx = len(j) + idx
@@ -1439,11 +1455,6 @@ func (j jsonArray) FetchValIdx(idx int) (JSON, error) {
 	return nil, nil
 }
 
-func (jsonNull) FetchValIdx(int) (JSON, error)   { return nil, nil }
-func (jsonTrue) FetchValIdx(int) (JSON, error)   { return nil, nil }
-func (jsonFalse) FetchValIdx(int) (JSON, error)  { return nil, nil }
-func (jsonString) FetchValIdx(int) (JSON, error) { return nil, nil }
-func (jsonNumber) FetchValIdx(int) (JSON, error) { return nil, nil }
 func (jsonObject) FetchValIdx(int) (JSON, error) { return nil, nil }
 
 // FetchPath implements the #> operator.
@@ -1736,8 +1747,12 @@ func (j jsonObject) RemoveString(s string) (JSON, bool, error) {
 	return jsonObject(newVal), true, nil
 }
 
-func (jsonNull) RemoveString(string) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
-func (jsonTrue) RemoveString(string) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
+func (jsonNull) RemoveString(string) (JSON, bool, error) {
+	return nil, false, errCannotDeleteFromScalar
+}
+func (jsonTrue) RemoveString(string) (JSON, bool, error) {
+	return nil, false, errCannotDeleteFromScalar
+}
 func (jsonFalse) RemoveString(string) (JSON, bool, error) {
 	return nil, false, errCannotDeleteFromScalar
 }
