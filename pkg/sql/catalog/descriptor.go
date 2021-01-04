@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// IndexOpts configures the behavior of TableDescriptor.ForeachIndex.
+// IndexOpts configures the behavior of TableDescriptor.ForEachIndex.
 type IndexOpts struct {
 	// NonPhysicalPrimaryIndex should be included.
 	NonPhysicalPrimaryIndex bool
@@ -114,8 +114,7 @@ type TableDescriptor interface {
 	GetPrimaryIndexID() descpb.IndexID
 	GetPrimaryIndex() *descpb.IndexDescriptor // deprecated
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
-	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor                                             // deprecated
-	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error // deprecated
+	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor // deprecated
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)               // deprecated
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error) // deprecated
