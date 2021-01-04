@@ -64,7 +64,11 @@ func readNextMessages(t testing.TB, f cdctest.TestFeed, numMessages int, stripTs
 	for len(actual) < numMessages {
 		m, err := f.Next()
 		if log.V(1) {
-			log.Infof(context.Background(), `%v %s: %s->%s`, err, m.Topic, m.Key, m.Value)
+			if m != nil {
+				log.Infof(context.Background(), `msg %s: %s->%s (%s)`, m.Topic, m.Key, m.Value, m.Resolved)
+			} else {
+				log.Infof(context.Background(), `err %v`, err)
+			}
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -194,6 +198,11 @@ func expectResolvedTimestamp(t testing.TB, f cdctest.TestFeed) hlc.Timestamp {
 	} else if m == nil {
 		t.Fatal(`expected message`)
 	}
+	return extractResolvedTimestamp(t, m)
+}
+
+func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Timestamp {
+	t.Helper()
 	if m.Key != nil {
 		t.Fatalf(`unexpected row %s: %s -> %s`, m.Topic, m.Key, m.Value)
 	}

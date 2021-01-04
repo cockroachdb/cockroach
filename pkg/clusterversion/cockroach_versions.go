@@ -252,6 +252,9 @@ const (
 	// database, such as adding REGIONS to a DATABASE or setting the LOCALITY
 	// on a TABLE.
 	MultiRegionFeatures
+	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
+	// nodes support detecting and restarting on primary index changes.
+	ChangefeedsSupportPrimaryIndexChanges
 
 	// Step (1): Add new versions here.
 )
@@ -426,6 +429,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     MultiRegionFeatures,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 34},
 	},
+	{
+		Key:     ChangefeedsSupportPrimaryIndexChanges,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 36},
+	},
+
 	// Step (2): Add new versions here.
 })
 
