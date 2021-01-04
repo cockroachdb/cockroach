@@ -833,11 +833,11 @@ func spansForAllRestoreTableIndexes(
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
+		for _, index := range table.NonDropIndexes() {
+			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.GetID())), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
-			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
+			added[tableAndIndex{tableID: table.GetID(), indexID: index.GetID()}] = true
 		}
 	}
 	// If there are desc revisions, ensure that we also add any index spans
@@ -853,10 +853,10 @@ func spansForAllRestoreTableIndexes(
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
 			tbl := tabledesc.NewImmutable(*rawTbl)
-			for _, idx := range tbl.AllNonDropIndexes() {
-				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
+			for _, idx := range tbl.NonDropIndexes() {
+				key := tableAndIndex{tableID: tbl.ID, indexID: idx.GetID()}
 				if !added[key] {
-					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.GetID())), false); err != nil {
 						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 					}
 					added[key] = true
