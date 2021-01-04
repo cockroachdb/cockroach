@@ -139,6 +139,19 @@ message StreamIngestionDataSpec {
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
 }
 
+message StreamIngestionFrontierSpec {
+  // HighWaterAtStart is set by the ingestion job when planning the frontier
+  // processor. It is used to convey the timestamp until which the ingestion
+  // job has ingested data.
+  optional util.hlc.Timestamp high_water_at_start = 1 [(gogoproto.nullable) = false];
+  // TrackedSpans is the entire span set being watched. The spans do not really
+  // represent KV spans but uniquely identify the partitions in the ingestion
+  // stream. Once all the partitions in the ingestion stream have been resolved
+  // at a certain timestamp, then it's safe to resolve the ingestion at that
+  // timestamp.
+  repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
+}
+
 message BackupDataSpec {
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
