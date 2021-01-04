@@ -16,7 +16,6 @@ import (
 	"io"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 	"unsafe"
 
@@ -365,12 +364,24 @@ func TestServerDump(t *testing.T) {
 	sourceCount := 5
 	// Number of slabs (hours) of data we want to generate
 	slabCount := 5
-	// Generated datapoints every 100 seconds, so compute how many we want to
-	// generate data across the target number of hours.
-	valueCount := int(ts.Resolution10s.SlabDuration()/(100*1e9)) * slabCount
+	// Number of datapoints to generate every hour. Generated datapoints every
+	// 100 seconds, so compute how many we want to generate data across one hour.
+	numPointsEachHour := int(ts.Resolution10s.SlabDuration() / (100 * 1e9))
+	// Number of total datapoints.
+	valueCount := numPointsEachHour * slabCount
+	// We'll dump [startVal, endVal) below. To simplify the test, pick them
+	// according to a slab boundary.
+	startSlab, endSlab := 2, 4
+	startVal := numPointsEachHour * startSlab
+	endVal := numPointsEachHour * endSlab
 
 	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
 		t.Fatal(err)
+	}
+
+	names := make([]string, 0, seriesCount)
+	for series := 0; series < seriesCount; series++ {
+		names = append(names, seriesName(series))
 	}
 
 	conn, err := tsrv.RPCContext().GRPCDialNode(tsrv.Cfg.Addr, tsrv.NodeID(),
@@ -380,7 +391,11 @@ func TestServerDump(t *testing.T) {
 	}
 	client := tspb.NewTimeSeriesClient(conn)
 
-	dumpClient, err := client.Dump(context.Background(), nil)
+	dumpClient, err := client.Dump(context.Background(), &tspb.DumpRequest{
+		Names:      names,
+		StartNanos: datapointTimestampNanos(startVal),
+		EndNanos:   datapointTimestampNanos(endVal),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,12 +410,6 @@ func TestServerDump(t *testing.T) {
 		}
 		if err != nil {
 			t.Fatal(err)
-		}
-		// The dump will include all of the real time series metrics recorded by the
-		// server. Filter out everything other than the metrics we are creating
-		// for this test.
-		if !strings.HasPrefix(msg.Name, "metric.") {
-			continue
 		}
 		sourceMap, ok := resultMap[msg.Name]
 		if !ok {
@@ -425,12 +434,12 @@ func TestServerDump(t *testing.T) {
 			sourceMap[sourceName(source)] = tspb.TimeSeriesData{
 				Name:       seriesName(series),
 				Source:     sourceName(source),
-				Datapoints: generateTimeSeriesDatapoints(valueCount),
+				Datapoints: generateTimeSeriesDatapoints(startVal, endVal),
 			}
 		}
 	}
 
-	if a, e := totalMsgCount, seriesCount*sourceCount*slabCount; a != e {
+	if a, e := totalMsgCount, seriesCount*sourceCount*(endSlab-startSlab); a != e {
 		t.Fatalf("dump returned %d messages, expected %d", a, e)
 	}
 	if a, e := resultMap, expectedMap; !reflect.DeepEqual(a, e) {
@@ -486,13 +495,20 @@ func sourceName(sourceNum int) string {
 	return fmt.Sprintf("source.%d", sourceNum)
 }
 
-func generateTimeSeriesDatapoints(valueCount int) []tspb.TimeSeriesDatapoint {
-	result := make([]tspb.TimeSeriesDatapoint, 0, valueCount)
-	var i int64
-	for i = 0; i < int64(valueCount); i++ {
+func datapointTimestampNanos(val int) int64 {
+	return int64(val * 100 * 1e9)
+}
+
+func datapointValue(val int) float64 {
+	return float64(val * 100)
+}
+
+func generateTimeSeriesDatapoints(startValue, endValue int) []tspb.TimeSeriesDatapoint {
+	result := make([]tspb.TimeSeriesDatapoint, 0, endValue-startValue)
+	for i := startValue; i < endValue; i++ {
 		result = append(result, tspb.TimeSeriesDatapoint{
-			TimestampNanos: i * 100 * 1e9,
-			Value:          float64(i * 100),
+			TimestampNanos: datapointTimestampNanos(i),
+			Value:          datapointValue(i),
 		})
 	}
 	return result
@@ -505,7 +521,7 @@ func populateSeries(seriesCount, sourceCount, valueCount int, tsdb *ts.DB) error
 				{
 					Name:       seriesName(series),
 					Source:     sourceName(source),
-					Datapoints: generateTimeSeriesDatapoints(valueCount),
+					Datapoints: generateTimeSeriesDatapoints(0 /* startValue */, valueCount),
 				},
 			}); err != nil {
 				return errors.Errorf(
