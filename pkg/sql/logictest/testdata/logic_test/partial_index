@@ -1412,3 +1412,19 @@ UPDATE t57085_p3 SET p = 4 WHERE p = 3;
 query III rowsort
 SELECT c, p, i FROM t57085_c3@idx WHERE p = 3 AND i = 100
 ----
+
+# Regression test for #58390. Altering the primary key of a table with a partial
+# index that has a disjunctive filter should not create a stack overflow due to
+# a cycle in the optimizer memo.
+subtest regression_58390
+
+statement ok
+CREATE TABLE t58390 (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  c INT,
+  INDEX (c) WHERE a = 1 OR b = 1
+)
+
+statement ok
+ALTER TABLE t58390 ALTER PRIMARY KEY USING COLUMNS (b, a)
