@@ -54,6 +54,11 @@ usermod -a -G docker agent
 su - agent <<'EOF'
 set -euxo pipefail
 
+# Set the default branch name for git. (Out of an abundance of caution because
+# I don't know how well TC handles having a different default branch name, stick
+# with "master".)
+git config --global init.defaultBranch master
+
 echo 'export GOPATH="$HOME"/work/.go' >> .profile && source .profile
 
 wget https://teamcity.cockroachdb.com/update/buildAgent.zip
