@@ -116,7 +116,7 @@ type indexMapValue struct {
 // initialized with that event's data.
 func newIndexMapValue(c roachpb.ContentionEvent) *indexMapValue {
 	txnCache := cache.NewUnorderedCache(txnCacheCfg)
-	txnCache.Add(c.Txn.TxnMeta.ID, 1)
+	txnCache.Add(c.TxnMeta.ID, 1)
 	keyMap := cache.NewOrderedCache(orderedKeyMapCfg)
 	keyMap.Add(comparableKey(c.Key), txnCache)
 	return &indexMapValue{
@@ -134,7 +134,7 @@ func (v *indexMapValue) addContentionEvent(c roachpb.ContentionEvent) {
 	var numTimesThisTxnWasEncountered int
 	txnCache, ok := v.orderedKeyMap.Get(comparableKey(c.Key))
 	if ok {
-		if txnVal, ok := txnCache.(*cache.UnorderedCache).Get(c.Txn.TxnMeta.ID); ok {
+		if txnVal, ok := txnCache.(*cache.UnorderedCache).Get(c.TxnMeta.ID); ok {
 			numTimesThisTxnWasEncountered = txnVal.(int)
 		}
 	} else {
@@ -142,7 +142,7 @@ func (v *indexMapValue) addContentionEvent(c roachpb.ContentionEvent) {
 		txnCache = cache.NewUnorderedCache(txnCacheCfg)
 		v.orderedKeyMap.Add(comparableKey(c.Key), txnCache)
 	}
-	txnCache.(*cache.UnorderedCache).Add(c.Txn.TxnMeta.ID, numTimesThisTxnWasEncountered+1)
+	txnCache.(*cache.UnorderedCache).Add(c.TxnMeta.ID, numTimesThisTxnWasEncountered+1)
 }
 
 // indexMap is a helper struct that wraps an LRU cache sized up to

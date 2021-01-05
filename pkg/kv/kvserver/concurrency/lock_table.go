@@ -80,7 +80,7 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn  *enginepb.TxnMeta // always non-nil
+	txn  *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
 	key  roachpb.Key       // the key of the conflict
 	held bool              // is the conflict a held lock?
 
@@ -968,7 +968,12 @@ func (l *lockState) informActiveWaiters() {
 		g := qg.guard
 		var state waitingState
 		if g.isSameTxnAsReservation(waitForState) {
-			state = waitingState{kind: waitSelf}
+			state = waitingState{
+				kind: waitSelf,
+				key:  waitForState.key,
+				txn:  waitForState.txn,
+				held: waitForState.held, // false
+			}
 		} else {
 			state = waitForState
 			state.guardAccess = spanset.SpanReadWrite
@@ -1339,7 +1344,12 @@ func (l *lockState) tryActiveWait(
 	g.key = l.key
 	g.mu.startWait = true
 	if g.isSameTxnAsReservation(waitForState) {
-		g.mu.state = waitingState{kind: waitSelf}
+		g.mu.state = waitingState{
+			kind: waitSelf,
+			key:  waitForState.key,
+			txn:  waitForState.txn,
+			held: waitForState.held, // false
+		}
 	} else {
 		state := waitForState
 		state.guardAccess = sa
