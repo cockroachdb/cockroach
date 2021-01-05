@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -167,7 +166,7 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 
 	for i := range desc.Overloads {
 		o := &desc.Overloads[i]
-		if _, err := parser.ParseExpr(o.Def); err != nil {
+		if _, _, err := ParseUserDefinedFuncDef(o.Def); err != nil {
 			return err
 		}
 
@@ -196,7 +195,7 @@ func (desc *Immutable) MakeFuncDef() (*tree.FunctionDefinition, error) {
 			typs[j].Name = o.ParamNames[j]
 		}
 		retType := o.ReturnType
-		expr, err := parser.ParseExpr(o.Def)
+		_, expr, err := ParseUserDefinedFuncDef(o.Def)
 		if err != nil {
 			return nil, err
 		}

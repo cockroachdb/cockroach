@@ -35,7 +35,7 @@ type createFuncNode struct {
 	n        *tree.CreateFunction
 	dbDesc   catalog.DatabaseDescriptor
 	funcName *tree.FuncName
-	expr     tree.Expr
+	def      tree.Statement
 }
 
 // Use to satisfy the linter.
@@ -67,7 +67,7 @@ func (p *planner) CreateFunc(ctx context.Context, n *tree.CreateFunction) (planN
 	// Parse the function definition to see if it's even sensical.
 	funcDef := n.FuncDef.RawString()
 	// TODO(jordan): make sure that there are no unbound variables in this expr.
-	funcExpr, err := funcdesc.ParseUserDefinedFuncDef(funcDef)
+	statement, _, err := funcdesc.ParseUserDefinedFuncDef(funcDef)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (p *planner) CreateFunc(ctx context.Context, n *tree.CreateFunction) (planN
 
 	return &createFuncNode{
 		n:        n,
-		expr:     funcExpr,
+		def:      statement,
 		funcName: funcName,
 		dbDesc:   db,
 	}, nil
@@ -111,7 +111,7 @@ func resolveNewFuncName(
 }
 
 func (c *createFuncNode) startExec(params runParams) error {
-	return params.p.createUserDefinedFunc(params, c.dbDesc, c.funcName, c.n, c.expr)
+	return params.p.createUserDefinedFunc(params, c.dbDesc, c.funcName, c.n, c.def)
 }
 
 func (p *planner) createUserDefinedFunc(
@@ -119,7 +119,7 @@ func (p *planner) createUserDefinedFunc(
 	db catalog.DatabaseDescriptor,
 	funcName *tree.FuncName,
 	n *tree.CreateFunction,
-	expr tree.Expr,
+	def tree.Statement,
 ) error {
 	paramNames := make([]string, len(n.Params))
 	paramTypes := make([]*types.T, len(n.Params))
@@ -214,7 +214,7 @@ func (p *planner) createUserDefinedFunc(
 		Name: mangled,
 		Overloads: []descpb.FuncDescriptor_Overload{
 			{
-				Def:        tree.AsStringWithFlags(expr, tree.FmtParsable),
+				Def:        tree.AsStringWithFlags(def, tree.FmtParsable),
 				ParamNames: paramNames,
 				ParamTypes: paramTypes,
 				ReturnType: *retType,
