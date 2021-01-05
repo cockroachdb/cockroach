@@ -164,16 +164,17 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
 
-				c.requestsByName[reqName] = concurrency.Request{
-					Txn:       txn,
-					Timestamp: ts,
-					// TODO(nvanbenschoten): test Priority
-					ReadConsistency: readConsistency,
-					WaitPolicy:      waitPolicy,
-					Requests:        reqUnions,
-					LatchSpans:      latchSpans,
-					LockSpans:       lockSpans,
-				}
+				c.requestsByName[reqName] = testReq{
+					Request: concurrency.Request{
+						Txn:       txn,
+						Timestamp: ts,
+						// TODO(nvanbenschoten): test Priority
+						ReadConsistency: readConsistency,
+						WaitPolicy:      waitPolicy,
+						Requests:        reqUnions,
+						LatchSpans:      latchSpans,
+						LockSpans:       lockSpans,
+					}}
 				return ""
 
 			case "sequence":
@@ -190,8 +191,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.mu.Unlock()
 
 				opName := fmt.Sprintf("sequence %s", reqName)
-				mon.runAsync(opName, func(ctx context.Context) {
-					guard, resp, err := m.SequenceReq(ctx, prev, req)
+				cancel := mon.runAsync(opName, func(ctx context.Context) {
+					guard, resp, err := m.SequenceReq(ctx, prev, req.Request)
 					if err != nil {
 						log.Eventf(ctx, "sequencing complete, returned error: %v", err)
 					} else if resp != nil {
@@ -205,6 +206,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						log.Event(ctx, "sequencing complete, returned no guard")
 					}
 				})
+				req.cancel = cancel
+				c.requestsByName[reqName] = req
 				return c.waitAndCollect(t, mon)
 
 			case "finish":
@@ -477,6 +480,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	})
 }
 
+type testReq struct {
+	cancel func()
+	concurrency.Request
+}
+
 // cluster encapsulates the state of a running cluster and a set of requests.
 // It serves as the test harness in TestConcurrencyManagerBasic - maintaining
 // transaction and request declarations, recording the state of in-flight
@@ -491,7 +499,7 @@ type cluster struct {
 	// Definitions.
 	txnCounter     uint32
 	txnsByName     map[string]*roachpb.Transaction
-	requestsByName map[string]concurrency.Request
+	requestsByName map[string]testReq
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
@@ -511,6 +519,7 @@ type txnRecord struct {
 type txnPush struct {
 	ctx            context.Context
 	pusher, pushee uuid.UUID
+	count          int
 }
 
 func newCluster() *cluster {
@@ -520,7 +529,7 @@ func newCluster() *cluster {
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
-		requestsByName:  make(map[string]concurrency.Request),
+		requestsByName:  make(map[string]testReq),
 		guardsByReqName: make(map[string]*concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 		txnPushes:       make(map[uuid.UUID]*txnPush),
@@ -533,6 +542,9 @@ func (c *cluster) makeConfig() concurrency.Config {
 		RangeDesc:      c.rangeDesc,
 		Settings:       c.st,
 		IntentResolver: c,
+		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
+			ev.Duration = 1234 * time.Millisecond // for determinism
+		},
 		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
 	}
 }
@@ -680,11 +692,18 @@ func (r *txnRecord) asTxn() (*roachpb.Transaction, chan struct{}) {
 func (c *cluster) registerPush(ctx context.Context, pusher, pushee uuid.UUID) (*txnPush, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.txnPushes[pusher]; ok {
-		return nil, errors.Errorf("txn %v already pushing", pusher)
+	if p, ok := c.txnPushes[pusher]; ok {
+		if pushee != p.pushee {
+			return nil, errors.Errorf("pusher %s can't push two txns %s and %s at the same time",
+				pusher.Short(), pushee.Short(), p.pushee.Short(),
+			)
+		}
+		p.count++
+		return p, nil
 	}
 	p := &txnPush{
 		ctx:    ctx,
+		count:  1,
 		pusher: pusher,
 		pushee: pushee,
 	}
@@ -695,7 +714,17 @@ func (c *cluster) registerPush(ctx context.Context, pusher, pushee uuid.UUID) (*
 func (c *cluster) unregisterPush(push *txnPush) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.txnPushes, push.pusher)
+	p, ok := c.txnPushes[push.pusher]
+	if !ok {
+		return
+	}
+	p.count--
+	if p.count == 0 {
+		delete(c.txnPushes, push.pusher)
+	}
+	if p.count < 0 {
+		panic(fmt.Sprintf("negative count: %+v", p))
+	}
 }
 
 // detectDeadlocks looks at all in-flight transaction pushes and determines
@@ -792,7 +821,7 @@ func (c *cluster) resetNamespace() {
 	defer c.mu.Unlock()
 	c.txnCounter = 0
 	c.txnsByName = make(map[string]*roachpb.Transaction)
-	c.requestsByName = make(map[string]concurrency.Request)
+	c.requestsByName = make(map[string]testReq)
 	c.txnRecords = make(map[uuid.UUID]*txnRecord)
 }
 
@@ -871,7 +900,7 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 	atomic.StoreInt32(&g.finished, 1)
 }
 
-func (m *monitor) runAsync(opName string, fn func(context.Context)) {
+func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func()) {
 	m.seq++
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), opName)
 	g := &monitoredGoroutine{
@@ -887,6 +916,7 @@ func (m *monitor) runAsync(opName string, fn func(context.Context)) {
 		fn(ctx)
 		atomic.StoreInt32(&g.finished, 1)
 	}()
+	return cancel
 }
 
 func (m *monitor) numMonitored() int {
