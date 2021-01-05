@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
-	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -138,7 +138,7 @@ func TestServerReport(t *testing.T) {
 		node := rt.server.MetricsRecorder().GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
 		rt.server.SQLServer().(*sql.Server).ResetSQLStats(ctx)
-		rt.server.ReportDiagnostics(ctx)
+		rt.server.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
 		rangeCounts := make(map[roachpb.StoreID]int64)
@@ -160,40 +160,6 @@ func TestServerReport(t *testing.T) {
 		require.Equal(t, expectedUsageReports, rt.diagServer.NumRequests())
 
 		last := rt.diagServer.LastRequestData()
-		if expected, actual := rt.server.ClusterID().String(), last.UUID; expected != actual {
-			return errors.Errorf("expected cluster id %v got %v", expected, actual)
-		}
-		if expected, actual := "system", last.TenantID; expected != actual {
-			return errors.Errorf("expected tenant id %v got %v", expected, actual)
-		}
-		if expected, actual := rt.server.NodeID().String(), last.NodeID; expected != actual {
-			return errors.Errorf("expected node id %v got %v", expected, actual)
-		}
-		if expected, actual := rt.server.NodeID().String(), last.SQLInstanceID; expected != actual {
-			return errors.Errorf("expected sql instance id %v got %v", expected, actual)
-		}
-		if expected, actual := rt.server.NodeID(), last.Node.NodeID; expected != actual {
-			return errors.Errorf("expected node id %v got %v", expected, actual)
-		}
-
-		if last.Node.Hardware.Mem.Total == 0 {
-			return errors.Errorf("expected non-zero total mem")
-		}
-		if last.Node.Hardware.Mem.Available == 0 {
-			return errors.Errorf("expected non-zero available mem")
-		}
-		if actual, expected := last.Node.Hardware.Cpu.Numcpu, runtime.NumCPU(); int(actual) != expected {
-			return errors.Errorf("expected %d num cpu, got %d", expected, actual)
-		}
-		if last.Node.Hardware.Cpu.Sockets == 0 {
-			return errors.Errorf("expected non-zero sockets")
-		}
-		if last.Node.Hardware.Cpu.Mhz == 0.0 {
-			return errors.Errorf("expected non-zero speed")
-		}
-		if last.Node.Os.Platform == "" {
-			return errors.Errorf("expected non-empty OS")
-		}
 
 		if minExpected, actual := totalKeys, last.Node.KeyCount; minExpected > actual {
 			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
@@ -203,22 +169,6 @@ func TestServerReport(t *testing.T) {
 		}
 		if minExpected, actual := len(rt.serverArgs.StoreSpecs), len(last.Stores); minExpected > actual {
 			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
-		}
-		if expected, actual := "true", last.Internal; expected != actual {
-			return errors.Errorf("expected internal to be %v, got %v", expected, actual)
-		}
-		if expected, actual := len(rt.serverArgs.Locality.Tiers), len(last.Node.Locality.Tiers); expected != actual {
-			return errors.Errorf("expected locality to have %d tier, got %d", expected, actual)
-		}
-		for i := range rt.serverArgs.Locality.Tiers {
-			if expected, actual := sql.HashForReporting(clusterSecret, rt.serverArgs.Locality.Tiers[i].Key),
-				last.Node.Locality.Tiers[i].Key; expected != actual {
-				return errors.Errorf("expected locality tier %d key to be %s, got %s", i, expected, actual)
-			}
-			if expected, actual := sql.HashForReporting(clusterSecret, rt.serverArgs.Locality.Tiers[i].Value),
-				last.Node.Locality.Tiers[i].Value; expected != actual {
-				return errors.Errorf("expected locality tier %d value to be %s, got %s", i, expected, actual)
-			}
 		}
 
 		for _, store := range last.Stores {
@@ -233,6 +183,15 @@ func TestServerReport(t *testing.T) {
 	})
 
 	last := rt.diagServer.LastRequestData()
+	require.Equal(t, rt.server.ClusterID().String(), last.UUID)
+	require.Equal(t, "system", last.TenantID)
+	require.Equal(t, rt.server.NodeID().String(), last.NodeID)
+	require.Equal(t, rt.server.NodeID().String(), last.SQLInstanceID)
+	require.Equal(t, "true", last.Internal)
+
+	// Verify environment.
+	verifyEnvironment(t, clusterSecret, rt.serverArgs.Locality, &last.Env)
+
 	// This check isn't clean, since the body is a raw proto binary and thus could
 	// easily contain some encoded form of elemName, but *if* it ever does fail,
 	// that is probably very interesting.
@@ -351,7 +310,7 @@ func startReporterTest(t *testing.T) *reporterTest {
 			DisableDeleteOrphanedLeases: true,
 		},
 		Server: &server.TestingKnobs{
-			DiagnosticsTestingKnobs: diagnosticspb.TestingKnobs{
+			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &url,
 			},
 		},

@@ -8,14 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package diagnosticspb
+package diagnostics
 
 import (
+	"math/rand"
 	"net/url"
 	"strconv"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -67,58 +69,31 @@ type ClusterInfo struct {
 	IsInternal bool
 }
 
-// BuildUpdatesURL creates a URL to check for version updates.
-// If an empty updates URL is set (via empty environment variable), returns nil.
-func BuildUpdatesURL(clusterInfo *ClusterInfo, nodeInfo *NodeInfo, knobs *TestingKnobs) *url.URL {
-	url := updatesURL
-	if knobs != nil && knobs.OverrideUpdatesURL != nil {
-		url = *knobs.OverrideUpdatesURL
-	}
-	report := &DiagnosticReport{Node: *nodeInfo}
-	return addInfoToURL(url, clusterInfo, report)
-}
-
-// BuildReportingURL creates a URL to report diagnostics. If this is a CRDB
-// node, then nodeInfo is filled (and nodeInfo.NodeID is non-zero). Otherwise,
-// this is a SQL-only tenant and sqlInfo is filled.
-//
-// If an empty updates URL is set (via empty environment variable), returns nil.
-func BuildReportingURL(
-	clusterInfo *ClusterInfo, report *DiagnosticReport, knobs *TestingKnobs,
+// addInfoToURL sets query parameters on the URL used to report diagnostics. If
+// this is a CRDB node, then nodeInfo is filled (and nodeInfo.NodeID is
+// non-zero). Otherwise, this is a SQL-only tenant and sqlInfo is filled.
+func addInfoToURL(
+	url *url.URL,
+	clusterInfo *ClusterInfo,
+	env *diagnosticspb.Environment,
+	nodeID roachpb.NodeID,
+	sqlInfo *diagnosticspb.SQLInstanceInfo,
 ) *url.URL {
-	url := reportingURL
-	if knobs != nil && knobs.OverrideReportingURL != nil {
-		url = *knobs.OverrideReportingURL
-	}
-	return addInfoToURL(url, clusterInfo, report)
-}
-
-func addInfoToURL(url *url.URL, clusterInfo *ClusterInfo, report *DiagnosticReport) *url.URL {
 	if url == nil {
 		return nil
 	}
 	result := *url
 	q := result.Query()
 
-	// If NodeID is non-zero, then maintain backwards-compatibility by using the
-	// NodeInfo fields.
-	// TODO(andyk): Update this to always use other report fields, once they're
-	// guaranteed to be populated by all callers.
-	var b build.Info
-	if report.Node.NodeID != 0 {
-		// SQLInstanceID is always set to the NodeID for CRDB nodes.
-		b = report.Node.Build
-		q.Set("nodeid", strconv.Itoa(int(report.Node.NodeID)))
-		q.Set("sqlid", strconv.Itoa(int(report.Node.NodeID)))
-		q.Set("uptime", strconv.Itoa(int(report.Node.Uptime)))
-		q.Set("licensetype", report.Node.LicenseType)
-	} else {
-		b = report.Env.Build
-		q.Set("sqlid", strconv.Itoa(int(report.SQL.SQLInstanceID)))
-		q.Set("uptime", strconv.Itoa(int(report.SQL.Uptime)))
-		q.Set("licensetype", report.Env.LicenseType)
+	// Don't set nodeid if this is a SQL-only instance.
+	if nodeID != 0 {
+		q.Set("nodeid", strconv.Itoa(int(nodeID)))
 	}
 
+	b := env.Build
+	q.Set("sqlid", strconv.Itoa(int(sqlInfo.SQLInstanceID)))
+	q.Set("uptime", strconv.Itoa(int(sqlInfo.Uptime)))
+	q.Set("licensetype", env.LicenseType)
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", clusterInfo.ClusterID.String())
@@ -129,4 +104,11 @@ func addInfoToURL(url *url.URL, clusterInfo *ClusterInfo, report *DiagnosticRepo
 	q.Set("envchannel", b.EnvChannel)
 	result.RawQuery = q.Encode()
 	return &result
+}
+
+// randomly shift `d` to be up to `jitterSeconds` shorter or longer.
+func addJitter(d time.Duration) time.Duration {
+	const jitterSeconds = 120
+	j := time.Duration(rand.Intn(jitterSeconds*2)-jitterSeconds) * time.Second
+	return d + j
 }
