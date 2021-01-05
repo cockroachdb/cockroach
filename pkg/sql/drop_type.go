@@ -28,9 +28,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type typeToDrop struct {
+	desc   *typedesc.Mutable
+	fqName string
+}
+
 type dropTypeNode struct {
 	n  *tree.DropType
-	td map[descpb.ID]*typedesc.Mutable
+	td map[descpb.ID]typeToDrop
 }
 
 // Use to satisfy the linter.
@@ -47,7 +52,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 
 	node := &dropTypeNode{
 		n:  n,
-		td: make(map[descpb.ID]*typedesc.Mutable),
+		td: make(map[descpb.ID]typeToDrop),
 	}
 	if n.DropBehavior == tree.DropCascade {
 		return nil, unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported")
@@ -102,8 +107,21 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		}
 
 		// Record these descriptors for deletion.
-		node.td[typeDesc.ID] = typeDesc
-		node.td[mutArrayDesc.ID] = mutArrayDesc
+		node.td[typeDesc.ID] = typeToDrop{
+			desc:   typeDesc,
+			fqName: tree.AsStringWithFQNames(name, p.Ann()),
+		}
+		arrayFQName, err := getTypeNameFromTypeDescriptor(
+			oneAtATimeSchemaResolver{ctx, p},
+			mutArrayDesc,
+		)
+		if err != nil {
+			return nil, err
+		}
+		node.td[mutArrayDesc.ID] = typeToDrop{
+			desc:   mutArrayDesc,
+			fqName: arrayFQName.FQString(),
+		}
 	}
 	return node, nil
 }
@@ -138,14 +156,13 @@ func (p *planner) canDropTypeDesc(
 }
 
 func (n *dropTypeNode) startExec(params runParams) error {
-	for _, typ := range n.td {
+	for _, toDrop := range n.td {
+		typ, fqName := toDrop.desc, toDrop.fqName
 		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), true /* queueJob */); err != nil {
 			return err
 		}
 		// Log a Drop Type event.
-		// TODO(knz): This logging is imperfect, see this issue:
-		// https://github.com/cockroachdb/cockroach/issues/57734
-		if err := params.p.logEvent(params.ctx, typ.ID, &eventpb.DropType{TypeName: typ.Name}); err != nil {
+		if err := params.p.logEvent(params.ctx, typ.ID, &eventpb.DropType{TypeName: fqName}); err != nil {
 			return err
 		}
 	}
