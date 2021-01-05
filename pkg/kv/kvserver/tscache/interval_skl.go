@@ -15,17 +15,16 @@ import (
 	"bytes"
 	"container/list"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -89,9 +88,7 @@ const (
 )
 
 const (
-	encodedTsSize    = 8 + 4 + 1 // walltime + logical + flags
-	encodedTxnIDSize = uuid.Size
-	encodedValSize   = encodedTsSize + encodedTxnIDSize
+	encodedValSize = int(unsafe.Sizeof(cacheValue{}))
 
 	// initialSklPageSize is the initial size of each page in the sklImpl's
 	// intervalSkl. The pages start small to limit the memory footprint of
@@ -1211,30 +1208,19 @@ func encodeValueSet(b []byte, keyVal, gapVal cacheValue) (ret []byte, meta uint1
 }
 
 func decodeValue(b []byte) (ret []byte, val cacheValue) {
-	val.ts.WallTime = int64(binary.BigEndian.Uint64(b))
-	val.ts.Logical = int32(binary.BigEndian.Uint32(b[8:]))
-	val.ts.Synthetic = b[12] != 0
-	var err error
-	if val.txnID, err = uuid.FromBytes(b[encodedTsSize:encodedValSize]); err != nil {
-		panic(err)
-	}
+	// Copy and interpret the byte slice as a cacheValue.
+	valPtr := (*[encodedValSize]byte)(unsafe.Pointer(&val))
+	copy(valPtr[:], b)
 	ret = b[encodedValSize:]
-	return
+	return ret, val
 }
 
 func encodeValue(b []byte, val cacheValue) []byte {
-	l := len(b)
-	b = b[:l+encodedValSize]
-	binary.BigEndian.PutUint64(b[l:], uint64(val.ts.WallTime))
-	binary.BigEndian.PutUint32(b[l+8:], uint32(val.ts.Logical))
-	syn := byte(0)
-	if val.ts.Synthetic {
-		syn = 1
-	}
-	b[l+12] = syn
-	if _, err := val.txnID.MarshalTo(b[l+encodedTsSize:]); err != nil {
-		panic(err)
-	}
+	// Interpret the cacheValue as a byte slice and copy.
+	prev := len(b)
+	b = b[:prev+encodedValSize]
+	valPtr := (*[encodedValSize]byte)(unsafe.Pointer(&val))
+	copy(b[prev:], valPtr[:])
 	return b
 }
 

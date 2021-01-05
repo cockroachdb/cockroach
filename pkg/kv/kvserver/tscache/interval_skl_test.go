@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1313,6 +1314,14 @@ func TestArenaReuse(t *testing.T) {
 	expArenas := defaultMinSklPages + intermediatePages
 	require.Less(t, expArenas, iters)
 	require.Equal(t, expArenas, len(arenas))
+}
+
+// TestEncodedValSize tests that the encodedValSize does not change unexpectedly
+// due to changes in the cacheValue struct size. If the struct size does change,
+// if should be done so deliberately.
+func TestEncodedValSize(t *testing.T) {
+	require.Equal(t, encodedValSize, int(unsafe.Sizeof(cacheValue{})), "encodedValSize should equal sizeof(cacheValue{})")
+	require.Equal(t, 32, encodedValSize, "encodedValSize should not change unexpectedly")
 }
 
 func BenchmarkIntervalSklAdd(b *testing.B) {
