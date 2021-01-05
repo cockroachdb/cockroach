@@ -36,6 +36,8 @@ import (
 // formatters. logpb.Entry, in comparison, was tailored specifically
 // to the legacy crdb-v1 formatter, and is a lossy representation.
 type logEntry struct {
+	idPayload
+
 	// The entry timestamp.
 	ts int64
 	// The severity of the event.
@@ -90,12 +92,17 @@ func makeUnsafePayload(m string) entryPayload {
 
 // makeEntry creates a logEntry.
 func makeEntry(ctx context.Context, s Severity, c Channel, depth int) (res logEntry) {
+	logging.idMu.RLock()
+	ids := logging.idMu.idPayload
+	logging.idMu.RUnlock()
+
 	res = logEntry{
-		ts:   timeutil.Now().UnixNano(),
-		sev:  s,
-		ch:   c,
-		gid:  goid.Get(),
-		tags: logtags.FromContext(ctx),
+		idPayload: ids,
+		ts:        timeutil.Now().UnixNano(),
+		sev:       s,
+		ch:        c,
+		gid:       goid.Get(),
+		tags:      logtags.FromContext(ctx),
 	}
 
 	// Populate file/lineno.
@@ -179,20 +186,20 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 		makeStartLine(f, "arguments: %s", os.Args),
 	)
 
-	logging.mu.Lock()
-	if logging.mu.clusterID != "" {
-		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.mu.clusterID))
+	logging.idMu.RLock()
+	if logging.idMu.clusterID != "" {
+		messages = append(messages, makeStartLine(f, "clusterID: %s", logging.idMu.clusterID))
 	}
-	if logging.mu.nodeID != 0 {
-		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.mu.nodeID))
+	if logging.idMu.nodeID != 0 {
+		messages = append(messages, makeStartLine(f, "nodeID: n%d", logging.idMu.nodeID))
 	}
-	if logging.mu.tenantID != "" {
-		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.mu.tenantID))
+	if logging.idMu.tenantID != "" {
+		messages = append(messages, makeStartLine(f, "tenantID: %s", logging.idMu.tenantID))
 	}
-	if logging.mu.sqlInstanceID != 0 {
-		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.mu.sqlInstanceID))
+	if logging.idMu.sqlInstanceID != 0 {
+		messages = append(messages, makeStartLine(f, "instanceID: %d", logging.idMu.sqlInstanceID))
 	}
-	logging.mu.Unlock()
+	logging.idMu.RUnlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
