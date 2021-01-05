@@ -3,8 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tracing",
     srcs = [
-        "annotate.go",
-        "annotate_nocgo.go",
         "context.go",
         "grpc_interceptor.go",
         "recording.go",
@@ -15,7 +13,6 @@ go_library(
         "test_utils.go",
         "tracer.go",
     ],
-    cgo = True,
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing",
     visibility = ["//visibility:public"],
     deps = [

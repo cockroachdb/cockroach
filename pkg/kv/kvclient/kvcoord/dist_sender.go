@@ -717,7 +717,6 @@ func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequ
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	tracing.AnnotateTrace()
 	ds.incrementBatchCounters(&ba)
 
 	// TODO(nvanbenschoten): This causes ba to escape to the heap. Either

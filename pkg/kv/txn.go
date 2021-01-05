@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -582,8 +581,6 @@ func (txn *Txn) DelRange(ctx context.Context, begin, end interface{}) error {
 // operation. The order of the results matches the order the operations were
 // added to the batch.
 func (txn *Txn) Run(ctx context.Context, b *Batch) error {
-	tracing.AnnotateTrace()
-	defer tracing.AnnotateTrace()
 	if err := b.prepare(); err != nil {
 		return err
 	}
