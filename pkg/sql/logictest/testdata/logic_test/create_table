@@ -316,3 +316,9 @@ CREATE TABLE error (LIKE like_hash_base INCLUDING STATISTICS)
 
 statement error unimplemented
 CREATE TABLE error (LIKE like_hash_base INCLUDING STORAGE)
+
+subtest regression_57630
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+CREATE TABLE error (a INT, b INT, INDEX idx (a), INDEX idx (b))
+
