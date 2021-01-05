@@ -34,3 +34,40 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+go_library(
+    name = "scplan",
+    srcs = [
+        "compiler.go",
+        "declarative.go",
+        "graphviz.go",
+        "helpers.go",
+        "rules.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/util",
+        "//pkg/util/iterutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_emicklei_dot//:dot",
+    ],
+)
+
+go_test(
+    name = "scplan_test",
+    srcs = ["compiler_test.go"],
+    embed = [":scplan"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
+        "@com_github_emicklei_dot//:dot",
+        "@com_github_stretchr_testify//require",
+    ],
+)

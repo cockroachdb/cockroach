@@ -1,4 +1,4 @@
-package builder_test
+package scbuild_test
 
 import (
 	"os"

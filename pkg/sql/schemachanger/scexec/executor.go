@@ -1,4 +1,4 @@
-package executor
+package scexec
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -48,7 +48,7 @@ func New(
 const kvTrace = false
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
-func (ex *Executor) ExecuteOps(ctx context.Context, toExecute []ops.Op) error {
+func (ex *Executor) ExecuteOps(ctx context.Context, toExecute []scop.Op) error {
 	if len(toExecute) == 0 {
 		return nil
 	}
@@ -57,44 +57,44 @@ func (ex *Executor) ExecuteOps(ctx context.Context, toExecute []ops.Op) error {
 		return err
 	}
 	switch typ {
-	case ops.DescriptorMutationType:
+	case scop.DescriptorMutationType:
 		return ex.executeDescriptorMutationOps(ctx, toExecute)
-	case ops.BackfillType:
+	case scop.BackfillType:
 		return ex.executeBackfillOps(ctx, toExecute)
-	case ops.ValidationType:
+	case scop.ValidationType:
 		return ex.executeValidationOps(ctx, toExecute)
 	default:
 		return errors.AssertionFailedf("unknown ops type %d", typ)
 	}
 }
 
-func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []ops.Op) error {
+func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []scop.Op) error {
 	for _, op := range execute {
 		var err error
 		switch op := op.(type) {
-		case ops.AddCheckConstraint:
+		case scop.AddCheckConstraint:
 			err = ex.executeAddCheckConstraint(ctx, op)
-		case ops.AddIndexDescriptor:
+		case scop.AddIndexDescriptor:
 			err = ex.executeAddIndexDescriptor(ctx, op)
-		case ops.MakeAddedPrimaryIndexDeleteOnly:
+		case scop.MakeAddedPrimaryIndexDeleteOnly:
 			err = ex.executeMakeAddedPrimaryIndexDeleteOnly(ctx, op)
-		case ops.MakeAddedIndexDeleteAndWriteOnly:
+		case scop.MakeAddedIndexDeleteAndWriteOnly:
 			err = ex.executeMakeAddedIndexDeleteAndWriteOnly(ctx, op)
-		case ops.MakeAddedPrimaryIndexPublic:
+		case scop.MakeAddedPrimaryIndexPublic:
 			err = ex.executeMakeAddedPrimaryIndexPublic(ctx, op)
-		case ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly:
+		case scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly:
 			err = ex.executeMakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
-		case ops.MakeDroppedIndexDeleteOnly:
+		case scop.MakeDroppedIndexDeleteOnly:
 			err = ex.executeMakeDroppedIndexDeleteOnly(ctx, op)
-		case ops.MakeDroppedIndexAbsent:
+		case scop.MakeDroppedIndexAbsent:
 			err = ex.executeMakeDroppedIndexAbsent(ctx, op)
-		case ops.AddColumnDescriptor:
+		case scop.AddColumnDescriptor:
 			err = ex.executeAddColumnDescriptor(ctx, op)
-		case ops.ColumnDescriptorStateChange:
+		case scop.ColumnDescriptorStateChange:
 			err = ex.executeColumnDescriptorStateChange(ctx, op)
-		case ops.IndexDescriptorStateChange:
+		case scop.IndexDescriptorStateChange:
 			err = ex.executeIndexDescriptorStateChange(ctx, op)
-		case ops.AddColumnFamily:
+		case scop.AddColumnFamily:
 			err = ex.executeAddColumnFamily(ctx, op)
 		default:
 			err = errors.AssertionFailedf("descriptor mutation op not implemented for %T", op)
@@ -107,7 +107,7 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, execute []
 }
 
 func (ex *Executor) executeMakeAddedPrimaryIndexDeleteOnly(
-	ctx context.Context, op ops.MakeAddedPrimaryIndexDeleteOnly,
+	ctx context.Context, op scop.MakeAddedPrimaryIndexDeleteOnly,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -132,7 +132,7 @@ func (ex *Executor) executeMakeAddedPrimaryIndexDeleteOnly(
 }
 
 func (ex *Executor) executeMakeAddedIndexDeleteAndWriteOnly(
-	ctx context.Context, op ops.MakeAddedIndexDeleteAndWriteOnly,
+	ctx context.Context, op scop.MakeAddedIndexDeleteAndWriteOnly,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -151,7 +151,7 @@ func (ex *Executor) executeMakeAddedIndexDeleteAndWriteOnly(
 }
 
 func (ex *Executor) executeMakeAddedPrimaryIndexPublic(
-	ctx context.Context, op ops.MakeAddedPrimaryIndexPublic,
+	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -178,7 +178,7 @@ func (ex *Executor) executeMakeAddedPrimaryIndexPublic(
 }
 
 func (ex *Executor) executeMakeDroppedPrimaryIndexDeleteAndWriteOnly(
-	ctx context.Context, op ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
+	ctx context.Context, op scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -204,7 +204,7 @@ func (ex *Executor) executeMakeDroppedPrimaryIndexDeleteAndWriteOnly(
 }
 
 func (ex *Executor) executeMakeDroppedIndexDeleteOnly(
-	ctx context.Context, op ops.MakeDroppedIndexDeleteOnly,
+	ctx context.Context, op scop.MakeDroppedIndexDeleteOnly,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -223,7 +223,7 @@ func (ex *Executor) executeMakeDroppedIndexDeleteOnly(
 }
 
 func (ex *Executor) executeMakeDroppedIndexAbsent(
-	ctx context.Context, op ops.MakeDroppedIndexAbsent,
+	ctx context.Context, op scop.MakeDroppedIndexAbsent,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -256,14 +256,14 @@ func getIndexMutation(
 }
 
 func (ex *Executor) executeIndexDescriptorStateChange(
-	ctx context.Context, op ops.IndexDescriptorStateChange,
+	ctx context.Context, op scop.IndexDescriptorStateChange,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
 		return err
 	}
 	// We want to find the index and then change its state.
-	if op.State == targets.State_PUBLIC && op.NextState == targets.State_DELETE_AND_WRITE_ONLY {
+	if op.State == scpb.State_PUBLIC && op.NextState == scpb.State_DELETE_AND_WRITE_ONLY {
 		var idx descpb.IndexDescriptor
 		for i := range table.Indexes {
 			if table.Indexes[i].ID != op.IndexID {
@@ -286,18 +286,18 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 		idx := mut.GetIndex()
 		switch op.NextState {
 
-		case targets.State_ABSENT:
+		case scpb.State_ABSENT:
 			// Can happen in revert or when removing an index.
 			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_ONLY, op.NextState, mut.State)
 			}
 			table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
-		case targets.State_DELETE_AND_WRITE_ONLY:
+		case scpb.State_DELETE_AND_WRITE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		case targets.State_DELETE_ONLY:
+		case scpb.State_DELETE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_ONLY
-		case targets.State_PUBLIC:
+		case scpb.State_PUBLIC:
 			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
@@ -316,7 +316,7 @@ func (ex *Executor) executeIndexDescriptorStateChange(
 }
 
 func (ex *Executor) executeAddCheckConstraint(
-	ctx context.Context, op ops.AddCheckConstraint,
+	ctx context.Context, op scop.AddCheckConstraint,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -337,14 +337,14 @@ func (ex *Executor) executeAddCheckConstraint(
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
-func (ex *Executor) executeBackfillOps(ctx context.Context, execute []ops.Op) error {
+func (ex *Executor) executeBackfillOps(ctx context.Context, execute []scop.Op) error {
 	// TODO(ajwerner): Run backfills in parallel. Will require some plumbing for
 	// checkpointing at the very least.
 
 	for _, op := range execute {
 		var err error
 		switch op := op.(type) {
-		case ops.IndexBackfill:
+		case scop.IndexBackfill:
 			err = ex.executeIndexBackfillOp(ctx, op)
 		default:
 			panic("unimplemented")
@@ -356,13 +356,13 @@ func (ex *Executor) executeBackfillOps(ctx context.Context, execute []ops.Op) er
 	return nil
 }
 
-func (ex *Executor) executeValidationOps(ctx context.Context, execute []ops.Op) error {
+func (ex *Executor) executeValidationOps(ctx context.Context, execute []scop.Op) error {
 	log.Errorf(ctx, "not implemented")
 	return nil
 }
 
 func (ex *Executor) executeAddIndexDescriptor(
-	ctx context.Context, op ops.AddIndexDescriptor,
+	ctx context.Context, op scop.AddIndexDescriptor,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -379,7 +379,7 @@ func (ex *Executor) executeAddIndexDescriptor(
 }
 
 func (ex *Executor) executeAddColumnDescriptor(
-	ctx context.Context, op ops.AddColumnDescriptor,
+	ctx context.Context, op scop.AddColumnDescriptor,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
@@ -408,14 +408,14 @@ func (ex *Executor) executeAddColumnDescriptor(
 }
 
 func (ex *Executor) executeColumnDescriptorStateChange(
-	ctx context.Context, op ops.ColumnDescriptorStateChange,
+	ctx context.Context, op scop.ColumnDescriptorStateChange,
 ) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
 		return err
 	}
 	// We want to find the index and then change its state.
-	if op.State == targets.State_PUBLIC && op.NextState == targets.State_DELETE_AND_WRITE_ONLY {
+	if op.State == scpb.State_PUBLIC && op.NextState == scpb.State_DELETE_AND_WRITE_ONLY {
 		var col descpb.ColumnDescriptor
 
 		for i := range table.Columns {
@@ -449,7 +449,7 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 		col := mut.GetColumn()
 		switch op.NextState {
 
-		case targets.State_ABSENT:
+		case scpb.State_ABSENT:
 			// Can happen in revert or when removing an index.
 			if mut.State != descpb.DescriptorMutation_DELETE_ONLY {
 				return errors.AssertionFailedf("expected index to be in %v for %v, got %v",
@@ -471,11 +471,11 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 				fam.ColumnNames = append(fam.ColumnNames[:famIdx], fam.ColumnNames[famIdx+1:]...)
 			}
 			table.Mutations = append(mutations[:foundIdx], mutations[foundIdx+1:]...)
-		case targets.State_DELETE_AND_WRITE_ONLY:
+		case scpb.State_DELETE_AND_WRITE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		case targets.State_DELETE_ONLY:
+		case scpb.State_DELETE_ONLY:
 			mut.State = descpb.DescriptorMutation_DELETE_ONLY
-		case targets.State_PUBLIC:
+		case scpb.State_PUBLIC:
 			if mut.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				return errors.AssertionFailedf("expected column to be in %v for %v, got %v",
 					descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY, op.NextState, mut.State)
@@ -489,7 +489,7 @@ func (ex *Executor) executeColumnDescriptorStateChange(
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
-func (ex *Executor) executeAddColumnFamily(ctx context.Context, op ops.AddColumnFamily) error {
+func (ex *Executor) executeAddColumnFamily(ctx context.Context, op scop.AddColumnFamily) error {
 	table, err := ex.descsCollection.GetMutableTableVersionByID(ctx, op.TableID, ex.txn)
 	if err != nil {
 		return err
@@ -501,7 +501,7 @@ func (ex *Executor) executeAddColumnFamily(ctx context.Context, op ops.AddColumn
 	return ex.descsCollection.WriteDesc(ctx, kvTrace, table, ex.txn)
 }
 
-func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op ops.IndexBackfill) error {
+func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op scop.IndexBackfill) error {
 	// Note that the leasing here is subtle. We'll avoid the cache and ensure that
 	// the descriptor is read from the store. That means it will not be leased.
 	// This relies on changed to the descriptor not messing with this index
@@ -576,7 +576,7 @@ func (ex *Executor) maybeSplitIndexSpans(ctx context.Context, span roachpb.Span)
 	return ex.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
-func getOpsType(execute []ops.Op) (ops.Type, error) {
+func getOpsType(execute []scop.Op) (scop.Type, error) {
 	typ := execute[0].Type()
 	for i := 1; i < len(execute); i++ {
 		if execute[i].Type() != typ {

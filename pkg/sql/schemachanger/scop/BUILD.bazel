@@ -10,3 +10,14 @@ go_library(
         "//pkg/sql/schemachanger/targets",
     ],
 )
+
+go_library(
+    name = "scop",
+    srcs = ["ops.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/scpb",
+    ],
+)

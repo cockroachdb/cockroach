@@ -30,8 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -51,7 +51,7 @@ type alterTableNode struct {
 	// It is parallel with n.Cmds (for the inject stats commands).
 	statsData map[int]tree.TypedExpr
 
-	newSchemaChangerTargets []targets.TargetState
+	newSchemaChangerTargets []scpb.TargetState
 }
 
 // AlterTable applies a schema change on a table.
@@ -67,7 +67,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, err
 	}
 	if scs := p.extendedEvalCtx.SchemaChangerState; scs.inUse {
-		b := builder.NewBuilder(p, p.SemaCtx(), p.EvalContext())
+		b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext())
 		updated, err := b.AlterTable(ctx, scs.targetStates, n)
 		if err != nil {
 			return nil, err

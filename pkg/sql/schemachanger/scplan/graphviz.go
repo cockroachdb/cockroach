@@ -1,4 +1,4 @@
-package compiler
+package scplan
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/emicklei/dot"
 )
 
@@ -16,7 +16,7 @@ func (g *SchemaChange) drawStages() (*dot.Graph, error) {
 	dg := dot.NewGraph()
 	stagesSubgraph := dg.Subgraph("stages", dot.ClusterOption{})
 	targetsSubgraph := stagesSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[targets.Target]dot.Node, len(g.targets))
+	targetNodes := make(map[scpb.Target]dot.Node, len(g.targets))
 	for idx, t := range g.targets {
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t))
@@ -67,7 +67,7 @@ func (g *SchemaChange) drawDeps() (*dot.Graph, error) {
 
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
 	targetsSubgraph := depsSubgraph.Subgraph("targets", dot.ClusterOption{})
-	targetNodes := make(map[targets.Target]dot.Node, len(g.targets))
+	targetNodes := make(map[scpb.Target]dot.Node, len(g.targets))
 	for idx, t := range g.targets {
 		tn := targetsSubgraph.Node(strconv.Itoa(idx))
 		tn.Attr("label", htmlLabel(t))
@@ -76,7 +76,7 @@ func (g *SchemaChange) drawDeps() (*dot.Graph, error) {
 		targetNodes[t] = tn
 	}
 
-	tsNodes := make(map[*targets.TargetState]dot.Node)
+	tsNodes := make(map[*scpb.TargetState]dot.Node)
 	for _, tsMap := range g.targetStates {
 		for _, ts := range tsMap {
 			tsNodes[ts] = depsSubgraph.Node(targetStateID(g.targetIdxMap[ts.Target], ts.State))
@@ -109,7 +109,7 @@ func (g *SchemaChange) drawDeps() (*dot.Graph, error) {
 
 }
 
-func targetStateID(targetID int, state targets.State) string {
+func targetStateID(targetID int, state scpb.State) string {
 	return fmt.Sprintf("%d:%s", targetID, state)
 }
 

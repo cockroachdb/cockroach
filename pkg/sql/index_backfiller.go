@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,7 +31,7 @@ func NewIndexBackfiller(
 // TODO(ajwerner): allow backfilling multiple indexes.
 func (ib *IndexBackfillPlanner) BackfillIndex(
 	ctx context.Context,
-	tracker executor.JobProgressTracker,
+	tracker scexec.JobProgressTracker,
 	descriptor catalog.TableDescriptor,
 	source descpb.IndexID,
 	toBackfill ...descpb.IndexID,
@@ -96,7 +96,7 @@ func (i *IndexBackfillPlanner) scanTargetSpansToPushTimestampCache(
 
 func iterateNoop(_ []kv.KeyValue) error { return nil }
 
-var _ executor.IndexBackfiller = (*IndexBackfillPlanner)(nil)
+var _ scexec.IndexBackfiller = (*IndexBackfillPlanner)(nil)
 
 func (ip *IndexBackfillPlanner) plan(
 	ctx context.Context,

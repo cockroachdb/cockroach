@@ -1,8 +1,8 @@
-package ops
+package scop
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
 
 type Type int
@@ -46,8 +46,8 @@ type IndexDescriptorStateChange struct {
 	descriptorMutationOp
 	TableID   descpb.ID
 	IndexID   descpb.IndexID
-	State     targets.State
-	NextState targets.State
+	State     scpb.State
+	NextState scpb.State
 }
 
 type IndexBackfill struct {
@@ -120,8 +120,8 @@ type ColumnDescriptorStateChange struct {
 	descriptorMutationOp
 	TableID   descpb.ID
 	ColumnID  descpb.ColumnID
-	State     targets.State
-	NextState targets.State
+	State     scpb.State
+	NextState scpb.State
 }
 
 type AddCheckConstraint struct {
@@ -145,7 +145,7 @@ type CheckConstraintStateChange struct {
 	TableID descpb.ID
 	Name    string
 
-	NextState targets.State
+	NextState scpb.State
 }
 
 type AddColumnFamily struct {

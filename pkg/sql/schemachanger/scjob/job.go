@@ -1,4 +1,4 @@
-package job
+package scjob
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -33,7 +33,7 @@ func init() {
 
 type newSchemaChangeResumer struct {
 	job     *jobs.Job
-	targets []*targets.TargetProto
+	targets []*scpb.TargetProto
 }
 
 type badJobTracker struct {
@@ -63,7 +63,7 @@ func (b badJobTracker) SetResumeSpans(
 	panic("implement me")
 }
 
-var _ executor.JobProgressTracker = (*badJobTracker)(nil)
+var _ scexec.JobProgressTracker = (*badJobTracker)(nil)
 
 func (n *newSchemaChangeResumer) Resume(
 	ctx context.Context, execCtxI interface{}, resultsCh chan<- tree.Datums,
@@ -86,8 +86,8 @@ func (n *newSchemaChangeResumer) Resume(
 	lm := execCtx.LeaseMgr()
 	db := lm.DB()
 	ie := execCtx.ExtendedEvalContext().InternalExecutor.(sqlutil.InternalExecutor)
-	sc, err := compiler.Compile(makeTargetStates(ctx, settings, n.targets, states), compiler.CompileFlags{
-		ExecutionPhase: compiler.PostCommitPhase,
+	sc, err := scplan.Compile(makeTargetStates(ctx, settings, n.targets, states), scplan.CompileFlags{
+		ExecutionPhase: scplan.PostCommitPhase,
 	})
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (n *newSchemaChangeResumer) Resume(
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
-			if err := executor.New(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
+			if err := scexec.New(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
 				return err
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
@@ -128,8 +128,8 @@ func (n *newSchemaChangeResumer) Resume(
 	return nil
 }
 
-func makeStates(nextTargets []targets.TargetState) []targets.State {
-	states := make([]targets.State, len(nextTargets))
+func makeStates(nextTargets []scpb.TargetState) []scpb.State {
+	states := make([]scpb.State, len(nextTargets))
 	for i := range nextTargets {
 		states[i] = nextTargets[i].State
 	}
@@ -137,16 +137,16 @@ func makeStates(nextTargets []targets.TargetState) []targets.State {
 }
 
 func makeTargetStates(
-	ctx context.Context, sv *cluster.Settings, protos []*targets.TargetProto, states []targets.State,
-) []targets.TargetState {
+	ctx context.Context, sv *cluster.Settings, protos []*scpb.TargetProto, states []scpb.State,
+) []scpb.TargetState {
 	if len(protos) != len(states) {
 		logcrash.ReportOrPanic(ctx, &sv.SV, "unexpected slice size mismatch %d and %d",
 			len(protos), len(states))
 	}
-	ts := make([]targets.TargetState, len(protos))
+	ts := make([]scpb.TargetState, len(protos))
 	for i := range protos {
-		ts[i] = targets.TargetState{
-			Target: protos[i].GetValue().(targets.Target),
+		ts[i] = scpb.TargetState{
+			Target: protos[i].GetValue().(scpb.Target),
 			State:  states[i],
 		}
 	}

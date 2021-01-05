@@ -1,4 +1,4 @@
-package targets
+package scpb
 
 var NumStates = len(State_name)
 

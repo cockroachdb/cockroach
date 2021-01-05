@@ -1,11 +1,11 @@
-package compiler
+package scplan
 
 import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
@@ -17,8 +17,8 @@ import (
 // There's some hackery but it's just that.
 
 type Stage struct {
-	Ops         []ops.Op
-	NextTargets []targets.TargetState
+	Ops         []scop.Op
+	NextTargets []scpb.TargetState
 }
 
 type ExecutionPhase int
@@ -55,15 +55,15 @@ func (d *descIDSet) contains(id descpb.ID) bool {
 }
 
 type opEdge struct {
-	from, to *targets.TargetState
-	op       ops.Op
+	from, to *scpb.TargetState
+	op       scop.Op
 }
 
-func (o *opEdge) start() *targets.TargetState {
+func (o *opEdge) start() *scpb.TargetState {
 	return o.from
 }
 
-func (o *opEdge) end() *targets.TargetState {
+func (o *opEdge) end() *scpb.TargetState {
 	return o.to
 }
 
@@ -76,38 +76,38 @@ var _ edge = (*depEdge)(nil)
 //
 // It is illegal for from and to to refer to the same target.
 type depEdge struct {
-	from, to *targets.TargetState
+	from, to *scpb.TargetState
 }
 
-func (d depEdge) start() *targets.TargetState {
+func (d depEdge) start() *scpb.TargetState {
 	return d.from
 }
 
-func (d depEdge) end() *targets.TargetState {
+func (d depEdge) end() *scpb.TargetState {
 	return d.to
 }
 
 type edge interface {
-	start() *targets.TargetState
-	end() *targets.TargetState
+	start() *scpb.TargetState
+	end() *scpb.TargetState
 }
 
 type SchemaChange struct {
 	flags               CompileFlags
-	initialTargetStates []*targets.TargetState
+	initialTargetStates []*scpb.TargetState
 
-	targets      []targets.Target
-	targetStates []map[targets.State]*targets.TargetState
-	targetIdxMap map[targets.Target]int
+	targets      []scpb.Target
+	targetStates []map[scpb.State]*scpb.TargetState
+	targetIdxMap map[scpb.Target]int
 
 	// targetStateOpEdges maps a TargetState to an opEdge that proceeds
 	// from it. A targetState may have at most one opEdge from it.
-	targetStateOpEdges map[*targets.TargetState]*opEdge
+	targetStateOpEdges map[*scpb.TargetState]*opEdge
 
 	// targetStateDepEdges maps a TargetState to its dependencies.
 	// A targetState dependency is another target state which must be
 	// reached before or concurrently with this targetState.
-	targetStateDepEdges map[*targets.TargetState][]*depEdge
+	targetStateDepEdges map[*scpb.TargetState][]*depEdge
 
 	edges []edge
 
@@ -116,8 +116,8 @@ type SchemaChange struct {
 
 func (g *SchemaChange) forEach(it nodeFunc) error {
 	for _, m := range g.targetStates {
-		for i := 0; i < targets.NumStates; i++ {
-			if ts, ok := m[targets.State(i)]; ok {
+		for i := 0; i < scpb.NumStates; i++ {
+			if ts, ok := m[scpb.State(i)]; ok {
 				if err := it(ts.Target, ts.State); err != nil {
 					if iterutil.Done(err) {
 						err = nil
@@ -130,14 +130,12 @@ func (g *SchemaChange) forEach(it nodeFunc) error {
 	return nil
 }
 
-func (g *SchemaChange) getOrCreateTargetState(
-	t targets.Target, s targets.State,
-) *targets.TargetState {
+func (g *SchemaChange) getOrCreateTargetState(t scpb.Target, s scpb.State) *scpb.TargetState {
 	targetStates := g.getTargetStatesMap(t)
 	if ts, ok := targetStates[s]; ok {
 		return ts
 	}
-	ts := &targets.TargetState{
+	ts := &scpb.TargetState{
 		Target: t,
 		State:  s,
 	}
@@ -145,7 +143,7 @@ func (g *SchemaChange) getOrCreateTargetState(
 	return ts
 }
 
-func (g *SchemaChange) getTargetStatesMap(t targets.Target) map[targets.State]*targets.TargetState {
+func (g *SchemaChange) getTargetStatesMap(t scpb.Target) map[scpb.State]*scpb.TargetState {
 	return g.targetStates[g.targetIdxMap[t]]
 }
 
@@ -169,16 +167,14 @@ func (g *SchemaChange) DrawDepGraph() (string, error) {
 	return gv.String(), nil
 }
 
-func (g *SchemaChange) containsTarget(target targets.Target) bool {
+func (g *SchemaChange) containsTarget(target scpb.Target) bool {
 	_, exists := g.targetIdxMap[target]
 	return exists
 }
 
 // addOpEdge adds an opEdge for the given target with the provided op.
 // Returns the next state (for convenience).
-func (g *SchemaChange) addOpEdge(
-	t targets.Target, cur, next targets.State, op ops.Op,
-) targets.State {
+func (g *SchemaChange) addOpEdge(t scpb.Target, cur, next scpb.State, op scop.Op) scpb.State {
 	oe := &opEdge{
 		from: g.getOrCreateTargetState(t, cur),
 		to:   g.getOrCreateTargetState(t, next),
@@ -194,10 +190,7 @@ func (g *SchemaChange) addOpEdge(
 }
 
 func (g *SchemaChange) addDepEdge(
-	fromTarget targets.Target,
-	fromState targets.State,
-	toTarget targets.Target,
-	toState targets.State,
+	fromTarget scpb.Target, fromState scpb.State, toTarget scpb.Target, toState scpb.State,
 ) {
 	de := &depEdge{
 		from: g.getOrCreateTargetState(fromTarget, fromState),
@@ -208,14 +201,14 @@ func (g *SchemaChange) addDepEdge(
 }
 
 type stage struct {
-	ops  []ops.Op
-	next []*targets.TargetState
+	ops  []scop.Op
+	next []*scpb.TargetState
 }
 
 func buildStages(g *SchemaChange, flags CompileFlags) error {
 	// TODO(ajwerner): deal with the case where the target state was
 	// fulfilled by something that preceded the initial state.
-	fulfilled := map[*targets.TargetState]struct{}{}
+	fulfilled := map[*scpb.TargetState]struct{}{}
 	cur := g.initialTargetStates
 	for {
 		for _, ts := range cur {
@@ -233,7 +226,7 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 		}
 		// Find out what opEdges we have on a per-type basis and then
 		// figure out if we have the dependencies fulfilled.
-		opTypes := make(map[ops.Type][]*opEdge)
+		opTypes := make(map[scop.Type][]*opEdge)
 		for _, oe := range opEdges {
 			opTypes[oe.op.Type()] = append(opTypes[oe.op.Type()], oe)
 		}
@@ -242,14 +235,14 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 		// assume that it will and press on. The reason it's valid is
 		// that so long as we make progress, everything is okay.
 		var didSomething bool
-		for _, typ := range []ops.Type{
-			ops.DescriptorMutationType,
-			ops.BackfillType,
-			ops.ValidationType,
+		for _, typ := range []scop.Type{
+			scop.DescriptorMutationType,
+			scop.BackfillType,
+			scop.ValidationType,
 		} {
 			edges := opTypes[typ]
 			for len(edges) > 0 {
-				candidates := make(map[*targets.TargetState]struct{})
+				candidates := make(map[*scpb.TargetState]struct{})
 				for _, e := range edges {
 					candidates[e.to] = struct{}{}
 				}
@@ -298,17 +291,17 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 				// This is terrible. We just need to drop indexes before adding indexes
 				// so that replacing an index doesn't cause the index we want to remove
 				// from being overwritten before we copy it to the mutations list.
-				sortVal := func(op ops.Op) int {
+				sortVal := func(op scop.Op) int {
 					switch t := op.(type) {
-					case ops.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
-						ops.MakeDroppedIndexDeleteOnly,
-						ops.MakeDroppedIndexAbsent:
+					case scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
+						scop.MakeDroppedIndexDeleteOnly,
+						scop.MakeDroppedIndexAbsent:
 						return -1
-					case ops.MakeAddedPrimaryIndexDeleteOnly,
-						ops.MakeAddedIndexDeleteAndWriteOnly,
-						ops.MakeAddedPrimaryIndexPublic:
+					case scop.MakeAddedPrimaryIndexDeleteOnly,
+						scop.MakeAddedIndexDeleteAndWriteOnly,
+						scop.MakeAddedPrimaryIndexPublic:
 						return 0
-					case ops.IndexDescriptorStateChange:
+					case scop.IndexDescriptorStateChange:
 						return int(t.State)
 					default:
 						return 10
@@ -330,7 +323,7 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 	return nil
 }
 
-func Compile(t []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
+func Compile(t []scpb.TargetState, flags CompileFlags) (*SchemaChange, error) {
 	// We want to create a sequence of TargetStates and ops along the edges.
 
 	// We'll start with a process of producing a graph of edges.
@@ -348,8 +341,8 @@ func (g *SchemaChange) Stages() []Stage {
 	for i := range g.stages {
 		ret = append(ret, Stage{
 			Ops: g.stages[i].ops,
-			NextTargets: func() (next []targets.TargetState) {
-				next = make([]targets.TargetState, len(g.stages[i].next))
+			NextTargets: func() (next []scpb.TargetState) {
+				next = make([]scpb.TargetState, len(g.stages[i].next))
 				for i, ts := range g.stages[i].next {
 					next[i] = *ts
 				}

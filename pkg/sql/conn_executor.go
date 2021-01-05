@@ -36,9 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2515,16 +2515,16 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		return nil
 	}
 	if err := ex.runNewSchemaChanger(
-		ctx, compiler.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn,
+		ctx, scplan.PreCommitPhase, ex.withNewSchemaChangeExecutorDuringTxn,
 	); err != nil {
 		return err
 	}
 
 	scs := &ex.extraTxnState.schemaChangerState
-	targetSlice := make([]*targets.TargetProto, len(scs.targetStates))
-	states := make([]targets.State, len(scs.targetStates))
+	targetSlice := make([]*scpb.TargetProto, len(scs.targetStates))
+	states := make([]scpb.State, len(scs.targetStates))
 	for i := range scs.targetStates {
-		var tp targets.TargetProto
+		var tp scpb.TargetProto
 		if !tp.SetValue(scs.targetStates[i].Target) {
 			panic(errors.Errorf("%T", scs.targetStates[i].Target))
 		}
@@ -2548,15 +2548,15 @@ func (ex *connExecutor) runPostStatementStages(ctx context.Context) error {
 	if !ex.extraTxnState.schemaChangerState.targetStatesChanged {
 		return nil
 	}
-	return ex.runNewSchemaChanger(ctx, compiler.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringTxn)
+	return ex.runNewSchemaChanger(ctx, scplan.PostStatementPhase, ex.withNewSchemaChangeExecutorDuringTxn)
 }
 
 func (ex *connExecutor) runNewSchemaChanger(
 	ctx context.Context,
-	phase compiler.ExecutionPhase,
-	executorRunner func(context.Context, func(context.Context, *executor.Executor) error) error,
+	phase scplan.ExecutionPhase,
+	executorRunner func(context.Context, func(context.Context, *scexec.Executor) error) error,
 ) error {
-	sc, err := compiler.Compile(ex.extraTxnState.schemaChangerState.targetStates, compiler.CompileFlags{
+	sc, err := scplan.Compile(ex.extraTxnState.schemaChangerState.targetStates, scplan.CompileFlags{
 		ExecutionPhase: phase,
 		// TODO(ajwerner): Populate the set of new descriptors
 	})
@@ -2565,7 +2565,7 @@ func (ex *connExecutor) runNewSchemaChanger(
 	}
 	after := ex.extraTxnState.schemaChangerState.targetStates
 	for _, s := range sc.Stages() {
-		if err := executorRunner(ctx, func(ctx context.Context, e *executor.Executor) error {
+		if err := executorRunner(ctx, func(ctx context.Context, e *scexec.Executor) error {
 			return e.ExecuteOps(ctx, s.Ops)
 		}); err != nil {
 			return err
@@ -2578,10 +2578,10 @@ func (ex *connExecutor) runNewSchemaChanger(
 }
 
 func (ex *connExecutor) withNewSchemaChangeExecutorDuringTxn(
-	ctx context.Context, f func(context.Context, *executor.Executor) error,
+	ctx context.Context, f func(context.Context, *scexec.Executor) error,
 ) error {
 	// TODO(ajwerner): Provide a transaction-scoped index backfiller.
-	return f(ctx, executor.New(
+	return f(ctx, scexec.New(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
 		nil /* backfiller */, nil, /* jobTracker */
 	))

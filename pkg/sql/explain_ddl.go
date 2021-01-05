@@ -8,9 +8,9 @@ import (
 	"io"
 	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -40,8 +40,8 @@ func (n *explainDDLNode) Close(ctx context.Context) {
 var _ planNode = (*explainDDLNode)(nil)
 
 func (n *explainDDLNode) startExec(params runParams) error {
-	b := builder.NewBuilder(params.p, params.p.SemaCtx(), params.p.EvalContext())
-	var ts []targets.TargetState
+	b := scbuild.NewBuilder(params.p, params.p.SemaCtx(), params.p.EvalContext())
+	var ts []scpb.TargetState
 	var err error
 	switch n := params.p.stmt.AST.(*tree.Explain).Statement.(type) {
 	case *tree.AlterTable:
@@ -52,8 +52,8 @@ func (n *explainDDLNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	sc, err := compiler.Compile(ts, compiler.CompileFlags{
-		ExecutionPhase: compiler.PostCommitPhase,
+	sc, err := scplan.Compile(ts, scplan.CompileFlags{
+		ExecutionPhase: scplan.PostCommitPhase,
 		// TODO(ajwerner): Populate created descriptors.
 	})
 	if err != nil {

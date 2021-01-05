@@ -1,4 +1,4 @@
-package compiler
+package scplan
 
 import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 

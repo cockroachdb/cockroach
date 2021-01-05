@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.sql.schemachanger.targets;
-option go_package = "targets";
+package cockroach.sql.schemachanger.scpb;
+option go_package = "scpb";
 
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";

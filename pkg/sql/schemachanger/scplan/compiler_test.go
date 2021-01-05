@@ -1,11 +1,11 @@
-package compiler
+package scplan
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/emicklei/dot"
@@ -17,13 +17,13 @@ import (
 
 func TestCompiler(t *testing.T) {
 	for _, tc := range []struct {
-		ts    []targets.TargetState
+		ts    []scpb.TargetState
 		flags CompileFlags
 	}{
 		{
-			[]targets.TargetState{
+			[]scpb.TargetState{
 				{
-					&targets.DropColumn{
+					&scpb.DropColumn{
 						TableID: 1,
 						Column: descpb.ColumnDescriptor{
 							Name: "foo",
@@ -31,10 +31,10 @@ func TestCompiler(t *testing.T) {
 							Type: types.IntArray,
 						},
 					},
-					targets.State_PUBLIC,
+					scpb.State_PUBLIC,
 				},
 				{
-					&targets.AddIndex{
+					&scpb.AddIndex{
 						TableID: 1,
 						Index: descpb.IndexDescriptor{
 							ID:        2,
@@ -43,16 +43,16 @@ func TestCompiler(t *testing.T) {
 						PrimaryIndex:   1,
 						ReplacementFor: 1,
 					},
-					targets.State_ABSENT,
+					scpb.State_ABSENT,
 				},
 				{
-					&targets.DropIndex{
+					&scpb.DropIndex{
 						TableID:    1,
 						IndexID:    1,
 						ReplacedBy: 2,
 						ColumnIDs:  []descpb.ColumnID{1, 2},
 					},
-					targets.State_PUBLIC,
+					scpb.State_PUBLIC,
 				},
 			},
 			CompileFlags{
@@ -76,7 +76,7 @@ func TestCompile(t *testing.T) {
 	type compileIteration struct {
 		// Must be set for the first Statement. If nil, use the most previously
 		// generated targets.
-		initial  []targets.TargetState
+		initial  []scpb.TargetState
 		flags    CompileFlags
 		expected []Stage
 	}
@@ -94,7 +94,7 @@ func TestCompile(t *testing.T) {
 			tableID  = descpb.ID(51)
 			newColID = descpb.ColumnID(2)
 		)
-		addColTarget := targets.AddColumn{
+		addColTarget := scpb.AddColumn{
 			TableID: tableID,
 			Column: descpb.ColumnDescriptor{
 				ID: newColID,
@@ -106,8 +106,8 @@ func TestCompile(t *testing.T) {
 			name: "add column without backfill",
 			compileIterations: []compileIteration{
 				{
-					initial: []targets.TargetState{
-						{&addColTarget, targets.State_ABSENT},
+					initial: []scpb.TargetState{
+						{&addColTarget, scpb.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -120,16 +120,16 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.AddColumnDescriptor{
+							[]scop.Op{
+								scop.AddColumnDescriptor{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
 									},
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_ONLY},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_ONLY},
 							},
 						},
 					},
@@ -140,27 +140,27 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_PUBLIC},
 							},
 						},
 					},
@@ -175,7 +175,7 @@ func TestCompile(t *testing.T) {
 			tableID  = descpb.ID(51)
 			newIdxID = descpb.IndexID(3)
 		)
-		addIdxTarget := targets.AddIndex{
+		addIdxTarget := scpb.AddIndex{
 			TableID: tableID,
 			Index: descpb.IndexDescriptor{
 				ID:             newIdxID,
@@ -188,8 +188,8 @@ func TestCompile(t *testing.T) {
 			name: "add non-unique index",
 			compileIterations: []compileIteration{
 				{
-					initial: []targets.TargetState{
-						{&addIdxTarget, targets.State_ABSENT},
+					initial: []scpb.TargetState{
+						{&addIdxTarget, scpb.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -202,8 +202,8 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.AddIndexDescriptor{
+							[]scop.Op{
+								scop.AddIndexDescriptor{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:             newIdxID,
@@ -212,8 +212,8 @@ func TestCompile(t *testing.T) {
 									},
 								},
 							},
-							[]targets.TargetState{
-								{&addIdxTarget, targets.State_DELETE_ONLY},
+							[]scpb.TargetState{
+								{&addIdxTarget, scpb.State_DELETE_ONLY},
 							},
 						},
 					},
@@ -224,38 +224,38 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newIdxID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addIdxTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexBackfill{
+							[]scop.Op{
+								scop.IndexBackfill{
 									TableID: tableID,
 									IndexID: newIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addIdxTarget, targets.State_VALIDATED},
+							[]scpb.TargetState{
+								{&addIdxTarget, scpb.State_VALIDATED},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newIdxID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
 							},
-							[]targets.TargetState{
-								{&addIdxTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addIdxTarget, scpb.State_PUBLIC},
 							},
 						},
 					},
@@ -272,13 +272,13 @@ func TestCompile(t *testing.T) {
 			newPrimaryIdxID = descpb.IndexID(3)
 			oldPrimaryIdxID = descpb.IndexID(1)
 		)
-		addColTarget := targets.AddColumn{
+		addColTarget := scpb.AddColumn{
 			TableID: tableID,
 			Column: descpb.ColumnDescriptor{
 				ID: newColID,
 			},
 		}
-		addIdxTarget := targets.AddIndex{
+		addIdxTarget := scpb.AddIndex{
 			TableID: tableID,
 			Index: descpb.IndexDescriptor{
 				ID:        newPrimaryIdxID,
@@ -287,7 +287,7 @@ func TestCompile(t *testing.T) {
 			},
 			ReplacementFor: oldPrimaryIdxID,
 		}
-		dropIdxTarget := targets.DropIndex{
+		dropIdxTarget := scpb.DropIndex{
 			TableID:    tableID,
 			IndexID:    oldPrimaryIdxID,
 			ReplacedBy: newPrimaryIdxID,
@@ -297,10 +297,10 @@ func TestCompile(t *testing.T) {
 			name: "add column with default value",
 			compileIterations: []compileIteration{
 				{
-					initial: []targets.TargetState{
-						{&addColTarget, targets.State_ABSENT},
-						{&addIdxTarget, targets.State_ABSENT},
-						{&dropIdxTarget, targets.State_PUBLIC},
+					initial: []scpb.TargetState{
+						{&addColTarget, scpb.State_ABSENT},
+						{&addIdxTarget, scpb.State_ABSENT},
+						{&dropIdxTarget, scpb.State_PUBLIC},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -313,14 +313,14 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.AddColumnDescriptor{
+							[]scop.Op{
+								scop.AddColumnDescriptor{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
 									},
 								},
-								ops.AddIndexDescriptor{
+								scop.AddIndexDescriptor{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:        newPrimaryIdxID,
@@ -329,10 +329,10 @@ func TestCompile(t *testing.T) {
 									},
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_ONLY},
-								{&addIdxTarget, targets.State_DELETE_ONLY},
-								{&dropIdxTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_ONLY},
+								{&addIdxTarget, scpb.State_DELETE_ONLY},
+								{&dropIdxTarget, scpb.State_PUBLIC},
 							},
 						},
 					},
@@ -343,103 +343,103 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&dropIdxTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&dropIdxTarget, scpb.State_PUBLIC},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexBackfill{
+							[]scop.Op{
+								scop.IndexBackfill{
 									TableID: tableID,
 									IndexID: newPrimaryIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addIdxTarget, targets.State_BACKFILLED},
-								{&dropIdxTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, scpb.State_BACKFILLED},
+								{&dropIdxTarget, scpb.State_PUBLIC},
 							},
 						},
 						// The validation step isn't actually necessary because the new PK
 						// has the same set of unique columns as the old PK. I think we can
 						// eliminate it in general when adding/dropping columns.
 						{
-							[]ops.Op{
-								ops.UniqueIndexValidation{
+							[]scop.Op{
+								scop.UniqueIndexValidation{
 									TableID: tableID,
 									IndexID: newPrimaryIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addIdxTarget, targets.State_VALIDATED},
-								{&dropIdxTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addIdxTarget, scpb.State_VALIDATED},
+								{&dropIdxTarget, scpb.State_PUBLIC},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_PUBLIC},
-								{&addIdxTarget, targets.State_PUBLIC},
-								{&dropIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addIdxTarget, scpb.State_PUBLIC},
+								{&dropIdxTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_DELETE_ONLY,
+									NextState: scpb.State_DELETE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_PUBLIC},
-								{&addIdxTarget, targets.State_PUBLIC},
-								{&dropIdxTarget, targets.State_DELETE_ONLY},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addIdxTarget, scpb.State_PUBLIC},
+								{&dropIdxTarget, scpb.State_DELETE_ONLY},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_ABSENT,
+									NextState: scpb.State_ABSENT,
 								},
 							},
-							[]targets.TargetState{
-								{&addColTarget, targets.State_PUBLIC},
-								{&addIdxTarget, targets.State_PUBLIC},
-								{&dropIdxTarget, targets.State_ABSENT},
+							[]scpb.TargetState{
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addIdxTarget, scpb.State_PUBLIC},
+								{&dropIdxTarget, scpb.State_ABSENT},
 							},
 						},
 					},
@@ -463,13 +463,13 @@ func TestCompile(t *testing.T) {
 			newColID        = descpb.ColumnID(2)
 			newUniqueIdxID  = descpb.IndexID(4)
 		)
-		dropColTarget := targets.AddColumn{
+		dropColTarget := scpb.AddColumn{
 			TableID: tableID,
 			Column: descpb.ColumnDescriptor{
 				ID: newColID,
 			},
 		}
-		addPrimaryIdxTargetStmt1 := targets.AddIndex{
+		addPrimaryIdxTargetStmt1 := scpb.AddIndex{
 			TableID: tableID,
 			Index: descpb.IndexDescriptor{
 				ID:     newPrimaryIdxID,
@@ -478,12 +478,12 @@ func TestCompile(t *testing.T) {
 			},
 			ReplacementFor: oldPrimaryIdxID,
 		}
-		dropPrimaryIdxTargetStmt1 := targets.DropIndex{
+		dropPrimaryIdxTargetStmt1 := scpb.DropIndex{
 			TableID:    tableID,
 			IndexID:    oldPrimaryIdxID,
 			ReplacedBy: newPrimaryIdxID,
 		}
-		addPrimaryIdxTarget := targets.AddIndex{
+		addPrimaryIdxTarget := scpb.AddIndex{
 			TableID: tableID,
 			Index: descpb.IndexDescriptor{
 				ID:     newPrimaryIdxID,
@@ -492,23 +492,23 @@ func TestCompile(t *testing.T) {
 			},
 			ReplacementFor: oldPrimaryIdxID,
 		}
-		dropPrimaryIdxTarget := targets.DropIndex{
+		dropPrimaryIdxTarget := scpb.DropIndex{
 			TableID:    tableID,
 			IndexID:    oldPrimaryIdxID,
 			ReplacedBy: newPrimaryIdxID,
 		}
-		addColTarget := targets.AddColumn{
+		addColTarget := scpb.AddColumn{
 			TableID: tableID,
 			Column: descpb.ColumnDescriptor{
 				ID: newColID,
 			},
 		}
-		addUniqueIdxTarget := targets.DropIndex{
+		addUniqueIdxTarget := scpb.DropIndex{
 			TableID:   tableID,
 			IndexID:   newUniqueIdxID,
 			ColumnIDs: []descpb.ColumnID{newColID},
 		}
-		addUniqueConstraintTarget := targets.AddUniqueConstraint{
+		addUniqueConstraintTarget := scpb.AddUniqueConstraint{
 			TableID:   tableID,
 			IndexID:   newUniqueIdxID,
 			ColumnIDs: []descpb.ColumnID{newColID},
@@ -518,39 +518,39 @@ func TestCompile(t *testing.T) {
 			name: "drop column and add column with unique index and default value",
 			compileIterations: []compileIteration{
 				{
-					initial: []targets.TargetState{
-						{&addPrimaryIdxTargetStmt1, targets.State_ABSENT},
-						{&dropPrimaryIdxTargetStmt1, targets.State_PUBLIC},
-						{&dropColTarget, targets.State_PUBLIC},
+					initial: []scpb.TargetState{
+						{&addPrimaryIdxTargetStmt1, scpb.State_ABSENT},
+						{&dropPrimaryIdxTargetStmt1, scpb.State_PUBLIC},
+						{&dropColTarget, scpb.State_PUBLIC},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  oldColID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTargetStmt1, targets.State_ABSENT},
-								{&dropPrimaryIdxTargetStmt1, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTargetStmt1, scpb.State_ABSENT},
+								{&dropPrimaryIdxTargetStmt1, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 					},
 				},
 				{
-					initial: []targets.TargetState{
-						{&addPrimaryIdxTarget, targets.State_ABSENT},
-						{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-						{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-						{&addColTarget, targets.State_ABSENT},
-						{&addUniqueIdxTarget, targets.State_ABSENT},
-						{&addUniqueConstraintTarget, targets.State_ABSENT},
+					initial: []scpb.TargetState{
+						{&addPrimaryIdxTarget, scpb.State_ABSENT},
+						{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+						{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+						{&addColTarget, scpb.State_ABSENT},
+						{&addUniqueIdxTarget, scpb.State_ABSENT},
+						{&addUniqueConstraintTarget, scpb.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
@@ -563,14 +563,14 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.AddColumnDescriptor{
+							[]scop.Op{
+								scop.AddColumnDescriptor{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
 									},
 								},
-								ops.AddIndexDescriptor{
+								scop.AddIndexDescriptor{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:     newPrimaryIdxID,
@@ -579,13 +579,13 @@ func TestCompile(t *testing.T) {
 									},
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_DELETE_ONLY},
-								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_DELETE_ONLY},
-								{&addUniqueIdxTarget, targets.State_ABSENT},
-								{&addUniqueConstraintTarget, targets.State_ABSENT},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_DELETE_ONLY},
+								{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_DELETE_ONLY},
+								{&addUniqueIdxTarget, scpb.State_ABSENT},
+								{&addUniqueConstraintTarget, scpb.State_ABSENT},
 							},
 						},
 					},
@@ -596,154 +596,154 @@ func TestCompile(t *testing.T) {
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addUniqueIdxTarget, targets.State_ABSENT},
-								{&addUniqueConstraintTarget, targets.State_ABSENT},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, scpb.State_ABSENT},
+								{&addUniqueConstraintTarget, scpb.State_ABSENT},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexBackfill{
+							[]scop.Op{
+								scop.IndexBackfill{
 									TableID: tableID,
 									IndexID: newPrimaryIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
-								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addUniqueIdxTarget, targets.State_ABSENT},
-								{&addUniqueConstraintTarget, targets.State_ABSENT},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, scpb.State_ABSENT},
+								{&addUniqueConstraintTarget, scpb.State_ABSENT},
 							},
 						},
 						{
-							[]ops.Op{
+							[]scop.Op{
 								// This also moves the unique constraint to State_DELETE_AND_WRITE_ONLY.
-								ops.IndexBackfill{
+								scop.IndexBackfill{
 									TableID: tableID,
 									IndexID: newUniqueIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
-								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addUniqueIdxTarget, targets.State_BACKFILLED},
-								{&addUniqueConstraintTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, scpb.State_BACKFILLED},
+								{&addUniqueConstraintTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.UniqueIndexValidation{
+							[]scop.Op{
+								scop.UniqueIndexValidation{
 									TableID:        tableID,
 									PrimaryIndexID: newPrimaryIdxID, // TODO: Do we want the new non-public index?
 									IndexID:        newUniqueIdxID,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_BACKFILLED},
-								{&dropPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addUniqueIdxTarget, targets.State_BACKFILLED},
-								{&addUniqueConstraintTarget, targets.State_VALIDATED},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_BACKFILLED},
+								{&dropPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addUniqueIdxTarget, scpb.State_BACKFILLED},
+								{&addUniqueConstraintTarget, scpb.State_VALIDATED},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.ColumnDescriptorStateChange{
+							[]scop.Op{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  newColID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newPrimaryIdxID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_DELETE_AND_WRITE_ONLY,
+									NextState: scpb.State_DELETE_AND_WRITE_ONLY,
 								},
 								// This also makes the unique constraint public. Eventually we
 								// will need a way to update states for index-less unique
 								// constraints.
-								ops.IndexDescriptorStateChange{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   newUniqueIdxID,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropPrimaryIdxTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&dropColTarget, targets.State_DELETE_AND_WRITE_ONLY},
-								{&addColTarget, targets.State_PUBLIC},
-								{&addUniqueIdxTarget, targets.State_PUBLIC},
-								{&addUniqueConstraintTarget, targets.State_PUBLIC},
-							},
-						},
-						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
-									TableID:   tableID,
-									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_DELETE_ONLY,
-								},
-								ops.ColumnDescriptorStateChange{
-									TableID:   tableID,
-									ColumnID:  oldColID,
-									NextState: targets.State_DELETE_ONLY,
-								},
-							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropPrimaryIdxTarget, targets.State_DELETE_ONLY},
-								{&dropColTarget, targets.State_DELETE_ONLY},
-								{&addColTarget, targets.State_PUBLIC},
-								{&addUniqueIdxTarget, targets.State_PUBLIC},
-								{&addUniqueConstraintTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropPrimaryIdxTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&dropColTarget, scpb.State_DELETE_AND_WRITE_ONLY},
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addUniqueIdxTarget, scpb.State_PUBLIC},
+								{&addUniqueConstraintTarget, scpb.State_PUBLIC},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.IndexDescriptorStateChange{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
 									TableID:   tableID,
 									IndexID:   oldPrimaryIdxID,
-									NextState: targets.State_DELETE_ONLY,
+									NextState: scpb.State_DELETE_ONLY,
 								},
-								ops.ColumnDescriptorStateChange{
+								scop.ColumnDescriptorStateChange{
 									TableID:   tableID,
 									ColumnID:  oldColID,
-									NextState: targets.State_DELETE_ONLY,
+									NextState: scpb.State_DELETE_ONLY,
 								},
 							},
-							[]targets.TargetState{
-								{&addPrimaryIdxTarget, targets.State_PUBLIC},
-								{&dropPrimaryIdxTarget, targets.State_ABSENT},
-								{&dropColTarget, targets.State_ABSENT},
-								{&addColTarget, targets.State_PUBLIC},
-								{&addUniqueIdxTarget, targets.State_PUBLIC},
-								{&addUniqueConstraintTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropPrimaryIdxTarget, scpb.State_DELETE_ONLY},
+								{&dropColTarget, scpb.State_DELETE_ONLY},
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addUniqueIdxTarget, scpb.State_PUBLIC},
+								{&addUniqueConstraintTarget, scpb.State_PUBLIC},
+							},
+						},
+						{
+							[]scop.Op{
+								scop.IndexDescriptorStateChange{
+									TableID:   tableID,
+									IndexID:   oldPrimaryIdxID,
+									NextState: scpb.State_DELETE_ONLY,
+								},
+								scop.ColumnDescriptorStateChange{
+									TableID:   tableID,
+									ColumnID:  oldColID,
+									NextState: scpb.State_DELETE_ONLY,
+								},
+							},
+							[]scpb.TargetState{
+								{&addPrimaryIdxTarget, scpb.State_PUBLIC},
+								{&dropPrimaryIdxTarget, scpb.State_ABSENT},
+								{&dropColTarget, scpb.State_ABSENT},
+								{&addColTarget, scpb.State_PUBLIC},
+								{&addUniqueIdxTarget, scpb.State_PUBLIC},
+								{&addUniqueConstraintTarget, scpb.State_PUBLIC},
 							},
 						},
 					},
@@ -767,7 +767,7 @@ func TestCompile(t *testing.T) {
 			checkName = "check"
 			checkExpr = "[expr]"
 		)
-		addCheckTarget := targets.AddCheckConstraint{
+		addCheckTarget := scpb.AddCheckConstraint{
 			TableID:   tableID,
 			Name:      checkName,
 			Expr:      checkExpr,
@@ -778,24 +778,24 @@ func TestCompile(t *testing.T) {
 			name: "add check constraint",
 			compileIterations: []compileIteration{
 				{
-					initial: []targets.TargetState{
-						{&addCheckTarget, targets.State_ABSENT},
+					initial: []scpb.TargetState{
+						{&addCheckTarget, scpb.State_ABSENT},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostStatementPhase,
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.AddCheckConstraint{
+							[]scop.Op{
+								scop.AddCheckConstraint{
 									TableID:   tableID,
 									Name:      checkName,
 									Expr:      checkExpr,
 									ColumnIDs: []descpb.ColumnID{columnID},
 								},
 							},
-							[]targets.TargetState{
-								{&addCheckTarget, targets.State_DELETE_AND_WRITE_ONLY},
+							[]scpb.TargetState{
+								{&addCheckTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 							},
 						},
 					},
@@ -807,34 +807,34 @@ func TestCompile(t *testing.T) {
 					expected: []Stage{},
 				},
 				{
-					initial: []targets.TargetState{
-						{&addCheckTarget, targets.State_DELETE_AND_WRITE_ONLY},
+					initial: []scpb.TargetState{
+						{&addCheckTarget, scpb.State_DELETE_AND_WRITE_ONLY},
 					},
 					flags: CompileFlags{
 						ExecutionPhase: PostCommitPhase,
 					},
 					expected: []Stage{
 						{
-							[]ops.Op{
-								ops.ValidateCheckConstraint{
+							[]scop.Op{
+								scop.ValidateCheckConstraint{
 									TableID: tableID,
 									Name:    checkName,
 								},
 							},
-							[]targets.TargetState{
-								{&addCheckTarget, targets.State_VALIDATED},
+							[]scpb.TargetState{
+								{&addCheckTarget, scpb.State_VALIDATED},
 							},
 						},
 						{
-							[]ops.Op{
-								ops.CheckConstraintStateChange{
+							[]scop.Op{
+								scop.CheckConstraintStateChange{
 									TableID:   tableID,
 									Name:      checkName,
-									NextState: targets.State_PUBLIC,
+									NextState: scpb.State_PUBLIC,
 								},
 							},
-							[]targets.TargetState{
-								{&addCheckTarget, targets.State_PUBLIC},
+							[]scpb.TargetState{
+								{&addCheckTarget, scpb.State_PUBLIC},
 							},
 						},
 					},
@@ -845,7 +845,7 @@ func TestCompile(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var prevTargetStates []targets.TargetState
+			var prevTargetStates []scpb.TargetState
 			for _, ci := range tc.compileIterations {
 				if len(ci.initial) > 0 {
 					prevTargetStates = prevTargetStates[:0]
@@ -880,8 +880,8 @@ func TestCompile(t *testing.T) {
 }
 
 func TestDebugScratch(t *testing.T) {
-	targetSlice := []targets.Target{
-		&targets.AddIndex{
+	targetSlice := []scpb.Target{
+		&scpb.AddIndex{
 			TableID: 10,
 			Index: descpb.IndexDescriptor{
 				Name:             "primary 2",
@@ -897,7 +897,7 @@ func TestDebugScratch(t *testing.T) {
 			PrimaryIndex:   1,
 			ReplacementFor: 1,
 		},
-		&targets.AddColumn{
+		&scpb.AddColumn{
 			TableID:      10,
 			ColumnFamily: descpb.FamilyID(1),
 			Column: descpb.ColumnDescriptor{
@@ -908,7 +908,7 @@ func TestDebugScratch(t *testing.T) {
 				PGAttributeNum: 2,
 			},
 		},
-		&targets.DropIndex{
+		&scpb.DropIndex{
 			TableID:    10,
 			IndexID:    1,
 			ReplacedBy: 2,
@@ -916,18 +916,18 @@ func TestDebugScratch(t *testing.T) {
 		},
 	}
 
-	targetStates := []targets.TargetState{
+	targetStates := []scpb.TargetState{
 		{
 			Target: targetSlice[0],
-			State:  targets.State_DELETE_ONLY,
+			State:  scpb.State_DELETE_ONLY,
 		},
 		{
 			Target: targetSlice[1],
-			State:  targets.State_DELETE_ONLY,
+			State:  scpb.State_DELETE_ONLY,
 		},
 		{
 			Target: targetSlice[2],
-			State:  targets.State_PUBLIC,
+			State:  scpb.State_PUBLIC,
 		},
 	}
 

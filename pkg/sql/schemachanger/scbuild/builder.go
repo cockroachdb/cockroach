@@ -1,4 +1,4 @@
-package builder
+package scbuild
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -28,7 +28,7 @@ type Builder struct {
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
 
-	targetStates []targets.TargetState
+	targetStates []scpb.TargetState
 }
 
 func NewBuilder(
@@ -42,8 +42,8 @@ func NewBuilder(
 }
 
 func (b *Builder) AlterTable(
-	ctx context.Context, ts []targets.TargetState, n *tree.AlterTable,
-) ([]targets.TargetState, error) {
+	ctx context.Context, ts []scpb.TargetState, n *tree.AlterTable,
+) ([]scpb.TargetState, error) {
 	// TODO (lucy): Clean this up.
 	b.targetStates = ts
 	defer func() {
@@ -63,7 +63,7 @@ func (b *Builder) AlterTable(
 		}
 	}
 
-	result := make([]targets.TargetState, len(b.targetStates))
+	result := make([]scpb.TargetState, len(b.targetStates))
 	for i := range b.targetStates {
 		result[i] = b.targetStates[i]
 	}
@@ -175,24 +175,24 @@ func (b *Builder) alterTableAddColumn(
 	}
 
 	b.addTargetState(
-		&targets.AddColumn{
+		&scpb.AddColumn{
 			TableID:      table.GetID(),
 			Column:       *col,
 			ColumnFamily: columnFamilyID,
 		},
-		targets.State_ABSENT,
+		scpb.State_ABSENT,
 	)
 	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
 	if idx != nil {
 		idxID := b.nextIndexID(table)
 		idx.ID = idxID
 		b.addTargetState(
-			&targets.AddIndex{
+			&scpb.AddIndex{
 				TableID:      table.GetID(),
 				Index:        *idx,
 				PrimaryIndex: newPrimaryIdxID,
 			},
-			targets.State_ABSENT,
+			scpb.State_ABSENT,
 		)
 	}
 	return nil
@@ -213,13 +213,13 @@ func (b *Builder) validateColumnName(
 	}
 	for _, ts := range b.targetStates {
 		switch t := ts.Target.(type) {
-		case *targets.AddColumn:
+		case *scpb.AddColumn:
 			if t.TableID == table.GetID() && t.Column.Name == string(d.Name) {
 				return pgerror.Newf(pgcode.DuplicateColumn,
 					"duplicate: column %q in the middle of being added, not yet public",
 					col.Name)
 			}
-		case *targets.DropColumn:
+		case *scpb.DropColumn:
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q being dropped, try again later", col.Name)
 		}
@@ -244,7 +244,7 @@ func (b *Builder) findOrAddColumnFamily(
 		return 0, errors.Errorf("unknown family %q", family)
 	}
 	familyID := b.nextFamilyID(table)
-	b.addTargetState(&targets.AddColumnFamily{
+	b.addTargetState(&scpb.AddColumnFamily{
 		TableID: table.GetID(),
 		Family: descpb.ColumnFamilyDescriptor{
 			Name:            family,
@@ -253,7 +253,7 @@ func (b *Builder) findOrAddColumnFamily(
 			ColumnIDs:       []descpb.ColumnID{},
 			DefaultColumnID: 0,
 		},
-	}, targets.State_ABSENT)
+	}, scpb.State_ABSENT)
 	return familyID, nil
 }
 
@@ -275,7 +275,7 @@ func (b *Builder) alterTableDropColumn(
 	}
 	// Check whether the column is being dropped.
 	for _, ts := range b.targetStates {
-		if _, ok := ts.Target.(*targets.DropColumn); ok {
+		if _, ok := ts.Target.(*scpb.DropColumn); ok {
 			return nil
 		}
 	}
@@ -293,11 +293,11 @@ func (b *Builder) alterTableDropColumn(
 	// drop foreign keys
 
 	b.addTargetState(
-		&targets.DropColumn{
+		&scpb.DropColumn{
 			TableID: table.GetID(),
 			Column:  *colToDrop,
 		},
-		targets.State_PUBLIC,
+		scpb.State_PUBLIC,
 	)
 	b.addOrUpdatePrimaryIndexTargetsForDropColumn(table, colToDrop.ID)
 	return nil
@@ -330,12 +330,12 @@ func (b *Builder) maybeAddSequenceDependencies(
 
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		b.addTargetState(
-			&targets.AddSequenceDependency{
+			&scpb.AddSequenceDependency{
 				TableID:    tableID,
 				ColumnID:   col.ID,
 				SequenceID: seqDesc.GetID(),
 			},
-			targets.State_ABSENT,
+			scpb.State_ABSENT,
 		)
 	}
 	return nil
@@ -347,7 +347,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
 	for i := range b.targetStates {
-		if t, ok := b.targetStates[i].Target.(*targets.AddPrimaryIndex); ok &&
+		if t, ok := b.targetStates[i].Target.(*scpb.AddPrimaryIndex); ok &&
 			t.TableID == table.GetID() {
 			t.StoreColumnIDs = append(t.StoreColumnIDs, colID)
 			t.StoreColumnNames = append(t.StoreColumnNames, colName)
@@ -386,7 +386,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	}
 
 	b.addTargetState(
-		&targets.AddPrimaryIndex{
+		&scpb.AddPrimaryIndex{
 			TableID:          table.GetID(),
 			Index:            *newIdx,
 			PrimaryIndex:     table.GetPrimaryIndexID(),
@@ -394,19 +394,19 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 			StoreColumnIDs:   append(storeColIDs, colID),
 			StoreColumnNames: append(storeColNames, colName),
 		},
-		targets.State_ABSENT,
+		scpb.State_ABSENT,
 	)
 
 	// Drop the existing primary index.
 	b.addTargetState(
-		&targets.DropPrimaryIndex{
+		&scpb.DropPrimaryIndex{
 			TableID:          table.GetID(),
 			Index:            *(protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)),
 			ReplacedBy:       idxID,
 			StoreColumnIDs:   storeColIDs,
 			StoreColumnNames: storeColNames,
 		},
-		targets.State_PUBLIC,
+		scpb.State_PUBLIC,
 	)
 
 	return idxID
@@ -419,7 +419,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// Check whether a target to add a PK already exists. If so, update its
 	// storing columns.
 	for i := range b.targetStates {
-		if t, ok := b.targetStates[i].Target.(*targets.AddPrimaryIndex); ok &&
+		if t, ok := b.targetStates[i].Target.(*scpb.AddPrimaryIndex); ok &&
 			t.TableID == table.GetID() {
 			for j := range t.StoreColumnIDs {
 				if t.StoreColumnIDs[j] == colID {
@@ -440,7 +440,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.
-			_, _, err := table.FindIndexByName(name)
+			_, err := table.FindIndexWithName(name)
 			return err == nil
 		},
 	)
@@ -469,7 +469,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	}
 
 	b.addTargetState(
-		&targets.AddPrimaryIndex{
+		&scpb.AddPrimaryIndex{
 			TableID:          table.GetID(),
 			Index:            *newIdx,
 			PrimaryIndex:     table.GetPrimaryIndexID(),
@@ -477,19 +477,19 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 			StoreColumnIDs:   addStoreColIDs,
 			StoreColumnNames: addStoreColNames,
 		},
-		targets.State_ABSENT,
+		scpb.State_ABSENT,
 	)
 
 	// Drop the existing primary index.
 	b.addTargetState(
-		&targets.DropPrimaryIndex{
+		&scpb.DropPrimaryIndex{
 			TableID:          table.GetID(),
 			Index:            *(protoutil.Clone(&table.PrimaryIndex).(*descpb.IndexDescriptor)),
 			ReplacedBy:       idxID,
 			StoreColumnIDs:   dropStoreColIDs,
 			StoreColumnNames: dropStoreColNames,
 		},
-		targets.State_PUBLIC,
+		scpb.State_PUBLIC,
 	)
 
 	return idxID
@@ -499,7 +499,7 @@ func (b *Builder) nextColumnID(table *tabledesc.Immutable) descpb.ColumnID {
 	nextColID := table.GetNextColumnID()
 	var maxColID descpb.ColumnID
 	for _, ts := range b.targetStates {
-		if ac, ok := ts.Target.(*targets.AddColumn); ok && ac.TableID == table.GetID() {
+		if ac, ok := ts.Target.(*scpb.AddColumn); ok && ac.TableID == table.GetID() {
 			if ac.Column.ID > maxColID {
 				maxColID = ac.Column.ID
 			}
@@ -515,11 +515,11 @@ func (b *Builder) nextIndexID(table *tabledesc.Immutable) descpb.IndexID {
 	nextMaxID := table.GetNextIndexID()
 	var maxIdxID descpb.IndexID
 	for _, ts := range b.targetStates {
-		if ai, ok := ts.Target.(*targets.AddIndex); ok && ai.TableID == table.GetID() {
+		if ai, ok := ts.Target.(*scpb.AddIndex); ok && ai.TableID == table.GetID() {
 			if ai.Index.ID > maxIdxID {
 				maxIdxID = ai.Index.ID
 			}
-		} else if ai, ok := ts.Target.(*targets.AddPrimaryIndex); ok && ai.TableID == table.GetID() {
+		} else if ai, ok := ts.Target.(*scpb.AddPrimaryIndex); ok && ai.TableID == table.GetID() {
 			if ai.Index.ID > maxIdxID {
 				maxIdxID = ai.Index.ID
 			}
@@ -535,7 +535,7 @@ func (b *Builder) nextFamilyID(table *tabledesc.Immutable) descpb.FamilyID {
 	nextMaxID := table.GetNextFamilyID()
 	var maxFamilyID descpb.FamilyID
 	for _, ts := range b.targetStates {
-		if af, ok := ts.Target.(*targets.AddColumnFamily); ok &&
+		if af, ok := ts.Target.(*scpb.AddColumnFamily); ok &&
 			af.TableID == table.GetID() {
 			if af.Family.ID > maxFamilyID {
 				maxFamilyID = af.Family.ID
@@ -548,8 +548,8 @@ func (b *Builder) nextFamilyID(table *tabledesc.Immutable) descpb.FamilyID {
 	return nextMaxID
 }
 
-func (b *Builder) addTargetState(t targets.Target, s targets.State) {
-	b.targetStates = append(b.targetStates, targets.TargetState{
+func (b *Builder) addTargetState(t scpb.Target, s scpb.State) {
+	b.targetStates = append(b.targetStates, scpb.TargetState{
 		Target: t,
 		State:  s,
 	})

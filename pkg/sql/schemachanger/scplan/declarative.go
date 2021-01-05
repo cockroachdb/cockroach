@@ -1,18 +1,18 @@
-package compiler
+package scplan
 
 import (
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/errors"
 )
 
-func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*SchemaChange, error) {
+func buildGraph(initialStates []scpb.TargetState, flags CompileFlags) (*SchemaChange, error) {
 	g := SchemaChange{
-		targetIdxMap:        map[targets.Target]int{},
-		targetStateOpEdges:  map[*targets.TargetState]*opEdge{},
-		targetStateDepEdges: map[*targets.TargetState][]*depEdge{},
+		targetIdxMap:        map[scpb.Target]int{},
+		targetStateOpEdges:  map[*scpb.TargetState]*opEdge{},
+		targetStateDepEdges: map[*scpb.TargetState][]*depEdge{},
 	}
 
 	// TODO: add validation of targets to ensure no two overlap in their
@@ -24,7 +24,7 @@ func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*Schem
 		idx := len(g.targets)
 		g.targetIdxMap[ts.Target] = idx
 		g.targets = append(g.targets, ts.Target)
-		g.targetStates = append(g.targetStates, map[targets.State]*targets.TargetState{})
+		g.targetStates = append(g.targetStates, map[scpb.State]*scpb.TargetState{})
 		g.initialTargetStates = append(g.initialTargetStates,
 			g.getOrCreateTargetState(ts.Target, ts.State))
 	}
@@ -34,7 +34,7 @@ func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*Schem
 	for _, ts := range initialStates {
 		p[reflect.TypeOf(ts.Target)].forward(&g, ts.Target, ts.State, flags)
 	}
-	g.forEach(func(target targets.Target, s targets.State) error {
+	g.forEach(func(target scpb.Target, s scpb.State) error {
 		d, ok := p[reflect.TypeOf(target)]
 		if !ok {
 			panic(errors.Errorf("not implemented for %T", target))
@@ -51,12 +51,12 @@ func buildGraph(initialStates []targets.TargetState, flags CompileFlags) (*Schem
 var _ graphBuilder = (*SchemaChange)(nil)
 
 type depMatcher struct {
-	s       targets.State
+	s       scpb.State
 	matcher interface{}
 }
 
 type decOpEdge struct {
-	nextState targets.State
+	nextState scpb.State
 	predicate interface{}
 	op        interface{}
 }
@@ -66,14 +66,14 @@ type targetRules struct {
 	forward, backwards targetOpRules
 }
 
-type targetDepRules map[targets.State][]depMatcher
+type targetDepRules map[scpb.State][]depMatcher
 
-type targetOpRules map[targets.State][]decOpEdge
+type targetOpRules map[scpb.State][]decOpEdge
 
 var p = buildSchemaChangePlanner(rules)
 
-type opGenFunc func(builder graphBuilder, t targets.Target, s targets.State, flags CompileFlags)
-type depGenFunc func(g graphBuilder, t targets.Target, s targets.State)
+type opGenFunc func(builder graphBuilder, t scpb.Target, s scpb.State, flags CompileFlags)
+type depGenFunc func(g graphBuilder, t scpb.Target, s scpb.State)
 
 type schemaChangeTargetPlanner struct {
 	forward, backwards opGenFunc
@@ -82,7 +82,7 @@ type schemaChangeTargetPlanner struct {
 
 type schemaChangePlanner map[reflect.Type]schemaChangeTargetPlanner
 
-func buildSchemaChangePlanner(m map[targets.Target]targetRules) schemaChangePlanner {
+func buildSchemaChangePlanner(m map[scpb.Target]targetRules) schemaChangePlanner {
 	tp := make(map[reflect.Type]schemaChangeTargetPlanner)
 	for t, r := range m {
 		tp[reflect.TypeOf(t)] = schemaChangeTargetPlanner{
@@ -94,11 +94,11 @@ func buildSchemaChangePlanner(m map[targets.Target]targetRules) schemaChangePlan
 	return tp
 }
 
-func buildSchemaChangeDepGenFunc(t targets.Target, deps targetDepRules) depGenFunc {
+func buildSchemaChangeDepGenFunc(t scpb.Target, deps targetDepRules) depGenFunc {
 	// We want to walk all of the edges and ensure that they have the proper
 	// signature.
 	tTyp := reflect.TypeOf(t)
-	matchers := map[targets.State]map[reflect.Type][]func(a, b targets.Target) (bool, targets.State){}
+	matchers := map[scpb.State]map[reflect.Type][]func(a, b scpb.Target) (bool, scpb.State){}
 	for s, rules := range deps {
 		for i, rule := range rules {
 			mt := reflect.TypeOf(rule.matcher)
@@ -113,10 +113,10 @@ func buildSchemaChangeDepGenFunc(t targets.Target, deps targetDepRules) depGenFu
 				panic(errors.Errorf("expected %T to implement %v for (%T,%s)[%d]", other, targetType, t, s, i))
 			}
 			if matchers[s] == nil {
-				matchers[s] = map[reflect.Type][]func(a targets.Target, b targets.Target) (bool, targets.State){}
+				matchers[s] = map[reflect.Type][]func(a scpb.Target, b scpb.Target) (bool, scpb.State){}
 			}
 			rule := rule
-			f := func(a, b targets.Target) (bool, targets.State) {
+			f := func(a, b scpb.Target) (bool, scpb.State) {
 				out := reflect.ValueOf(rule.matcher).Call([]reflect.Value{reflect.ValueOf(a), reflect.ValueOf(b)})
 				if out[0].Bool() {
 					return true, rule.s
@@ -126,9 +126,9 @@ func buildSchemaChangeDepGenFunc(t targets.Target, deps targetDepRules) depGenFu
 			matchers[s][other] = append(matchers[s][other], f)
 		}
 	}
-	return func(g graphBuilder, this targets.Target, thisState targets.State) {
+	return func(g graphBuilder, this scpb.Target, thisState scpb.State) {
 		for t, funcs := range matchers[thisState] {
-			if err := g.forEach(func(that targets.Target, thatState targets.State) error {
+			if err := g.forEach(func(that scpb.Target, thatState scpb.State) error {
 				if reflect.TypeOf(that) != t {
 					return nil
 				}
@@ -154,12 +154,12 @@ func buildSchemaChangeDepGenFunc(t targets.Target, deps targetDepRules) depGenFu
 
 var (
 	compileFlagsTyp = reflect.TypeOf((*CompileFlags)(nil)).Elem()
-	opsType         = reflect.TypeOf((*ops.Op)(nil)).Elem()
+	opsType         = reflect.TypeOf((*scop.Op)(nil)).Elem()
 	boolType        = reflect.TypeOf((*bool)(nil)).Elem()
-	targetType      = reflect.TypeOf((*targets.Target)(nil)).Elem()
+	targetType      = reflect.TypeOf((*scpb.Target)(nil)).Elem()
 )
 
-func buildSchemaChangeOpGenFunc(t targets.Target, forward targetOpRules) opGenFunc {
+func buildSchemaChangeOpGenFunc(t scpb.Target, forward targetOpRules) opGenFunc {
 	// We want to walk all of the edges and ensure that they have the proper
 	// signature.
 	tTyp := reflect.TypeOf(t)
@@ -183,13 +183,13 @@ func buildSchemaChangeOpGenFunc(t targets.Target, forward targetOpRules) opGenFu
 					panic(errors.Errorf("invalid predicate with signature %v != %v for %T[%d]", pt, predicateTyp, t, i))
 				}
 			}
-			if rule.nextState == targets.State_UNKNOWN {
+			if rule.nextState == scpb.State_UNKNOWN {
 				if rule.op != nil {
 					panic(errors.Errorf("invalid stopping rule with non-nil op func for %T[%d]", t, i))
 				}
 				continue
 			}
-			if rule.nextState != targets.State_UNKNOWN && rule.op == nil {
+			if rule.nextState != scpb.State_UNKNOWN && rule.op == nil {
 				panic(errors.Errorf("invalid nil op with next state %s for %T[%d]", rule.nextState, t, i))
 			}
 			if ot := reflect.TypeOf(rule.op); ot != opType {
@@ -198,7 +198,7 @@ func buildSchemaChangeOpGenFunc(t targets.Target, forward targetOpRules) opGenFu
 		}
 	}
 
-	return func(builder graphBuilder, t targets.Target, s targets.State, flags CompileFlags) {
+	return func(builder graphBuilder, t scpb.Target, s scpb.State, flags CompileFlags) {
 		cur := s
 		tv := reflect.ValueOf(t)
 		flagsV := reflect.ValueOf(flags)
@@ -213,11 +213,11 @@ func buildSchemaChangeOpGenFunc(t targets.Target, forward targetOpRules) opGenFu
 						continue
 					}
 				}
-				if rule.nextState == targets.State_UNKNOWN {
+				if rule.nextState == scpb.State_UNKNOWN {
 					return
 				}
 				out := reflect.ValueOf(rule.op).Call(opsArgs)
-				builder.addOpEdge(t, cur, rule.nextState, out[0].Interface().(ops.Op))
+				builder.addOpEdge(t, cur, rule.nextState, out[0].Interface().(scop.Op))
 				cur = rule.nextState
 				continue outer
 			}
@@ -226,7 +226,7 @@ func buildSchemaChangeOpGenFunc(t targets.Target, forward targetOpRules) opGenFu
 	}
 }
 
-type nodeFunc func(target targets.Target, s targets.State) error
+type nodeFunc func(target scpb.Target, s scpb.State) error
 
 type graph interface {
 	forEach(it nodeFunc) error
@@ -235,14 +235,14 @@ type graph interface {
 type graphBuilder interface {
 	graph
 	addOpEdge(
-		t targets.Target,
-		cur, next targets.State,
-		op ops.Op,
-	) (nextState targets.State)
+		t scpb.Target,
+		cur, next scpb.State,
+		op scop.Op,
+	) (nextState scpb.State)
 	addDepEdge(
-		fromTarget targets.Target,
-		fromState targets.State,
-		toTarget targets.Target,
-		toState targets.State,
+		fromTarget scpb.Target,
+		fromState scpb.State,
+		toTarget scpb.Target,
+		toState scpb.State,
 	)
 }

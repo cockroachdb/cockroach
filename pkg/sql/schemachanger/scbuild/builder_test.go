@@ -1,4 +1,4 @@
-package builder_test
+package scbuild_test
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -52,31 +52,31 @@ func TestBuilder(t *testing.T) {
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
 	})
-	b := builder.NewBuilder(
+	b := scbuild.NewBuilder(
 		planner, planner.SemaCtx(), planner.EvalContext(),
 	)
 
 	for _, tc := range []struct {
 		name     string
 		stmt     string
-		expected []targets.TargetState
+		expected []scpb.TargetState
 	}{
 		{
 			"add column",
 			"ALTER TABLE db.public.foo ADD COLUMN j INT",
-			[]targets.TargetState{
+			[]scpb.TargetState{
 				{
-					&targets.AddColumn{
+					&scpb.AddColumn{
 						TableID: tableID,
 						Column: descpb.ColumnDescriptor{
 							ID:   2,
 							Name: "j",
 						},
 					},
-					targets.State_ABSENT,
+					scpb.State_ABSENT,
 				},
 				{
-					&targets.AddPrimaryIndex{
+					&scpb.AddPrimaryIndex{
 						TableID: tableID,
 						Index: descpb.IndexDescriptor{
 							ID:   2,
@@ -87,10 +87,10 @@ func TestBuilder(t *testing.T) {
 						StoreColumnIDs:   []descpb.ColumnID{2},
 						StoreColumnNames: []string{"j"},
 					},
-					targets.State_ABSENT,
+					scpb.State_ABSENT,
 				},
 				{
-					&targets.DropPrimaryIndex{
+					&scpb.DropPrimaryIndex{
 						TableID: tableID,
 						Index: descpb.IndexDescriptor{
 							ID:   1,
@@ -100,7 +100,7 @@ func TestBuilder(t *testing.T) {
 						StoreColumnIDs:   nil,
 						StoreColumnNames: nil,
 					},
-					targets.State_PUBLIC,
+					scpb.State_PUBLIC,
 				},
 			},
 		},
@@ -124,13 +124,13 @@ func TestBuilder(t *testing.T) {
 				require.IsType(t, exp.Target, actual.Target)
 				require.Equal(t, exp.State, actual.State)
 				switch target := actual.Target.(type) {
-				case *targets.AddColumn:
-					e := exp.Target.(*targets.AddColumn)
+				case *scpb.AddColumn:
+					e := exp.Target.(*scpb.AddColumn)
 					require.Equal(t, e.TableID, target.TableID)
 					require.Equal(t, e.Column.ID, target.Column.ID)
 					require.Equal(t, e.Column.Name, target.Column.Name)
-				case *targets.AddPrimaryIndex:
-					e := exp.Target.(*targets.AddPrimaryIndex)
+				case *scpb.AddPrimaryIndex:
+					e := exp.Target.(*scpb.AddPrimaryIndex)
 					require.Equal(t, e.TableID, target.TableID)
 					require.Equal(t, e.Index.ID, target.Index.ID)
 					require.Equal(t, e.Index.Name, target.Index.Name)
@@ -138,8 +138,8 @@ func TestBuilder(t *testing.T) {
 					require.Equal(t, e.ReplacementFor, target.ReplacementFor)
 					require.Equal(t, e.StoreColumnIDs, target.StoreColumnIDs)
 					require.Equal(t, e.StoreColumnNames, target.StoreColumnNames)
-				case *targets.DropPrimaryIndex:
-					e := exp.Target.(*targets.DropPrimaryIndex)
+				case *scpb.DropPrimaryIndex:
+					e := exp.Target.(*scpb.DropPrimaryIndex)
 					require.Equal(t, e.TableID, target.TableID)
 					require.Equal(t, e.Index.ID, target.Index.ID)
 					require.Equal(t, e.Index.Name, target.Index.Name)

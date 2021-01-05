@@ -1,4 +1,4 @@
-package executor_test
+package scexec_test
 
 import (
 	"context"
@@ -15,11 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/builder"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/compiler"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/executor"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/ops"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/targets"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -65,7 +65,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 	type testCase struct {
 		name      string
 		orig, exp func() *tabledesc.Immutable
-		ops       func() []ops.Op
+		ops       func() []scop.Op
 	}
 	var table *tabledesc.Mutable
 	makeTable := func(f func(mutable *tabledesc.Mutable)) func() *tabledesc.Immutable {
@@ -117,7 +117,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := executor.New(txn, descriptors, ti.lm.Codec(), nil, nil)
+			ex := scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil)
 			orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
@@ -155,9 +155,9 @@ CREATE TABLE db.t (
 				})
 				mutable.NextMutationID++
 			}),
-			ops: func() []ops.Op {
-				return []ops.Op{
-					ops.AddIndexDescriptor{
+			ops: func() []scop.Op {
+				return []scop.Op{
+					scop.AddIndexDescriptor{
 						TableID: table.ID,
 						Index:   indexToAdd,
 					},
@@ -178,9 +178,9 @@ CREATE TABLE db.t (
 					Hidden:              false,
 				})
 			}),
-			ops: func() []ops.Op {
-				return []ops.Op{
-					ops.AddCheckConstraint{
+			ops: func() []scop.Op {
+				return []scop.Op{
+					scop.AddCheckConstraint{
 						TableID:     table.GetID(),
 						Name:        "check_foo",
 						Expr:        "i > 1",
@@ -211,8 +211,8 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var id descpb.ID
-		var ts []targets.TargetState
-		var targetSlice []targets.Target
+		var ts []scpb.TargetState
+		var targetSlice []scpb.Target
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -225,8 +225,8 @@ func TestSchemaChanger(t *testing.T) {
 			//
 			//  ALTER TABLE foo ADD COLUMN j INT;
 			//
-			targetSlice = []targets.Target{
-				&targets.AddPrimaryIndex{
+			targetSlice = []scpb.Target{
+				&scpb.AddPrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
 						Name:             "new_primary_key",
@@ -242,7 +242,7 @@ func TestSchemaChanger(t *testing.T) {
 					StoreColumnIDs:   []descpb.ColumnID{2},
 					StoreColumnNames: []string{"j"},
 				},
-				&targets.AddColumn{
+				&scpb.AddColumn{
 					TableID:      fooTable.GetID(),
 					ColumnFamily: descpb.FamilyID(1),
 					Column: descpb.ColumnDescriptor{
@@ -253,7 +253,7 @@ func TestSchemaChanger(t *testing.T) {
 						PGAttributeNum: 2,
 					},
 				},
-				&targets.DropPrimaryIndex{
+				&scpb.DropPrimaryIndex{
 					TableID: fooTable.GetID(),
 					Index: descpb.IndexDescriptor{
 						Name:             "primary",
@@ -270,64 +270,64 @@ func TestSchemaChanger(t *testing.T) {
 				},
 			}
 
-			targetStates := []targets.TargetState{
+			targetStates := []scpb.TargetState{
 				{
 					Target: targetSlice[0],
-					State:  targets.State_ABSENT,
+					State:  scpb.State_ABSENT,
 				},
 				{
 					Target: targetSlice[1],
-					State:  targets.State_ABSENT,
+					State:  scpb.State_ABSENT,
 				},
 				{
 					Target: targetSlice[2],
-					State:  targets.State_PUBLIC,
+					State:  scpb.State_PUBLIC,
 				},
 			}
 
-			for _, phase := range []compiler.ExecutionPhase{
-				compiler.PostStatementPhase,
-				compiler.PreCommitPhase,
+			for _, phase := range []scplan.ExecutionPhase{
+				scplan.PostStatementPhase,
+				scplan.PreCommitPhase,
 			} {
-				sc, err := compiler.Compile(targetStates, compiler.CompileFlags{
+				sc, err := scplan.Compile(targetStates, scplan.CompileFlags{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
 			return nil
 		}))
-		var after []targets.TargetState
+		var after []scpb.TargetState
 		ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := compiler.Compile(ts, compiler.CompileFlags{
-				ExecutionPhase: compiler.PostCommitPhase,
+			sc, err := scplan.Compile(ts, scplan.CompileFlags{
+				ExecutionPhase: scplan.PostCommitPhase,
 			})
 			stages := sc.Stages()
 			require.NoError(t, err)
 			for _, s := range stages {
-				require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+				require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 				after = s.NextTargets
 			}
 			return nil
 		})
-		require.Equal(t, []targets.TargetState{
+		require.Equal(t, []scpb.TargetState{
 			{
 				targetSlice[0],
-				targets.State_PUBLIC,
+				scpb.State_PUBLIC,
 			},
 			{
 				targetSlice[1],
-				targets.State_PUBLIC,
+				scpb.State_PUBLIC,
 			},
 			{
 				targetSlice[2],
-				targets.State_ABSENT,
+				scpb.State_ABSENT,
 			},
 		}, after)
 		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
@@ -341,7 +341,7 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var id descpb.ID
-		var ts []targets.TargetState
+		var ts []scpb.TargetState
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -365,24 +365,24 @@ func TestSchemaChanger(t *testing.T) {
 				EvalContext() *tree.EvalContext
 			})
 			defer cleanup()
-			b := builder.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext())
+			b := scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext())
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
 			require.Len(t, parsed, 1)
 			targetStates, err := b.AlterTable(ctx, nil, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
 
-			for _, phase := range []compiler.ExecutionPhase{
-				compiler.PostStatementPhase,
-				compiler.PreCommitPhase,
+			for _, phase := range []scplan.ExecutionPhase{
+				scplan.PostStatementPhase,
+				scplan.PreCommitPhase,
 			} {
-				sc, err := compiler.Compile(targetStates, compiler.CompileFlags{
+				sc, err := scplan.Compile(targetStates, scplan.CompileFlags{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
@@ -392,13 +392,13 @@ func TestSchemaChanger(t *testing.T) {
 		ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			sc, err := compiler.Compile(ts, compiler.CompileFlags{
-				ExecutionPhase: compiler.PostCommitPhase,
+			sc, err := scplan.Compile(ts, scplan.CompileFlags{
+				ExecutionPhase: scplan.PostCommitPhase,
 			})
 			require.NoError(t, err)
 			stages := sc.Stages()
 			for _, s := range stages {
-				require.NoError(t, executor.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+				require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
 				//after = s.NextTargets
 			}
 			return nil

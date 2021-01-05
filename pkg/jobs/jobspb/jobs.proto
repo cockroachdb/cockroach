@@ -19,7 +19,7 @@ import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/tenant.proto";
 import "util/hlc/timestamp.proto";
-import "sql/schemachanger/targets/targets.proto";
+import "sql/schemachanger/scpb/targets.proto";
 
 message Lease {
   option (gogoproto.equal) = true;
@@ -299,12 +299,12 @@ message TypeSchemaChangeProgress {
 
 // TypeSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
-  repeated cockroach.sql.schemachanger.targets.TargetProto targets = 1;
+  repeated cockroach.sql.schemachanger.scpb.TargetProto targets = 1;
 }
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
-  repeated cockroach.sql.schemachanger.targets.State states = 1;
+  repeated cockroach.sql.schemachanger.scpb.State states = 1;
 }
 
 message ResumeSpanList {
