@@ -107,10 +107,8 @@ func TestRegistry(t *testing.T) {
 			keyBytes = encoding.EncodeStringAscending(keyBytes, key)
 			if err := registry.AddContentionEvent(roachpb.ContentionEvent{
 				Key: keyBytes,
-				Txn: roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{
-						ID: contendingTxnID,
-					},
+				TxnMeta: enginepb.TxnMeta{
+					ID: contendingTxnID,
 				},
 				Duration: time.Duration(contentionDuration),
 			}); err != nil {

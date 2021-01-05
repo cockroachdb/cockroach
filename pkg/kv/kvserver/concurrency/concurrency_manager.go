@@ -59,6 +59,7 @@ type Config struct {
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
+	OnContentionEvent func(*roachpb.ContentionEvent) // may be nil; allowed to mutate the event
 	TxnWaitKnobs      txnwait.TestingKnobs
 }
 
@@ -92,6 +93,7 @@ func NewManager(cfg Config) Manager {
 			ir:                cfg.IntentResolver,
 			lt:                lt,
 			disableTxnPushing: cfg.DisableTxnPushing,
+			onContentionEvent: cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
