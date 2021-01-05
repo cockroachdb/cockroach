@@ -6171,7 +6171,6 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
 	t.Run("inside-tenant", func(t *testing.T) {
-		skip.WithIssue(t, 57317)
 		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
 	})
 
