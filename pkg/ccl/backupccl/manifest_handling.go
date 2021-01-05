@@ -670,9 +670,6 @@ func resolveBackupManifests(
 				}
 			}
 		}
-		if err != nil {
-			return nil, nil, nil, err
-		}
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
