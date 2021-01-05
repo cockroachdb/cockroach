@@ -243,7 +243,7 @@ describe("Nodes Overview page", () => {
         "replicas",
         "capacity usage",
         "memory use",
-        "cpus",
+        "vcpus",
         "version",
         "status",
         "", // logs column doesn't have header text
@@ -263,7 +263,7 @@ describe("Nodes Overview page", () => {
         "replicas",
         "capacity usage",
         "memory use",
-        "cpus",
+        "vcpus",
         "version",
         "status",
         "", // logs column doesn't have header text

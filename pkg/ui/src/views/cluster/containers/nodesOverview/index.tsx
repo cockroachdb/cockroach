@@ -270,7 +270,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "numCpus",
       title: (
         <CPUsTooltip>
-          CPUs
+           vCPUs
         </CPUsTooltip>
       ),
       dataIndex: "numCpus",
