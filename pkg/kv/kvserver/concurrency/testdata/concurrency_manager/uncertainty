@@ -50,6 +50,7 @@ on-txn-updated txn=txn1 status=pending ts=15,2
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000001 @ "k"
 
 finish req=req1
 ----
@@ -111,6 +112,7 @@ on-txn-updated txn=txn1 status=pending ts=15,2
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000001 @ "k"
 
 finish req=req1
 ----

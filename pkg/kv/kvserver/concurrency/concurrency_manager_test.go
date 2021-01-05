@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	"github.com/maruel/panicparse/stack"
 	"github.com/petermattis/goid"
 )
@@ -918,6 +919,18 @@ func (m *monitor) collectRecordings() string {
 						g: g, value: field.Value,
 					})
 					g.prevEvents++
+				}
+			}
+			var ev roachpb.ContentionEvent
+			for _, item := range span.InternalStructured {
+				if types.Is(item, &ev) {
+					_ = types.UnmarshalAny(item, &ev)
+					if ev.Duration != 0 {
+						ev.Duration = 123 // for determinism
+					}
+					logs = append(logs, logRecord{
+						g: g, value: fmt.Sprintf("contention metadata: %s @ %s", ev.TxnMeta.ID.Short(), ev.Key),
+					})
 				}
 			}
 		}

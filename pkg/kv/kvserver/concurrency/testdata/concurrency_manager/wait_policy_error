@@ -129,6 +129,7 @@ sequence req=reqNoWait1
 [5] sequence reqNoWait1: acquiring latches
 [5] sequence reqNoWait1: scanning lock table for conflicting locks
 [5] sequence reqNoWait1: sequencing complete, returned guard
+[5] sequence reqNoWait1: contention metadata: 00000001 @ "k"
 
 finish req=reqNoWait1
 ----
@@ -221,6 +222,7 @@ on-txn-updated txn=txn2 status=aborted
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: sequencing complete, returned guard
+[3] sequence req3: contention metadata: 00000002 @ "k3"
 
 new-request name=reqNoWait4 txn=txnNoWait ts=12,0 wait-policy=error
   get key=k5
@@ -249,6 +251,7 @@ sequence req=reqNoWait4
 [12] sequence reqNoWait4: acquiring latches
 [12] sequence reqNoWait4: scanning lock table for conflicting locks
 [12] sequence reqNoWait4: sequencing complete, returned guard
+[12] sequence reqNoWait4: contention metadata: 00000002 @ "k5"
 
 finish req=reqNoWait4
 ----

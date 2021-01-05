@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -152,6 +153,8 @@ func (w *lockTableWaiterImpl) WaitOn(
 	// re-discover the intent(s) during evaluation and resolve them themselves.
 	var deferredResolution []roachpb.LockUpdate
 	defer w.resolveDeferredIntents(ctx, &err, &deferredResolution)
+	ev := &roachpb.ContentionEvent{}
+	tBegin := timeutil.Now()
 	for {
 		select {
 		case <-newStateC:
@@ -159,6 +162,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 			state := guard.CurState()
 			switch state.kind {
 			case waitFor, waitForDistinguished:
+				// NB: TxnLockTableWaiterWithNonTxn has state.{key,txn}==nil, despite
+				// what the comments on the txn field claim; should probably make that
+				// test more realistic.
+				if state.key != nil {
+					ev.Key = state.key
+					ev.TxnMeta = *state.txn
+				}
 				if req.WaitPolicy == lock.WaitPolicy_Error {
 					// If the waiter has an Error wait policy, resolve the conflict
 					// immediately without waiting. If the conflict is a lock then
@@ -263,6 +273,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 						// detail in #41720. Specifically, see mention of "contention
 						// footprint" and COMMITTED_BUT_NOT_REMOVABLE.
 						w.lm.OnLockUpdated(ctx, &deferredResolution[len(deferredResolution)-1])
+
+						ev.Duration = timeutil.Since(tBegin)
+						if sp := tracing.SpanFromContext(ctx); sp != nil && ev.TxnMeta.ID != uuid.Nil {
+							sp.LogStructured(ev)
+						}
+						ev = &roachpb.ContentionEvent{}
+						tBegin = timeutil.Now()
 						continue
 					}
 				}
@@ -334,6 +351,13 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// waiting, re-acquire latches, and check the lockTable again for
 				// any new conflicts. If it find none, it can proceed with
 				// evaluation.
+
+				if ev.TxnMeta.ID != uuid.Nil {
+					ev.Duration = timeutil.Since(tBegin)
+					if sp := tracing.SpanFromContext(ctx); sp != nil {
+						sp.LogStructured(ev)
+					}
+				}
 				return nil
 
 			default:

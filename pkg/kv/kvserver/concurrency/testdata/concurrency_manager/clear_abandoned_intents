@@ -115,6 +115,15 @@ on-txn-updated txn=txn2 status=aborted
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000002 @ "b"
+[3] sequence req1: contention metadata: 00000002 @ "c"
+[3] sequence req1: contention metadata: 00000002 @ "d"
+[3] sequence req1: contention metadata: 00000002 @ "e"
+[3] sequence req1: contention metadata: 00000002 @ "f"
+[3] sequence req1: contention metadata: 00000002 @ "g"
+[3] sequence req1: contention metadata: 00000002 @ "h"
+[3] sequence req1: contention metadata: 00000002 @ "i"
+[3] sequence req1: contention metadata: 00000002 @ "j"
 
 debug-lock-table
 ----
@@ -181,6 +190,7 @@ on-txn-updated txn=txn2 status=committed
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000002 @ "a"
 
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=b
@@ -209,6 +219,7 @@ sequence req=req1
 [5] sequence req1: acquiring latches
 [5] sequence req1: scanning lock table for conflicting locks
 [5] sequence req1: sequencing complete, returned guard
+[5] sequence req1: contention metadata: 00000002 @ "b"
 
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=c
@@ -239,6 +250,7 @@ sequence req=req1
 [7] sequence req1: acquiring latches
 [7] sequence req1: scanning lock table for conflicting locks
 [7] sequence req1: sequencing complete, returned guard
+[7] sequence req1: contention metadata: 00000002 @ "c"
 
 debug-lock-table
 ----

@@ -73,6 +73,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 finish req=req2
 ----
@@ -191,6 +192,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 finish req=req2
 ----
@@ -318,6 +320,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 finish req=req2
 ----
@@ -389,6 +392,7 @@ on-txn-updated txn=txn1 status=committed
 [3] sequence req4: acquiring latches
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: sequencing complete, returned guard
+[3] sequence req4: contention metadata: 00000001 @ "k"
 
 finish req=req4
 ----

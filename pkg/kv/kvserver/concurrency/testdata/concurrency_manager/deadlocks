@@ -166,6 +166,7 @@ on-txn-updated txn=txn1 status=aborted
 [6] sequence req3r: acquiring latches
 [6] sequence req3r: scanning lock table for conflicting locks
 [6] sequence req3r: sequencing complete, returned guard
+[6] sequence req3r: contention metadata: 00000001 @ "a"
 
 # Txn3 can proceed and eventually commit.
 finish req=req3r
@@ -179,6 +180,7 @@ on-txn-updated txn=txn3 status=committed
 [5] sequence req2r: acquiring latches
 [5] sequence req2r: scanning lock table for conflicting locks
 [5] sequence req2r: sequencing complete, returned guard
+[5] sequence req2r: contention metadata: 00000003 @ "c"
 
 # Txn2 can proceed and eventually commit.
 finish req=req2r
@@ -379,6 +381,7 @@ on-txn-updated txn=txn1 status=aborted
 [4] sequence req4w: acquiring latches
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: sequencing complete, returned guard
+[4] sequence req4w: contention metadata: 00000001 @ "a"
 [5] sequence req1w2: detected pusher aborted
 [5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
@@ -392,6 +395,7 @@ finish req=req4w
 [7] sequence req3w2: acquiring latches
 [7] sequence req3w2: scanning lock table for conflicting locks
 [7] sequence req3w2: sequencing complete, returned guard
+[7] sequence req3w2: contention metadata: 00000004 @ "a"
 
 # Txn3 can proceed and eventually commit.
 finish req=req3w2
@@ -405,6 +409,7 @@ on-txn-updated txn=txn3 status=committed
 [6] sequence req2w2: acquiring latches
 [6] sequence req2w2: scanning lock table for conflicting locks
 [6] sequence req2w2: sequencing complete, returned guard
+[6] sequence req2w2: contention metadata: 00000003 @ "c"
 
 # Txn2 can proceed and eventually commit.
 finish req=req2w2
@@ -616,6 +621,7 @@ on-txn-updated txn=txn4 status=aborted
 [5] sequence req1w2: acquiring latches
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: sequencing complete, returned guard
+[5] sequence req1w2: contention metadata: 00000004 @ "b"
 
 # Txn1 can proceed and eventually commit.
 finish req=req1w2
@@ -629,6 +635,7 @@ on-txn-updated txn=txn1 status=committed
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
+[6] sequence req3w2: contention metadata: 00000001 @ "a"
 
 # Txn3 can proceed and eventually commit.
 finish req=req3w2
@@ -841,6 +848,7 @@ on-txn-updated txn=txn1 status=aborted
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
+[6] sequence req3w2: contention metadata: 00000001 @ "a"
 
 # Txn3 can proceed and eventually commit.
 finish req=req3w2
@@ -854,6 +862,7 @@ on-txn-updated txn=txn3 status=committed
 [4] sequence req4w: acquiring latches
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: sequencing complete, returned guard
+[4] sequence req4w: contention metadata: 00000003 @ "c"
 
 # Txn4 can proceed and eventually commit.
 finish req=req4w
@@ -1085,6 +1094,7 @@ on-txn-updated txn=txn4 status=aborted
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
+[6] sequence req3w2: contention metadata: 00000004 @ "a"
 
 # Txn3 can proceed and eventually commit.
 finish req=req3w2
@@ -1098,6 +1108,7 @@ on-txn-updated txn=txn3 status=committed
 [4] sequence req5w: acquiring latches
 [4] sequence req5w: scanning lock table for conflicting locks
 [4] sequence req5w: sequencing complete, returned guard
+[4] sequence req5w: contention metadata: 00000003 @ "c"
 
 # Txn5 can proceed and eventually commit.
 finish req=req5w
