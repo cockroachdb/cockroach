@@ -21,30 +21,32 @@ import (
 // definition, and parses it. It performs validation, ensuring that the
 // definition contains only things that the user-defined function implementation
 // can handle.
-func ParseUserDefinedFuncDef(funcDef string) (tree.Expr, error) {
+// It returns the fully-parsed statement, as well as the render expression in
+// the SELECT (which is currently the only thing handled by UDFs).
+func ParseUserDefinedFuncDef(funcDef string) (tree.Statement, tree.Expr, error) {
 	funcAst, err := parser.ParseOne(funcDef)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid function definition: %s", funcDef)
+		return nil, nil, pgerror.Wrapf(err, pgcode.Syntax, "invalid function definition: %s", funcDef)
 	}
 	s, ok := funcAst.AST.(*tree.Select)
 	if !ok {
-		return nil, pgerror.Newf(pgcode.Syntax, "only SELECTs are allowed as UDFs")
+		return nil, nil, pgerror.Newf(pgcode.Syntax, "only SELECTs are allowed as UDFs")
 	}
 
 	if s.Limit != nil || s.OrderBy != nil || s.Locking != nil || s.With != nil {
-		return nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs")
+		return nil, nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs")
 	}
 	switch t := s.Select.(type) {
 	case *tree.SelectClause:
 		if len(t.Exprs) != 1 {
-			return nil, pgerror.New(pgcode.Syntax, "only single-projection scalar SELECTs are allowed as UDFs")
+			return nil, nil, pgerror.New(pgcode.Syntax, "only single-projection scalar SELECTs are allowed as UDFs")
 		}
 		if t.Distinct || t.TableSelect || t.From.Tables != nil || t.DistinctOn != nil || t.GroupBy != nil ||
 			t.Having != nil || t.Window != nil || t.Where != nil {
-			return nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs", funcDef)
+			return nil, nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs")
 		}
-		return t.Exprs[0].Expr, nil
+		return funcAst.AST, t.Exprs[0].Expr, nil
 	default:
-		return nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs", funcDef)
+		return nil, nil, pgerror.Newf(pgcode.Syntax, "only simple scalar SELECTs are allowed as UDFs")
 	}
 }

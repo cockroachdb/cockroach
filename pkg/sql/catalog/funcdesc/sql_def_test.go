@@ -78,7 +78,7 @@ func TestParseUserDefinedFuncDef(t *testing.T) {
 	}
 	for i, tt := range tests {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			got, err := ParseUserDefinedFuncDef(tt.funcdef)
+			_, got, err := ParseUserDefinedFuncDef(tt.funcdef)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseUserDefinedFuncDef() error = %v, wantErr %v", err, tt.wantErr)
 				return
