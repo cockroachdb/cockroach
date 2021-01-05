@@ -88,7 +88,8 @@ func RevertRange(
 	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
 
 	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys)
+		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
+		args.EnableTimeBoundIteratorOptimization)
 	if err != nil {
 		return result.Result{}, err
 	}
