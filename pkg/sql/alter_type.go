@@ -85,6 +85,7 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 func (n *alterTypeNode) startExec(params runParams) error {
 	telemetry.Inc(n.n.Cmd.TelemetryCounter())
 
+	typeName := tree.AsStringWithFQNames(n.n.Type, params.p.Ann())
 	eventLogDone := false
 	var err error
 	switch t := n.n.Cmd.(type) {
@@ -97,9 +98,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 			return err
 		}
 		err = params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57734
-			TypeName:    n.desc.Name,
+			TypeName:    typeName,
 			NewTypeName: string(t.NewName),
 		})
 		eventLogDone = true
@@ -130,7 +129,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err := params.p.logEvent(params.ctx,
 			n.desc.ID,
 			&eventpb.AlterType{
-				TypeName: n.desc.Name,
+				TypeName: typeName,
 			}); err != nil {
 			return err
 		}
