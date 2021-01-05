@@ -1181,37 +1181,37 @@ limit
  │    └── union
  │         ├── columns: latitude:4 longitude:5 data1:6!null data2:7!null
  │         ├── left columns: latitude:4 longitude:5 data1:6!null data2:7!null
- │         ├── right columns: latitude:54 longitude:55 data1:56 data2:57
+ │         ├── right columns: latitude:64 longitude:65 data1:66 data2:67
  │         ├── key: (4-7)
  │         ├── union
  │         │    ├── columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
  │         │    ├── left columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
- │         │    ├── right columns: latitude:44 longitude:45 data1:46 data2:47
+ │         │    ├── right columns: latitude:54 longitude:55 data1:56 data2:57
  │         │    ├── cardinality: [0 - 30]
  │         │    ├── key: (4-7)
  │         │    ├── union
  │         │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
- │         │    │    ├── left columns: latitude:24 longitude:25 data1:26 data2:27
- │         │    │    ├── right columns: latitude:34 longitude:35 data1:36 data2:37
+ │         │    │    ├── left columns: latitude:34 longitude:35 data1:36 data2:37
+ │         │    │    ├── right columns: latitude:44 longitude:45 data1:46 data2:47
  │         │    │    ├── cardinality: [0 - 20]
  │         │    │    ├── key: (4-7)
  │         │    │    ├── scan index_tab@d
- │         │    │    │    ├── columns: latitude:24!null longitude:25!null data1:26!null data2:27!null
- │         │    │    │    ├── constraint: /24/25/26/27/21: [/10/11 - /10/11]
+ │         │    │    │    ├── columns: latitude:34!null longitude:35!null data1:36!null data2:37!null
+ │         │    │    │    ├── constraint: /34/35/36/37/31: [/10/11 - /10/11]
  │         │    │    │    ├── limit: 10
- │         │    │    │    └── fd: ()-->(24,25)
+ │         │    │    │    └── fd: ()-->(34,35)
  │         │    │    └── scan index_tab@d
- │         │    │         ├── columns: latitude:34!null longitude:35!null data1:36!null data2:37!null
- │         │    │         ├── constraint: /34/35/36/37/31: [/10/12 - /10/12]
+ │         │    │         ├── columns: latitude:44!null longitude:45!null data1:46!null data2:47!null
+ │         │    │         ├── constraint: /44/45/46/47/41: [/10/12 - /10/12]
  │         │    │         ├── limit: 10
- │         │    │         └── fd: ()-->(34,35)
+ │         │    │         └── fd: ()-->(44,45)
  │         │    └── scan index_tab@d
- │         │         ├── columns: latitude:44!null longitude:45!null data1:46!null data2:47!null
- │         │         ├── constraint: /44/45/46/47/41: [/10/13 - /10/13]
+ │         │         ├── columns: latitude:54!null longitude:55!null data1:56!null data2:57!null
+ │         │         ├── constraint: /54/55/56/57/51: [/10/13 - /10/13]
  │         │         ├── limit: 10
- │         │         └── fd: ()-->(44,45)
+ │         │         └── fd: ()-->(54,55)
  │         └── scan index_tab@d
- │              ├── columns: latitude:54 longitude:55 data1:56!null data2:57!null
+ │              ├── columns: latitude:64 longitude:65 data1:66!null data2:67!null
  │              └── constraint: /4/5/6/7/1
  │                   ├── [/-5 - /-5]
  │                   └── [/0 - /0]
