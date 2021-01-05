@@ -183,10 +183,12 @@ on-txn-updated txn=txn3 status=committed
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: sequencing complete, returned guard
+[5] sequence req4: contention metadata: 00000003 @ "k"
 [7] sequence req2: resolving intent "k" for txn 00000003 with COMMITTED status
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: sequencing complete, returned guard
+[7] sequence req2: contention metadata: 00000003 @ "k"
 
 finish req=req2
 ----

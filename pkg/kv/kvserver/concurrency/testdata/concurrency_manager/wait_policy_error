@@ -105,6 +105,7 @@ sequence req=reqNoWait1
 [4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
 [4] sequence reqNoWait1: pushee not abandoned
 [4] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on "k"
+[4] sequence reqNoWait1: contention metadata: 00000001 @ "k"
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error hits abandoned lock.
@@ -117,9 +118,11 @@ on-txn-updated txn=txn1 status=committed
 [3] sequence req3: resolving intent "k2" for txn 00000001 with COMMITTED status
 [3] sequence req3: pushing txn 00000002 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 
 sequence req=reqNoWait1
 ----
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 [5] sequence reqNoWait1: sequencing request
 [5] sequence reqNoWait1: acquiring latches
 [5] sequence reqNoWait1: scanning lock table for conflicting locks
@@ -128,6 +131,7 @@ sequence req=reqNoWait1
 finish req=reqNoWait1
 ----
 [-] finish reqNoWait1: finishing request
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 
 debug-lock-table
 ----
@@ -153,11 +157,13 @@ new-request name=reqNoWait2 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait2
 ----
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 [6] sequence reqNoWait2: sequencing request
 [6] sequence reqNoWait2: acquiring latches
 [6] sequence reqNoWait2: scanning lock table for conflicting locks
 [6] sequence reqNoWait2: waiting in lock wait-queues
 [6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on "k2"
+[6] sequence reqNoWait2: contention metadata: 00000003 @ "k2"
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error discovers lock. The
@@ -170,6 +176,7 @@ new-request name=reqNoWait3 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait3
 ----
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 [7] sequence reqNoWait3: sequencing request
 [7] sequence reqNoWait3: acquiring latches
 [7] sequence reqNoWait3: scanning lock table for conflicting locks
@@ -178,10 +185,12 @@ sequence req=reqNoWait3
 handle-write-intent-error req=reqNoWait3 lease-seq=1
   intent txn=txn2 key=k4
 ----
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 [8] handle write intent error reqNoWait3: handled conflicting intents on "k4", released latches
 
 sequence req=reqNoWait3
 ----
+[3] sequence req3: contention metadata: 00000001 @ "k2"
 [9] sequence reqNoWait3: re-sequencing request
 [9] sequence reqNoWait3: acquiring latches
 [9] sequence reqNoWait3: scanning lock table for conflicting locks
@@ -189,6 +198,7 @@ sequence req=reqNoWait3
 [9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
 [9] sequence reqNoWait3: pushee not abandoned
 [9] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on "k4"
+[9] sequence reqNoWait3: contention metadata: 00000002 @ "k4"
 
 debug-lock-table
 ----
@@ -216,6 +226,8 @@ on-txn-updated txn=txn2 status=aborted
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: sequencing complete, returned guard
+[3] sequence req3: contention metadata: 00000001 @ "k2"
+[3] sequence req3: contention metadata: 00000002 @ "k3"
 
 new-request name=reqNoWait4 txn=txnNoWait ts=12,0 wait-policy=error
   get key=k5

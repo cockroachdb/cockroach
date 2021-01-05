@@ -115,6 +115,7 @@ on-lease-updated leaseholder=false lease-seq=2
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----
@@ -262,12 +263,14 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 [-] update lock: committing txn 00000002 @ k
 [11] sequence req3: acquiring latches
 [11] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
+[11] sequence req3: contention metadata: 00000002 @ "k"
 
 finish req=reqRes2
 ----
 [-] finish reqRes2: finishing request
 [11] sequence req3: scanning lock table for conflicting locks
 [11] sequence req3: sequencing complete, returned guard
+[11] sequence req3: contention metadata: 00000002 @ "k"
 
 debug-lock-table
 ----
@@ -377,6 +380,7 @@ on-split
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----
@@ -420,12 +424,14 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+[4] sequence req2: contention metadata: 00000001 @ "k"
 
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
+[4] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----
@@ -547,6 +553,7 @@ on-merge
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----
@@ -695,6 +702,7 @@ on-snapshot-applied
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
+[2] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----
@@ -738,12 +746,14 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [-] update lock: committing txn 00000001 @ k
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
+[4] sequence req2: contention metadata: 00000001 @ "k"
 
 finish req=reqRes1
 ----
 [-] finish reqRes1: finishing request
 [4] sequence req2: scanning lock table for conflicting locks
 [4] sequence req2: sequencing complete, returned guard
+[4] sequence req2: contention metadata: 00000001 @ "k"
 
 debug-lock-table
 ----

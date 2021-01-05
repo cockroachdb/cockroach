@@ -115,6 +115,7 @@ on-txn-updated txn=txn2 status=aborted
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000002 @ "a"
 
 debug-lock-table
 ----
@@ -181,6 +182,7 @@ on-txn-updated txn=txn2 status=committed
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000002 @ "a"
 
 handle-write-intent-error req=req1 lease-seq=1
   intent txn=txn2 key=b
@@ -367,6 +369,7 @@ on-txn-updated txn=txn2 status=aborted
 [4] sequence req1: acquiring latches
 [4] sequence req1: scanning lock table for conflicting locks
 [4] sequence req1: sequencing complete, returned guard
+[4] sequence req1: contention metadata: 00000002 @ "a"
 
 debug-lock-table
 ----
@@ -578,9 +581,11 @@ on-txn-updated txn=txn3 status=aborted
 [3] sequence req1: resolving intent "c" for txn 00000003 with ABORTED status
 [3] sequence req1: pushing txn 00000005 to abort
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
+[3] sequence req1: contention metadata: 00000003 @ "c"
 [6] sequence req2: resolving intent "a" for txn 00000003 with ABORTED status
 [6] sequence req2: pushing timestamp of txn 00000004 above 11.000000000,1
 [6] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req2: contention metadata: 00000003 @ "a"
 
 debug-lock-table
 ----
@@ -608,12 +613,15 @@ local: num=0
 on-txn-updated txn=txn4 status=aborted
 ----
 [-] update txn: aborting txn4
+[3] sequence req1: contention metadata: 00000003 @ "c"
 [6] sequence req2: resolving intent "b" for txn 00000004 with ABORTED status
 [6] sequence req2: resolving a batch of 1 intent(s)
 [6] sequence req2: resolving intent "d" for txn 00000003 with ABORTED status
 [6] sequence req2: acquiring latches
 [6] sequence req2: scanning lock table for conflicting locks
 [6] sequence req2: sequencing complete, returned guard
+[6] sequence req2: contention metadata: 00000003 @ "a"
+[6] sequence req2: contention metadata: 00000004 @ "b"
 
 debug-lock-table
 ----
@@ -632,6 +640,7 @@ local: num=0
 finish req=req2
 ----
 [-] finish req2: finishing request
+[3] sequence req1: contention metadata: 00000003 @ "c"
 
 # Tht txn holding e is aborted, so req1 can resolve e and proceed to
 # evaluation.
@@ -642,6 +651,8 @@ on-txn-updated txn=txn5 status=aborted
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[3] sequence req1: contention metadata: 00000003 @ "c"
+[3] sequence req1: contention metadata: 00000005 @ "e"
 
 finish req=req1
 ----

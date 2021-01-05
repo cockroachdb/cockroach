@@ -11,6 +11,7 @@
 package concurrency
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -120,6 +122,47 @@ type IntentResolver interface {
 	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 }
 
+// contentionEventHelper helps with how
+// contention events are tracked and emitted.
+type contentionEventHelper struct {
+	sp     *tracing.Span
+	ev     *roachpb.ContentionEvent
+	tBegin time.Time
+}
+
+// emitAndInit compares its arguments against the open ContentionEvent. If they
+// match, we are continuing to handle the same event and no action is taken.
+// If they differ, the open event (if any) is finalized and added to the Span,
+// and a new event initialized from the inputs.
+//
+// As a special case, the zero values for the arguments indicate
+// that there is no next payload; this saves an allocation.
+func (ice *contentionEventHelper) emitAndInit(newKey []byte, newTxn enginepb.TxnMeta) {
+	if ice.sp == nil {
+		// No span to attach payloads to - don't do any work.
+		//
+		// TODO(tbg): we could special case the noop span here too, but the plan is for
+		// nobody to use noop spans any more (trace.mode=background).
+		return
+	}
+	if ice.ev != nil {
+		if ice.ev.TxnMeta.ID.Equal(newTxn.ID) && bytes.Equal(ice.ev.Key, newKey) {
+			return
+		}
+		ice.ev.Duration = timeutil.Since(ice.tBegin)
+		ice.sp.LogStructured(ice.ev)
+	}
+	ice.ev = nil
+	if newKey == nil && newTxn.ID == uuid.Nil {
+		return
+	}
+	ice.ev = &roachpb.ContentionEvent{
+		Key:     newKey,
+		TxnMeta: newTxn,
+	}
+	ice.tBegin = timeutil.Now()
+}
+
 // WaitOn implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
@@ -131,13 +174,23 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+
+	ice := contentionEventHelper{sp: tracing.SpanFromContext(ctx)}
+	defer ice.emitAndInit(nil, enginepb.TxnMeta{}) // emit last open payload, if any
+
 	for {
 		select {
+		// newStateC will be signaled for the transaction we are currently
+		// contending on. We will continue to receive updates about this
+		// transaction until it no longer contends with us, at which point
+		// either one of the other channels fires or we receive state
+		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
 			switch state.kind {
 			case waitFor, waitForDistinguished:
+				ice.emitAndInit(state.key, *state.txn)
 				if req.WaitPolicy == lock.WaitPolicy_Error {
 					// If the waiter has an Error wait policy, resolve the conflict
 					// immediately without waiting. If the conflict is a lock then
