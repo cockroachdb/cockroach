@@ -285,7 +285,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "numCpus",
-      title: <CPUsTooltip>CPUs</CPUsTooltip>,
+      title: <CPUsTooltip>vCPUs</CPUsTooltip>,
       dataIndex: "numCpus",
       sorter: true,
       className: "column--align-right",
