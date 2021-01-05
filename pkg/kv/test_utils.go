@@ -57,6 +57,7 @@ func IsExpectedRelocateError(err error) bool {
 		"breaker open",
 		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
 		"cannot up-replicate to .*; missing gossiped StoreDescriptor",
+		"remote couldn't accept .* snapshot",
 	}
 	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
