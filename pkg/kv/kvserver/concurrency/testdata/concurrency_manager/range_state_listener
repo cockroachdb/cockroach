@@ -112,6 +112,7 @@ local: num=0
 on-lease-updated leaseholder=false lease-seq=2
 ----
 [-] transfer lease: released
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -260,6 +261,7 @@ sequence req=reqRes2
 on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 ----
 [-] update lock: committing txn 00000002 @ k
+[11] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [11] sequence req3: acquiring latches
 [11] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
 
@@ -374,6 +376,7 @@ local: num=0
 on-split
 ----
 [-] split range: complete
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -418,6 +421,7 @@ sequence req=reqRes1
 on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
@@ -544,6 +548,7 @@ local: num=0
 on-merge
 ----
 [-] merge range: complete
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -692,6 +697,7 @@ local: num=0
 on-snapshot-applied
 ----
 [-] snapshot replica: applied
+[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -736,6 +742,7 @@ sequence req=reqRes1
 on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 ----
 [-] update lock: committing txn 00000001 @ k
+[4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 

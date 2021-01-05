@@ -11,6 +11,7 @@
 package concurrency
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -99,6 +101,9 @@ type lockTableWaiterImpl struct {
 	// When set, WriteIntentError are propagated instead of pushing
 	// conflicting transactions.
 	disableTxnPushing bool
+	// When set, called just before each ContentionEvent is emitted.
+	// Is allowed to mutate the event.
+	onContentionEvent func(ev *roachpb.ContentionEvent)
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -131,11 +136,24 @@ func (w *lockTableWaiterImpl) WaitOn(
 	var timer *timeutil.Timer
 	var timerC <-chan time.Time
 	var timerWaitingState waitingState
+
+	h := contentionEventHelper{
+		sp:      tracing.SpanFromContext(ctx),
+		onEvent: w.onContentionEvent,
+	}
+	defer h.emit()
+
 	for {
 		select {
+		// newStateC will be signaled for the transaction we are currently
+		// contending on. We will continue to receive updates about this
+		// transaction until it no longer contends with us, at which point
+		// either one of the other channels fires or we receive state
+		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
 			state := guard.CurState()
+			h.emitAndInit(state)
 			switch state.kind {
 			case waitFor, waitForDistinguished:
 				if req.WaitPolicy == lock.WaitPolicy_Error {
@@ -652,6 +670,75 @@ func (c *txnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
 func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	copy(c.txns[1:], c.txns[:])
 	c.txns[0] = txn
+}
+
+// contentionEventHelper tracks and emits ContentionEvents.
+type contentionEventHelper struct {
+	sp      *tracing.Span
+	onEvent func(event *roachpb.ContentionEvent) // may be nil
+
+	// Internal.
+	ev     *roachpb.ContentionEvent
+	tBegin time.Time
+}
+
+// emit emits the open contention event, if any.
+func (h *contentionEventHelper) emit() {
+	if h.ev == nil {
+		return
+	}
+	h.ev.Duration = timeutil.Since(h.tBegin)
+	if h.onEvent != nil {
+		// NB: this is intentionally above the call to LogStructured so that
+		// this interceptor gets to mutate the event (used for test determinism).
+		h.onEvent(h.ev)
+	}
+	h.sp.LogStructured(h.ev)
+	h.ev = nil
+}
+
+// emitAndInit compares the waitingState's active txn (if any) against the current
+// ContentionEvent (if any). If the they match, we are continuing to handle the
+// same event and no action is taken. If they differ, the open event (if any) is
+// finalized and added to the Span, and a new event initialized from the inputs.
+func (h *contentionEventHelper) emitAndInit(s waitingState) {
+	if h.sp == nil {
+		// No span to attach payloads to - don't do any work.
+		//
+		// TODO(tbg): we could special case the noop span here too, but the plan is for
+		// nobody to use noop spans any more (trace.mode=background).
+		return
+	}
+
+	// If true, we want to emit the current event and possibly start a new one.
+	// Otherwise,
+	switch s.kind {
+	case waitFor, waitForDistinguished, waitSelf:
+		// If we're tracking an event and see a different txn/key, the event is
+		// done and we initialize the new event tracking the new txn/key.
+		//
+		// NB: we're guaranteed to have `s.{txn,key}` populated here.
+		if h.ev != nil &&
+			(!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key)) {
+			h.emit() // h.ev is now nil
+		}
+
+		if h.ev == nil {
+			h.ev = &roachpb.ContentionEvent{
+				Key:     s.key,
+				TxnMeta: *s.txn,
+			}
+			h.tBegin = timeutil.Now()
+		}
+	case waitElsewhere, doneWaiting:
+		// If we have an event, emit it now and that's it - the case we're in
+		// does not give us a new transaction/key.
+		if h.ev != nil {
+			h.emit()
+		}
+	default:
+		panic("unhandled waitingState.kind")
+	}
 }
 
 func newWriteIntentErr(ws waitingState) *Error {

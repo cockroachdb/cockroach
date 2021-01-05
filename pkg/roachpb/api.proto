@@ -2203,14 +2203,14 @@ service Internal {
 
 // ContentionEvent is a message that will be attached to BatchResponses
 // indicating any conflicts with another transaction during replica evaluation.
-// This message is currently not emitted and only exists for SQL Execution to
-// have a protobuf to work with to build the higher-level infrastructure around
-// contention observability while the work to emit these events is ongoing.
 message ContentionEvent {
+  option (gogoproto.goproto_stringer) = false;
+
   // Key is the key that this and the other transaction conflicted on.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
-  // Txn is the other transaction.
-  Transaction txn = 2 [(gogoproto.nullable) = false];
+  // TxnMeta is the transaction conflicted
+  // with, i.e. the transaction holding a lock.
+  cockroach.storage.enginepb.TxnMeta txn_meta = 2 [(gogoproto.nullable) = false];
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
