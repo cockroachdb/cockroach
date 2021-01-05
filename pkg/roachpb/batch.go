@@ -26,14 +26,16 @@ import (
 //go:generate go run -tags gen-batch gen_batch.go
 
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
-// carried out. For transactional requests, ba.Timestamp must be zero initially
+// carried out. It returns true if it is set to the local HLC time.
+//
+// For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts
 // reads; writes use txn.Timestamp). For non-transactional requests, if no
 // timestamp is specified, nowFn is used to create and set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) (bool, error) {
 	if txn := ba.Txn; txn != nil {
 		if !ba.Timestamp.IsEmpty() {
-			return errors.New("transactional request must not set batch timestamp")
+			return false, errors.New("transactional request must not set batch timestamp")
 		}
 
 		// The batch timestamp is the timestamp at which reads are performed. We set
@@ -49,9 +51,10 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		// When not transactional, allow empty timestamp and use nowFn instead
 		if ba.Timestamp.IsEmpty() {
 			ba.Timestamp = nowFn()
+			return true, nil
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // EarliestActiveTimestamp returns the earliest timestamp at which the batch

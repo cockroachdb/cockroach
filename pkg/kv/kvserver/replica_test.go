@@ -319,7 +319,7 @@ func (tc *testContext) Sender() kv.Sender {
 			ba.RangeID = 1
 		}
 		if ba.Timestamp.IsEmpty() {
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if _, err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				tc.Fatal(err)
 			}
 		}
@@ -4470,7 +4470,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		var ba roachpb.BatchRequest
 		gArgs := getArgs(key)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if _, err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := tc.Sender().Send(context.Background(), ba)
@@ -4679,7 +4679,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
-	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+	if _, err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 		t.Fatal(err)
 	}
 	br, pErr := tc.Sender().Send(context.Background(), ba)
@@ -4846,7 +4846,7 @@ func setupResolutionTest(
 		var ba roachpb.BatchRequest
 		ba.Header = h
 		ba.RangeID = newRepl.RangeID
-		if err := ba.SetActiveTimestamp(newRepl.store.Clock().Now); err != nil {
+		if _, err := ba.SetActiveTimestamp(newRepl.store.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		pArgs := putArgs(splitKey.AsRawKey(), []byte("value"))
@@ -4898,7 +4898,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 		ba.Header.RangeID = newRepl.RangeID
 		gArgs := getArgs(splitKey)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if _, err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := newRepl.Send(context.Background(), ba)
@@ -7451,7 +7451,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ba.Add(&roachpb.GetRequest{
 				RequestHeader: roachpb.RequestHeader{Key: key},
 			})
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if _, err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
 			}
 			_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
@@ -8979,7 +8979,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
 		ba.Txn = txn
-		if err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
+		if _, err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := repl.Send(ctx, ba)
@@ -9225,7 +9225,8 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
 	assignSeqNumsForReqs(txn, &etArgs)
-	require.NoError(t, ba.SetActiveTimestamp(func() hlc.Timestamp { return hlc.Timestamp{} }))
+	_, err = ba.SetActiveTimestamp(func() hlc.Timestamp { return hlc.Timestamp{} })
+	require.NoError(t, err)
 	// Get a reference to the txn's replica.
 	stores := s.GetStores().(*Stores)
 	store, err := stores.GetStore(s.GetFirstStoreID())
