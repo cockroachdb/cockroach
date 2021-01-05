@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -403,18 +402,20 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID())
+	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
 	if err != nil {
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID(), schemaID)
+	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, schemaID)
 	if err != nil {
 		return nil, err
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
-		tree.Name(schemaName),
+		tree.Name(resolvedSchema.Name),
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
