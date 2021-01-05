@@ -195,6 +195,26 @@ func TestChangefeedEnvelope(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedFullTableName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+
+		t.Run(`envelope=row`, func(t *testing.T) {
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH full_table_name`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		})
+	}
+	//TODO(zinger): No reason in principle this shouldn't be honored here
+	//t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1404,7 +1424,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
-func TestChangefeedTruncateRenameDrop(t *testing.T) {
+func TestChangefeedTruncateOrDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1450,18 +1470,6 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		}
 		assertFailuresCounter(t, metrics, 2)
 
-		sqlDB.Exec(t, `CREATE TABLE rename (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO rename VALUES (1)`)
-		rename := feed(t, f, `CREATE CHANGEFEED FOR rename`)
-		defer closeFeed(t, rename)
-		assertPayloads(t, rename, []string{`rename: [1]->{"after": {"a": 1}}`})
-		sqlDB.Exec(t, `ALTER TABLE rename RENAME TO renamed`)
-		sqlDB.Exec(t, `INSERT INTO renamed VALUES (2)`)
-		if _, err := rename.Next(); !testutils.IsError(err, `"rename" was renamed to "renamed"`) {
-			t.Errorf(`expected ""rename" was renamed to "renamed"" error got: %+v`, err)
-		}
-		assertFailuresCounter(t, metrics, 3)
-
 		sqlDB.Exec(t, `CREATE TABLE drop (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
 		drop := feed(t, f, `CREATE CHANGEFEED FOR drop`)
@@ -1471,7 +1479,7 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
 			t.Errorf(`expected ""drop" was dropped or truncated" error got: %+v`, err)
 		}
-		assertFailuresCounter(t, metrics, 4)
+		assertFailuresCounter(t, metrics, 3)
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
