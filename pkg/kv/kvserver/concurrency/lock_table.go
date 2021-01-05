@@ -80,7 +80,7 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn  *enginepb.TxnMeta // always non-nil
+	txn  *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished}
 	key  roachpb.Key       // the key of the conflict
 	held bool              // is the conflict a held lock?
 
