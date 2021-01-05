@@ -69,6 +69,7 @@ go_library(
         "//pkg/sql/roleoption",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
