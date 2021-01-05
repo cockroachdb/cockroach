@@ -77,14 +77,14 @@ debug-lock-table
 ----
 global: num=3
  lock: "k"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
-  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -138,9 +138,9 @@ debug-lock-table
 ----
 global: num=2
  lock: "k2"
-  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
@@ -199,14 +199,14 @@ debug-lock-table
 ----
 global: num=3
  lock: "k2"
-  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
+  res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 11.000000000,0, seq: 0
  lock: "k3"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -262,7 +262,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
 local: num=0
 
 reset

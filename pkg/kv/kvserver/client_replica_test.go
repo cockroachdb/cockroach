@@ -62,10 +62,103 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// TestRangeCommandClockUpdate verifies that followers update their
-// clocks when executing a command, even if the lease holder's clock is far
-// in the future.
-func TestRangeCommandClockUpdate(t *testing.T) {
+// TestReplicaClockUpdates verifies that the leaseholder and followers both
+// update their clocks when executing a command to the command's timestamp, as
+// long as the request timestamp is from a clock (i.e. is not synthetic).
+func TestReplicaClockUpdates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	run := func(t *testing.T, write bool, synthetic bool) {
+		const numNodes = 3
+		const maxOffset = 100 * time.Millisecond
+		var manuals []*hlc.ManualClock
+		var clocks []*hlc.Clock
+		for i := 0; i < numNodes; i++ {
+			manuals = append(manuals, hlc.NewManualClock(1))
+			clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, maxOffset))
+		}
+		ctx := context.Background()
+		cfg := kvserver.TestStoreConfig(nil)
+		cfg.TestingKnobs.DisableReplicateQueue = true
+		cfg.Clock = nil
+		mtc := &multiTestContext{
+			storeConfig: &cfg,
+			clocks:      clocks,
+			// This test was written before the multiTestContext started creating many
+			// system ranges at startup, and hasn't been update to take that into
+			// account.
+			startWithSingleRange: true,
+		}
+		defer mtc.Stop()
+		mtc.Start(t, numNodes)
+		mtc.replicateRange(1, 1, 2)
+
+		// Pick a timestamp in the future of all nodes by less than the
+		// MaxOffset. Set the synthetic flag according to the test case.
+		reqTS := clocks[0].Now().Add(int64(maxOffset/2), 0).WithSynthetic(synthetic)
+		h := roachpb.Header{Timestamp: reqTS}
+
+		// Execute the command.
+		var req roachpb.Request
+		reqKey := roachpb.Key("a")
+		if write {
+			req = incrementArgs(reqKey, 5)
+		} else {
+			req = getArgs(reqKey)
+		}
+		if _, err := kv.SendWrappedWith(ctx, mtc.stores[0].TestSender(), h, req); err != nil {
+			t.Fatal(err)
+		}
+
+		// If writing, wait for that command to execute on all the replicas.
+		// Consensus is asynchronous outside of the majority quorum, and Raft
+		// application is asynchronous on all nodes.
+		if write {
+			testutils.SucceedsSoon(t, func() error {
+				var values []int64
+				for _, eng := range mtc.engines {
+					val, _, err := storage.MVCCGet(ctx, eng, reqKey, reqTS, storage.MVCCGetOptions{})
+					if err != nil {
+						return err
+					}
+					values = append(values, mustGetInt(val))
+				}
+				if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
+					return errors.Errorf("expected (5, 5, 5), got %v", values)
+				}
+				return nil
+			})
+		}
+
+		// Verify that clocks were updated as expected. Check all clocks if we
+		// issued a write, but only the leaseholder's if we issued a read. In
+		// theory, we should be able to assert that _only_ the leaseholder's
+		// clock is updated by a read, but in practice an assertion against
+		// followers' clocks being updated is very difficult to make without
+		// being flaky because it's difficult to prevent other channels
+		// (background work, etc.) from carrying the clock update.
+		expUpdated := !synthetic
+		clocksToCheck := clocks
+		if !write {
+			clocksToCheck = clocks[:1]
+		}
+		for _, c := range clocksToCheck {
+			require.Equal(t, expUpdated, reqTS.Less(c.Now()))
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
+		testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+			run(t, write, synthetic)
+		})
+	})
+}
+
+// TestFollowersDontRejectClockUpdateWithJump verifies that followers update
+// their clocks when executing a command, even if the leaseholder's clock is
+// far in the future.
+func TestFollowersDontRejectClockUpdateWithJump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -128,9 +221,9 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	}
 }
 
-// TestRejectFutureCommand verifies that lease holders reject commands that
-// would cause a large time jump.
-func TestRejectFutureCommand(t *testing.T) {
+// TestLeaseholdersRejectClockUpdateWithJump verifies that leaseholders reject
+// commands that would cause a large time jump.
+func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -151,7 +244,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	const numCmds = 3
 	clockOffset := clock.MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
-		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0)
+		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0).WithSynthetic(false)
 		if _, err := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +256,8 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	_, pErr := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
+	tsFuture := ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0).WithSynthetic(false)
+	_, pErr := kv.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: tsFuture}, incArgs)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Fatalf("unexpected error %v", pErr)
 	}
@@ -953,7 +1047,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	// Start a transaction using node2 as a gateway.
 	txn := roachpb.MakeTransaction("test", keyA, 1, clock2.Now(), 250 /* maxOffsetNs */)
 	// Simulate a read to another range on node2 by setting the observed timestamp.
-	txn.UpdateObservedTimestamp(2, clock2.Now())
+	txn.UpdateObservedTimestamp(2, clock2.NowAsClockTimestamp())
 
 	defer mtc.Stop()
 	mtc.Start(t, 2)

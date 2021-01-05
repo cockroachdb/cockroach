@@ -78,21 +78,18 @@ func (s *Store) Send(
 		return nil, roachpb.NewError(err)
 	}
 
-	if s.cfg.TestingKnobs.ClockBeforeSend != nil {
-		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
-	}
-
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted.
-	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-		s.cfg.Clock.Update(ba.Timestamp)
-	} else {
-		// If the command appears to come from a node with a bad clock,
-		// reject it now before we reach that point.
-		var err error
-		if err = s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, ba.Timestamp); err != nil {
-			return nil, roachpb.NewError(err)
+	if baClockTS, ok := ba.Timestamp.TryToClockTimestamp(); ok {
+		if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+			s.cfg.Clock.Update(baClockTS)
+		} else {
+			// If the command appears to come from a node with a bad clock,
+			// reject it instead of updating the local clock and proceeding.
+			if err := s.cfg.Clock.UpdateAndCheckMaxOffset(ctx, baClockTS); err != nil {
+				return nil, roachpb.NewError(err)
+			}
 		}
 	}
 
@@ -119,7 +116,9 @@ func (s *Store) Send(
 				// Update our clock with the outgoing response txn timestamp
 				// (if timestamp has been forwarded).
 				if ba.Timestamp.Less(br.Txn.WriteTimestamp) {
-					s.cfg.Clock.Update(br.Txn.WriteTimestamp)
+					if clockTS, ok := br.Txn.WriteTimestamp.TryToClockTimestamp(); ok {
+						s.cfg.Clock.Update(clockTS)
+					}
 				}
 			}
 		} else {
@@ -127,7 +126,9 @@ func (s *Store) Send(
 				// Update our clock with the outgoing response timestamp.
 				// (if timestamp has been forwarded).
 				if ba.Timestamp.Less(br.Timestamp) {
-					s.cfg.Clock.Update(br.Timestamp)
+					if clockTS, ok := br.Timestamp.TryToClockTimestamp(); ok {
+						s.cfg.Clock.Update(clockTS)
+					}
 				}
 			}
 		}
@@ -135,7 +136,7 @@ func (s *Store) Send(
 		// We get the latest timestamp - we know that any
 		// write with a higher timestamp we run into later must
 		// have started after this point in (absolute) time.
-		now := s.cfg.Clock.Now()
+		now := s.cfg.Clock.NowAsClockTimestamp()
 		if pErr != nil {
 			pErr.Now = now
 		} else {
@@ -152,7 +153,7 @@ func (s *Store) Send(
 		// this node, in which case the following is a no-op).
 		if _, ok := ba.Txn.GetObservedTimestamp(s.NodeID()); !ok {
 			txnClone := ba.Txn.Clone()
-			txnClone.UpdateObservedTimestamp(s.NodeID(), s.Clock().Now())
+			txnClone.UpdateObservedTimestamp(s.NodeID(), s.Clock().NowAsClockTimestamp())
 			ba.Txn = txnClone
 		}
 	}

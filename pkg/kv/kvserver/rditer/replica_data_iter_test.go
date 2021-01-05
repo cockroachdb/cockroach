@@ -170,7 +170,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 			if key := iter.Key(); !key.Equal(expectedKeys[i]) {
 				k1, ts1 := key.Key, key.Timestamp
 				k2, ts2 := expectedKeys[i].Key, expectedKeys[i].Timestamp
-				t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
+				t.Errorf("%d: expected %q(%s); got %q(%s)", i, k2, ts2, k1, ts1)
 			}
 			if reverse {
 				i--
@@ -220,7 +220,7 @@ func verifyRDEngineIter(
 		if !k.Equal(expectedKeys[i]) {
 			k1, ts1 := k.Key, k.Timestamp
 			k2, ts2 := expectedKeys[i].Key, expectedKeys[i].Timestamp
-			t.Errorf("%d: expected %q(%d); got %q(%d)", i, k2, ts2, k1, ts1)
+			t.Errorf("%d: expected %q(%s); got %q(%s)", i, k2, ts2, k1, ts1)
 		}
 		i++
 		iter.Next()

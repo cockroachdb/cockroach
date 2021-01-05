@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -217,9 +218,14 @@ func TestIntentDemuxWriter(t *testing.T) {
 				key := scanRoachKey(t, d, "k")
 				// We don't bother populating most fields in the proto.
 				var meta enginepb.MVCCMetadata
-				var ts, txn int
-				d.ScanArgs(t, "ts", &ts)
-				meta.Timestamp.WallTime = int64(ts)
+				var tsS string
+				d.ScanArgs(t, "ts", &tsS)
+				ts, err := hlc.ParseTimestamp(tsS)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+				meta.Timestamp = ts.ToLegacyTimestamp()
+				var txn int
 				d.ScanArgs(t, "txn", &txn)
 				txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txn)))
 				meta.Txn = &enginepb.TxnMeta{ID: txnUUID}

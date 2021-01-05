@@ -79,7 +79,7 @@ const (
 	ConnAny = ConnHostAny | ConnLocal
 )
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (t ConnType) String() string {
 	switch t {
 	case ConnLocal:
@@ -95,7 +95,7 @@ func (t ConnType) String() string {
 	}
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (c Conf) String() string {
 	if len(c.Entries) == 0 {
 		return "# (empty configuration)\n"
@@ -138,7 +138,7 @@ func (c Conf) String() string {
 // the "Address" field.
 type AnyAddr struct{}
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (AnyAddr) String() string { return "all" }
 
 // GetOption returns the value of option name if there is exactly one
@@ -290,7 +290,7 @@ func (h Entry) OptionsString() string {
 	return sb.String()
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (h Entry) String() string {
 	return Conf{Entries: []Entry{h}}.String()
 }
@@ -301,7 +301,7 @@ type String struct {
 	Quoted bool
 }
 
-// String implements the fmt.Formatter interface.
+// String implements the fmt.Stringer interface.
 func (s String) String() string {
 	if s.Quoted {
 		return `"` + s.Value + `"`

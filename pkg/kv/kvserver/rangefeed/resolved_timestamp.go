@@ -237,7 +237,7 @@ func (rts *resolvedTimestamp) recompute() bool {
 func (rts *resolvedTimestamp) assertNoChange() {
 	before := rts.resolvedTS
 	changed := rts.recompute()
-	if changed || (before != rts.resolvedTS) {
+	if changed || !before.EqOrdering(rts.resolvedTS) {
 		panic(fmt.Sprintf("unexpected resolved timestamp change on recomputation, "+
 			"was %s, recomputed as %s", before, rts.resolvedTS))
 	}

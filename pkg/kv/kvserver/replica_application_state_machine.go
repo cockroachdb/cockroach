@@ -376,9 +376,9 @@ type replicaAppBatch struct {
 	// replicaState other than Stats are overwritten completely rather than
 	// updated in-place.
 	stats enginepb.MVCCStats
-	// maxTS is the maximum timestamp that any command that was staged in this
-	// batch was evaluated at.
-	maxTS hlc.Timestamp
+	// maxTS is the maximum clock timestamp that any command that was staged in
+	// this batch was evaluated at.
+	maxTS hlc.ClockTimestamp
 	// migrateToAppliedStateKey tracks whether any command in the batch
 	// triggered a migration to the replica applied state key. If so, this
 	// migration will be performed when the application batch is committed.
@@ -464,7 +464,9 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	}
 
 	// Update the batch's max timestamp.
-	b.maxTS.Forward(cmd.replicatedResult().Timestamp)
+	if clockTS, ok := cmd.replicatedResult().Timestamp.TryToClockTimestamp(); ok {
+		b.maxTS.Forward(clockTS)
+	}
 
 	// Normalize the command, accounting for past migrations.
 	b.migrateReplicatedResult(ctx, cmd)

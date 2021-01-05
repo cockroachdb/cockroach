@@ -842,7 +842,7 @@ func (filter *mergeFilter) SuspendMergeTrigger(
 			// We block the LHS leaseholder from applying the merge trigger. Note
 			// that RHS followers will have already caught up to the leaseholder
 			// well before this point.
-			blocker.signal(freezeStart)
+			blocker.signal(freezeStart.ToTimestamp())
 			// Wait for the merge to be unblocked.
 			<-blocker.unblockCh
 		}

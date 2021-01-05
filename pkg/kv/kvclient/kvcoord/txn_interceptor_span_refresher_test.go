@@ -120,7 +120,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	txn := makeTxnProto()
-	txn.UpdateObservedTimestamp(1, txn.WriteTimestamp.Add(20, 0))
+	txn.UpdateObservedTimestamp(1, txn.WriteTimestamp.Add(20, 0).UnsafeToClockTimestamp())
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
 	cases := []struct {
@@ -164,7 +164,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				return pErr
 			},
 			expRefresh:   true,
-			expRefreshTS: txn.WriteTimestamp.Add(20, 0), // see UpdateObservedTimestamp
+			expRefreshTS: txn.WriteTimestamp.Add(20, 0).WithSynthetic(false), // see UpdateObservedTimestamp
 		},
 		{
 			pErr: func() *roachpb.Error {

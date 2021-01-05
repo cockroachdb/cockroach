@@ -187,7 +187,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		// Instead, we make the first lease special (which is OK) and the problem
 		// disappears.
 		if r.mu.state.Lease.Sequence > 0 {
-			r.mu.minLeaseProposedTS = r.Clock().Now()
+			r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 		}
 	}
 
