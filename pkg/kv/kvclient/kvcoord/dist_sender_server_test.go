@@ -1190,7 +1190,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 					t.Fatal(err)
 				}
 				ts[i] = s.Clock().Now()
-				log.Infof(ctx, "%d: %s %d", i, key, ts[i])
+				log.Infof(ctx, "%d: %s %s", i, key, ts[i])
 				if i == 0 {
 					testutils.SucceedsSoon(t, func() error {
 						// Enforce that when we write the second key, it's written
@@ -1535,8 +1535,8 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// response that does not result in an error. Even though the batch as a
 	// whole results in an error, the transaction should still propagate this
 	// information.
-	ot1 := roachpb.ObservedTimestamp{NodeID: 7, Timestamp: hlc.Timestamp{WallTime: 15}}
-	ot2 := roachpb.ObservedTimestamp{NodeID: 8, Timestamp: hlc.Timestamp{WallTime: 16}}
+	ot1 := roachpb.ObservedTimestamp{NodeID: 7, Timestamp: hlc.ClockTimestamp{WallTime: 15}}
+	ot2 := roachpb.ObservedTimestamp{NodeID: 8, Timestamp: hlc.ClockTimestamp{WallTime: 16}}
 	containsObservedTSs := func(txn *roachpb.Transaction) bool {
 		contains := func(ot roachpb.ObservedTimestamp) bool {
 			for _, ts := range txn.ObservedTimestamps {

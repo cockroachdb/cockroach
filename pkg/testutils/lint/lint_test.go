@@ -1020,6 +1020,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/encoding/encoding.go",
+			":!util/hlc/timestamp.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {

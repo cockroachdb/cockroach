@@ -23,40 +23,41 @@ message Timestamp {
 
   // Holds a wall time, typically a unix epoch time expressed in
   // nanoseconds.
+  //
+  // It is not safe to mutate this field directly. Instead, use one of the
+  // methods on Timestamp, which ensure that the synthetic flag is updated
+  // appropriately.
   int64 wall_time = 1;
   // The logical component captures causality for events whose wall times
   // are equal. It is effectively bounded by (maximum clock skew)/(minimal
   // ns between events) and nearly impossible to overflow.
+  //
+  // It is not safe to mutate this field directly. Instead, use one of the
+  // methods on Timestamp, which ensure that the synthetic flag is updated
+  // appropriately.
   int32 logical = 2;
-  // A collection of bit flags that provide details about the timestamp
-  // and its meaning. The data type is a uint32, but the number of flags
-  // is limited to 8 so that the flags can be encoded into a single byte.
+  // Indicates that the Timestamp did not come from an HLC clock somewhere
+  // in the system and, therefore, does not have the ability to update a
+  // peer's HLC clock. If set to true, the "synthetic timestamp" may be
+  // arbitrarily disconnected from real time.
   //
-  // Flags do not affect the sort order of Timestamps. However, they are
-  // considered when performing structural equality checks (e.g. using the
-  // == operator). Consider use of the EqOrdering method when testing for
-  // equality.
-  uint32 flags = 3;
-}
-
-// TimestampFlag is used to provide extra classification for Timestamps.
-enum TimestampFlag {
-  UNKNOWN = 0x00;
-  // A synthetic timestamp is defined as a timestamp that makes no claim
-  // about the value of clocks in the system. While standard timestamps
-  // are pulled from HLC clocks and indicate that some node in the system
-  // has a clock with a reading equal to or above its value, a synthetic
-  // timestamp makes no such indication.
+  // The flag serves as the dynamically typed version of a ClockTimestamp
+  // (but inverted). Only Timestamps with this flag set to false can be
+  // downcast to a ClockTimestamp successfully (see TryToClockTimestamp).
   //
-  // Synthetic timestamps are central to non-blocking transactions, which
-  // write at "future timestamps". They are also used to disconnect some
-  // committed versions from observed timestamps, where they indicate that
-  // versions were moved from the timestamp at which they were originally
-  // written. Only synthetic timestamps require observing the full
+  // Synthetic timestamps with this flag set to true are central to
+  // non-blocking transactions, which write "into the future". Setting the
+  // flag to true is also used to disconnect some committed MVCC versions
+  // from observed timestamps by indicating that those versions were moved
+  // from the timestamp at which they were originally written. Committed
+  // MVCC versions with synthetic timestamps require observing the full
   // uncertainty interval, whereas readings off the leaseholders's clock
-  // can tighten it for non-synthetic versions.
-  SYNTHETIC = 0x01;
-  // ... = 0x02;
-  // ... = 0x04;
-  // max = 0x80;
+  // can tighten the uncertainty interval that is applied to MVCC versions
+  // with clock timestamp.
+  //
+  // This flag does not affect the sort order of Timestamps. However, it
+  // is considered when performing structural equality checks (e.g. using
+  // the == operator). Consider use of the EqOrdering method when testing
+  // for equality.
+  bool synthetic = 3;
 }

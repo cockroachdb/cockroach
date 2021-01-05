@@ -3289,7 +3289,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expTS := txne2Commit.WriteTimestamp.Add(0, 1)
+			expTS := txne2Commit.WriteTimestamp.Next()
 
 			// Now try writing an earlier value without a txn--should get WriteTooOldError.
 			err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value4, nil)
@@ -3306,7 +3306,7 @@ func TestMVCCWriteWithDiffTimestampsAndEpochs(t *testing.T) {
 			}
 			// Now write an intent with exactly the same timestamp--ties also get WriteTooOldError.
 			err = MVCCPut(ctx, engine, nil, testKey1, txn2.ReadTimestamp, value5, txn2)
-			intentTS := expTS.Add(0, 1)
+			intentTS := expTS.Next()
 			if wtoErr := (*roachpb.WriteTooOldError)(nil); !errors.As(err, &wtoErr) {
 				t.Fatal("unexpected success")
 			} else if wtoErr.ActualTimestamp != intentTS {

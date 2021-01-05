@@ -97,12 +97,12 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 			errors.AssertionFailedf("attempting to create txn with nil db"), ctx))
 	}
 
-	now := db.clock.Now()
+	now := db.clock.NowAsClockTimestamp()
 	kvTxn := roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
-		now,
+		now.ToTimestamp(),
 		db.clock.MaxOffset().Nanoseconds(),
 	)
 
@@ -123,7 +123,7 @@ func NewTxnFromProto(
 	ctx context.Context,
 	db *DB,
 	gatewayNodeID roachpb.NodeID,
-	now hlc.Timestamp,
+	now hlc.ClockTimestamp,
 	typ TxnType,
 	proto *roachpb.Transaction,
 ) *Txn {
@@ -1134,8 +1134,8 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	now := txn.db.clock.Now()
-	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now)
+	now := txn.db.clock.NowAsClockTimestamp()
+	txn.mu.sender.ManualRestart(ctx, txn.mu.userPriority, now.ToTimestamp())
 	txn.resetDeadlineLocked()
 	return roachpb.NewTransactionRetryWithProtoRefreshError(
 		msg,
@@ -1144,7 +1144,7 @@ func (txn *Txn) GenerateForcedRetryableError(ctx context.Context, msg string) er
 			txn.debugNameLocked(),
 			nil, // baseKey
 			txn.mu.userPriority,
-			now,
+			now.ToTimestamp(),
 			txn.db.clock.MaxOffset().Nanoseconds(),
 		))
 }

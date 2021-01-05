@@ -697,8 +697,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
-	plus10 := origTS.Add(10, 10)
-	plus20 := origTS.Add(20, 0)
+	plus10 := origTS.Add(10, 10).WithSynthetic(false)
+	plus20 := origTS.Add(20, 0).WithSynthetic(false)
 	testCases := []struct {
 		// The test's name.
 		name             string
@@ -726,7 +726,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			name: "ReadWithinUncertaintyIntervalError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				const nodeID = 1
-				txn.UpdateObservedTimestamp(nodeID, plus10)
+				txn.UpdateObservedTimestamp(nodeID, plus10.UnsafeToClockTimestamp())
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
 						hlc.Timestamp{}, hlc.Timestamp{}, nil),
@@ -818,12 +818,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			)
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
-			now := clock.Now()
+			now := clock.NowAsClockTimestamp()
 			origTxnProto := roachpb.MakeTransaction(
 				"test txn",
 				key,
 				roachpb.UserPriority(0),
-				now,
+				now.ToTimestamp(),
 				clock.MaxOffset().Nanoseconds(),
 			)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
@@ -1270,7 +1270,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				const nodeID = 0
 				// ReadWithinUncertaintyIntervalErrors need a clock to have been
 				// recorded on the origin.
-				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0))
+				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
 				return roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					&txn)
