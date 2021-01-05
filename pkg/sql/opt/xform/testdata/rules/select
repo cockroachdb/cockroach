@@ -3424,6 +3424,7 @@ CREATE TABLE t (
   a INT,
   b INT,
   c INT,
+  INDEX (a, b),
   INDEX (c) WHERE a > 1 OR b > 1
 )
 ----
@@ -3431,8 +3432,8 @@ CREATE TABLE t (
 memo
 SELECT * FROM t WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~5KB, required=[presentation: k:1,a:2,b:3,c:4])
- ├── G1: (select G2 G3) (index-join G4 t,cols=(1-4))
+memo (optimized, ~18KB, required=[presentation: k:1,a:2,b:3,c:4])
+ ├── G1: (select G2 G3) (index-join G4 t,cols=(1-4)) (distinct-on G5 G6 cols=(1))
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
  │         └── cost: 1094.04
@@ -3440,17 +3441,68 @@ memo (optimized, ~5KB, required=[presentation: k:1,a:2,b:3,c:4])
  │    └── []
  │         ├── best: (scan t,cols=(1-4))
  │         └── cost: 1084.02
- ├── G3: (filters G5)
+ ├── G3: (filters G7)
  ├── G4: (scan t@secondary,partial,cols=(1,4))
  │    └── []
  │         ├── best: (scan t@secondary,partial,cols=(1,4))
  │         └── cost: 350.68
- ├── G5: (or G6 G7)
- ├── G6: (gt G8 G9)
- ├── G7: (gt G10 G9)
- ├── G8: (variable a)
- ├── G9: (const 1)
- └── G10: (variable b)
+ ├── G5: (union-all G8 G9)
+ │    └── []
+ │         ├── best: (union-all G8 G9)
+ │         └── cost: 2194.76
+ ├── G6: (aggregations G10 G11 G12)
+ ├── G7: (or G13 G14)
+ ├── G8: (select G15 G16) (select G17 G16) (index-join G18 t,cols=(6-9))
+ │    └── []
+ │         ├── best: (select G15 G16)
+ │         └── cost: 1094.04
+ ├── G9: (select G19 G20) (select G21 G20)
+ │    └── []
+ │         ├── best: (select G19 G20)
+ │         └── cost: 1094.04
+ ├── G10: (const-agg G22)
+ ├── G11: (const-agg G23)
+ ├── G12: (const-agg G24)
+ ├── G13: (gt G22 G25)
+ ├── G14: (gt G23 G25)
+ ├── G15: (scan t,cols=(6-9))
+ │    └── []
+ │         ├── best: (scan t,cols=(6-9))
+ │         └── cost: 1084.02
+ ├── G16: (filters G26)
+ ├── G17: (index-join G27 t,cols=(6-9))
+ │    └── []
+ │         ├── best: (index-join G27 t,cols=(6-9))
+ │         └── cost: 1714.02
+ ├── G18: (scan t@secondary,cols=(6-8),constrained)
+ │    └── []
+ │         ├── best: (scan t@secondary,cols=(6-8),constrained)
+ │         └── cost: 357.34
+ ├── G19: (scan t,cols=(11-14))
+ │    └── []
+ │         ├── best: (scan t,cols=(11-14))
+ │         └── cost: 1084.02
+ ├── G20: (filters G28)
+ ├── G21: (index-join G29 t,cols=(11-14))
+ │    └── []
+ │         ├── best: (index-join G29 t,cols=(11-14))
+ │         └── cost: 1714.02
+ ├── G22: (variable a)
+ ├── G23: (variable b)
+ ├── G24: (variable c)
+ ├── G25: (const 1)
+ ├── G26: (gt G30 G25)
+ ├── G27: (scan t@secondary,partial,cols=(6,9))
+ │    └── []
+ │         ├── best: (scan t@secondary,partial,cols=(6,9))
+ │         └── cost: 350.68
+ ├── G28: (gt G31 G25)
+ ├── G29: (scan t@secondary,partial,cols=(11,14))
+ │    └── []
+ │         ├── best: (scan t@secondary,partial,cols=(11,14))
+ │         └── cost: 350.68
+ ├── G30: (variable a)
+ └── G31: (variable b)
 
 # --------------------------------------------------
 # SplitDisjunctionAddKey
