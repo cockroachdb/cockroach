@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +71,14 @@ func (m *mockServer) Join(
 	context.Context, *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
 	panic("unimplemented")
+}
+
+func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
+	return &roachpb.GossipSubscriptionEvent{
+		Key:            gossip.KeyClusterID,
+		Content:        roachpb.MakeValueFromBytesAndTimestamp(clusterID.GetBytes(), hlc.Timestamp{}),
+		PatternMatched: gossip.KeyClusterID,
+	}
 }
 
 func gossipEventForNodeDesc(desc *roachpb.NodeDescriptor) *roachpb.GossipSubscriptionEvent {
@@ -116,12 +125,18 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	s := rpc.NewServer(rpcContext)
 
+	// Test setting the cluster ID by setting it to nil then ensuring it's later
+	// set to the original ID value.
+	clusterID := rpcContext.ClusterID.Get()
+	rpcContext.ClusterID.Reset(uuid.Nil)
+
 	gossipSubC := make(chan *roachpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 2)
-		assert.Equal(t, "node:.*", req.Patterns[0])
-		assert.Equal(t, "system-db", req.Patterns[1])
+		assert.Len(t, req.Patterns, 3)
+		assert.Equal(t, "cluster-id", req.Patterns[0])
+		assert.Equal(t, "node:.*", req.Patterns[1])
+		assert.Equal(t, "system-db", req.Patterns[2])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -157,7 +172,11 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
 	gossipSubC <- gossipEventForNodeDesc(node1)
 	gossipSubC <- gossipEventForNodeDesc(node2)
+	gossipSubC <- gossipEventForClusterID(clusterID)
 	require.NoError(t, <-startedC)
+
+	// Ensure that ClusterID was updated.
+	require.Equal(t, clusterID, rpcContext.ClusterID.Get())
 
 	// Test kvcoord.NodeDescStore impl. Wait for full update first.
 	waitForNodeDesc(t, c, 2)
@@ -325,13 +344,15 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
 	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2.2.2.2")}
 	gossipSubEvents := []*roachpb.GossipSubscriptionEvent{
+		gossipEventForClusterID(rpcContext.ClusterID.Get()),
 		gossipEventForNodeDesc(node1),
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 2)
-		assert.Equal(t, "node:.*", req.Patterns[0])
-		assert.Equal(t, "system-db", req.Patterns[1])
+		assert.Len(t, req.Patterns, 3)
+		assert.Equal(t, "cluster-id", req.Patterns[0])
+		assert.Equal(t, "node:.*", req.Patterns[1])
+		assert.Equal(t, "system-db", req.Patterns[2])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err

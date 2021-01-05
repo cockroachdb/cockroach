@@ -334,11 +334,11 @@ CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 statement error unsupported in multi-tenancy mode
 ALTER TABLE foo SPLIT AT VALUES(2)
 
-# Cluster ID is unset for tenants.
+# Make sure that the cluster id isn't unset.
 query B
 select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
 ----
-false
+true
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser
