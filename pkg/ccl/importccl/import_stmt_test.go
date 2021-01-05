@@ -1502,8 +1502,8 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "pgdump single table with insert",
 			typ:  "PGDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (1, 2), (3, 4);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (1, 2), (3, 4);
 				`,
 			with:        `WITH row_limit = '1'`,
 			verifyQuery: `SELECT * from t`,
@@ -1526,8 +1526,8 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "mysqldump single table",
 			typ:  "MYSQLDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);
 				`,
 			with:        `WITH row_limit = '1'`,
 			verifyQuery: `SELECT * from t`,
@@ -1536,11 +1536,11 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "mysqldump multiple inserts same table",
 			typ:  "MYSQLDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (1, 2);		
-				INSERT INTO t (a, b) VALUES (3, 4);		
-				INSERT INTO t (a, b) VALUES (5, 6);		
-				INSERT INTO t (a, b) VALUES (7, 8);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (1, 2);
+				INSERT INTO t (a, b) VALUES (3, 4);
+				INSERT INTO t (a, b) VALUES (5, 6);
+				INSERT INTO t (a, b) VALUES (7, 8);
 				`,
 			with:        `WITH row_limit = '2'`,
 			verifyQuery: `SELECT * from t`,

@@ -983,6 +983,11 @@ message TableDescriptor {
     }
 
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
+    
+    // AS option value for CREATE SEQUENCE, which specifies the default
+    // min and max values a sequence can take on.
+    optional string as_integer_type = 7 [(gogoproto.nullable) = false];
+
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
