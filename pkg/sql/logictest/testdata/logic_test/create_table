@@ -388,3 +388,8 @@ CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) PARTITION BY LIST (b)
 
 statement error pgcode 0A000 unique constraints with a predicate but without an index are not supported
 CREATE TABLE error (a INT, b INT, UNIQUE WITHOUT INDEX (a) WHERE b > 5)
+
+subtest regression_57630
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+CREATE TABLE error (a INT, b INT, INDEX idx (a), INDEX idx (b))
