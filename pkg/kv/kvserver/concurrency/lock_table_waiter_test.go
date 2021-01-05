@@ -343,7 +343,11 @@ func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	w, _, g := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
-	g.state = waitingState{kind: k}
+	txn := makeTxnProto("noop-wait-txn")
+	g.state = waitingState{
+		kind: k,
+		txn:  &txn.TxnMeta,
+	}
 	g.notify()
 	defer notifyUntilDone(t, g)()
 

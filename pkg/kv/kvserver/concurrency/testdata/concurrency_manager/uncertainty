@@ -47,6 +47,7 @@ on-txn-updated txn=txn1 status=pending ts=15,2
 ----
 [-] update txn: increasing timestamp of txn1
 [3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -108,6 +109,7 @@ on-txn-updated txn=txn1 status=pending ts=15,2
 ----
 [-] update txn: increasing timestamp of txn1
 [3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
