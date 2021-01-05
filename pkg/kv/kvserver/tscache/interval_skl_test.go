@@ -1326,11 +1326,23 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	size := 1
 	for i := 0; i < 9; i++ {
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
-			for iter := 0; iter < b.N; iter++ {
+			type op struct {
+				from, to []byte
+				val      cacheValue
+			}
+			ops := make([]op, b.N)
+			for i := range ops {
 				rnd := int64(rng.Int31n(max))
-				from := []byte(fmt.Sprintf("%020d", rnd))
-				to := []byte(fmt.Sprintf("%020d", rnd+int64(size-1)))
-				s.AddRange(from, to, 0, makeVal(clock.Now(), txnID))
+				ops[i] = op{
+					from: []byte(fmt.Sprintf("%020d", rnd)),
+					to:   []byte(fmt.Sprintf("%020d", rnd+int64(size-1))),
+					val:  makeVal(clock.Now(), txnID),
+				}
+			}
+
+			b.ResetTimer()
+			for _, op := range ops {
+				s.AddRange(op.from, op.to, 0, op.val)
 			}
 		})
 
@@ -1339,7 +1351,6 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 }
 
 func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
-	const parallel = 1
 	const max = 1000000000 // max size of range
 	const data = 500000    // number of ranges
 	const txnID = "123"
@@ -1356,33 +1367,40 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 
 	for i := 0; i <= 10; i++ {
 		b.Run(fmt.Sprintf("frac_%d", i), func(b *testing.B) {
-			var wg sync.WaitGroup
+			type op struct {
+				read     bool
+				from, to []byte
+				val      cacheValue
+			}
+			ops := make([]op, b.N)
+			for i := range ops {
+				readFrac := rng.Int31n(10)
+				keyNum := rng.Int31n(max)
 
-			for p := 0; p < parallel; p++ {
-				wg.Add(1)
-
-				go func(i int) {
-					defer wg.Done()
-
-					rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-
-					for n := 0; n < b.N/parallel; n++ {
-						readFrac := rng.Int31n(10)
-						keyNum := rng.Int31n(max)
-
-						if readFrac < int32(i) {
-							key := []byte(fmt.Sprintf("%020d", keyNum))
-							s.LookupTimestamp(key)
-						} else {
-							from, to := makeRange(keyNum)
-							nowVal := makeVal(clock.Now(), txnID)
-							s.AddRange(from, to, excludeFrom|excludeTo, nowVal)
-						}
+				if readFrac < int32(i) {
+					ops[i] = op{
+						read: true,
+						from: []byte(fmt.Sprintf("%020d", keyNum)),
 					}
-				}(i)
+				} else {
+					from, to := makeRange(keyNum)
+					ops[i] = op{
+						read: false,
+						from: from,
+						to:   to,
+						val:  makeVal(clock.Now(), txnID),
+					}
+				}
 			}
 
-			wg.Wait()
+			b.ResetTimer()
+			for _, op := range ops {
+				if op.read {
+					s.LookupTimestamp(op.from)
+				} else {
+					s.AddRange(op.from, op.to, excludeFrom|excludeTo, op.val)
+				}
+			}
 		})
 	}
 }
