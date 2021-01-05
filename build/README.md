@@ -95,14 +95,18 @@ Dependencies are managed using `go mod`. We use `go mod vendor` so that we can i
 ### Installing or updating a dependency
 
 Run `go get -u <dependency>`. To get a specific version, run `go get -u <dependency>@<version|branch|sha>`.
+You should see changes in `go.mod` when running `git diff`.
 
 When updating a dependency, you should run `go mod tidy` after `go get` to ensure the old entries
 are removed from go.sum.
 
-You must then run `make vendor_rebuild` to ensure the modules are installed. These changes must
-then be committed in the submodule directory (see [Working with Submodules](#working-with-submodules)).
+You must then run `make vendor_rebuild` to ensure the modules are installed.
+Ensure the vendor changes are as expected by running `cd vendor && git status`. If your import
+is missing, ensure it is used in code. This can be a blank dependency, e.g.
+`import _ "golang.org/api/compute/v1"`. These changes must then be committed in the submodule directory
+(see [Working with Submodules](#working-with-submodules)).
 
-Programs can then be run using `go build -mod=vendor ...` or `go test -mod=vendor ...`.
+Programs can then be run using `go build ...` or `go test ...`.
 
 ### Removing a dependency
 
