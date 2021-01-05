@@ -223,7 +223,7 @@ func checkedTSCacheUpdate(
 	pErr *roachpb.Error,
 ) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID) {
 	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
-		if now.Less(ts) {
+		if now.Less(ts) && !ts.Synthetic {
 			panic(fmt.Sprintf("Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
 				"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
 				"The timestamp cache update could be lost on a lease transfer.", ts, ba, br, pErr, now))
