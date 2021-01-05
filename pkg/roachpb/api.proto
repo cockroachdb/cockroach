@@ -343,6 +343,8 @@ message RevertRangeRequest {
   // than the GC Threshold for the replica - so that it is assured that the keys
   // for that time are still there — or the request will fail.
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
+
+  bool enable_time_bound_iterator_optimization = 3;
 }
 
 // A RevertRangeResponse is the return value from the RevertRange() method.
