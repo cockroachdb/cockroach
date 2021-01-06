@@ -422,7 +422,8 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 		return err
 	}
 
-	dbConn, err := serverutils.OpenDBConnE(server, serverArgs, server.Stopper())
+	dbConn, err := serverutils.OpenDBConnE(
+		server.ServingSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
 	if err != nil {
 		return err
 	}

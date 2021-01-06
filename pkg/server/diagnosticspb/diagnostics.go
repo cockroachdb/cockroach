@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -60,6 +62,7 @@ type TestingKnobs struct {
 // ClusterInfo contains cluster information that will become part of URLs.
 type ClusterInfo struct {
 	ClusterID  uuid.UUID
+	TenantID   roachpb.TenantID
 	IsInsecure bool
 	IsInternal bool
 }
@@ -71,36 +74,59 @@ func BuildUpdatesURL(clusterInfo *ClusterInfo, nodeInfo *NodeInfo, knobs *Testin
 	if knobs != nil && knobs.OverrideUpdatesURL != nil {
 		url = *knobs.OverrideUpdatesURL
 	}
-	return addInfoToURL(url, clusterInfo, nodeInfo)
+	report := &DiagnosticReport{Node: *nodeInfo}
+	return addInfoToURL(url, clusterInfo, report)
 }
 
-// BuildReportingURL creates a URL to report diagnostics.
+// BuildReportingURL creates a URL to report diagnostics. If this is a CRDB
+// node, then nodeInfo is filled (and nodeInfo.NodeID is non-zero). Otherwise,
+// this is a SQL-only tenant and sqlInfo is filled.
+//
 // If an empty updates URL is set (via empty environment variable), returns nil.
-func BuildReportingURL(clusterInfo *ClusterInfo, nodeInfo *NodeInfo, knobs *TestingKnobs) *url.URL {
+func BuildReportingURL(
+	clusterInfo *ClusterInfo, report *DiagnosticReport, knobs *TestingKnobs,
+) *url.URL {
 	url := reportingURL
 	if knobs != nil && knobs.OverrideReportingURL != nil {
 		url = *knobs.OverrideReportingURL
 	}
-	return addInfoToURL(url, clusterInfo, nodeInfo)
+	return addInfoToURL(url, clusterInfo, report)
 }
 
-func addInfoToURL(url *url.URL, clusterInfo *ClusterInfo, nodeInfo *NodeInfo) *url.URL {
+func addInfoToURL(url *url.URL, clusterInfo *ClusterInfo, report *DiagnosticReport) *url.URL {
 	if url == nil {
 		return nil
 	}
 	result := *url
 	q := result.Query()
-	b := &nodeInfo.Build
+
+	// If NodeID is non-zero, then maintain backwards-compatibility by using the
+	// NodeInfo fields.
+	// TODO(andyk): Update this to always use other report fields, once they're
+	// guaranteed to be populated by all callers.
+	var b build.Info
+	if report.Node.NodeID != 0 {
+		// SQLInstanceID is always set to the NodeID for CRDB nodes.
+		b = report.Node.Build
+		q.Set("nodeid", strconv.Itoa(int(report.Node.NodeID)))
+		q.Set("sqlid", strconv.Itoa(int(report.Node.NodeID)))
+		q.Set("uptime", strconv.Itoa(int(report.Node.Uptime)))
+		q.Set("licensetype", report.Node.LicenseType)
+	} else {
+		b = report.Env.Build
+		q.Set("sqlid", strconv.Itoa(int(report.SQL.SQLInstanceID)))
+		q.Set("uptime", strconv.Itoa(int(report.SQL.Uptime)))
+		q.Set("licensetype", report.Env.LicenseType)
+	}
+
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
 	q.Set("uuid", clusterInfo.ClusterID.String())
-	q.Set("nodeid", strconv.Itoa(int(nodeInfo.NodeID)))
-	q.Set("uptime", strconv.Itoa(int(nodeInfo.Uptime)))
+	q.Set("tenantid", clusterInfo.TenantID.String())
 	q.Set("insecure", strconv.FormatBool(clusterInfo.IsInsecure))
 	q.Set("internal", strconv.FormatBool(clusterInfo.IsInternal))
 	q.Set("buildchannel", b.Channel)
 	q.Set("envchannel", b.EnvChannel)
-	q.Set("licensetype", nodeInfo.LicenseType)
 	result.RawQuery = q.Encode()
 	return &result
 }

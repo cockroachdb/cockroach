@@ -38,6 +38,9 @@ type Server struct {
 // RequestData stores the data provided by a diagnostics request.
 type RequestData struct {
 	UUID          string
+	TenantID      string
+	NodeID        string
+	SQLInstanceID string
 	Version       string
 	LicenseType   string
 	Internal      string
@@ -64,6 +67,9 @@ func NewServer() *Server {
 
 		data := &RequestData{
 			UUID:          r.URL.Query().Get("uuid"),
+			TenantID:      r.URL.Query().Get("tenantid"),
+			NodeID:        r.URL.Query().Get("nodeid"),
+			SQLInstanceID: r.URL.Query().Get("sqlid"),
 			Version:       r.URL.Query().Get("version"),
 			LicenseType:   r.URL.Query().Get("licensetype"),
 			Internal:      r.URL.Query().Get("internal"),

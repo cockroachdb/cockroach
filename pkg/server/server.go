@@ -157,7 +157,7 @@ type Server struct {
 	protectedtsProvider   protectedts.Provider
 	protectedtsReconciler *ptreconcile.Reconciler
 
-	sqlServer *sqlServer
+	sqlServer *SQLServer
 
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
@@ -1950,7 +1950,7 @@ func (s *Server) startServeUI(
 }
 
 // TODO(tbg): move into server_sql.go.
-func (s *sqlServer) startServeSQL(
+func (s *SQLServer) startServeSQL(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	connManager netutil.Server,

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -97,7 +98,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		tempStorageMaxSizeBytes,
 	)
 
-	addr, httpAddr, instanceID, err := server.StartTenant(
+	sqlServer, addr, httpAddr, instanceID, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -107,6 +108,14 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Start up the diagnostics reporting loop.
+	// We don't do this in (*server.SQLServer).preStart() because we don't
+	// want this overhead and possible interference in tests.
+	if !cluster.TelemetryOptOut() {
+		sqlServer.StartDiagnostics(ctx)
+	}
+
 	// Register the server's identifiers so that log events are
 	// decorated with the server's identity. This helps when gathering
 	// log events from multiple servers into the same log collector.

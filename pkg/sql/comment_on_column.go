@@ -93,12 +93,16 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		comment = *n.n.Comment
 	}
+
+	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+	if err != nil {
+		return err
+	}
+
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.CommentOnColumn{
-			// TODO(knz): This table name is improperly qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57740
-			TableName:   n.tableDesc.Name,
+			TableName:   tn.String(),
 			ColumnName:  string(n.n.ColumnItem.ColumnName),
 			Comment:     comment,
 			NullComment: n.n.Comment == nil,
