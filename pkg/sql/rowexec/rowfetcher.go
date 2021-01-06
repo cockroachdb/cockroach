@@ -74,27 +74,21 @@ func initRowFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumns []descpb.ColumnDescriptor,
+	virtualColumn *descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	cols := desc.Columns
-	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
-	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumns...)
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+	tableArgs.InitCols(desc, scanVisibility, systemColumns, virtualColumn)
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
