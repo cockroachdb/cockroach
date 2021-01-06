@@ -60,13 +60,11 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
-        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
-        "@com_github_opentracing_opentracing_go//log",
         "@com_github_petermattis_goid//:goid",
         "@org_golang_x_net//trace",
     ] + select({
