@@ -319,6 +319,12 @@ message PartitioningDescriptor {
   // subpartition, this is offset to start from the end of the parent
   // partition's columns. If NumColumns is 0, then there is no partitioning.
   optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
+  // NumImplicitColumns specifies the number of columns that implicitly prefix a given index.
+  // This occurs if a user specifies a PARTITION BY which is not a prefix of the given index,
+  // in which case the ColumnIDs are added in front of the index and this field denotes
+  // the number of columns added as a prefix.
+  // If NumImplicitColumns is 0, there are no implicit columns defined for the index."
+  optional uint32 num_implicit_columns = 4 [(gogoproto.nullable)=false];
 
   // Exactly one of List or Range is required to be non-empty if NumColumns is
   // non-zero.
