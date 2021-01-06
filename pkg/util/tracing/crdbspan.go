@@ -80,7 +80,7 @@ type crdbSpanMu struct {
 	structured []Structured
 
 	// The Span's associated baggage.
-	Baggage map[string]string
+	baggage map[string]string
 }
 
 func (s *crdbSpan) recordingType() RecordingType {
@@ -220,14 +220,14 @@ func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
 }
 
 func (s *crdbSpan) setBaggageItemLocked(restrictedKey, value string) {
-	if oldVal, ok := s.mu.Baggage[restrictedKey]; ok && oldVal == value {
+	if oldVal, ok := s.mu.baggage[restrictedKey]; ok && oldVal == value {
 		// No-op.
 		return
 	}
-	if s.mu.Baggage == nil {
-		s.mu.Baggage = make(map[string]string)
+	if s.mu.baggage == nil {
+		s.mu.baggage = make(map[string]string)
 	}
-	s.mu.Baggage[restrictedKey] = value
+	s.mu.baggage[restrictedKey] = value
 }
 
 // getRecordingLocked returns the Span's recording. This does not include
@@ -286,9 +286,9 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		}
 	}
 
-	if len(s.mu.Baggage) > 0 {
+	if len(s.mu.baggage) > 0 {
 		rs.Baggage = make(map[string]string)
-		for k, v := range s.mu.Baggage {
+		for k, v := range s.mu.baggage {
 			rs.Baggage[k] = v
 		}
 	}
