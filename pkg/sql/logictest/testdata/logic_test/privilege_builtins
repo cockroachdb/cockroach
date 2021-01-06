@@ -1056,3 +1056,76 @@ query B
 SELECT has_column_privilege('hcp_test'::REGCLASS, 4, 'SELECT')
 ----
 true
+
+# Regression test for #58254. Tests privilege inheritance for roles (direct and indirect).
+
+user root
+
+statement ok
+DROP DATABASE IF EXISTS my_db;
+CREATE DATABASE my_db;
+
+statement ok
+CREATE ROLE my_role;
+
+statement ok
+GRANT CREATE ON DATABASE my_db TO my_role;
+GRANT my_role TO testuser;
+
+user testuser
+
+statement ok
+use my_db
+
+statement ok
+CREATE SCHEMA s;
+CREATE TABLE s.t()
+
+# Privilege check on direct member of role with CREATE privilege granted.
+query B
+SELECT has_schema_privilege('testuser', 's', 'create')
+----
+true
+
+# Privilege check on direct member of role without USAGE privilege granted.
+query B
+SELECT has_schema_privilege('testuser', 's', 'usage')
+----
+false
+
+# Confirm privilege checks on all objects.
+query BBB
+SELECT has_database_privilege('testuser', 'my_db', 'create'),
+       has_schema_privilege('testuser', 'public', 'usage'),
+       has_table_privilege('testuser', 's.t', 'select')
+----
+true false false
+
+user root
+
+statement ok
+CREATE USER testuser2;
+GRANT testuser TO testuser2;
+GRANT ALL ON SCHEMA my_db.s TO testuser2
+
+user testuser2
+
+statement ok
+use my_db
+
+# Make sure testuser only has CREATE privilege on schema s but testuser2 has both CREATE and USAGE.
+query BBBB
+SELECT has_schema_privilege('testuser', 's', 'create'),
+       has_schema_privilege('testuser', 's', 'usage'),
+       has_schema_privilege('testuser2', 's', 'create'),
+       has_schema_privilege('testuser2', 's', 'usage')
+----
+true false true true
+
+# Confirm privilege checks on all objects with testuser2, should match testuser.
+query BBB
+SELECT has_database_privilege('testuser2', 'my_db', 'create'),
+       has_schema_privilege('testuser2', 'public', 'usage'),
+       has_table_privilege('testuser2', 's.t', 'select')
+----
+true false false
