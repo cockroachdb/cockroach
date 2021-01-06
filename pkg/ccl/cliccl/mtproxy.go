@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -145,30 +144,16 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 	outgoingConf := &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	server := sqlproxyccl.NewServer(sqlproxyccl.Options{
-		FrontendAdmitter: func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
-			return sqlproxyccl.FrontendAdmit(
-				incoming,
-				&tls.Config{
-					Certificates: []tls.Certificate{cer},
-				},
-			)
+
+	handler := proxyHandler(
+		&tls.Config{
+			Certificates: []tls.Certificate{cer},
 		},
-		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			params := msg.Parameters
-			const magic = "prancing-pony"
-			if strings.HasPrefix(params["database"], magic+".") {
-				params["database"] = params["database"][len(magic)+1:]
-			} else if params["options"] != "--cluster="+magic {
-				return nil, errors.Errorf("client failed to pass '%s' via database or options", magic)
-			}
-			conn, err := sqlproxyccl.BackendDial(msg, sqlProxyTargetAddr, outgoingConf)
-			if err != nil {
-				return nil, err
-			}
-			return conn, nil
-		},
-	})
+		outgoingConf,
+		sqlProxyTargetAddr,
+	)
+
+	server := sqlproxyccl.NewServer(handler)
 
 	group, ctx := errgroup.WithContext(context.Background())
 
@@ -185,4 +170,51 @@ Uuwb2FVdh76ZK0AVd3Jh3KJs4+hr2u9syHaa7UPKXTcZsFWlGwZuu6X5A+0SO0S2
 	})
 
 	return group.Wait()
+}
+
+func proxyHandler(
+	incomingTLS, outgoingTLS *tls.Config, outgoingAddress string,
+) func(metrics *sqlproxyccl.Metrics, proxyConn *sqlproxyccl.Conn) error {
+	return func(metrics *sqlproxyccl.Metrics, proxyConn *sqlproxyccl.Conn) error {
+		conn, msg, err := sqlproxyccl.FrontendAdmit(proxyConn, incomingTLS)
+		if err != nil {
+			sqlproxyccl.SendErrToClient(conn, err)
+			return err
+		}
+		// This currently only happens for CancelRequest type of startup messages
+		// that we don't support
+		if conn == nil {
+			return nil
+		}
+
+		defer func() { _ = conn.Close() }()
+
+		params := msg.Parameters
+		const magic = "prancing-pony"
+		if strings.HasPrefix(params["database"], magic+".") {
+			params["database"] = params["database"][len(magic)+1:]
+		} else if params["options"] != "--cluster="+magic {
+			return errors.Errorf(
+				"client failed to pass '%s' via database or options", magic,
+			)
+		}
+
+		crdbConn, err := sqlproxyccl.BackendDial(msg, outgoingAddress, outgoingTLS)
+		if err != nil {
+			sqlproxyccl.UpdateMetricsForError(metrics, err)
+			sqlproxyccl.SendErrToClient(conn, err)
+			return err
+		}
+
+		defer func() { _ = crdbConn.Close() }()
+
+		metrics.SuccessfulConnCount.Inc(1)
+
+		err = sqlproxyccl.ConnectionCopy(crdbConn, conn)
+		if err != nil {
+			sqlproxyccl.UpdateMetricsForError(metrics, err)
+			sqlproxyccl.SendErrToClient(conn, err)
+		}
+		return err
+	}
 }
