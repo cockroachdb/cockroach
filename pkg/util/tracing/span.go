@@ -11,7 +11,6 @@
 package tracing
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"sync"
@@ -246,20 +245,20 @@ func (s *Span) IsVerbose() bool {
 	return s.crdb.recordingType() == RecordingVerbose
 }
 
-// SetVerbose toggles verbose recording on the Span, which must not be a noop span
-// (see the WithForceRealSpan option).
+// SetVerbose toggles verbose recording on the Span, which must not be a noop
+// span (see the WithForceRealSpan option).
 //
-// With 'true', future calls to LogFields and LogKV are recorded, and any future
-// descendants of this Span will do so automatically as well. This does not apply
-// to past derived Spans, which may in fact be noop spans.
+// With 'true', future calls to Record are actually recorded, and any future
+// descendants of this Span will do so automatically as well. This does not
+// apply to past derived Spans, which may in fact be noop spans.
 //
 // As a side effect, calls to `SetVerbose(true)` on a span that was not already
 // verbose will reset any past recording stored on this Span.
 //
-// When passed 'false', LogFields and LogKV will cede to add data to the recording
-// (though they may still be collected, should the Span have been set up with an
-// auxiliary trace sink). This does not apply to Spans derived from this one when
-// it was verbose.
+// When set to 'false', Record will cede to add data to the recording (though
+// they may still be collected, should the Span have been set up with an
+// auxiliary trace sink). This does not apply to Spans derived from this one
+// when it was verbose.
 func (s *Span) SetVerbose(to bool) {
 	// TODO(tbg): when always-on tracing is firmly established, we can remove the ugly
 	// caveat that SetVerbose(true) is a panic on a noop span because there will be no
@@ -531,45 +530,19 @@ func (s *Span) setTagInner(key string, value interface{}, locked bool) *Span {
 	return s
 }
 
-// LogFields is part of the opentracing.Span interface.
-func (s *Span) LogFields(fields ...otlog.Field) {
-	if !s.hasVerboseSink() {
-		return
-	}
-	if s.ot.shadowSpan != nil {
-		s.ot.shadowSpan.LogFields(fields...)
-	}
-	if s.netTr != nil {
-		// TODO(radu): when LightStep supports arbitrary fields, we should make
-		// the formatting of the message consistent with that. Until then we treat
-		// legacy events that just have an "event" key specially.
-		if len(fields) == 1 && fields[0].Key() == tracingpb.LogMessageField {
-			s.netTr.LazyPrintf("%s", fields[0].Value())
-		} else {
-			var buf bytes.Buffer
-			for i, f := range fields {
-				if i > 0 {
-					buf.WriteByte(' ')
-				}
-				fmt.Fprintf(&buf, "%s:%v", f.Key(), f.Value())
-			}
-
-			s.netTr.LazyPrintf("%s", buf.String())
-		}
-	}
-	s.crdb.LogFields(fields...)
-}
-
-func (s *crdbSpan) LogFields(fields ...otlog.Field) {
+func (s *crdbSpan) record(msg string) {
 	if s.recordingType() != RecordingVerbose {
 		return
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
 		s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
 			Timestamp: time.Now(),
-			Fields:    fields,
+			Fields: []otlog.Field{
+				otlog.String(tracingpb.LogMessageField, msg),
+			},
 		})
 	}
 }
@@ -584,19 +557,6 @@ func (s *Span) hasVerboseSink() bool {
 	return true
 }
 
-// LogKV is part of the opentracing.Span interface.
-func (s *Span) LogKV(alternatingKeyValues ...interface{}) {
-	if !s.hasVerboseSink() {
-		return
-	}
-	fields, err := otlog.InterleavedKVToFields(alternatingKeyValues...)
-	if err != nil {
-		s.LogFields(otlog.Error(err), otlog.String("function", "LogKV"))
-		return
-	}
-	s.LogFields(fields...)
-}
-
 // LogStructured adds a Structured payload to the Span. It will be added to the
 // recording even if the Span is not verbose; however it will be discarded if
 // the underlying Span has been optimized out (i.e. is a noop span).
@@ -609,10 +569,18 @@ func (s *Span) LogStructured(item Structured) {
 	s.crdb.LogStructured(item)
 }
 
-func (s *crdbSpan) LogStructured(item Structured) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.structured = append(s.mu.structured, item)
+// Record provides a way to put free-form text into verbose spans.
+func (s *Span) Record(msg string) {
+	if !s.hasVerboseSink() {
+		return
+	}
+	if s.ot.shadowSpan != nil {
+		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, msg))
+	}
+	if s.netTr != nil {
+		s.netTr.LazyPrintf("%s", msg)
+	}
+	s.crdb.record(msg)
 }
 
 // SetBaggageItem is part of the opentracing.Span interface.

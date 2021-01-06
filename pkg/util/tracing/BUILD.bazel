@@ -54,7 +54,6 @@ go_test(
     embed = [":tracing"],
     deps = [
         "//pkg/settings",
-        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_gogo_protobuf//types",
