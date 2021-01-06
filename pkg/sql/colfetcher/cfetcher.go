@@ -93,6 +93,11 @@ type cTableInfo struct {
 	// does not contain any -1's. It is meant to be used only in logging.
 	allExtraValColOrdinals []int
 
+	// invertedColOrdinal is a column index (into cols), indicating the virtual
+	// inverted column; -1 if there is no virtual inverted column or we don't
+	// need the value for that column.
+	invertedColOrdinal int
+
 	// maxColumnFamilyID is the maximum possible family id for the configured
 	// table.
 	maxColumnFamilyID descpb.FamilyID
@@ -477,6 +482,16 @@ func (rf *cFetcher) Init(
 			}
 		}
 	}
+	table.invertedColOrdinal = -1
+	if table.index.Type == descpb.IndexDescriptor_INVERTED {
+		id := table.index.InvertedColumnID()
+		colIdx, ok := tableArgs.ColIdxMap.Get(id)
+		if ok && neededCols.Contains(int(id)) {
+			table.invertedColOrdinal = colIdx
+		} else if neededCols.Contains(int(id)) {
+			return errors.AssertionFailedf("needed column %d not in colIdxMap", id)
+		}
+	}
 	// Unique secondary indexes contain the extra column IDs as part of
 	// the value component. We process these separately, so we need to know
 	// what extra columns are composite or not.
@@ -511,17 +526,18 @@ func (rf *cFetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs, table.keyValTypes)
-	if err != nil {
-		return err
-	}
+	table.keyValTypes = colinfo.GetColumnTypesFromColDescs(
+		colDescriptors, indexColumnIDs, table.keyValTypes,
+	)
 	if cHasExtraCols(table) {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs, table.extraTypes)
+		table.extraTypes = colinfo.GetColumnTypesFromColDescs(
+			colDescriptors, table.index.ExtraColumnIDs, table.extraTypes,
+		)
 		nExtraColumns := len(table.index.ExtraColumnIDs)
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
@@ -543,9 +559,6 @@ func (rf *cFetcher) Init(
 			} else {
 				table.extraValColOrdinals[i] = -1
 			}
-		}
-		if err != nil {
-			return err
 		}
 	}
 
@@ -810,6 +823,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					rf.table.keyValTypes,
 					rf.table.indexColumnDirs,
 					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
+					rf.table.invertedColOrdinal,
 				)
 				if err != nil {
 					return nil, err
@@ -1157,6 +1171,7 @@ func (rf *cFetcher) processValue(
 					nil,
 					&rf.machine.remainingValueColsByIdx,
 					valueBytes,
+					rf.table.invertedColOrdinal,
 				)
 				if err != nil {
 					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)

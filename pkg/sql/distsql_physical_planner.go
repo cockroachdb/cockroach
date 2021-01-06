@@ -989,6 +989,7 @@ func initTableReaderSpec(
 		Spans:            s.Spans[:0],
 		HasSystemColumns: n.containsSystemColumns,
 		NeededColumns:    n.colCfg.wantedColumnsOrdinals,
+		VirtualColumn:    getVirtualColumn(n.colCfg.virtualColumn, n.cols),
 	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
@@ -1010,6 +1011,27 @@ func initTableReaderSpec(
 		s.LimitHint = n.softLimit
 	}
 	return s, post, nil
+}
+
+// getVirtualColumn returns the column in cols with ID matching
+// virtualColumn.colID.
+func getVirtualColumn(
+	virtualColumn *struct {
+		colID tree.ColumnID
+		typ   *types.T
+	},
+	cols []*descpb.ColumnDescriptor,
+) *descpb.ColumnDescriptor {
+	if virtualColumn == nil {
+		return nil
+	}
+
+	for i := range cols {
+		if tree.ColumnID(cols[i].ID) == virtualColumn.colID {
+			return cols[i]
+		}
+	}
+	return nil
 }
 
 // tableOrdinal returns the index of a column with the given ID.
@@ -1281,25 +1303,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-
-	numCols := len(info.desc.Columns)
-	if returnMutations {
-		numCols += len(info.desc.MutationColumns())
-	}
-	if info.containsSystemColumns {
-		numCols += len(colinfo.AllSystemColumnDescs)
-	}
-
-	typs := make([]*types.T, 0, numCols)
-	for i := range info.desc.Columns {
-		typs = append(typs, info.desc.Columns[i].Type)
-	}
-	if returnMutations {
-		mutationColumns := info.desc.MutationColumns()
-		for i := range mutationColumns {
-			typs = append(typs, mutationColumns[i].Type)
-		}
-	}
+	typs := info.desc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)

@@ -282,7 +282,6 @@ var (
 	errMetadataTestReceiverWrap       = errors.New("core.MetadataTestReceiver is not supported")
 	errChangeAggregatorWrap           = errors.New("core.ChangeAggregator is not supported")
 	errChangeFrontierWrap             = errors.New("core.ChangeFrontier is not supported")
-	errInvertedFiltererWrap           = errors.New("core.InvertedFilterer is not supported")
 	errBackfillerWrap                 = errors.New("core.Backfiller is not supported (not an execinfra.RowSource)")
 	errReadImportWrap                 = errors.New("core.ReadImport is not supported (not an execinfra.RowSource)")
 	errCSVWriterWrap                  = errors.New("core.CSVWriter is not supported (not an execinfra.RowSource)")
@@ -343,14 +342,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.ProcessorSp
 	case spec.Core.Ordinality != nil:
 	case spec.Core.BulkRowWriter != nil:
 	case spec.Core.InvertedFilterer != nil:
-		// We do not wrap InvertedFilterer because that processor just happens
-		// to work due to the inverted data not being decoded by
-		// rowexec.tableReader which the ColBatchScan will attempt to do and
-		// will fail. The inverted column is not of the same type as the
-		// original column that was indexed (e.g. for geometry, the inverted
-		// column contains an int, and for arrays the inverted column contains
-		// the array element type). See #50695.
-		return errInvertedFiltererWrap
 	case spec.Core.InvertedJoiner != nil:
 	case spec.Core.BackupData != nil:
 		return errBackupDataWrap

@@ -278,7 +278,7 @@ func newInvertedJoiner(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
 		allIndexCols, false /* isCheck */, flowCtx.EvalCtx.Mon, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
-		nil, /* systemColumns */
+		nil /* systemColumns */, nil, /* virtualColumn */
 	)
 	if err != nil {
 		return nil, err
@@ -459,6 +459,16 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			// Done with this input batch.
 			break
 		}
+
+		// NB: Inverted columns are custom encoded in a manner that does not
+		// correspond to Datum encoding, and in the code here we only want the
+		// encoded bytes. Currently, we assume that the provider of this row has not
+		// decoded the row, and therefore the encoded bytes can be used directly.
+		// This will need to change if the rowFetcher used by the invertedJoiner is
+		// changed to use to a vectorized implementation, however. In this case, the
+		// fetcher will have decoded the row, but special-cased the inverted column
+		// by stuffing the encoded bytes into a "decoded" DBytes. See
+		// invertedFilterer.readInput() for an example.
 		idx := ij.colIdxMap.GetDefault(ij.invertedColID)
 		encInvertedVal := scannedRow[idx].EncodedBytes()
 		shouldAdd, err := ij.batchedExprEval.prepareAddIndexRow(encInvertedVal)
