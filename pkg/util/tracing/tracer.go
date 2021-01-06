@@ -421,7 +421,7 @@ func (t *Tracer) startSpanGeneric(
 	if opts.Parent != nil {
 		if !opts.Parent.isNoop() {
 			opts.Parent.crdb.mu.Lock()
-			m := opts.Parent.crdb.mu.Baggage
+			m := opts.Parent.crdb.mu.baggage
 			for k, v := range m {
 				s.SetBaggageItem(k, v)
 			}
