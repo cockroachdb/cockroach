@@ -7,12 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-//
-// A "shadow" tracer can be any opentracing.Tracer implementation that is used
-// in addition to the normal functionality of our tracer. It works by attaching
-// a shadow Span to every Span, and attaching a shadow context to every Span
-// context. When injecting a Span context, we encapsulate the shadow context
-// inside ours.
 
 package tracing
 
@@ -56,6 +50,11 @@ func (m *zipkinManager) Close(tr opentracing.Tracer) {
 	_ = m.collector.Close()
 }
 
+// A shadowTracer can be any opentracing.Tracer implementation that is used in
+// addition to the normal functionality of our tracer. It works by attaching a
+// shadow Span to every Span, and attaching a shadow context to every Span
+// context. When injecting a Span context, we encapsulate the shadow context
+// inside ours.
 type shadowTracer struct {
 	opentracing.Tracer
 	manager shadowTracerManager
