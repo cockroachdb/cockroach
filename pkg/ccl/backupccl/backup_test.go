@@ -3959,12 +3959,11 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 	defer f.Close()
-	// The last eight bytes of an SST file store a nonzero magic number. We can
-	// blindly null out those bytes and guarantee that the checksum will change.
-	if _, err := f.Seek(-8, io.SeekEnd); err != nil {
+	// mess with some bytes.
+	if _, err := f.Seek(-65, io.SeekEnd); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if _, err := f.Write(make([]byte, 8)); err != nil {
+	if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := f.Sync(); err != nil {
@@ -4054,38 +4053,6 @@ func TestTimestampMismatch(t *testing.T) {
 			`RESTORE data.bank, data.t2 FROM $1, $2`, fullBackup, incrementalT3FromT1OneTable,
 		)
 	})
-}
-
-func TestBackupLevelDB(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	_, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
-	defer cleanupFn()
-
-	_ = sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
-	// Verify that the sstables are in LevelDB format by checking the trailer
-	// magic.
-	var magic = []byte("\x57\xfb\x80\x8b\x24\x75\x47\xdb")
-	foundSSTs := 0
-	if err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
-		if filepath.Ext(path) == ".sst" {
-			foundSSTs++
-			data, err := ioutil.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.HasSuffix(data, magic) {
-				t.Fatalf("trailer magic is not LevelDB sstable: %s", path)
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if foundSSTs == 0 {
-		t.Fatal("found no sstables")
-	}
 }
 
 func setupBackupEncryptedTest(ctx context.Context, t *testing.T, sqlDB *sqlutils.SQLRunner) {
