@@ -130,6 +130,18 @@ func (g *SchemaChange) forEach(it nodeFunc) error {
 	return nil
 }
 
+func (g *SchemaChange) forEachTarget(it targetFunc) error {
+	for _, t := range g.targets {
+		if err := it(t); err != nil {
+			if iterutil.Done(err) {
+				err = nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func (g *SchemaChange) getOrCreateTargetState(t scpb.Target, s scpb.State) *scpb.TargetState {
 	targetStates := g.getTargetStatesMap(t)
 	if ts, ok := targetStates[s]; ok {

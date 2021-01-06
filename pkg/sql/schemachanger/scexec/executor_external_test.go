@@ -105,12 +105,12 @@ CREATE TABLE db.t (
 		tn := tree.MakeTableName("db", "t")
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			td, err := descriptors.GetTableByName(ctx, txn, &tn, mutFlags)
-			if err != nil {
+		) (err error) {
+			if _, table, err = descriptors.GetMutableTableByName(
+				ctx, txn, &tn, mutFlags,
+			); err != nil {
 				return err
 			}
-			table = td.(*tabledesc.Mutable)
 			return nil
 		}))
 
@@ -118,11 +118,11 @@ CREATE TABLE db.t (
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			ex := scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil)
-			orig, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
+			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
 			require.NoError(t, ex.ExecuteOps(ctx, c.ops()))
-			after, err := descriptors.GetTableByName(ctx, txn, &tn, immFlags)
+			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.exp(), after)
 			return nil
@@ -217,7 +217,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			tn := tree.MakeTableName("db", "foo")
-			fooTable, err := descriptors.GetTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()
 
@@ -346,7 +346,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			tn := tree.MakeTableName("db", "foo")
-			fooTable, err := descriptors.GetTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()
 

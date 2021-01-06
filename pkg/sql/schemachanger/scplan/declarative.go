@@ -1,10 +1,12 @@
 package scplan
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -127,22 +129,16 @@ func buildSchemaChangeDepGenFunc(t scpb.Target, deps targetDepRules) depGenFunc 
 		}
 	}
 	return func(g graphBuilder, this scpb.Target, thisState scpb.State) {
+		log.Infof(context.Background(), "in the matcher for %T %v %v %v", this, tTyp, thisState, matchers[thisState], len(matchers))
 		for t, funcs := range matchers[thisState] {
-			if err := g.forEach(func(that scpb.Target, thatState scpb.State) error {
+			if err := g.forEachTarget(func(that scpb.Target) error {
 				if reflect.TypeOf(that) != t {
 					return nil
 				}
-				for i, f := range funcs {
-					func() {
-						defer func() {
-							if r := recover(); r != nil {
-								panic(errors.Errorf("%T %v  %T %v %d %p: %v", this, t, that, thisState, i, f, r))
-							}
-						}()
-						if ok, thatState := f(this, that); ok {
-							g.addDepEdge(this, thisState, that, thatState)
-						}
-					}()
+				for _, f := range funcs {
+					if ok, thatState := f(this, that); ok {
+						g.addDepEdge(this, thisState, that, thatState)
+					}
 				}
 				return nil
 			}); err != nil {
@@ -227,9 +223,11 @@ func buildSchemaChangeOpGenFunc(t scpb.Target, forward targetOpRules) opGenFunc 
 }
 
 type nodeFunc func(target scpb.Target, s scpb.State) error
+type targetFunc func(t scpb.Target) error
 
 type graph interface {
 	forEach(it nodeFunc) error
+	forEachTarget(it targetFunc) error
 }
 
 type graphBuilder interface {

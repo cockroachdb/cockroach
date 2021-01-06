@@ -25,7 +25,7 @@ var rules = map[scpb.Target]targetRules{
 						that *scpb.AddPrimaryIndex,
 					) bool {
 						return this.TableID == that.TableID &&
-							indexContainsColumn(&that.Index, this.Column.ID)
+							indexContainsColumn(&that.Index, this.Column.ID, that.StoreColumnIDs...)
 					},
 					s: scpb.State_DELETE_AND_WRITE_ONLY,
 				},
@@ -47,7 +47,7 @@ var rules = map[scpb.Target]targetRules{
 						that *scpb.AddPrimaryIndex,
 					) bool {
 						return this.TableID == that.TableID &&
-							indexContainsColumn(&that.Index, this.Column.ID)
+							indexContainsColumn(&that.Index, this.Column.ID, that.StoreColumnIDs...)
 					},
 					s: scpb.State_PUBLIC,
 				},
@@ -232,7 +232,7 @@ var rules = map[scpb.Target]targetRules{
 						that *scpb.DropPrimaryIndex,
 					) bool {
 						return this.TableID == that.TableID &&
-							indexContainsColumn(&that.Index, this.Column.ID)
+							indexContainsColumn(&that.Index, this.Column.ID, that.StoreColumnIDs...)
 					},
 					s: scpb.State_DELETE_AND_WRITE_ONLY,
 				},
@@ -385,7 +385,7 @@ var rules = map[scpb.Target]targetRules{
 						that *scpb.DropColumn,
 					) bool {
 						return this.TableID == that.TableID &&
-							indexContainsColumn(&this.Index, that.Column.ID)
+							indexContainsColumn(&this.Index, that.Column.ID, this.StoreColumnIDs...)
 					},
 				},
 			},
