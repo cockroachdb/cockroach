@@ -4663,6 +4663,26 @@ CREATE TABLE json_arr2 (
 ----
 
 exec-ddl
+CREATE TABLE json_check (
+  k INT PRIMARY KEY,
+  i INT NOT NULL,
+  j JSONB,
+  CHECK (i IN (1, 2, 3)),
+  INVERTED INDEX (i, j)
+)
+----
+
+exec-ddl
+CREATE TABLE json_comp (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT AS (a % 4) STORED,
+  j JSONB,
+  INVERTED INDEX bj_idx (b, j)
+)
+----
+
+exec-ddl
 ALTER TABLE json_arr1 INJECT STATISTICS '[
   {
     "columns": ["j"],
@@ -5250,6 +5270,124 @@ project
       │    └── filters (true)
       └── filters
            └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+
+# Constrain a prefix column with a CHECK constraint.
+opt expect=GenerateInvertedJoins
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_check AS t1
+ON t1.j @> t2.j
+----
+project
+ ├── columns: k:6!null
+ ├── immutable
+ └── inner-join (lookup json_check [as=t1])
+      ├── columns: t2.j:3 t1.k:6!null t1.j:8
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (6)-->(8)
+      ├── inner-join (inverted json_check@secondary [as=t1])
+      │    ├── columns: t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@7":11!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [11] = [7]
+      │    ├── inverted-expr
+      │    │    └── t1.j:8 @> t2.j:3
+      │    ├── fd: (6)-->(7), (7)==(11), (11)==(7)
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t2.j:3 "inverted_join_const_col_@7":11!null
+      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:3
+      │    │    ├── values
+      │    │    │    ├── columns: "inverted_join_const_col_@7":11!null
+      │    │    │    ├── cardinality: [3 - 3]
+      │    │    │    ├── (1,)
+      │    │    │    ├── (2,)
+      │    │    │    └── (3,)
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+
+# Constrain a prefix column with a computed column expression.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_comp AS t1
+ON t1.j @> t2.j AND t1.a = 5
+----
+project
+ ├── columns: k:6!null
+ ├── immutable
+ └── inner-join (lookup json_comp [as=t1])
+      ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(7), (6)-->(9)
+      ├── inner-join (inverted json_comp@bj_idx [as=t1])
+      │    ├── columns: t2.j:3 t1.k:6!null b:8!null "inverted_join_const_col_@8":12!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [12] = [8]
+      │    ├── inverted-expr
+      │    │    └── t1.j:9 @> t2.j:3
+      │    ├── fd: ()-->(8,12), (8)==(12), (12)==(8)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@8":12!null t2.j:3
+      │    │    ├── fd: ()-->(12)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:3
+      │    │    └── projections
+      │    │         └── 1 [as="inverted_join_const_col_@8":12]
+      │    └── filters (true)
+      └── filters
+           ├── t1.j:9 @> t2.j:3 [outer=(3,9), immutable]
+           └── t1.a:7 = 5 [outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
+
+exec-ddl
+DROP INDEX bj_idx
+----
+
+exec-ddl
+CREATE INVERTED INDEX bj_partial_idx ON json_comp (b, j) WHERE a = 5
+----
+
+# Use the original filters, not the filters reduced during partial index
+# implication, to generate computed column filters that can constrain a prefix
+# column.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT t1.k
+FROM json_arr2 AS t2
+INNER INVERTED JOIN json_comp AS t1
+ON t1.j @> t2.j AND t1.a = 5
+----
+project
+ ├── columns: k:6!null
+ ├── immutable
+ └── inner-join (lookup json_comp [as=t1])
+      ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: ()-->(7), (6)-->(9)
+      ├── inner-join (inverted json_comp@bj_partial_idx,partial [as=t1])
+      │    ├── columns: t2.j:3 t1.k:6!null b:8!null "inverted_join_const_col_@8":13!null
+      │    ├── flags: force inverted join (into right side)
+      │    ├── prefix key columns: [13] = [8]
+      │    ├── inverted-expr
+      │    │    └── t1.j:9 @> t2.j:3
+      │    ├── fd: ()-->(8,13), (8)==(13), (13)==(8)
+      │    ├── project
+      │    │    ├── columns: "inverted_join_const_col_@8":13!null t2.j:3
+      │    │    ├── fd: ()-->(13)
+      │    │    ├── scan json_arr2 [as=t2]
+      │    │    │    └── columns: t2.j:3
+      │    │    └── projections
+      │    │         └── 1 [as="inverted_join_const_col_@8":13]
+      │    └── filters (true)
+      └── filters
+           └── t1.j:9 @> t2.j:3 [outer=(3,9), immutable]
 
 # Do not generate an inverted join when the prefix column is not constrained.
 opt expect-not=GenerateInvertedJoinsFromSelect format=hide-all
