@@ -467,15 +467,6 @@ func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) e
 	return nil
 }
 
-type textMapReaderFn func(handler func(key, val string) error) error
-
-var _ opentracing.TextMapReader = textMapReaderFn(nil)
-
-// ForeachKey is part of the opentracing.TextMapReader interface.
-func (fn textMapReaderFn) ForeachKey(handler func(key, val string) error) error {
-	return fn(handler)
-}
-
 var noopSpanContext = &SpanMeta{}
 
 // Extract is part of the opentracing.Tracer interface.
