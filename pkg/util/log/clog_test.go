@@ -161,6 +161,7 @@ func TestEntryDecoder(t *testing.T) {
 	t6 := t5.Add(time.Microsecond)
 	t7 := t6.Add(time.Microsecond)
 	t8 := t7.Add(time.Microsecond)
+	t9 := t8.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
@@ -181,6 +182,8 @@ func TestEntryDecoder(t *testing.T) {
 	// Regression test for #56873.
 	contents += formatEntry(Severity_INFO, t8, 8, "clog_test.go", 144, `sometags`, "foo")
 	contents += formatEntry(Severity_INFO, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
+	// Ensure that IPv6 addresses in tags get parsed properly.
+	contents += formatEntry(Severity_INFO, t9, 10, "clog_test.go", 146, `client=[1::]:2`, "foo")
 
 	readAllEntries := func(contents string) []Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -283,6 +286,15 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      145,
 			Message:   `bar`,
+		},
+		{
+			Severity:  Severity_INFO,
+			Time:      t9.UnixNano(),
+			Goroutine: 10,
+			File:      `clog_test.go`,
+			Line:      146,
+			Tags:      `client=[1::]:2`,
+			Message:   `foo`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
