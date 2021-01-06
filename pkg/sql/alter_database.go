@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/errors"
 )
 
 type alterDatabaseOwnerNode struct {
@@ -140,14 +142,14 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
-	// If we get to this point and the RegionConfig is nil, it means that the database doesn't
-	// yet have a primary region. Since we need a primary region before we can add a region,
-	// return an error here.
+	// If we get to this point and the database is not a multi-region database, it means that
+	// the database doesn't yet have a primary region. Since we need a primary region before
+	// we can add a region, return an error here.
 	if !n.desc.IsMultiRegion() {
 		return pgerror.Newf(pgcode.InvalidDatabaseDefinition,
-			"cannot add region %q to database %q. Please add primary region first.",
-			n.n.Region.String(),
-			n.n.Name.String(),
+			"cannot add region %q to database %q. Please add a primary region first.",
+			string(n.n.Region),
+			string(n.n.Name),
 		)
 	}
 
@@ -260,7 +262,178 @@ func (p *planner) AlterDatabaseDropRegion(
 func (p *planner) AlterDatabasePrimaryRegion(
 	ctx context.Context, n *tree.AlterDatabasePrimaryRegion,
 ) (planNode, error) {
-	return nil, unimplemented.New("alter database primary region", "implementation pending")
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterDatabasePrimaryRegionNode{n: n, desc: dbDesc}, nil
+}
+
+// switchPrimaryRegion performs the work in ALTER DATABASE ... PRIMARY REGION for the case
+// where the database is already a multi-region database.
+func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) error {
+	// First check if the new primary region has been added to the database. If not, return
+	// an error, as it must be added before it can be used as a primary region.
+	found := false
+	for _, r := range n.desc.RegionConfig.Regions {
+		if r.Name == descpb.RegionName(n.n.PrimaryRegion) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.InvalidName,
+				"region %q has not been added to the database. "+
+					"Please add the region to the database before setting it as primary region.",
+				string(n.n.PrimaryRegion),
+			),
+			"ALTER DATABASE %q ADD REGION %q", string(n.n.Name), string(n.n.PrimaryRegion),
+		)
+	}
+
+	// To update the primary region we need to modify the database descriptor, update the multi-region
+	// enum, and write a new zone configuration.
+	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Get the type descriptor for the multi-region enum.
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID)
+	if err != nil {
+		return err
+	}
+
+	// Update the primary region in the type descriptor, and write it back out.
+	typeDesc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
+	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+		return nil
+	}
+
+	// Validate that the enum's PrimaryRegion matches the database's PrimaryRegion.
+	// This should occur automatically, as the enum directly references the database's
+	// PrimaryRegion, but validate that here to be safe.
+	enumPrimaryRegion, err := typeDesc.PrimaryRegion()
+	if err != nil {
+		return err
+	}
+
+	databasePrimaryRegion, err := n.desc.PrimaryRegion()
+	if err != nil {
+		return err
+	}
+
+	if enumPrimaryRegion != databasePrimaryRegion {
+		return errors.AssertionFailedf(
+			"Multi-region enum primary region %q does not match database primary region %q",
+			enumPrimaryRegion,
+			databasePrimaryRegion)
+	}
+
+	// Update the database's zone configuration.
+	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		tree.Name(n.desc.Name),
+		*n.desc.RegionConfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// setInitialPrimaryRegion sets the primary region in cases where the database is already
+// a multi-region database.
+func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
+	// Create the region config structure to be added to the database descriptor.
+	regionConfig, err := params.p.createRegionConfig(
+		params.ctx,
+		tree.SurvivalGoalDefault,
+		n.n.PrimaryRegion,
+		[]tree.Name{n.n.PrimaryRegion},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Write the modified database descriptor.
+	n.desc.RegionConfig = regionConfig
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Initialize that multi-region database by creating the multi-region enum
+	// and the database-level zone configuration.
+	return params.p.initializeMultiRegionDatabase(params.ctx, n.desc)
+}
+
+func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
+	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
+	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	// There are two paths to consider here: either this is the first setting of the
+	// primary region, OR we're updating the primary region. In the case where this
+	// is the first setting of the primary region, the call will turn the database into
+	// a "multi-region" database. This requires creating a RegionConfig structure in the
+	// database descriptor, creating a multi-region enum, and setting up the database-level
+	// zone configuration. The second case is simpler, as the multi-region infrastructure
+	// is already setup. In this case we just need to update the database and type descriptor,
+	// and the zone config.
+	if !n.desc.IsMultiRegion() {
+		err := n.setInitialPrimaryRegion(params)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := n.switchPrimaryRegion(params)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Log Alter Database Primary Region event. This is an auditable log event and is recorded
+	// in the same transaction as the database descriptor, and zone configuration updates.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabasePrimaryRegion{
+			DatabaseName:      n.desc.GetName(),
+			PrimaryRegionName: n.n.PrimaryRegion.String(),
+		})
+}
+
+func (n *alterDatabasePrimaryRegionNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabasePrimaryRegionNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabasePrimaryRegionNode) Close(context.Context)        {}
+func (n *alterDatabasePrimaryRegionNode) ReadingOwnWrites()            {}
+
+type alterDatabasePrimaryRegionNode struct {
+	n    *tree.AlterDatabasePrimaryRegion
+	desc *dbdesc.Mutable
 }
 
 // AlterDatabaseSurvivalGoal transforms a tree.AlterDatabaseSurvivalGoal into a plan node.
