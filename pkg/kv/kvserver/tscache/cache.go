@@ -114,20 +114,26 @@ func (v cacheValue) String() string {
 //
 // This ratcheting policy is shared across all Cache implementations, even if
 // they do not use this function directly.
-func ratchetValue(old, new cacheValue) (cacheValue, bool) {
+func ratchetValue(old, new cacheValue) (res cacheValue, updated bool) {
 	if old.ts.Less(new.ts) {
-		// Ratchet to new value.
+		// New value newer. Ratchet to new value.
 		return new, true
 	} else if new.ts.Less(old.ts) {
-		// Nothing to update.
+		// Old value newer. Nothing to update.
 		return old, false
-	} else if new.txnID != old.txnID {
-		// old.ts == new.ts but the values have different txnIDs. Remove the
-		// transaction ID from the value so that it is no longer owned by any
-		// transaction.
-		new.txnID = noTxnID
-		return new, old.txnID != noTxnID
 	}
-	// old == new.
-	return old, false
+
+	// Equal times.
+	if new.ts.Synthetic != old.ts.Synthetic {
+		// old.ts == new.ts but the values have different synthetic flags.
+		// Remove the synthetic flag from the resulting value.
+		new.ts.Synthetic = false
+	}
+	if new.txnID != old.txnID {
+		// old.ts == new.ts but the values have different txnIDs. Remove the
+		// transaction ID from the resulting value so that it is no longer owned
+		// by any transaction.
+		new.txnID = noTxnID
+	}
+	return new, new != old
 }
