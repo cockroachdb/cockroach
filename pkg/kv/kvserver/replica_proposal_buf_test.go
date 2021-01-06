@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,33 +36,6 @@ type testProposer struct {
 	lai        uint64
 	enqueued   int
 	registered int
-
-	// If not nil, this can be a testProposerRaft used to mock the raft group
-	// passed to FlushLockedWithRaftGroup().
-	raftGroup proposerRaft
-	// If not nil, this is called by RejectProposalWithRedirectLocked(). If nil,
-	// RejectProposalWithRedirectLocked() panics.
-	onRejectProposalWithRedirectLocked func(prop *ProposalData, redirectTo roachpb.ReplicaID)
-}
-
-type testProposerRaft struct {
-	status raft.BasicStatus
-}
-
-var _ proposerRaft = testProposerRaft{}
-
-func (t testProposerRaft) Step(raftpb.Message) error {
-	// TODO(andrei, nvanbenschoten): Capture the message and test against it.
-	return nil
-}
-
-func (t testProposerRaft) BasicStatus() raft.BasicStatus {
-	return t.status
-}
-
-func (t testProposerRaft) ProposeConfChange(i raftpb.ConfChangeI) error {
-	// TODO(andrei, nvanbenschoten): Capture the message and test against it.
-	return nil
 }
 
 func (t *testProposer) locker() sync.Locker {
@@ -90,22 +62,13 @@ func (t *testProposer) enqueueUpdateCheck() {
 	t.enqueued++
 }
 
-func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
-	// Note that t.raftGroup can be nil, which FlushLockedWithRaftGroup supports.
-	return fn(t.raftGroup)
+func (t *testProposer) withGroupLocked(fn func(*raft.RawNode) error) error {
+	// Pass nil for the RawNode, which FlushLockedWithRaftGroup supports.
+	return fn(nil)
 }
 
 func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
-}
-
-func (t *testProposer) rejectProposalWithRedirectLocked(
-	ctx context.Context, prop *ProposalData, redirectTo roachpb.ReplicaID,
-) {
-	if t.onRejectProposalWithRedirectLocked == nil {
-		panic("unexpected rejectProposalWithRedirectLocked() call")
-	}
-	t.onRejectProposalWithRedirectLocked(prop, redirectTo)
 }
 
 func newPropData(leaseReq bool) (*ProposalData, []byte) {
@@ -377,91 +340,4 @@ func TestPropBufCnt(t *testing.T) {
 	assert.Equal(t, 0, res.arrayLen())
 	assert.Equal(t, -1, res.arrayIndex())
 	assert.Equal(t, uint64(0), res.leaseIndexOffset())
-}
-
-// Test that the proposal buffer rejects lease acquisition proposals from
-// followers. We want the leader to take the lease; see comments in
-// FlushLockedWithRaftGroup().
-func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	self := uint64(1)
-	// Each subtest will try to propose a lease acquisition in a different Raft
-	// scenario. Some proposals should be allowed, some should be rejected.
-	for _, tc := range []struct {
-		name         string
-		state        raft.StateType
-		leader       uint64
-		expRejection bool
-	}{
-		{
-			name:   "leader",
-			state:  raft.StateLeader,
-			leader: self,
-			// No rejection. The leader can request a lease.
-			expRejection: false,
-		},
-		{
-			name:  "follower known leader",
-			state: raft.StateFollower,
-			// Someone else is leader.
-			leader: self + 1,
-			// Rejection - a follower can't request a lease.
-			expRejection: true,
-		},
-		{
-			name:  "follower unknown leader",
-			state: raft.StateFollower,
-			// Unknown leader.
-			leader: raft.None,
-			// No rejection if the leader is unknown. See comments in
-			// FlushLockedWithRaftGroup().
-			expRejection: false,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var p testProposer
-			// p.replicaID() is hardcoded; it'd better be hardcoded to what this test
-			// expects.
-			require.Equal(t, self, uint64(p.replicaID()))
-
-			var rejected roachpb.ReplicaID
-			if tc.expRejection {
-				p.onRejectProposalWithRedirectLocked = func(_ *ProposalData, redirectTo roachpb.ReplicaID) {
-					if rejected != 0 {
-						t.Fatalf("unexpected 2nd rejection")
-					}
-					rejected = redirectTo
-				}
-			} else {
-				p.onRejectProposalWithRedirectLocked = func(_ *ProposalData, _ roachpb.ReplicaID) {
-					t.Fatalf("unexpected redirection")
-				}
-			}
-
-			raftStatus := raft.BasicStatus{
-				ID: self,
-				SoftState: raft.SoftState{
-					RaftState: tc.state,
-					Lead:      tc.leader,
-				},
-			}
-			r := testProposerRaft{status: raftStatus}
-			p.raftGroup = r
-			var b propBuf
-			b.Init(&p)
-
-			pd, data := newPropData(true /* leaseReq */)
-			_, err := b.Insert(ctx, pd, data)
-			require.NoError(t, err)
-			require.NoError(t, b.flushLocked(ctx))
-			if tc.expRejection {
-				require.Equal(t, roachpb.ReplicaID(tc.leader), rejected)
-			} else {
-				require.Equal(t, roachpb.ReplicaID(0), rejected)
-			}
-		})
-	}
 }
