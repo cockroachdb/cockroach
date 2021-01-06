@@ -65,6 +65,9 @@ CREATE TABLE partial_index_tab
 )
 ----
 
+# Insert statistics for index_tab. Histogram buckets are included for the
+# latitude column in order to make the optimizer choose specific plans for
+# SplitScanIntoUnionScans tests.
 exec-ddl
 ALTER TABLE index_tab INJECT STATISTICS '[
   {
@@ -83,7 +86,14 @@ ALTER TABLE index_tab INJECT STATISTICS '[
     "columns": ["latitude"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 1000000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "null_count": 0,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "-5"},
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 0, "num_range": 998000, "distinct_range": 98, "upper_bound": "2000"}
+    ]
   },
   {
     "columns": ["longitude"],
@@ -1174,13 +1184,13 @@ limit
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
  ├── sort
- │    ├── columns: latitude:4 longitude:5 data1:6!null data2:7!null
+ │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  │    ├── key: (4-7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    └── union
- │         ├── columns: latitude:4 longitude:5 data1:6!null data2:7!null
- │         ├── left columns: latitude:4 longitude:5 data1:6!null data2:7!null
+ │         ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
+ │         ├── left columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  │         ├── right columns: latitude:64 longitude:65 data1:66 data2:67
  │         ├── key: (4-7)
  │         ├── union
@@ -1211,8 +1221,8 @@ limit
  │         │         ├── limit: 10
  │         │         └── fd: ()-->(54,55)
  │         └── scan index_tab@d
- │              ├── columns: latitude:64 longitude:65 data1:66!null data2:67!null
- │              └── constraint: /4/5/6/7/1
+ │              ├── columns: latitude:64!null longitude:65 data1:66!null data2:67!null
+ │              └── constraint: /64/65/66/67/61
  │                   ├── [/-5 - /-5]
  │                   └── [/0 - /0]
  └── 10
