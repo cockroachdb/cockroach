@@ -400,9 +400,9 @@ func AggregateIsNeverNull(op Operator) bool {
 
 // AggregatesCanMerge returns true if the given inner and outer operators can be
 // replaced with a single equivalent operator, assuming the outer operator is
-// aggregating on the inner. In other words, the inner-outer aggregate pair
-// forms a valid "decomposition" of a single aggregate. For example, the
-// following pairs of queries are equivalent:
+// aggregating on the inner and that both operators are unordered. In other
+// words, the inner-outer aggregate pair forms a valid "decomposition" of a
+// single aggregate. For example, the following pairs of queries are equivalent:
 //
 //   SELECT sum(s) FROM (SELECT sum(y) FROM xy GROUP BY x) AS f(s);
 //   SELECT sum(y) FROM xy;
