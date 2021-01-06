@@ -27,7 +27,9 @@ var activeRecordBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var activeRecordBlockList21_1 = blocklist{}
+var activeRecordBlockList21_1 = blocklist{
+	"ActiveRecord::CockroachDB::UnloggedTablesTest#test_gracefully_handles_temporary_tables": "modified to pass on 20.2",
+}
 
 var activeRecordBlockList20_2 = blocklist{}
 

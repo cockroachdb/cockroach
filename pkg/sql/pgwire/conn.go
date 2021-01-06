@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -89,10 +90,8 @@ type conn struct {
 
 	sv *settings.Values
 
-	// testingLogEnabled is used in unit tests in this package to
-	// force-enable auth logging without dancing around the
-	// asynchronicity of cluster settings.
-	testingLogEnabled bool
+	// alwaysLogAuthActivity is used force-enables logging of authn events.
+	alwaysLogAuthActivity bool
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -147,11 +146,18 @@ func (s *Server) serveConn(
 	}
 
 	c := newConn(netConn, sArgs, &s.metrics, &s.execCfg.Settings.SV)
-	c.testingLogEnabled = atomic.LoadInt32(&s.testingLogEnabled) > 0
+	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingLogEnabled) > 0
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)
 }
+
+// alwaysLogAuthActivity makes it possible to unconditionally enable
+// authentication logging when cluster settings do not work reliably,
+// e.g. in multi-tenant setups in v20.2. This override mechanism
+// can be removed after all of CC is moved to use v21.1 or a version
+// which supports cluster settings.
+var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN_EVENTS", false)
 
 func newConn(
 	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, sv *settings.Values,
@@ -187,7 +193,7 @@ func (c *conn) GetErr() error {
 }
 
 func (c *conn) authLogEnabled() bool {
-	return c.testingLogEnabled || logSessionAuth.Get(c.sv)
+	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
 
 // serveImpl continuously reads from the network connection and pushes execution
