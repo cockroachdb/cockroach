@@ -121,7 +121,7 @@ func TestCompile(t *testing.T) {
 					expected: []Stage{
 						{
 							[]scop.Op{
-								scop.AddColumnDescriptor{
+								scop.MakeAddedColumnDescriptorDeleteOnly{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
@@ -203,7 +203,7 @@ func TestCompile(t *testing.T) {
 					expected: []Stage{
 						{
 							[]scop.Op{
-								scop.AddIndexDescriptor{
+								scop.MakeAddedNonPrimaryIndexDeleteOnly{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:             newIdxID,
@@ -314,13 +314,13 @@ func TestCompile(t *testing.T) {
 					expected: []Stage{
 						{
 							[]scop.Op{
-								scop.AddColumnDescriptor{
+								scop.MakeAddedColumnDescriptorDeleteOnly{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
 									},
 								},
-								scop.AddIndexDescriptor{
+								scop.MakeAddedNonPrimaryIndexDeleteOnly{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:        newPrimaryIdxID,
@@ -564,13 +564,13 @@ func TestCompile(t *testing.T) {
 					expected: []Stage{
 						{
 							[]scop.Op{
-								scop.AddColumnDescriptor{
+								scop.MakeAddedColumnDescriptorDeleteOnly{
 									TableID: tableID,
 									Column: descpb.ColumnDescriptor{
 										ID: newColID,
 									},
 								},
-								scop.AddIndexDescriptor{
+								scop.MakeAddedNonPrimaryIndexDeleteOnly{
 									TableID: tableID,
 									Index: descpb.IndexDescriptor{
 										ID:     newPrimaryIdxID,

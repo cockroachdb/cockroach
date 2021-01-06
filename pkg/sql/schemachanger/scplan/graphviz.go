@@ -113,17 +113,6 @@ func targetStateID(targetID int, state scpb.State) string {
 	return fmt.Sprintf("%d:%s", targetID, state)
 }
 
-func jsonLabel(o interface{}) dot.Literal {
-	raw, err := json.MarshalIndent(o, "", "    ")
-	if err != nil {
-		panic(err)
-	}
-	s := strings.Replace(
-		fmt.Sprintf("%q", fmt.Sprintf("%T%s", o, raw)),
-		`\n`, `\l`, -1)
-	return dot.Literal(s[:len(s)-1] + `\l"`)
-}
-
 func htmlLabel(o interface{}) dot.HTML {
 	var buf strings.Builder
 	if err := objectTemplate.Execute(&buf, o); err != nil {

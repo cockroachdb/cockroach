@@ -1,6 +1,7 @@
 package scplan
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -58,13 +59,13 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.AddColumn, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PostStatementPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_ONLY,
 					op: func(this *scpb.AddColumn) scop.Op {
-						return scop.AddColumnDescriptor{
+						return scop.MakeAddedColumnDescriptorDeleteOnly{
 							TableID: this.TableID,
 							Column:  this.Column,
 						}
@@ -75,17 +76,15 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.AddColumn, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.AddColumn) scop.Op {
-						return scop.ColumnDescriptorStateChange{
-							TableID:   this.TableID,
-							ColumnID:  this.Column.ID,
-							State:     scpb.State_DELETE_ONLY,
-							NextState: scpb.State_DELETE_AND_WRITE_ONLY,
+						return scop.MakeAddedColumnDescriptorDeleteAndWriteOnly{
+							TableID:  this.TableID,
+							ColumnID: this.Column.ID,
 						}
 					},
 				},
@@ -94,11 +93,9 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_PUBLIC,
 					op: func(this *scpb.AddColumn) scop.Op {
-						return scop.ColumnDescriptorStateChange{
-							TableID:   this.TableID,
-							ColumnID:  this.Column.ID,
-							State:     scpb.State_DELETE_AND_WRITE_ONLY,
-							NextState: scpb.State_PUBLIC,
+						return scop.MakeColumnDescriptorPublic{
+							TableID:  this.TableID,
+							ColumnID: this.Column.ID,
 						}
 					},
 				},
@@ -128,17 +125,19 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.AddPrimaryIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PostStatementPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_ONLY,
 					op: func(this *scpb.AddPrimaryIndex) scop.Op {
-						return scop.MakeAddedPrimaryIndexDeleteOnly{
-							TableID:          this.TableID,
-							Index:            this.Index,
-							StoreColumnIDs:   this.StoreColumnIDs,
-							StoreColumnNames: this.StoreColumnNames,
+						idx := this.Index
+						idx.StoreColumnNames = this.StoreColumnNames
+						idx.StoreColumnIDs = this.StoreColumnIDs
+						idx.EncodingType = descpb.PrimaryIndexEncoding
+						return scop.MakeAddedIndexDeleteOnly{
+							TableID: this.TableID,
+							Index:   idx,
 						}
 					},
 				},
@@ -147,7 +146,7 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.AddPrimaryIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
@@ -206,7 +205,7 @@ var rules = map[scpb.Target]targetRules{
 					op: func(this *scpb.AddPrimaryIndex) scop.Op {
 						return scop.MakeAddedPrimaryIndexPublic{
 							TableID: this.TableID,
-							IndexID: this.Index.ID,
+							Index:   this.Index,
 						}
 					},
 				},
@@ -243,11 +242,9 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.DropColumn) scop.Op {
-						return scop.ColumnDescriptorStateChange{
-							TableID:   this.TableID,
-							ColumnID:  this.Column.ID,
-							State:     scpb.State_PUBLIC,
-							NextState: scpb.State_DELETE_AND_WRITE_ONLY,
+						return scop.MakeDroppedColumnDeleteAndWriteOnly{
+							TableID:  this.TableID,
+							ColumnID: this.Column.ID,
 						}
 					},
 				},
@@ -255,7 +252,7 @@ var rules = map[scpb.Target]targetRules{
 			scpb.State_DELETE_AND_WRITE_ONLY: {
 				{
 					predicate: func(this *scpb.DropColumn, flags CompileFlags) bool {
-						return !flags.CreatedDescriptorIDs.contains(this.TableID) &&
+						return !flags.CreatedDescriptorIDs.Contains(this.TableID) &&
 							(flags.ExecutionPhase == PostStatementPhase ||
 								flags.ExecutionPhase == PreCommitPhase)
 					},
@@ -263,11 +260,9 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_DELETE_ONLY,
 					op: func(this *scpb.DropColumn) scop.Op {
-						return scop.ColumnDescriptorStateChange{
-							TableID:   this.TableID,
-							ColumnID:  this.Column.ID,
-							State:     scpb.State_DELETE_AND_WRITE_ONLY,
-							NextState: scpb.State_DELETE_ONLY,
+						return scop.MakeDroppedColumnDeleteOnly{
+							TableID:  this.TableID,
+							ColumnID: this.Column.ID,
 						}
 					},
 				},
@@ -276,11 +271,9 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.DropColumn) scop.Op {
-						return scop.ColumnDescriptorStateChange{
-							TableID:   this.TableID,
-							ColumnID:  this.Column.ID,
-							State:     scpb.State_DELETE_ONLY,
-							NextState: scpb.State_ABSENT,
+						return scop.MakeColumnAbsent{
+							TableID:  this.TableID,
+							ColumnID: this.Column.ID,
 						}
 					},
 				},
@@ -316,17 +309,15 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.DropIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PostStatementPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.DropIndex) scop.Op {
-						return scop.IndexDescriptorStateChange{
-							TableID:   this.TableID,
-							IndexID:   this.IndexID,
-							State:     scpb.State_PUBLIC,
-							NextState: scpb.State_DELETE_AND_WRITE_ONLY,
+						return scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly{
+							TableID: this.TableID,
+							IndexID: this.IndexID,
 						}
 					},
 				},
@@ -335,17 +326,15 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.DropIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_ONLY,
 					op: func(this *scpb.DropIndex) scop.Op {
-						return scop.IndexDescriptorStateChange{
-							TableID:   this.TableID,
-							IndexID:   this.IndexID,
-							State:     scpb.State_DELETE_AND_WRITE_ONLY,
-							NextState: scpb.State_DELETE_ONLY,
+						return scop.MakeDroppedIndexDeleteOnly{
+							TableID: this.TableID,
+							IndexID: this.IndexID,
 						}
 					},
 				},
@@ -354,11 +343,9 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.DropIndex) scop.Op {
-						return scop.IndexDescriptorStateChange{
-							TableID:   this.TableID,
-							IndexID:   this.IndexID,
-							State:     scpb.State_DELETE_ONLY,
-							NextState: scpb.State_ABSENT,
+						return scop.MakeIndexAbsent{
+							TableID: this.TableID,
+							IndexID: this.IndexID,
 						}
 					},
 				},
@@ -395,17 +382,20 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.DropPrimaryIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PostStatementPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
 					nextState: scpb.State_DELETE_AND_WRITE_ONLY,
 					op: func(this *scpb.DropPrimaryIndex) scop.Op {
+						// Most of this logic is taken from MakeMutationComplete().
+						idx := this.Index
+						idx.StoreColumnIDs = this.StoreColumnIDs
+						idx.StoreColumnNames = this.StoreColumnNames
+						idx.EncodingType = descpb.PrimaryIndexEncoding
 						return scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly{
-							TableID:          this.TableID,
-							IndexID:          this.Index.ID,
-							StoreColumnIDs:   this.StoreColumnIDs,
-							StoreColumnNames: this.StoreColumnNames,
+							TableID: this.TableID,
+							Index:   idx,
 						}
 					},
 				},
@@ -414,7 +404,7 @@ var rules = map[scpb.Target]targetRules{
 				{
 					predicate: func(this *scpb.DropPrimaryIndex, flags CompileFlags) bool {
 						return flags.ExecutionPhase == PreCommitPhase &&
-							!flags.CreatedDescriptorIDs.contains(this.TableID)
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
 				{
@@ -431,7 +421,7 @@ var rules = map[scpb.Target]targetRules{
 				{
 					nextState: scpb.State_ABSENT,
 					op: func(this *scpb.DropPrimaryIndex) scop.Op {
-						return scop.MakeDroppedIndexAbsent{
+						return scop.MakeIndexAbsent{
 							TableID: this.TableID,
 							IndexID: this.Index.ID,
 						}
@@ -446,7 +436,7 @@ var rules = map[scpb.Target]targetRules{
 			scpb.State_ABSENT: {
 				{
 					predicate: func(this *scpb.AddColumnFamily, flags CompileFlags) bool {
-						return !flags.CreatedDescriptorIDs.contains(this.TableID) &&
+						return !flags.CreatedDescriptorIDs.Contains(this.TableID) &&
 							flags.ExecutionPhase == PostStatementPhase
 					},
 				},

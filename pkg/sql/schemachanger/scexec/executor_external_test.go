@@ -157,7 +157,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
-					scop.AddIndexDescriptor{
+					scop.MakeAddedNonPrimaryIndexDeleteOnly{
 						TableID: table.ID,
 						Index:   indexToAdd,
 					},

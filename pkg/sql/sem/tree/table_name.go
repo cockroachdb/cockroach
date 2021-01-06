@@ -190,6 +190,7 @@ func (n *TableIndexName) Format(ctx *FmtCtx) {
 
 	// The table is not specified. The schema/catalog can still be specified.
 	if n.Table.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
+		n.Table.ToUnresolvedObjectName()
 		ctx.FormatNode(&n.Table.ObjectNamePrefix)
 		ctx.WriteByte('.')
 	}

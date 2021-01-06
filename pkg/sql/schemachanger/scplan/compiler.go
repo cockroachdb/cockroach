@@ -1,20 +1,18 @@
 package scplan
 
 import (
-	"sort"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(ajwerner): There are some ordering requirements between ops in
-// the same stage. Make sure to deal with that. In particular, we need
-// to move public things out before we can move non-public things in.
-// There's some hackery but it's just that.
+type StageI interface {
+	Ops() scop.Ops
+	Targets() []scpb.Target
+	NextStates() []scpb.State
+}
 
 type Stage struct {
 	Ops         []scop.Op
@@ -31,27 +29,7 @@ const (
 
 type CompileFlags struct {
 	ExecutionPhase       ExecutionPhase
-	CreatedDescriptorIDs descIDSet
-}
-
-type descIDSet struct {
-	set util.FastIntSet
-}
-
-func makeDescIDSet(ids ...descpb.ID) descIDSet {
-	s := descIDSet{}
-	for _, id := range ids {
-		s.add(id)
-	}
-	return s
-}
-
-func (d *descIDSet) add(id descpb.ID) {
-	d.set.Add(int(id))
-}
-
-func (d *descIDSet) contains(id descpb.ID) bool {
-	return d.set.Contains(int(id))
+	CreatedDescriptorIDs catalog.DescriptorIDSet
 }
 
 type opEdge struct {
@@ -298,29 +276,6 @@ func buildStages(g *SchemaChange, flags CompileFlags) error {
 					}
 				}
 			}
-			// TODO(ajwerner): Make this way better
-			sort.Slice(s.ops, func(i, j int) bool {
-				// This is terrible. We just need to drop indexes before adding indexes
-				// so that replacing an index doesn't cause the index we want to remove
-				// from being overwritten before we copy it to the mutations list.
-				sortVal := func(op scop.Op) int {
-					switch t := op.(type) {
-					case scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
-						scop.MakeDroppedIndexDeleteOnly,
-						scop.MakeDroppedIndexAbsent:
-						return -1
-					case scop.MakeAddedPrimaryIndexDeleteOnly,
-						scop.MakeAddedIndexDeleteAndWriteOnly,
-						scop.MakeAddedPrimaryIndexPublic:
-						return 0
-					case scop.IndexDescriptorStateChange:
-						return int(t.State)
-					default:
-						return 10
-					}
-				}
-				return sortVal(s.ops[i]) < sortVal(s.ops[j])
-			})
 			s.next = next
 			g.stages = append(g.stages, s)
 			cur = next
