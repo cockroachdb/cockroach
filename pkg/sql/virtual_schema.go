@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -175,6 +176,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		tree.PersistencePermanent,
 	)
 	if err != nil {
+		log.Errorf(ctx, "initVirtualDesc problem: %v\n%s", err, t.schema)
 		return mutDesc.TableDescriptor, err
 	}
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {

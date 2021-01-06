@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // GetPGCatalogSQL is a query uses udt_name::regtype instead of data_type column because
@@ -181,6 +184,30 @@ func (p PGCatalogTables) rewriteDiffs(diffFile string) error {
 	}
 
 	return nil
+}
+
+// getNotImplementedTables retrieves tables that are not yet part of crdb
+func (p PGCatalogTables) getNotImplementedTables(source PGCatalogTables) PGCatalogTables {
+	notImplemented := make(PGCatalogTables)
+	for tableName := range p {
+		if len(p[tableName]) == 0 && len(source[tableName].getNotImplementedTypes()) == 0 {
+			notImplemented[tableName] = source[tableName]
+		}
+	}
+	return notImplemented
+}
+
+//AreAllTypesImplemented verifies that all the types are implemented in cockroach db
+func (c PGCatalogColumns) getNotImplementedTypes() map[oid.Oid]string {
+	notImplemented := make(map[oid.Oid]string)
+	for _, column := range c {
+		typeOid := oid.Oid(column.Oid)
+		if _, ok := types.OidToType[typeOid]; !ok || typeOid == oid.T_anyarray {
+			notImplemented[typeOid] = column.DataType
+		}
+	}
+
+	return notImplemented
 }
 
 // Save have the purpose of storing all the data retrieved from postgres and useful information as postgres version
