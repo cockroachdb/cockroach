@@ -2476,6 +2476,13 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	colOffset int,
 	partitionNames map[string]string,
 ) error {
+	if partDesc.NumImplicitColumns > partDesc.NumColumns {
+		return errors.Newf(
+			"cannot have implicit partitioning columns (%d) > partitioning columns (%d)",
+			partDesc.NumImplicitColumns,
+			partDesc.NumColumns,
+		)
+	}
 	if partDesc.NumColumns == 0 {
 		return nil
 	}
