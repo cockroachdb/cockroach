@@ -60,6 +60,7 @@ type mockLockTableGuard struct {
 	state         waitingState
 	signal        chan struct{}
 	stateObserved chan struct{}
+	toResolve     []roachpb.LockUpdate
 }
 
 // mockLockTableGuard implements the lockTableGuard interface.
@@ -72,17 +73,20 @@ func (g *mockLockTableGuard) CurState() waitingState {
 	}
 	return s
 }
+func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
+	return g.toResolve
+}
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 
-// mockLockTableGuard implements the LockManager interface.
-func (g *mockLockTableGuard) OnLockAcquired(_ context.Context, _ *roachpb.LockAcquisition) {
-	panic("unimplemented")
+// mockLockTable overrides TransactionIsFinalized, which is the only LockTable
+// method that should be called in this test.
+type mockLockTable struct {
+	lockTableImpl
+	txnFinalizedFn func(txn *roachpb.Transaction)
 }
-func (g *mockLockTableGuard) OnLockUpdated(_ context.Context, up *roachpb.LockUpdate) {
-	if g.state.held && g.state.txn.ID == up.Txn.ID && g.state.key.Equal(up.Key) {
-		g.state = waitingState{kind: doneWaiting}
-		g.notify()
-	}
+
+func (lt *mockLockTable) TransactionIsFinalized(txn *roachpb.Transaction) {
+	lt.txnFinalizedFn(txn)
 }
 
 func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *mockLockTableGuard) {
@@ -97,7 +101,7 @@ func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *moc
 		st:      st,
 		stopper: stop.NewStopper(),
 		ir:      ir,
-		lm:      guard,
+		lt:      &mockLockTable{},
 	}
 	return w, ir, guard
 }
@@ -306,9 +310,13 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				resp := &roachpb.Transaction{TxnMeta: *pusheeArg, Status: roachpb.ABORTED}
 
 				// If the lock is held, we'll try to resolve it now that
-				// we know the holder is ABORTED. Otherwide, immediately
+				// we know the holder is ABORTED. Otherwise, immediately
 				// tell the request to stop waiting.
 				if lockHeld {
+					w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {
+						require.Equal(t, pusheeTxn.ID, txn.ID)
+						require.Equal(t, roachpb.ABORTED, txn.Status)
+					}
 					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
@@ -452,6 +460,10 @@ func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPush
 
 			// Next, we'll try to resolve the lock now that we know the
 			// holder is ABORTED.
+			w.lt.(*mockLockTable).txnFinalizedFn = func(txn *roachpb.Transaction) {
+				require.Equal(t, pusheeTxn.ID, txn.ID)
+				require.Equal(t, roachpb.ABORTED, txn.Status)
+			}
 			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
 				require.Equal(t, keyA, intent.Key)
 				require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
@@ -544,18 +556,16 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	}
 	keyA := roachpb.Key("keyA")
 	pusheeTxn := makeTxnProto("pushee")
-
-	// Add the conflicting txn to the finalizedTxnCache so that the request
-	// avoids the transaction record push and defers the intent resolution.
+	// Make the pusheeTxn ABORTED so that the request avoids the transaction
+	// record push and defers the intent resolution.
 	pusheeTxn.Status = roachpb.ABORTED
-	w.finalizedTxnCache.add(&pusheeTxn)
 
 	g.state = waitingState{
-		kind:        waitForDistinguished,
-		txn:         &pusheeTxn.TxnMeta,
-		key:         keyA,
-		held:        true,
+		kind:        doneWaiting,
 		guardAccess: spanset.SpanReadWrite,
+	}
+	g.toResolve = []roachpb.LockUpdate{
+		roachpb.MakeLockUpdate(&pusheeTxn, roachpb.Span{Key: keyA}),
 	}
 	g.notify()
 

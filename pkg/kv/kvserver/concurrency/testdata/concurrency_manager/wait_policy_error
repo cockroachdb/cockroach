@@ -108,7 +108,7 @@ sequence req=reqNoWait1
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error hits abandoned lock.
-# The request resolves the abandoned lock and proceeds.
+# The request removes the abandoned unreplicated lock and proceeds.
 # -------------------------------------------------------------
 
 on-txn-updated txn=txn1 status=committed
@@ -121,11 +121,6 @@ on-txn-updated txn=txn1 status=committed
 sequence req=reqNoWait1
 ----
 [5] sequence reqNoWait1: sequencing request
-[5] sequence reqNoWait1: acquiring latches
-[5] sequence reqNoWait1: scanning lock table for conflicting locks
-[5] sequence reqNoWait1: waiting in lock wait-queues
-[5] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
-[5] sequence reqNoWait1: resolving intent "k" for txn 00000001 with COMMITTED status
 [5] sequence reqNoWait1: acquiring latches
 [5] sequence reqNoWait1: scanning lock table for conflicting locks
 [5] sequence reqNoWait1: sequencing complete, returned guard
@@ -244,7 +239,7 @@ sequence req=reqNoWait4
 [12] sequence reqNoWait4: acquiring latches
 [12] sequence reqNoWait4: scanning lock table for conflicting locks
 [12] sequence reqNoWait4: waiting in lock wait-queues
-[12] sequence reqNoWait4: pushing txn 00000002 to check if abandoned
+[12] sequence reqNoWait4: resolving a batch of 1 intent(s)
 [12] sequence reqNoWait4: resolving intent "k5" for txn 00000002 with ABORTED status
 [12] sequence reqNoWait4: acquiring latches
 [12] sequence reqNoWait4: scanning lock table for conflicting locks
@@ -262,7 +257,7 @@ debug-lock-table
 ----
 global: num=1
  lock: "k4"
-  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl epoch: 0, seqs: [0]
+  holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,1, info: repl [holder finalized: aborted] epoch: 0, seqs: [0]
 local: num=0
 
 reset
