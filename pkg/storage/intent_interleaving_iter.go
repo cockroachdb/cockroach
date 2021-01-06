@@ -156,10 +156,6 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		// Make sure we don't step outside the lock table key space.
 		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
-	// TODO(sumeer): the creation of these iterators can race with concurrent
-	// mutations, which may make them inconsistent with each other. Add a way to
-	// cheaply clone the underlying Pebble iterator and use it in both places
-	// (the clones will have the same underlying memtables and sstables).
 	// Note that we can reuse intentKeyBuf after NewEngineIterator returns.
 	intentIter := reader.NewEngineIterator(intentOpts)
 
@@ -170,7 +166,12 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// or prefix iteration. We remember whether the upper bound has been
 	// set, so if not set, we can set the upper bound when SeekGE is called
 	// for prefix iteration.
-	iter := reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+	//
+	// The creation of these iterators can race with concurrent mutations, which
+	// may make them inconsistent with each other. So we clone here, to ensure
+	// consistency (certain Reader implementations already ensure consistency,
+	// but we want consistency for all Readers).
+	iter := newMVCCIteratorByCloningEngineIter(intentIter, opts)
 	return &intentInterleavingIter{
 		prefix:        opts.Prefix,
 		iter:          iter,
@@ -754,4 +755,16 @@ func (i *intentInterleavingIter) Stats() IteratorStats {
 
 func (i *intentInterleavingIter) SupportsPrev() bool {
 	return true
+}
+
+// newMVCCIteratorByCloningEngineIter assumes MVCCKeyIterKind and no timestamp
+// hints. It uses pebble.Iterator.Clone to ensure that the two iterators see
+// the identical engine state.
+func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
+	pIter := iter.GetRawIter()
+	it := newPebbleIterator(nil, pIter, opts)
+	if iter == nil {
+		panic("couldn't create a new iterator")
+	}
+	return it
 }
