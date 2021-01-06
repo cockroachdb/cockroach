@@ -4,7 +4,9 @@ go_library(
     name = "tracing",
     srcs = [
         "context.go",
+        "crdbspan.go",
         "grpc_interceptor.go",
+        "otspan.go",
         "recording.go",
         "shadow.go",
         "span.go",
