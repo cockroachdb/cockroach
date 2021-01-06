@@ -219,6 +219,12 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_implicit_column_partitioning.enabled",
+	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
+	false,
+)
+
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
@@ -2190,6 +2196,10 @@ func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 
 func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 	m.data.TempTablesEnabled = val
+}
+
+func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
+	m.data.ImplicitColumnPartitioningEnabled = val
 }
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
