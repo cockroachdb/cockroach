@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,9 +22,7 @@ import (
 )
 
 type unreliableRaftHandlerFuncs struct {
-	// If non-nil, can return false to avoid dropping the msg to
-	// unreliableRaftHandler.rangeID. If nil, all messages pertaining to the
-	// respective range are dropped.
+	// If non-nil, can return false to avoid dropping a msg to rangeID.
 	dropReq  func(*kvserver.RaftMessageRequest) bool
 	dropHB   func(*kvserver.RaftHeartbeat) bool
 	dropResp func(*kvserver.RaftMessageResponse) bool
@@ -50,7 +47,6 @@ func noopRaftHandlerFuncs() unreliableRaftHandlerFuncs {
 // unreliableRaftHandler drops all Raft messages that are addressed to the
 // specified rangeID, but lets all other messages through.
 type unreliableRaftHandler struct {
-	name    string
 	rangeID roachpb.RangeID
 	kvserver.RaftMessageHandler
 	unreliableRaftHandlerFuncs
@@ -72,14 +68,9 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		}
 	} else if req.RangeID == h.rangeID {
 		if h.dropReq == nil || h.dropReq(req) {
-			var prefix string
-			if h.name != "" {
-				prefix = fmt.Sprintf("[%s] ", h.name)
-			}
 			log.Infof(
 				ctx,
-				"%sdropping r%d Raft message %s",
-				prefix,
+				"dropping r%d Raft message %s",
 				req.RangeID,
 				raft.DescribeMessage(req.Message, func([]byte) string {
 					return "<omitted>"
