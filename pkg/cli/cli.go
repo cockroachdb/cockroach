@@ -21,6 +21,7 @@ import (
 
 	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -66,7 +67,7 @@ func Main() {
 
 	err := Run(os.Args[1:])
 
-	errCode := 0
+	errCode := exit.Success()
 	if err != nil {
 		// Display the error and its details/hints.
 		cliOutputError(stderr, err, true /*showSeverity*/, false /*verbose*/)
@@ -76,14 +77,14 @@ func Main() {
 
 		// Finally, extract the error code, as optionally specified
 		// by the sub-command.
-		errCode = 1
+		errCode = exit.UnspecifiedError()
 		var cliErr *cliError
 		if errors.As(err, &cliErr) {
 			errCode = cliErr.exitCode
 		}
 	}
 
-	os.Exit(errCode)
+	exit.WithCode(errCode)
 }
 
 // commandName computes the name of the command that args would invoke. For
@@ -101,7 +102,7 @@ func commandName(args []string) string {
 }
 
 type cliError struct {
-	exitCode int
+	exitCode exit.Code
 	severity log.Severity
 	cause    error
 }
@@ -184,7 +185,10 @@ func init() {
 			return err
 		}
 		fmt.Fprintln(c.OutOrStderr()) // provide a line break between usage and error
-		return err
+		return &cliError{
+			exitCode: exit.CommandLineFlagError(),
+			cause:    err,
+		}
 	})
 
 	cockroachCmd.AddCommand(

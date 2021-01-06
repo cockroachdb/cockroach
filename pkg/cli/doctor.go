@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -81,10 +82,19 @@ func wrapExamine(
 	valid, err := doctor.Examine(
 		context.Background(), descTable, namespaceTable, jobsTable, false, os.Stdout)
 	if err != nil {
-		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
+		return &cliError{
+			// Note: we are using "unspecified" here because the error
+			// return does not distinguish errors like connection errors
+			// etc, from errors during extraction.
+			exitCode: exit.UnspecifiedError(),
+			cause:    errors.Wrap(err, "examine failed"),
+		}
 	}
 	if !valid {
-		return &cliError{exitCode: 1, cause: errors.New("validation failed")}
+		return &cliError{
+			exitCode: exit.DoctorValidationFailed(),
+			cause:    errors.New("validation failed"),
+		}
 	}
 	fmt.Println("No problems found!")
 	return nil

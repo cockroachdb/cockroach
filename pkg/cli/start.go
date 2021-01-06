@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -264,7 +265,7 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 //
 // If the argument disableReplication is set the replication factor
 // will be set to 1 all zone configs.
-func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
+func runStart(cmd *cobra.Command, args []string, disableReplication bool) (returnErr error) {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -346,7 +347,7 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
-		return err
+		return &cliError{exitCode: exit.FatalError(), cause: err}
 	}
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
@@ -701,10 +702,6 @@ If problems persist, please see %s.`
 	defer shutdownSpan.Finish()
 	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
 
-	// returnErr will be populated with the error to use to exit the
-	// process (reported to the shell).
-	var returnErr error
-
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
 
 	// Block until one of the signals above is received or the stopper
@@ -731,6 +728,7 @@ If problems persist, please see %s.`
 		log.SetSync(true)
 
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
+
 		switch sig {
 		case os.Interrupt:
 			// Graceful shutdown after an interrupt should cause the process
@@ -738,7 +736,7 @@ If problems persist, please see %s.`
 			// "legitimate" and should be acknowledged with a success exit
 			// code. So we keep the error state here for later.
 			returnErr = &cliError{
-				exitCode: 1,
+				exitCode: exit.Interrupted(),
 				// INFO because a single interrupt is rather innocuous.
 				severity: log.Severity_INFO,
 				cause:    errors.New("interrupted"),

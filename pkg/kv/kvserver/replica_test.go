@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -3286,8 +3287,8 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -3322,7 +3323,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
 	}
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("did not fatal (exit status %d)", exitStatus)
 	}
 }
@@ -4074,8 +4075,8 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -4118,7 +4119,7 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
@@ -6455,8 +6456,8 @@ func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var exitStatus int
-	log.SetExitFunc(true /* hideStack */, func(i int) {
+	var exitStatus exit.Code
+	log.SetExitFunc(true /* hideStack */, func(i exit.Code) {
 		exitStatus = i
 	})
 	defer log.ResetExitFunc()
@@ -6494,7 +6495,7 @@ func TestReplicaCorruption(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.
-	if exitStatus != 255 {
+	if exitStatus != exit.FatalError() {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
