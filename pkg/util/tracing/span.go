@@ -436,6 +436,9 @@ func (s *Span) Finish() {
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
+	s.tracer.activeSpans.Lock()
+	delete(s.tracer.activeSpans.m, s)
+	s.tracer.activeSpans.Unlock()
 }
 
 // Meta returns the information which needs to be propagated across
