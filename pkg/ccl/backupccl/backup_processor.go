@@ -224,6 +224,7 @@ func runBackupProcessor(
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
 					ReturnSST:                           writeSSTsInProcessor,
+					OmitChecksum:                        true,
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,

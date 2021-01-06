@@ -9,7 +9,6 @@
 package backupccl
 
 import (
-	"bytes"
 	"context"
 	"io/ioutil"
 
@@ -210,16 +209,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			fileContents, err = storageccl.DecryptFile(fileContents, rd.spec.Encryption.Key)
 			if err != nil {
 				return summary, err
-			}
-		}
-
-		if len(file.Sha512) > 0 {
-			checksum, err := storageccl.SHA512ChecksumData(fileContents)
-			if err != nil {
-				return summary, err
-			}
-			if !bytes.Equal(checksum, file.Sha512) {
-				return summary, errors.Errorf("checksum mismatch for %s", file.Path)
 			}
 		}
 
