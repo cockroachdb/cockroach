@@ -260,7 +260,7 @@ var entryRE = regexp.MustCompile(
 		/* Goroutine ID     */ `(?:(\d+) )?` +
 		/* File/Line        */ `([^:]+):(\d+) ` +
 		/* Redactable flag  */ `((?:` + redactableIndicator + `)?) ` +
-		/* Context tags     */ `(?:\[([^]]+)\] )?`,
+		/* Context tags     */ `(?:\[((?:[^]]|\][^ ])+)\] )?`,
 )
 
 // EntryDecoder reads successive encoded log entries from the input
