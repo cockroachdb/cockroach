@@ -332,6 +332,14 @@ def go_deps():
         version = "v0.0.0-20191021191039-0944d244cd40",
     )
     go_repository(
+        name = "com_github_cespare_xxhash_v2",
+        build_file_proto_mode = "disable",
+        importpath = "github.com/cespare/xxhash/v2",
+        sum = "h1:6MnRN8NT7+YBpUIWxHtefFZOKTAPgGjpQSxqLNn0+qY=",
+        version = "v2.1.1",
+    )
+
+    go_repository(
         name = "com_github_client9_misspell",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/client9/misspell",
@@ -440,8 +448,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:ucQr+rdfI+sH8fNMAon3u0xnMkuxSoF2x67l/HhsnZw=",
-        version = "v0.0.0-20201223160501-f614b5ad0faa",
+        sum = "h1:7E8+895ZA2tkVvTTMbCNf2ejF47pFmo6wj0LSsvuGxM=",
+        version = "v0.0.0-20210105203824-97dabc1c2dca",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -2917,8 +2925,8 @@ def go_deps():
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sum = "h1:GnGfrp0fiNhiBS/v/aCFTmfEWgkvxW4Qiu8oM2/IfZ4=",
-        version = "v0.0.0-20201221025956-e89b829e73ea",
+        sum = "h1:XlAInxBYX5nBofPaY51uv/x9xmRgZGr/lDOsePd2AcE=",
+        version = "v0.0.0-20201229011636-eab1b5eb1a03",
     )
     go_repository(
         name = "org_golang_x_image",
@@ -2980,8 +2988,8 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sum = "h1:vRgIt+nup/B/BwIS0g2oC0haq0iqbV3ZA+u6+0TlNCo=",
-        version = "v0.0.0-20201223074533-0d417f636930",
+        sum = "h1:/dSxr6gT0FNI1MO5WLJo8mTmItROeOKTkDn+7OwWBos=",
+        version = "v0.0.0-20210105210732-16f7687f5001",
     )
     go_repository(
         name = "org_golang_x_text",
