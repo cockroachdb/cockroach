@@ -16,11 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +28,7 @@ func TestRecordingString(t *testing.T) {
 
 	root := tr.StartSpan("root", WithForceRealSpan())
 	root.SetVerbose(true)
-	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 1"))
+	root.Record("root 1")
 	// Hackily fix the timing on the first log message, so that we can check it later.
 	root.crdb.mu.recording.recordedLogs[0].Timestamp = root.crdb.startTime.Add(time.Millisecond)
 	// Sleep a bit so that everything that comes afterwards has higher timestamps
@@ -42,8 +40,8 @@ func TestRecordingString(t *testing.T) {
 	require.NoError(t, err)
 	wireContext, err := tr2.Extract(opentracing.HTTPHeaders, carrier)
 	remoteChild := tr2.StartSpan("remote child", WithParentAndManualCollection(wireContext))
-	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 2"))
-	remoteChild.LogFields(otlog.String(tracingpb.LogMessageField, "remote child 1"))
+	root.Record("root 2")
+	remoteChild.Record("remote child 1")
 	require.NoError(t, err)
 	remoteChild.Finish()
 	remoteRec := remoteChild.GetRecording()
@@ -51,14 +49,14 @@ func TestRecordingString(t *testing.T) {
 	require.NoError(t, err)
 	root.Finish()
 
-	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 3"))
+	root.Record("root 3")
 
 	ch2 := tr.StartSpan("local child", WithParentAndAutoCollection(root))
-	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 4"))
-	ch2.LogFields(otlog.String(tracingpb.LogMessageField, "local child 1"))
+	root.Record("root 4")
+	ch2.Record("local child 1")
 	ch2.Finish()
 
-	root.LogFields(otlog.String(tracingpb.LogMessageField, "root 5"))
+	root.Record("root 5")
 	root.Finish()
 
 	rec := root.GetRecording()
