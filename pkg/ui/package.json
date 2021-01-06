@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@cockroachlabs/admin-ui-components": "^0.1.28",
-    "analytics-node": "^3.4.0-beta.1",
+    "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
