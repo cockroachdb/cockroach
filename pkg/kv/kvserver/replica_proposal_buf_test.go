@@ -574,7 +574,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			leader: self + 1,
 			// The leader type makes it ineligible to get the lease. Thus, the local
 			// proposal will not be rejected.
-			leaderRepType: roachpb.VOTER_DEMOTING,
+			leaderRepType: roachpb.VOTER_DEMOTING_LEARNER,
 			expRejection:  false,
 		},
 		{

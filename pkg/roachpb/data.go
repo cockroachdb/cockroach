@@ -1618,7 +1618,7 @@ func confChangeImpl(
 			if err := checkExists(rDesc); err != nil {
 				return nil, err
 			}
-		case VOTER_DEMOTING:
+		case VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			// If a voter is demoted through joint consensus, it will
 			// be turned into a demoting voter first.
 			if err := checkExists(rDesc); err != nil {
@@ -1630,12 +1630,12 @@ func confChangeImpl(
 				NodeID: uint64(rDesc.ReplicaID),
 			})
 		case LEARNER:
-			// A learner could in theory show up in the descriptor if the
-			// removal was really a demotion and no joint consensus is used.
-			// But etcd/raft currently forces us to go through joint consensus
-			// when demoting, so demotions will always have a VOTER_DEMOTING
-			// instead. We must be straight-up removing a voter or learner, so
-			// the target should be gone from the descriptor at this point.
+			// A learner could in theory show up in the descriptor if the removal was
+			// really a demotion and no joint consensus is used. But etcd/raft
+			// currently forces us to go through joint consensus when demoting, so
+			// demotions will always have a VOTER_DEMOTING_LEARNER instead. We must be
+			// straight-up removing a voter or learner, so the target should be gone
+			// from the descriptor at this point.
 			if err := checkNotExists(rDesc); err != nil {
 				return nil, err
 			}
@@ -1672,17 +1672,12 @@ func confChangeImpl(
 			// We're adding a voter, but will transition into a joint config
 			// first.
 			changeType = raftpb.ConfChangeAddNode
-		case LEARNER:
-			// We're adding a learner.
-			// Note that we're guaranteed by virtue of the upstream
-			// ChangeReplicas txn that this learner is not currently a voter.
-			// Demotions (i.e. transitioning from voter to learner) are not
-			// represented in `added`; they're handled in `removed` above.
-			changeType = raftpb.ConfChangeAddLearnerNode
-		case NON_VOTER:
-			// We're adding a non-voter. Like the case above, we're guaranteed that
-			// this learner is not a voter. Promotions of non-voters to voters and
-			// demotions vice-versa are not currently supported.
+		case LEARNER, NON_VOTER:
+			// We're adding a learner or non-voter.
+			// Note that we're guaranteed by virtue of the upstream ChangeReplicas txn
+			// that this learner/non-voter is not currently a voter. Demotions (i.e.
+			// transitioning from voter to learner/non-voter) are not represented in
+			// `added`; they're handled in `removed` above.
 			changeType = raftpb.ConfChangeAddLearnerNode
 		default:
 			// A voter that is demoting was just removed and re-added in the
@@ -1703,7 +1698,7 @@ func confChangeImpl(
 	var enteringJoint bool
 	for _, rDesc := range replicas {
 		switch rDesc.GetType() {
-		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING:
+		case VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER:
 			enteringJoint = true
 		default:
 		}
