@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -278,7 +279,7 @@ var profileQuery = flag.String("profile-query", "kv-read", "name of query to run
 func TestCPUProfile(t *testing.T) {
 	skip.IgnoreLint(t,
 		"Remove this when profiling. Use profile flags above to configure. Sample command line: \n"+
-			"GOMAXPROCS=1 go test -run TestCPUProfile --logtostderr NONE && go tool pprof bench.test cpu.out",
+			"GOMAXPROCS=1 go test -run TestCPUProfile && go tool pprof cpu.out",
 	)
 
 	h := newHarness()
@@ -319,6 +320,8 @@ func BenchmarkPhases(b *testing.B) {
 
 // BenchmarkEndToEnd measures the time to execute a query end-to-end.
 func BenchmarkEndToEnd(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	h := newHarness()
 	defer h.close()
 
