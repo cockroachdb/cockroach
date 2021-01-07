@@ -50,7 +50,7 @@ func processSystemConfigKVs(
 		{
 			types := []*types.T{tbl.Columns[0].Type}
 			nameRow := make([]rowenc.EncDatum, 1)
-			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex(), types, nameRow, nil, kv.Key)
+			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}

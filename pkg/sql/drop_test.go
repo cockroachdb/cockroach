@@ -425,18 +425,18 @@ func TestDropIndex(t *testing.T) {
 	}
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
-	idx, _, err := tableDesc.FindIndexByName("foo")
+	idx, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, idx.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, idx.GetID())
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	// Index data hasn't been deleted.
@@ -462,11 +462,11 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	newIdx, _, err := tableDesc.FindIndexByName("foo")
+	newIdx, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	newIdxSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, newIdx.ID)
+	newIdxSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, newIdx.GetID())
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 4*numRows)
 
@@ -525,11 +525,11 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	indexDesc, _, err := tableDesc.FindIndexByName("foo")
+	index, err := tableDesc.FindIndexWithName("foo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, index.GetID())
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 	// Hack in zone configs for the primary and secondary indexes. (You need a CCL
@@ -539,7 +539,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	zoneConfig := zonepb.ZoneConfig{
 		Subzones: []zonepb.Subzone{
 			{IndexID: uint32(tableDesc.GetPrimaryIndexID()), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
-			{IndexID: uint32(indexDesc.ID), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
+			{IndexID: uint32(index.GetID()), Config: s.(*server.TestServer).Cfg.DefaultZoneConfig},
 		},
 	}
 	zoneConfigBytes, err := protoutil.Marshal(&zoneConfig)
@@ -564,7 +564,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// declares column families.
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }
@@ -597,7 +597,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 
 	// Ensure that index is not active.
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "intlv")
-	if _, _, err := tableDesc.FindIndexByName("intlv_idx"); err == nil {
+	if _, err := tableDesc.FindIndexWithName("intlv_idx"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }

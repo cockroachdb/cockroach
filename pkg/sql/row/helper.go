@@ -49,7 +49,7 @@ func newRowHelper(
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
+	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex().IndexDesc())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
@@ -89,7 +89,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 			rh.TableDesc.GetPrimaryIndexID())
 	}
 	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
-		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc, rh.TableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	return primaryIndexKey, err
 }
 
@@ -137,8 +137,9 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // #6233). Once it is, use the shared one.
 func (rh *rowHelper) skipColumnInPK(colID descpb.ColumnID, value tree.Datum) (bool, error) {
 	if rh.primaryIndexCols.Empty() {
-		for _, colID := range rh.TableDesc.GetPrimaryIndex().ColumnIDs {
-			rh.primaryIndexCols.Add(colID)
+		for i := 0; i < rh.TableDesc.GetPrimaryIndex().NumColumns(); i++ {
+			pkColID := rh.TableDesc.GetPrimaryIndex().GetColumnID(i)
+			rh.primaryIndexCols.Add(pkColID)
 		}
 	}
 	if !rh.primaryIndexCols.Contains(colID) {

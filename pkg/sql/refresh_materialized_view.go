@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 type refreshMaterializedViewNode struct {
@@ -68,10 +67,10 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := protoutil.Clone(n.desc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
-	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.GetPublicNonPrimaryIndexes()))
-	for i := range n.desc.GetPublicNonPrimaryIndexes() {
-		newIndexes[i] = *protoutil.Clone(&n.desc.GetPublicNonPrimaryIndexes()[i]).(*descpb.IndexDescriptor)
+	newPrimaryIndex := n.desc.GetPrimaryIndex().IndexDescDeepCopy()
+	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.PublicNonPrimaryIndexes()))
+	for i, idx := range n.desc.PublicNonPrimaryIndexes() {
+		newIndexes[i] = idx.IndexDescDeepCopy()
 	}
 
 	// Reset and allocate new IDs for the new indexes.
@@ -87,7 +86,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Queue the refresh mutation.
 	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
-		NewPrimaryIndex: *newPrimaryIndex,
+		NewPrimaryIndex: newPrimaryIndex,
 		NewIndexes:      newIndexes,
 		AsOf:            params.p.Txn().ReadTimestamp(),
 		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
