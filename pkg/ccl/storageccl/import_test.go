@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 func TestMaxImportBatchSize(t *testing.T) {
@@ -72,7 +73,12 @@ func slurpSSTablesLatestKey(
 	defer batch.Close()
 
 	for _, path := range paths {
-		sst, err := storage.NewSSTIterator(filepath.Join(dir, path))
+		file, err := vfs.Default.Open(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sst, err := storage.NewSSTIterator(file)
 		if err != nil {
 			t.Fatal(err)
 		}

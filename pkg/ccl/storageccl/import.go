@@ -12,7 +12,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -22,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -81,6 +85,12 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 	)
 	return s
 }()
+
+var remoteSSTs = settings.RegisterBoolSetting(
+	"kv.bulk_ingest.stream_external_ssts.enabled",
+	"if enabled, external SSTables are iterated directly in some cases, rather than being downloaded entirely first",
+	false,
+)
 
 // commandMetadataEstimate is an estimate of how much metadata Raft will add to
 // an AddSSTable command. It is intentionally a vast overestimate to avoid
@@ -274,3 +284,129 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	log.Event(ctx, "done")
 	return &roachpb.ImportResponse{Imported: batcher.GetSummary()}, nil
 }
+
+// ExternalSSTReader returns opens an SST in external storage, optionally
+// decrypting with the supplied parameters, and returns iterator over it.
+func ExternalSSTReader(
+	ctx context.Context,
+	e cloud.ExternalStorage,
+	basename string,
+	encryption *roachpb.FileEncryptionOptions,
+) (storage.SimpleMVCCIterator, error) {
+	// Do an initial read of the file, from the beginning, to get the file size as
+	// this is used e.g. to read the trailer.
+	var f io.ReadCloser
+	var sz int64
+
+	const maxAttempts = 3
+	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		var err error
+		f, sz, err = e.ReadFileAt(ctx, basename, 0)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	// TODO(dt): use streaming decryption on the fly wrapper from #58181.
+	if encryption != nil {
+		ciphertext, err := ioutil.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return nil, err
+		}
+		content, err := DecryptFile(ciphertext, encryption.Key)
+		if err != nil {
+			return nil, err
+		}
+		return storage.NewMemSSTIterator(content, false)
+	}
+
+	if !remoteSSTs.Get(&e.Settings().SV) {
+		content, err := ioutil.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return nil, err
+		}
+		return storage.NewMemSSTIterator(content, false)
+	}
+
+	iter, err := storage.NewSSTIterator(&sstReader{
+		sz:   sizeStat(sz),
+		body: f,
+		openAt: func(offset int64) (io.ReadCloser, error) {
+			reader, _, err := e.ReadFileAt(ctx, basename, offset)
+			return reader, err
+		},
+	})
+
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	return iter, nil
+}
+
+type sstReader struct {
+	sz     sizeStat
+	openAt func(int64) (io.ReadCloser, error)
+	// body and pos are mutated by calls to ReadAt and Close.
+	body io.ReadCloser
+	pos  int64
+}
+
+// Close implements io.Closer.
+func (r *sstReader) Close() error {
+	r.pos = 0
+	if r.body != nil {
+		return r.body.Close()
+	}
+	return nil
+}
+
+// Stat returns the size of the file.
+func (r *sstReader) Stat() (os.FileInfo, error) {
+	return r.sz, nil
+}
+
+// ReadAt implements io.ReaderAt by opening a Reader at an offset before reading
+// from it. Note: contrary to io.ReaderAt, ReadAt does *not* support parallel
+// calls.
+func (r *sstReader) ReadAt(p []byte, offset int64) (int, error) {
+	var read int
+	if r.pos != offset {
+		if err := r.Close(); err != nil {
+			return 0, err
+		}
+		b, err := r.openAt(offset)
+		if err != nil {
+			return 0, err
+		}
+		r.pos = offset
+		r.body = b
+	}
+	var err error
+	for n := 0; read < len(p); n, err = r.body.Read(p[read:]) {
+		read += n
+		if err != nil {
+			break
+		}
+	}
+	r.pos += int64(read)
+
+	// If we got an EOF after we had read enough, ignore it.
+	if read == len(p) && err == io.EOF {
+		return read, nil
+	}
+
+	return read, err
+}
+
+type sizeStat int64
+
+func (s sizeStat) Size() int64      { return int64(s) }
+func (sizeStat) IsDir() bool        { panic(errors.AssertionFailedf("unimplemented")) }
+func (sizeStat) ModTime() time.Time { panic(errors.AssertionFailedf("unimplemented")) }
+func (sizeStat) Mode() os.FileMode  { panic(errors.AssertionFailedf("unimplemented")) }
+func (sizeStat) Name() string       { panic(errors.AssertionFailedf("unimplemented")) }
+func (sizeStat) Sys() interface{}   { panic(errors.AssertionFailedf("unimplemented")) }
