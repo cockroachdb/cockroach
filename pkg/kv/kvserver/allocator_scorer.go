@@ -884,7 +884,7 @@ func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor)
 
 // storeHasReplica returns true if the provided StoreID contains an entry in
 // the provided list of existing replicas.
-func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicaDescriptor) bool {
+func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicationTarget) bool {
 	for _, r := range existing {
 		if r.StoreID == storeID {
 			return true

@@ -735,7 +735,7 @@ func (a Allocator) simulateRemoveTarget(
 func (a Allocator) removeTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
-	candidates []roachpb.ReplicaDescriptor,
+	candidates []roachpb.ReplicationTarget,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	targetType targetReplicaType,
@@ -815,7 +815,14 @@ func (a Allocator) RemoveVoter(
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
-	return a.removeTarget(ctx, zone, voterCandidates, existingVoters, existingNonVoters, voterTarget)
+	return a.removeTarget(
+		ctx,
+		zone,
+		roachpb.MakeReplicaSet(voterCandidates).ReplicationTargets(),
+		existingVoters,
+		existingNonVoters,
+		voterTarget,
+	)
 }
 
 // RemoveNonVoter returns a suitable non-voting replica to remove from the
@@ -830,7 +837,14 @@ func (a Allocator) RemoveNonVoter(
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
-	return a.removeTarget(ctx, zone, nonVoterCandidates, existingVoters, existingNonVoters, nonVoterTarget)
+	return a.removeTarget(
+		ctx,
+		zone,
+		roachpb.MakeReplicaSet(nonVoterCandidates).ReplicationTargets(),
+		existingVoters,
+		existingNonVoters,
+		nonVoterTarget,
+	)
 }
 
 // RebalanceTarget returns a suitable store for a rebalance target with
@@ -1089,7 +1103,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// If the current leaseholder is not preferred, set checkTransferLeaseSource
 		// to false to motivate the below logic to transfer the lease.
 		existing = preferred
-		if !storeHasReplica(leaseStoreID, preferred) {
+		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
 			checkTransferLeaseSource = false
 		}
 	}
@@ -1189,7 +1203,7 @@ func (a *Allocator) ShouldTransferLease(
 		existing = preferred
 		// If the current leaseholder isn't one of the preferred stores, then we
 		// should try to transfer the lease.
-		if !storeHasReplica(leaseStoreID, existing) {
+		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(existing).ReplicationTargets()) {
 			return true
 		}
 	}
