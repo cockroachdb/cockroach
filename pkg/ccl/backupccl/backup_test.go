@@ -6089,6 +6089,104 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
 }
 
+func TestPaginatedBackupTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+	const numAccounts = 1
+	serverArgs := base.TestServerArgs{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	var numExportRequests int
+	exportRequestSpans := make([]string, 0)
+
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+			for _, ru := range request.Requests {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportRequest:
+					exportRequest := ru.GetInner().(*roachpb.ExportRequest)
+					span := roachpb.Span{Key: exportRequest.Key, EndKey: exportRequest.EndKey}
+					exportRequestSpans = append(exportRequestSpans, span.String())
+					numExportRequests++
+				}
+			}
+			return nil
+		},
+		TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			for _, ru := range br.Responses {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportResponse:
+					exportResponse := ru.GetInner().(*roachpb.ExportResponse)
+					// Every ExportResponse should have a single SST when running backup
+					// within a tenant.
+					require.Equal(t, 1, len(exportResponse.Files))
+				}
+			}
+			return nil
+		},
+	}
+	_, tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	_ = security.EmbeddedTenantIDs()
+
+	resetStateVars := func() {
+		numExportRequests = 0
+		exportRequestSpans = exportRequestSpans[:0]
+	}
+
+	_, conn10 := serverutils.StartTenant(t, srv,
+		base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	defer conn10.Close()
+	tenant10 := sqlutils.MakeSQLRunner(conn10)
+	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
+
+	// The total size in bytes of the data to be backed up is 63b.
+
+	// Single ExportRequest with no resume span.
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='63b'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
+
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+	require.Equal(t, 1, numExportRequests)
+	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"), EndKey: []byte("/Tenant/10/Table/53/2")}
+	require.Equal(t, exportRequestSpans, []string{startingSpan.String()})
+	resetStateVars()
+
+	// Two ExportRequests with one resume span.
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
+	require.Equal(t, 2, numExportRequests)
+	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/510/0"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan.String()})
+	resetStateVars()
+
+	// One ExportRequest for every KV.
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='10b'`)
+	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
+	require.Equal(t, 5, numExportRequests)
+	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/53/1"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	resumeSpan1 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/210/0"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	resumeSpan2 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/310/0"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	resumeSpan3 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/410/0"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	resumeSpan4 := roachpb.Span{Key: []byte("/Tenant/10/Table/53/1/510/0"),
+		EndKey: []byte("/Tenant/10/Table/53/2")}
+	require.Equal(t, exportRequestSpans, []string{startingSpan.String(), resumeSpan1.String(),
+		resumeSpan2.String(), resumeSpan3.String(), resumeSpan4.String()})
+	resetStateVars()
+
+	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
+}
+
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
