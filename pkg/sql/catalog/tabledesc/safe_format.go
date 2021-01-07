@@ -110,7 +110,7 @@ func formatSafeTableIndexes(w *redact.StringBuilder, desc catalog.TableDescripto
 	w.Printf(", PrimaryIndex: %d", desc.GetPrimaryIndexID())
 	w.Printf(", NextIndexID: %d", desc.TableDesc().NextIndexID)
 	w.Printf(", Indexes: [")
-	_ = desc.ForEachActiveIndex(func(idx catalog.Index) error {
+	_ = catalog.ForEachActiveIndex(desc, func(idx catalog.Index) error {
 		if !idx.Primary() {
 			w.Printf(", ")
 		}

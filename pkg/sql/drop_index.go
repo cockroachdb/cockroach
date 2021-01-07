@@ -202,7 +202,7 @@ func (n *dropIndexNode) maybeDropShardColumn(
 	if dropped {
 		return nil
 	}
-	if tableDesc.FindNonDropIndex(func(otherIdx catalog.Index) bool {
+	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
 		return otherIdx.ContainsColumnID(shardColDesc.ID)
 	}) != nil {
 		return nil
@@ -456,7 +456,7 @@ func (p *planner) dropIndexByName(
 		)
 	}
 
-	foundIndex := tableDesc.FindPublicNonPrimaryIndex(func(idxEntry catalog.Index) bool {
+	foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idxEntry catalog.Index) bool {
 		return idxEntry.GetID() == idx.ID
 	})
 

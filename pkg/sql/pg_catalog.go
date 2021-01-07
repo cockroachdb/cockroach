@@ -444,7 +444,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 
 		// Columns for each index.
 		columnIdxMap := table.ColumnIdxMap()
-		return table.ForEachIndex(catalog.IndexOpts{}, func(index catalog.Index) error {
+		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			for i := 0; i < index.NumColumns(); i++ {
 				colID := index.GetColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
@@ -624,7 +624,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		}
 
 		// Indexes.
-		return table.ForEachIndex(catalog.IndexOpts{}, func(index catalog.Index) error {
+		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 			indexType := forwardIndexOid
 			if index.GetType() == descpb.IndexDescriptor_INVERTED {
 				indexType = invertedIndexOid
@@ -1441,7 +1441,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
-				return table.ForEachIndex(catalog.IndexOpts{}, func(index catalog.Index) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.GetID())
 					isReady := isMutation && isWriteOnly
@@ -1523,7 +1523,7 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor, tableLookup tableLookupFn) error {
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
-				return table.ForEachIndex(catalog.IndexOpts{}, func(index catalog.Index) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					def, err := indexDefFromDescriptor(ctx, p, db, table, index.IndexDesc(), tableLookup)
 					if err != nil {
 						return err

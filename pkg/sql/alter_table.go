@@ -816,7 +816,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// new name exists. This is what postgres does.
 			switch details.Kind {
 			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
-				if n.tableDesc.FindNonDropIndex(func(idx catalog.Index) bool {
+				if catalog.FindNonDropIndex(n.tableDesc, func(idx catalog.Index) bool {
 					return idx.GetName() == string(t.NewName)
 				}) != nil {
 					return pgerror.Newf(pgcode.DuplicateRelation,
