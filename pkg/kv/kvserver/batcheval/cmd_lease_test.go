@@ -232,7 +232,8 @@ func TestCheckCanReceiveLease(t *testing.T) {
 		{leaseholderType: roachpb.VOTER_FULL, eligible: true},
 		{leaseholderType: roachpb.VOTER_INCOMING, eligible: false},
 		{leaseholderType: roachpb.VOTER_OUTGOING, eligible: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, eligible: false},
 		{leaseholderType: roachpb.LEARNER, eligible: false},
 		{leaseholderType: roachpb.NON_VOTER, eligible: false},
 	} {

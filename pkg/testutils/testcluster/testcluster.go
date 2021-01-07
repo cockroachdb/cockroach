@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -785,7 +786,47 @@ func (tc *TestCluster) RemoveNonVotersOrFatal(
 	return desc
 }
 
-// TransferRangeLease is part of the TestClusterInterface.
+// SwapVoterWithNonVoter is part of TestClusterInterface.
+func (tc *TestCluster) SwapVoterWithNonVoter(
+	startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+) (*roachpb.RangeDescriptor, error) {
+	ctx := context.Background()
+	key := keys.MustAddr(startKey)
+	var beforeDesc roachpb.RangeDescriptor
+	if err := tc.Servers[0].DB().GetProto(
+		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
+	); err != nil {
+		return nil, errors.Wrap(err, "range descriptor lookup error")
+	}
+	changes := []roachpb.ReplicationChange{
+		{ChangeType: roachpb.ADD_VOTER, Target: nonVoterTarget},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: nonVoterTarget},
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: voterTarget},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: voterTarget},
+	}
+
+	return tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+}
+
+// SwapVoterWithNonVoterOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) SwapVoterWithNonVoterOrFatal(
+	t *testing.T, startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+) *roachpb.RangeDescriptor {
+	afterDesc, err := tc.SwapVoterWithNonVoter(startKey, voterTarget, nonVoterTarget)
+
+	// Verify that the swap actually worked.
+	require.NoError(t, err)
+	replDesc, ok := afterDesc.GetReplicaDescriptor(voterTarget.StoreID)
+	require.True(t, ok)
+	require.Equal(t, roachpb.NON_VOTER, replDesc.GetType())
+	replDesc, ok = afterDesc.GetReplicaDescriptor(nonVoterTarget.StoreID)
+	require.True(t, ok)
+	require.Equal(t, roachpb.VOTER_FULL, replDesc.GetType())
+
+	return afterDesc
+}
+
+// TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
