@@ -1496,7 +1496,7 @@ func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
 // trigger applies.
 func (crt ChangeReplicasTrigger) Replicas() []ReplicaDescriptor {
 	if crt.Desc != nil {
-		return crt.Desc.Replicas().All()
+		return crt.Desc.Replicas().Descriptors()
 	}
 	return crt.DeprecatedUpdatedReplicas
 }

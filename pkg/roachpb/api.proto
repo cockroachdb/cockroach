@@ -824,7 +824,8 @@ message AdminChangeReplicasResponse {
 // The first store in the list of targets becomes the new leaseholder.
 message AdminRelocateRangeRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
+  repeated ReplicationTarget voter_targets = 2 [(gogoproto.nullable) = false];
+  repeated ReplicationTarget non_voter_targets = 3 [(gogoproto.nullable) = false];
   // TODO(a-robinson): Add "reason"/"details" string fields?
 }
 

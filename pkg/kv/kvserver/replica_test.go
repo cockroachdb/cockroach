@@ -6408,7 +6408,7 @@ func TestReplicaSetsEqual(t *testing.T) {
 		{true, createReplicaSets([]roachpb.StoreID{1, 2, 3, 1, 2, 3}), createReplicaSets([]roachpb.StoreID{1, 1, 2, 2, 3, 3})},
 	}
 	for _, test := range testData {
-		if replicaSetsEqual(test.a, test.b) != test.expected {
+		if replicasCollocated(test.a, test.b) != test.expected {
 			t.Fatalf("unexpected replica intersection: %+v", test)
 		}
 	}
@@ -9596,7 +9596,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.
 				var expLagging laggingReplicaSet
-				for _, rep := range q.descRLocked().Replicas().All() {
+				for _, rep := range q.descRLocked().Replicas().Descriptors() {
 					if l, ok := q.livenessMap[rep.NodeID]; ok && !l.IsLive {
 						expLagging = append(expLagging, l.Liveness)
 					}
@@ -12833,7 +12833,7 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 				})
 			}
 		}
-		desc := roachpb.NewRangeDescriptor(roachpb.RangeID(10), roachpb.RKeyMin, roachpb.RKeyMax, roachpb.MakeReplicaDescriptors(rDescs))
+		desc := roachpb.NewRangeDescriptor(roachpb.RangeID(10), roachpb.RKeyMin, roachpb.RKeyMax, roachpb.MakeReplicaSet(rDescs))
 		return testCase{
 			desc:       desc,
 			chgs:       chgs,
@@ -12934,7 +12934,7 @@ func TestRangeUnavailableMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var repls roachpb.ReplicaDescriptors
+	var repls roachpb.ReplicaSet
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
 	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)

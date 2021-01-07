@@ -388,9 +388,9 @@ func (v *replicationStatsVisitor) visitSameZone(ctx context.Context, r *roachpb.
 func (v *replicationStatsVisitor) countRange(
 	key ZoneKey, replicationFactor int, r *roachpb.RangeDescriptor,
 ) {
-	voters := len(r.Replicas().Voters())
+	voters := len(r.Replicas().VoterDescriptors())
 	var liveVoters int
-	for _, rep := range r.Replicas().Voters() {
+	for _, rep := range r.Replicas().VoterDescriptors() {
 		if v.nodeChecker(rep.NodeID) {
 			liveVoters++
 		}

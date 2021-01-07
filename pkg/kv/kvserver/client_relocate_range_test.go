@@ -31,11 +31,14 @@ func relocateAndCheck(
 	t *testing.T,
 	tc *testcluster.TestCluster,
 	startKey roachpb.RKey,
-	targets []roachpb.ReplicationTarget,
+	voterTargets []roachpb.ReplicationTarget,
+	nonVoterTargets []roachpb.ReplicationTarget,
 ) (retries int) {
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().
-			AdminRelocateRange(context.Background(), startKey.AsRawKey(), targets)
+			AdminRelocateRange(
+				context.Background(), startKey.AsRawKey(), voterTargets, nonVoterTargets,
+			)
 		if err != nil {
 			retries++
 		}
@@ -43,8 +46,10 @@ func relocateAndCheck(
 	})
 	desc, err := tc.Servers[0].LookupRange(startKey.AsRawKey())
 	require.NoError(t, err)
-	requireDescMembers(t, desc, targets)
-	requireLeaseAt(t, tc, desc, targets[0])
+	requireDescMembers(t, desc, append(voterTargets, nonVoterTargets...))
+	if len(voterTargets) > 0 {
+		requireLeaseAt(t, tc, desc, voterTargets[0])
+	}
 	return retries
 }
 
@@ -56,7 +61,7 @@ func requireDescMembers(
 	sort.Slice(targets, func(i, j int) bool { return targets[i].StoreID < targets[j].StoreID })
 
 	have := make([]roachpb.ReplicationTarget, 0, len(targets))
-	for _, rDesc := range desc.Replicas().All() {
+	for _, rDesc := range desc.Replicas().Descriptors() {
 		have = append(have, roachpb.ReplicationTarget{
 			NodeID:  rDesc.NodeID,
 			StoreID: rDesc.StoreID,
@@ -116,7 +121,7 @@ func TestAdminRelocateRange(t *testing.T) {
 			if len(ic.ops) == 2 && ic.ops[0].ChangeType == roachpb.ADD_VOTER && ic.ops[1].ChangeType == roachpb.REMOVE_VOTER {
 				actAtomic++
 			} else {
-				actSingle++
+				actSingle += len(ic.ops)
 			}
 		}
 		actAtomic -= retries
@@ -149,7 +154,7 @@ func TestAdminRelocateRange(t *testing.T) {
 		targets := tc.Targets(1, 0, 2)
 		// Expect two single additions, and that's it.
 		requireNumAtomic(0, 2, func() int {
-			return relocateAndCheck(t, tc, k, targets)
+			return relocateAndCheck(t, tc, k, targets, nil /* nonVoterTargets */)
 		})
 	}
 
@@ -163,7 +168,7 @@ func TestAdminRelocateRange(t *testing.T) {
 		// in the process (i.e. internally the lease must've been moved around
 		// to achieve that).
 		requireNumAtomic(3, 0, func() int {
-			return relocateAndCheck(t, tc, k, targets)
+			return relocateAndCheck(t, tc, k, targets, nil /* nonVoterTargets */)
 		})
 	}
 
@@ -171,7 +176,7 @@ func TestAdminRelocateRange(t *testing.T) {
 	// Pure downreplication.
 	{
 		requireNumAtomic(0, 2, func() int {
-			return relocateAndCheck(t, tc, k, tc.Targets(4))
+			return relocateAndCheck(t, tc, k, tc.Targets(4), nil /* nonVoterTargets */)
 		})
 	}
 
@@ -180,7 +185,7 @@ func TestAdminRelocateRange(t *testing.T) {
 	// replication changes cannot be used; we add-then-remove instead.
 	{
 		requireNumAtomic(0, 2, func() int {
-			return relocateAndCheck(t, tc, k, tc.Targets(2))
+			return relocateAndCheck(t, tc, k, tc.Targets(2), nil /* nonVoterTargets */)
 		})
 	}
 
@@ -189,15 +194,33 @@ func TestAdminRelocateRange(t *testing.T) {
 	{
 		// s3 -(add)-> s3 s2 -(swap)-> s4 s2 -(add)-> s4 s2 s1 (=s2 s4 s1)
 		requireNumAtomic(1, 2, func() int {
-			return relocateAndCheck(t, tc, k, tc.Targets(1, 3, 0))
+			return relocateAndCheck(t, tc, k, tc.Targets(1, 3, 0), nil /* nonVoterTargets */)
 		})
 		// s2 s4 s1 -(add)-> s2 s4 s1 s6 (=s4 s2 s6 s1)
 		requireNumAtomic(0, 1, func() int {
-			return relocateAndCheck(t, tc, k, tc.Targets(3, 1, 5, 0))
+			return relocateAndCheck(t, tc, k, tc.Targets(3, 1, 5, 0), nil /* nonVoterTargets */)
 		})
 		// s4 s2 s6 s1 -(swap)-> s3 s2 s6 s1 -(swap)-> s3 s5 s6 s1 -(del)-> s3 s5 s6 -(del)-> s3 s5
 		requireNumAtomic(2, 2, func() int {
-			return relocateAndCheck(t, tc, k, tc.Targets(2, 4))
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), nil /* nonVoterTargets */)
+		})
+	}
+
+	// Relocation of non-voting replicas is not done atomically under any
+	// scenario.
+	// TODO(aayush): Update this comment and test once we support atomic swaps of
+	// more than 1 non-voter at a time.
+	{
+		requireNumAtomic(0, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(1, 3))
+		})
+		// Add & remove.
+		requireNumAtomic(0, 2, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(1, 5))
+		})
+		// 2 add and 2 remove operations.
+		requireNumAtomic(0, 4, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(0, 3))
 		})
 	}
 }

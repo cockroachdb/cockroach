@@ -52,6 +52,9 @@ func (n *relocateNode) startExec(runParams) error {
 	return nil
 }
 
+// TODO(aayush): Extend EXPERIMENTAL_RELOCATE syntax to support relocating
+// non-voting replicas.
+
 func (n *relocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
@@ -131,7 +134,9 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 	} else {
-		if err := params.p.ExecCfg().DB.AdminRelocateRange(params.ctx, rowKey, relocationTargets); err != nil {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, relocationTargets, nil, /* nonVoterTargets */
+		); err != nil {
 			return false, err
 		}
 	}
