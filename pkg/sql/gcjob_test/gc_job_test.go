@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -59,7 +60,15 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	for _, dropItem := range []DropItem{INDEX, TABLE, DATABASE} {
 		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
-			s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			params := base.TestServerArgs{}
+			blockGC := make(chan struct{}, 1)
+			params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+				RunBeforePerformGC: func(_ int64) error {
+					<-blockGC
+					return nil
+				},
+			}
+			s, db, kvDB := serverutils.StartServer(t, params)
 			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(db)
@@ -169,6 +178,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				DescriptorIDs: descpb.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
+				RunningStatus: sql.RunningStatusWaitingGC,
 				NonCancelable: true,
 			}
 
@@ -188,9 +198,18 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// Check that the job started.
 			jobIDStr := strconv.Itoa(int(*job.ID()))
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, lookupJR); err != nil {
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
+
+			if ttlTime != FUTURE {
+				// Check that the job eventually blocks right before performing GC, due to the testing knob.
+				sqlDB.CheckQueryResultsRetry(
+					t,
+					fmt.Sprintf("SELECT status, running_status::STRING FROM [SHOW JOBS] WHERE job_id = %s", jobIDStr),
+					[][]string{{"running", "NULL"}})
+			}
+			blockGC <- struct{}{}
 
 			if ttlTime == FUTURE {
 				time.Sleep(500 * time.Millisecond)
@@ -277,12 +296,14 @@ SELECT parent_id, table_id
 	// Now we should be able to find our GC job
 	var jobID int64
 	var status jobs.Status
+	var runningStatus jobs.RunningStatus
 	sqlDB.QueryRow(t, `
-SELECT job_id, status
+SELECT job_id, status, running_status
   FROM crdb_internal.jobs
  WHERE description LIKE 'GC for DROP TABLE db.public.foo';
-`).Scan(&jobID, &status)
+`).Scan(&jobID, &status, &runningStatus)
 	require.Equal(t, jobs.StatusRunning, status)
+	require.Equal(t, sql.RunningStatusWaitingGC, runningStatus)
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

@@ -1853,6 +1853,7 @@ func CreateGCJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
+		RunningStatus: RunningStatusWaitingGC,
 		NonCancelable: true,
 	}
 }
@@ -1861,7 +1862,8 @@ func CreateGCJobRecord(
 // Note that this is defined here for testing purposes to avoid cyclic
 // dependencies.
 type GCJobTestingKnobs struct {
-	RunBeforeResume func(jobID int64) error
+	RunBeforeResume    func(jobID int64) error
+	RunBeforePerformGC func(jobID int64) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
