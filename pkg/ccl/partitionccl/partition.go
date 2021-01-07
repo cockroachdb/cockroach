@@ -275,7 +275,7 @@ func selectPartitionExprs(
 
 	a := &rowenc.DatumAlloc{}
 	var prefixDatums []tree.Datum
-	if err := tableDesc.ForEachIndex(catalog.IndexOpts{
+	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
 		AddMutations: true,
 	}, func(idx catalog.Index) error {
 		return selectPartitionExprsByName(

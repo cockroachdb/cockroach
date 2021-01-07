@@ -191,7 +191,7 @@ func makeInputConverter(
 	}
 
 	if singleTable != nil {
-		if idx := singleTable.FindDeletableNonPrimaryIndex(func(idx catalog.Index) bool {
+		if idx := catalog.FindDeletableNonPrimaryIndex(singleTable, func(idx catalog.Index) bool {
 			return idx.IsPartial()
 		}); idx != nil {
 			return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")

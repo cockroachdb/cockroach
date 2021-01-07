@@ -1881,7 +1881,7 @@ func NewTableDesc(
 	}
 
 	// Record the types of indexes that the table has.
-	if err := desc.ForEachNonDropIndex(func(idx catalog.Index) error {
+	if err := catalog.ForEachNonDropIndex(&desc, func(idx catalog.Index) error {
 		if idx.IsSharded() {
 			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 		}
