@@ -147,7 +147,7 @@ message SnapshotRequest {
     // for upreplication, before they're promoted to full voters.
     //
     // As of the time of writing, we only send this snapshot from the
-    // atomicReplicationChange after creating a new LEARNER replica.
+    // execReplicationChangesForVoters after creating a new LEARNER replica.
     LEARNER_INITIAL = 1;
     reserved 2;
   }
