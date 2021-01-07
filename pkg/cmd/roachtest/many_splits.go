@@ -18,6 +18,8 @@ import (
 // runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
 // left-to-right splits and check the cluster is still live afterwards.
 func runManySplits(ctx context.Context, t *test, c *cluster) {
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)

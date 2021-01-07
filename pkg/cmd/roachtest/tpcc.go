@@ -77,6 +77,8 @@ func tpccImportCmd(warehouses int, extraArgs ...string) string {
 func setupTPCC(
 	ctx context.Context, t *test, c *cluster, opts tpccOptions,
 ) (crdbNodes, workloadNode nodeListOption) {
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 	crdbNodes = c.Range(1, c.spec.NodeCount-1)
 	workloadNode = c.Node(c.spec.NodeCount)
 	if c.isLocal() {
@@ -110,7 +112,7 @@ func setupTPCC(
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
+		c.Start(ctx, t, crdbNodes)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
 		case usingImport:
