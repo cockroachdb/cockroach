@@ -309,9 +309,29 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+type backingSlicesState int
+
+const (
+	uninitialized backingSlicesState = iota
+	primary
+	active
+	all
+)
+
 // indexCache contains lazily precomputed slices of catalog.Index interfaces.
-// A field value of nil indicates that the slice hasn't been precomputed yet.
+// The valid initial state is indexCache{}.
 type indexCache struct {
+	// These first two slices grow as needed to derive all other slices below.
+	// Each interface in backingInterfaces points to the corresponding entry
+	// in backingStructs, this is done to minimize allocations.
+	backingStructs    []index
+	backingInterfaces []catalog.Index
+	// backingSlicesState specifies how far the above slices have grown.
+	backingSlicesState backingSlicesState
+
+	// The remaining fields store the precomputed slices of interest.
+	// A value of nil signifies it hasn't been precomputed yet,
+	// therefore empty precomputations need to be stored as []catalog.Index{}.
 	all                  []catalog.Index
 	active               []catalog.Index
 	nonDrop              []catalog.Index
@@ -322,19 +342,79 @@ type indexCache struct {
 	partial              []catalog.Index
 }
 
+// primaryIndex returns the catalog.Index interface for the primary index.
+func (c *indexCache) primaryIndex(desc *wrapper) catalog.Index {
+	c.ensureBackingSlices(desc, primary)
+	return c.backingInterfaces[0]
+}
+
+// ensureBackingSlices ensures that backingStructs and backingInterfaces are
+// populated with enough entries, as specified by requiredState.
+func (c *indexCache) ensureBackingSlices(desc *wrapper, requiredState backingSlicesState) {
+	switch c.backingSlicesState {
+	case uninitialized:
+		// We need to transition the state to `primary` and perhaps beyond.
+		c.backingStructs = make([]index, 0, 1+len(desc.Indexes)+len(desc.Mutations))
+		c.backingInterfaces = make([]catalog.Index, 0, cap(c.backingStructs))
+		c.addToBackingSlices(index{desc: &desc.PrimaryIndex})
+		c.backingSlicesState = primary
+		if requiredState <= primary {
+			return
+		}
+		fallthrough
+	case primary:
+		// We need to transition the state to `active` and perhaps beyond.
+		for i := range desc.Indexes {
+			c.addToBackingSlices(index{desc: &desc.Indexes[i]})
+		}
+		c.backingSlicesState = active
+		if requiredState <= active {
+			return
+		}
+		fallthrough
+	case active:
+		// We need to transition the state to `all`.
+		for _, m := range desc.Mutations {
+			if idxDesc := m.GetIndex(); idxDesc != nil {
+				c.addToBackingSlices(index{
+					desc:              idxDesc,
+					mutationID:        m.MutationID,
+					mutationState:     m.State,
+					mutationDirection: m.Direction,
+				})
+			}
+		}
+		c.backingSlicesState = all
+		fallthrough
+	case all:
+		// We're good, the `all` state is terminal.
+		return
+	}
+}
+
+// addToBackingSlices adds a new index to the backing slices and sets its
+// ordinal number in order of addition.
+// This is a convenience method for ensureBackingSlices.
+func (c *indexCache) addToBackingSlices(newIndex index) {
+	newIndex.ordinal = len(c.backingStructs)
+	c.backingStructs = append(c.backingStructs, newIndex)
+	c.backingInterfaces = append(c.backingInterfaces, &c.backingStructs[newIndex.ordinal])
+}
+
 // cachedIndexes returns an already-build slice of catalog.Index interfaces if
-// it exists, if not it builds it using the provided factory function and args.
-// Notice that, as a result, empty slices need to be handled carefully.
+// it exists, if not it builds it using the provided factory function and args,
+// after populating the backing slices as much as required.
+// Notice that, as a whole, empty slices need to be handled carefully.
 func (c *indexCache) cachedIndexes(
 	cached *[]catalog.Index,
 	factory func(c *indexCache, desc *wrapper) []catalog.Index,
+	requiredState backingSlicesState,
 	desc *wrapper,
 ) []catalog.Index {
 	if *cached == nil {
-		*cached = factory(c, desc)
-		if *cached == nil {
-			*cached = []catalog.Index{}
-		}
+		c.ensureBackingSlices(desc, requiredState)
+		s := factory(c, desc)
+		*cached = append(make([]catalog.Index, 0, len(s)), s...)
 	}
 	if len(*cached) == 0 {
 		return nil
@@ -344,69 +424,47 @@ func (c *indexCache) cachedIndexes(
 
 // buildPublicNonPrimary builds a fresh return value for
 // desc.PublicNonPrimaryIndexes().
-func buildPublicNonPrimary(_ *indexCache, desc *wrapper) []catalog.Index {
-	s := make([]catalog.Index, len(desc.Indexes))
-	for i := range s {
-		s[i] = index{desc: &desc.Indexes[i], ordinal: i + 1}
-	}
-	return s
+func buildPublicNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
+	return c.backingInterfaces[1 : 1+len(desc.Indexes)]
 }
 
 func (c *indexCache) publicNonPrimaryIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.publicNonPrimary, buildPublicNonPrimary, desc)
+	return c.cachedIndexes(&c.publicNonPrimary, buildPublicNonPrimary, active, desc)
 }
 
-// buildActive builds fresh return value for desc.ActiveIndexes().
+// buildActive builds a fresh return value for desc.ActiveIndexes().
 func buildActive(c *indexCache, desc *wrapper) []catalog.Index {
-	publicNonPrimary := c.publicNonPrimaryIndexes(desc)
-	s := make([]catalog.Index, 1, 1+len(publicNonPrimary))
-	s[0] = index{desc: &desc.PrimaryIndex}
-	return append(s, publicNonPrimary...)
+	return c.backingInterfaces[:1+len(desc.Indexes)]
 }
 
 func (c *indexCache) activeIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.active, buildActive, desc)
+	return c.cachedIndexes(&c.active, buildActive, active, desc)
 }
 
-// buildAll builds fresh return value for desc.AllIndexes().
-func buildAll(c *indexCache, desc *wrapper) []catalog.Index {
-	s := make([]catalog.Index, 0, 1+len(desc.Indexes)+len(desc.Mutations))
-	s = append(s, c.activeIndexes(desc)...)
-	for _, m := range desc.Mutations {
-		if idxDesc := m.GetIndex(); idxDesc != nil {
-			idx := index{
-				desc:              idxDesc,
-				ordinal:           len(s),
-				mutationID:        m.MutationID,
-				mutationState:     m.State,
-				mutationDirection: m.Direction,
-			}
-			s = append(s, idx)
-		}
-	}
-	return s
+// buildAll builds a fresh return value for desc.AllIndexes().
+func buildAll(c *indexCache, _ *wrapper) []catalog.Index {
+	return c.backingInterfaces
 }
 
 func (c *indexCache) allIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.all, buildAll, desc)
+	return c.cachedIndexes(&c.all, buildAll, all, desc)
 }
 
-// buildDeletableNonPrimary builds fresh return value for
+// buildDeletableNonPrimary builds a fresh return value for
 // desc.DeletableNonPrimaryIndexes().
-func buildDeletableNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
-	return c.allIndexes(desc)[1:]
+func buildDeletableNonPrimary(c *indexCache, _ *wrapper) []catalog.Index {
+	return c.backingInterfaces[1:]
 }
 
 func (c *indexCache) deletableNonPrimaryIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.deletableNonPrimary, buildDeletableNonPrimary, desc)
+	return c.cachedIndexes(&c.deletableNonPrimary, buildDeletableNonPrimary, all, desc)
 }
 
-// buildWritableNonPrimary builds fresh return value for
+// buildWritableNonPrimary builds a fresh return value for
 // desc.WritableNonPrimaryIndexes().
-func buildWritableNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
-	deletableNonPrimary := c.deletableNonPrimaryIndexes(desc)
-	s := make([]catalog.Index, 0, len(deletableNonPrimary))
-	for _, idx := range deletableNonPrimary {
+func buildWritableNonPrimary(c *indexCache, _ *wrapper) []catalog.Index {
+	s := make([]catalog.Index, 0, len(c.backingInterfaces[1:]))
+	for _, idx := range c.backingInterfaces[1:] {
 		if idx.Public() || idx.WriteAndDeleteOnly() {
 			s = append(s, idx)
 		}
@@ -415,15 +473,14 @@ func buildWritableNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
 }
 
 func (c *indexCache) writableNonPrimaryIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.writableNonPrimary, buildWritableNonPrimary, desc)
+	return c.cachedIndexes(&c.writableNonPrimary, buildWritableNonPrimary, all, desc)
 }
 
-// buildDeleteOnlyNonPrimary builds fresh return value for
+// buildDeleteOnlyNonPrimary builds a fresh return value for
 // desc.DeleteOnlyNonPrimaryIndexes().
 func buildDeleteOnlyNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
-	deletableNonPublic := c.deletableNonPrimaryIndexes(desc)[len(desc.Indexes):]
-	s := make([]catalog.Index, 0, len(deletableNonPublic))
-	for _, idx := range deletableNonPublic {
+	s := make([]catalog.Index, 0, len(desc.Mutations))
+	for _, idx := range c.backingInterfaces[1+len(desc.Indexes):] {
 		if idx.DeleteOnly() {
 			s = append(s, idx)
 		}
@@ -432,14 +489,13 @@ func buildDeleteOnlyNonPrimary(c *indexCache, desc *wrapper) []catalog.Index {
 }
 
 func (c *indexCache) deleteOnlyNonPrimaryIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.deleteOnlyNonPrimary, buildDeleteOnlyNonPrimary, desc)
+	return c.cachedIndexes(&c.deleteOnlyNonPrimary, buildDeleteOnlyNonPrimary, all, desc)
 }
 
-// buildNonDrop builds fresh return value for desc.NonDropIndexes().
+// buildNonDrop builds a fresh return value for desc.NonDropIndexes().
 func buildNonDrop(c *indexCache, desc *wrapper) []catalog.Index {
-	all := c.allIndexes(desc)
-	s := make([]catalog.Index, 0, len(all))
-	for _, idx := range all {
+	s := make([]catalog.Index, 0, len(c.backingInterfaces))
+	for _, idx := range c.backingInterfaces {
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
 			s = append(s, idx)
 		}
@@ -448,14 +504,13 @@ func buildNonDrop(c *indexCache, desc *wrapper) []catalog.Index {
 }
 
 func (c *indexCache) nonDropIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.nonDrop, buildNonDrop, desc)
+	return c.cachedIndexes(&c.nonDrop, buildNonDrop, all, desc)
 }
 
-// buildPartial builds fresh return value for desc.PartialIndexes().
-func buildPartial(c *indexCache, desc *wrapper) []catalog.Index {
-	deletableNonPrimary := c.deletableNonPrimaryIndexes(desc)
-	s := make([]catalog.Index, 0, len(deletableNonPrimary))
-	for _, idx := range deletableNonPrimary {
+// buildPartial builds a fresh return value for desc.PartialIndexes().
+func buildPartial(c *indexCache, _ *wrapper) []catalog.Index {
+	s := make([]catalog.Index, 0, len(c.backingInterfaces[1:]))
+	for _, idx := range c.backingInterfaces[1:] {
 		if idx.IsPartial() {
 			s = append(s, idx)
 		}
@@ -464,5 +519,5 @@ func buildPartial(c *indexCache, desc *wrapper) []catalog.Index {
 }
 
 func (c *indexCache) partialIndexes(desc *wrapper) []catalog.Index {
-	return c.cachedIndexes(&c.partial, buildPartial, desc)
+	return c.cachedIndexes(&c.partial, buildPartial, all, desc)
 }
