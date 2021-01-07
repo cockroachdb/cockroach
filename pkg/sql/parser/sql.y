@@ -446,6 +446,9 @@ func (u *sqlSymUnion) interleave() *tree.InterleaveDef {
 func (u *sqlSymUnion) partitionBy() *tree.PartitionBy {
     return u.val.(*tree.PartitionBy)
 }
+func (u *sqlSymUnion) partitionTableBy() *tree.PartitionTableBy {
+    return u.val.(*tree.PartitionTableBy)
+}
 func (u *sqlSymUnion) createTableOnCommitSetting() tree.CreateTableOnCommitSetting {
     return u.val.(tree.CreateTableOnCommitSetting)
 }
@@ -1002,7 +1005,8 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.LikeTableOption> like_table_option
 %type <tree.CreateTableOnCommitSetting> opt_create_table_on_commit
 %type <*tree.InterleaveDef> opt_interleave
-%type <*tree.PartitionBy> opt_partition_by partition_by
+%type <*tree.PartitionBy> opt_partition_by partition_by partition_by_inner
+%type <*tree.PartitionTableBy> opt_partition_table_by partition_table_by
 %type <str> partition opt_partition
 %type <str> opt_create_table_inherits
 %type <tree.ListPartition> list_partition
@@ -1989,10 +1993,10 @@ alter_table_cmd:
     $$.val = &tree.AlterTableSetAudit{Mode: $3.auditMode()}
   }
   // ALTER TABLE <name> PARTITION BY ...
-| partition_by
+| partition_table_by
   {
-    $$.val = &tree.AlterTablePartitionBy{
-      PartitionBy: $1.partitionBy(),
+    $$.val = &tree.AlterTablePartitionTableBy{
+      PartitionTableBy: $1.partitionTableBy(),
     }
   }
   // ALTER TABLE <name> INJECT STATISTICS <json>
@@ -5657,7 +5661,7 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_table_by opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5666,14 +5670,14 @@ create_table_stmt:
       Interleave: $9.interleave(),
       Defs: $6.tblDefs(),
       AsSource: nil,
-      PartitionBy: $10.partitionBy(),
+      PartitionTableBy: $10.partitionTableBy(),
       Persistence: $2.persistence(),
       StorageParams: $11.storageParams(),
       OnCommit: $12.createTableOnCommitSetting(),
       Locality: $13.locality(),
     }
   }
-| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_create_table_inherits opt_interleave opt_partition_table_by opt_table_with opt_create_table_on_commit opt_locality
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5682,7 +5686,7 @@ create_table_stmt:
       Interleave: $12.interleave(),
       Defs: $9.tblDefs(),
       AsSource: nil,
-      PartitionBy: $13.partitionBy(),
+      PartitionTableBy: $13.partitionTableBy(),
       Persistence: $2.persistence(),
       StorageParams: $14.storageParams(),
       OnCommit: $15.createTableOnCommitSetting(),
@@ -5958,22 +5962,50 @@ opt_partition_by:
     $$.val = (*tree.PartitionBy)(nil)
   }
 
+opt_partition_table_by:
+  partition_table_by
+| /* EMPTY */
+  {
+    $$.val = (*tree.PartitionTableBy)(nil)
+  }
+
+partition_table_by:
+  partition_by
+  {
+    $$.val = &tree.PartitionTableBy{
+      PartitionBy: $1.partitionBy(),
+    }
+  }
+| PARTITION ALL BY partition_by_inner
+  { 
+    $$.val = &tree.PartitionTableBy{
+      All: true,
+      PartitionBy: $4.partitionBy(),
+    }
+  }
+
 partition_by:
-  PARTITION BY LIST '(' name_list ')' '(' list_partitions ')'
+  PARTITION BY partition_by_inner
+  {
+    $$.val = $3.partitionBy()
+  }
+
+partition_by_inner:
+  LIST '(' name_list ')' '(' list_partitions ')'
   {
     $$.val = &tree.PartitionBy{
-      Fields: $5.nameList(),
-      List: $8.listPartitions(),
+      Fields: $3.nameList(),
+      List: $6.listPartitions(),
     }
   }
-| PARTITION BY RANGE '(' name_list ')' '(' range_partitions ')'
+| RANGE '(' name_list ')' '(' range_partitions ')'
   {
     $$.val = &tree.PartitionBy{
-      Fields: $5.nameList(),
-      Range: $8.rangePartitions(),
+      Fields: $3.nameList(),
+      Range: $6.rangePartitions(),
     }
   }
-| PARTITION BY NOTHING
+| NOTHING
   {
     $$.val = (*tree.PartitionBy)(nil)
   }

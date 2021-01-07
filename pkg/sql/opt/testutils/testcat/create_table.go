@@ -171,8 +171,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	} else {
 		tab.addPrimaryColumnIndex("rowid")
 	}
-	if stmt.PartitionBy != nil {
-		tab.Indexes[0].partitionBy = stmt.PartitionBy
+	if stmt.PartitionTableBy != nil {
+		tab.Indexes[0].partitionBy = stmt.PartitionTableBy.PartitionBy
 	}
 
 	// Add check constraints.

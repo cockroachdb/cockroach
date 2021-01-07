@@ -1316,8 +1316,8 @@ create_schema_stmt ::=
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' opt_schema_name 'AUTHORIZATION' role_spec
 
 create_table_stmt ::=
-	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit opt_locality
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_table_by opt_table_with opt_create_table_on_commit opt_locality
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_table_by opt_table_with opt_create_table_on_commit opt_locality
 
 create_table_as_stmt ::=
 	'CREATE' opt_persistence_temp_table 'TABLE' table_name create_as_opt_col_list opt_table_with 'AS' select_stmt opt_create_table_on_commit
@@ -1846,6 +1846,10 @@ opt_table_elem_list ::=
 	table_elem_list
 	| 
 
+opt_partition_table_by ::=
+	partition_table_by
+	| 
+
 opt_table_with ::=
 	opt_with_storage_parameter_list
 
@@ -2289,12 +2293,14 @@ storing ::=
 	| 'INCLUDE'
 
 partition_by ::=
-	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
-	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
-	| 'PARTITION' 'BY' 'NOTHING'
+	'PARTITION' 'BY' partition_by_inner
 
 storage_parameter_list ::=
 	( storage_parameter ) ( ( ',' storage_parameter ) )*
+
+partition_table_by ::=
+	partition_by
+	| 'PARTITION' 'ALL' 'BY' partition_by_inner
 
 create_as_table_defs ::=
 	( column_name create_as_col_qual_list ) ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )*
@@ -2498,7 +2504,7 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
-	| partition_by
+	| partition_table_by
 	| 'OWNER' 'TO' role_spec
 
 var_set_list ::=
@@ -2586,11 +2592,10 @@ func_expr_windowless ::=
 index_elem_options ::=
 	opt_class opt_asc_desc opt_nulls_order
 
-list_partitions ::=
-	( list_partition ) ( ( ',' list_partition ) )*
-
-range_partitions ::=
-	( range_partition ) ( ( ',' range_partition ) )*
+partition_by_inner ::=
+	'LIST' '(' name_list ')' '(' list_partitions ')'
+	| 'RANGE' '(' name_list ')' '(' range_partitions ')'
+	| 'NOTHING'
 
 storage_parameter ::=
 	name '=' var_value
@@ -2857,11 +2862,11 @@ opt_class ::=
 	name
 	| 
 
-list_partition ::=
-	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
+list_partitions ::=
+	( list_partition ) ( ( ',' list_partition ) )*
 
-range_partition ::=
-	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by
+range_partitions ::=
+	( range_partition ) ( ( ',' range_partition ) )*
 
 create_as_col_qualification ::=
 	create_as_col_qualification_elem
@@ -2977,6 +2982,12 @@ special_function ::=
 tuple1_unambiguous_values ::=
 	a_expr ','
 	| a_expr ',' expr_list
+
+list_partition ::=
+	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
+
+range_partition ::=
+	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by
 
 create_as_col_qualification_elem ::=
 	'PRIMARY' 'KEY'
