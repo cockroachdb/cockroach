@@ -1446,7 +1446,17 @@ func (node *Locality) doc(p *PrettyCfg) pretty.Doc {
 	case LocalityLevelGlobal:
 		return pretty.ConcatSpace(localityKW, pretty.Keyword("GLOBAL"))
 	case LocalityLevelRow:
-		return pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY ROW"))
+		ret := pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY ROW"))
+		if node.RegionalByRowColumn != "" {
+			return pretty.ConcatSpace(
+				ret,
+				pretty.ConcatSpace(
+					pretty.Keyword("ON"),
+					p.Doc(&node.RegionalByRowColumn),
+				),
+			)
+		}
+		return ret
 	case LocalityLevelTable:
 		byTable := pretty.ConcatSpace(localityKW, pretty.Keyword("REGIONAL BY TABLE IN"))
 		if node.TableRegion == "" {
