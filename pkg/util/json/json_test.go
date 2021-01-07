@@ -2252,3 +2252,62 @@ func TestJSONRemovePath(t *testing.T) {
 		}
 	}
 }
+
+func TestToDecimal(t *testing.T) {
+	numericCases := []string{
+		"1",
+		"1.0",
+		"3.14",
+		"-3.14",
+		"1.000",
+		"-0.0",
+		"-0.09",
+		"0.08",
+	}
+
+	nonNumericCases := []string{
+		"\"1\"",
+		"{}",
+		"[]",
+		"true",
+		"false",
+		"null",
+	}
+
+	for _, tc := range numericCases {
+		t.Run(fmt.Sprintf("numeric - %s", tc), func(t *testing.T) {
+			dec1, _, err := apd.NewFromString(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			json, err := ParseJSON(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			dec2, ok := json.AsDecimal()
+			if !ok {
+				t.Fatalf("could not cast %v to decmial", json)
+			}
+
+			if dec1.Cmp(dec2) != 0 {
+				t.Fatalf("expected %s == %s", dec1.String(), dec2.String())
+			}
+		})
+	}
+
+	for _, tc := range nonNumericCases {
+		t.Run(fmt.Sprintf("nonNumeric - %s", tc), func(t *testing.T) {
+			json, err := ParseJSON(tc)
+			if err != nil {
+				t.Fatalf("expected no error")
+			}
+
+			dec, ok := json.AsDecimal()
+			if dec != nil || ok {
+				t.Fatalf("%v should not be a valid decimal", json)
+			}
+		})
+	}
+}
