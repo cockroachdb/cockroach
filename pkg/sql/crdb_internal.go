@@ -1823,7 +1823,7 @@ CREATE TABLE crdb_internal.create_statements (
 		if createNofk == "" {
 			createNofk = stmt
 		}
-		hasPartitions := nil != table.FindIndex(catalog.IndexOpts{}, func(idx catalog.Index) bool {
+		hasPartitions := nil != catalog.FindIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) bool {
 			return idx.GetPartitioning().NumColumns != 0
 		})
 		return addRow(
@@ -2050,7 +2050,7 @@ CREATE TABLE crdb_internal.table_indexes (
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
 					// indexes are not reported as a part of ForeachIndex.
-					return table.ForEachIndex(catalog.IndexOpts{
+					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						NonPhysicalPrimaryIndex: true,
 					}, func(idx catalog.Index) error {
 						row = row[:0]
@@ -2179,7 +2179,7 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				return table.ForEachIndex(catalog.IndexOpts{NonPhysicalPrimaryIndex: true}, reportIndex)
+				return catalog.ForEachIndex(table, catalog.IndexOpts{NonPhysicalPrimaryIndex: true}, reportIndex)
 			})
 	},
 }
@@ -2261,7 +2261,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			}
 
 			// Record the backward references of the primary index.
-			if err := table.ForEachIndex(catalog.IndexOpts{}, reportIdxDeps); err != nil {
+			if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
 				return err
 			}
 
@@ -2390,7 +2390,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := table.ForEachIndex(catalog.IndexOpts{}, reportIdxDeps); err != nil {
+				if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
 					return err
 				}
 				reportDependedOnBy := func(
@@ -2820,7 +2820,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 
 				for i, s := range subzones {
-					index := table.FindActiveIndex(func(idx catalog.Index) bool {
+					index := catalog.FindActiveIndex(table, func(idx catalog.Index) bool {
 						return idx.GetID() == descpb.IndexID(s.IndexID)
 					})
 					if index == nil {
@@ -3404,7 +3404,7 @@ CREATE TABLE crdb_internal.partitions (
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
-					return table.ForEachIndex(catalog.IndexOpts{
+					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index catalog.Index) error {
 						return addPartitioningRows(ctx, p, dbName, table, index.IndexDesc(), &index.IndexDesc().Partitioning,

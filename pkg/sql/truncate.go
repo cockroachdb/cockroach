@@ -376,7 +376,7 @@ func (p *planner) reassignInterleaveIndexReferences(
 ) error {
 	for _, table := range tables {
 		changed := false
-		if err := table.ForEachNonDropIndex(func(indexI catalog.Index) error {
+		if err := catalog.ForEachNonDropIndex(table, func(indexI catalog.Index) error {
 			index := indexI.IndexDesc()
 			for j, a := range index.Interleave.Ancestors {
 				if a.TableID == truncatedID {

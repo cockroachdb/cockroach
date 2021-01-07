@@ -100,7 +100,7 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := tableDesc.ForEachIndex(catalog.IndexOpts{
+	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
 		AddMutations: true,
 	}, func(idx catalog.Index) error {
 		_, indexSubzoneExists := subzoneIndexByIndexID[idx.GetID()]
