@@ -255,7 +255,7 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 // GetPrimaryIndex returns the primary index in the form of a catalog.Index
 // interface.
 func (desc *wrapper) GetPrimaryIndex() catalog.Index {
-	return index{desc: &desc.PrimaryIndex}
+	return desc.getExistingOrNewIndexCache().primaryIndex(desc)
 }
 
 // getExistingOrNewIndexCache should be the only place where the indexCache
