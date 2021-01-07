@@ -1281,6 +1281,54 @@ SELECT * FROM inv_c@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
 1  {"num": 1, "x": "y"}  foo
 3  {"num": 3, "x": "y"}  bar
 
+# Updates and Upserts with fetch columns pruned.
+
+statement ok
+CREATE TABLE prune (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    INDEX idx (b) WHERE c > 0,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c),
+    FAMILY (d)
+)
+
+statement ok
+INSERT INTO prune (a, b, c, d) VALUES (1, 2, 3, 4)
+
+# Test that an update is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+UPDATE prune SET d = d + 1 WHERE a = 1
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  5
+
+# Test that an upsert is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+UPSERT INTO prune (a, d) VALUES (1, 6)
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  6
+
+# Test that an upsert is successful when fetch columns b and c are pruned
+# because an update to idx is not required.
+statement ok
+INSERT INTO prune (a, d) VALUES (1, 6) ON CONFLICT (a) DO UPDATE SET d = 7
+
+query IIII rowsort
+SELECT * FROM prune@idx WHERE c > 0
+----
+1  2  3  7
+
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.
 subtest regression_52318

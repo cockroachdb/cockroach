@@ -1655,7 +1655,7 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 		// possible to generate an unconstrained partial index scan, which may
 		// lead to better query plans.
 		if _, isPartialIndex := index.Predicate(); isPartialIndex {
-			p, ok := tabMeta.PartialIndexPredicates[i]
+			p, ok := tabMeta.PartialIndexPredicate(i)
 			if !ok {
 				// A partial index predicate expression was not built for the
 				// partial index. See Builder.buildScan for details on when this

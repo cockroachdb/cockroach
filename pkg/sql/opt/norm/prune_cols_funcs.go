@@ -45,6 +45,15 @@ func (c *CustomFuncs) NeededExplainCols(private *memo.ExplainPrivate) opt.ColSet
 func (c *CustomFuncs) NeededMutationCols(
 	private *memo.MutationPrivate, uniqueChecks memo.UniqueChecksExpr, fkChecks memo.FKChecksExpr,
 ) opt.ColSet {
+	return c.neededMutationCols(private, uniqueChecks, fkChecks, true /* includePartialIndexCols */)
+}
+
+func (c *CustomFuncs) neededMutationCols(
+	private *memo.MutationPrivate,
+	uniqueChecks memo.UniqueChecksExpr,
+	fkChecks memo.FKChecksExpr,
+	includePartialIndexCols bool,
+) opt.ColSet {
 	var cols opt.ColSet
 
 	// Add all input columns referenced by the mutation private.
@@ -60,8 +69,10 @@ func (c *CustomFuncs) NeededMutationCols(
 	addCols(private.FetchCols)
 	addCols(private.UpdateCols)
 	addCols(private.CheckCols)
-	addCols(private.PartialIndexPutCols)
-	addCols(private.PartialIndexDelCols)
+	if includePartialIndexCols {
+		addCols(private.PartialIndexPutCols)
+		addCols(private.PartialIndexDelCols)
+	}
 	addCols(private.ReturnCols)
 	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {
@@ -89,17 +100,8 @@ func (c *CustomFuncs) NeededMutationCols(
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
-	return neededMutationFetchCols(c.mem, op, private)
-}
-
-// neededMutationFetchCols returns the set of columns needed by the given
-// mutation operator.
-func neededMutationFetchCols(
-	mem *memo.Memo, op opt.Operator, private *memo.MutationPrivate,
-) opt.ColSet {
-
 	var cols opt.ColSet
-	tabMeta := mem.Metadata().TableMeta(private.Table)
+	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
 	familyCols := func(fam cat.Family) opt.ColSet {
@@ -153,26 +155,26 @@ func neededMutationFetchCols(
 
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
-			// If the columns being updated are not part of the index and the
-			// index is not a partial index, then the update does not require
-			// changes to the index. Partial indexes may be updated (even when a
-			// column in the index is not changing) when rows that were not
-			// previously in the index must be added to the index because they
-			// now satisfy the partial index predicate.
+			// If the columns being updated are not part of the index, then the
+			// update does not require changes to the index. Partial indexes may
+			// be updated (even when a column in the index is not changing) when
+			// the predicate references columns that are being updated. For
+			// example, rows that were not previously in the index must be added
+			// to the index because they now satisfy the partial index
+			// predicate, requiring the index columns to be fetched.
 			//
 			// Note that we use the set of index columns where the virtual
 			// columns have been mapped to their source columns. Virtual columns
 			// are never part of the updated columns. Updates to source columns
 			// trigger index changes.
-			//
-			// TODO(mgartner): Index columns are not necessary when neither the
-			// index columns nor the columns referenced in the partial index
-			// predicate are being updated. We should prune mutation fetch
-			// columns when this is the case, rather than always marking index
-			// columns of partial indexes as "needed".
 			indexCols := tabMeta.IndexColumnsMapVirtual(i)
-			_, isPartialIndex := tabMeta.Table.Index(i).Predicate()
-			if !indexCols.Intersects(updateCols) && !isPartialIndex {
+			pred, isPartialIndex := tabMeta.PartialIndexPredicate(i)
+			indexAndPredCols := indexCols.Copy()
+			if isPartialIndex {
+				predFilters := *pred.(*memo.FiltersExpr)
+				indexAndPredCols.UnionWith(predFilters.OuterCols())
+			}
+			if !indexAndPredCols.Intersects(updateCols) {
 				continue
 			}
 
@@ -578,17 +580,6 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 			relProps.Rule.PruneCols.Add(w.Col)
 			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps().OuterCols)
 		}
-
-	case opt.UpdateOp, opt.UpsertOp, opt.DeleteOp:
-		// Find the columns that would need to be fetched, if no returning
-		// clause were present.
-		withoutReturningPrivate := *e.Private().(*memo.MutationPrivate)
-		withoutReturningPrivate.ReturnCols = opt.OptionalColList{}
-		neededCols := neededMutationFetchCols(e.Memo(), e.Op(), &withoutReturningPrivate)
-
-		// Only the "free" RETURNING columns can be pruned away (i.e. the columns
-		// required by the mutation only because they're being returned).
-		relProps.Rule.PruneCols = relProps.OutputCols.Difference(neededCols)
 
 	case opt.WithOp:
 		// WithOp passes through its input unchanged, so it has the same pruning

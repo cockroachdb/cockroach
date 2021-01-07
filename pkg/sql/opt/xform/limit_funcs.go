@@ -249,12 +249,11 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 
 	// makeNewUnion extends the Union tree rooted at 'last' to include 'newScan'.
 	// The ColumnIDs of the original Scan are used by the resulting expression.
-	oldColList := scan.Relational().OutputCols.ToList()
-	makeNewUnion := func(last, newScan memo.RelExpr) memo.RelExpr {
+	makeNewUnion := func(last, newScan memo.RelExpr, outCols opt.ColList) memo.RelExpr {
 		return c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
 			LeftCols:  last.Relational().OutputCols.ToList(),
 			RightCols: newScan.Relational().OutputCols.ToList(),
-			OutCols:   oldColList,
+			OutCols:   outCols,
 		})
 	}
 
@@ -263,7 +262,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// construct a single unlimited Scan, which will also be added to the Unions.
 	var noLimitSpans constraint.Spans
 	var last memo.RelExpr
-	for i := 0; i < spans.Count(); i++ {
+	for i, n := 0, spans.Count(); i < n; i++ {
 		if i >= budgetExceededIndex {
 			// The Scan budget has been reached; no additional Scans can be created.
 			noLimitSpans.Append(spans.Get(i))
@@ -276,15 +275,27 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 			noLimitSpans.Append(spans.Get(i))
 			continue
 		}
-		for j := 0; j < singleKeySpans.Count(); j++ {
+		for j, m := 0, singleKeySpans.Count(); j < m; j++ {
 			if last == nil {
 				// This is the first limited Scan, so no Union necessary.
 				last = c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
 				continue
 			}
-			// Construct a new Scan for each span and add it to the Union tree.
+			// Construct a new Scan for each span.
 			newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
-			last = makeNewUnion(last, newScan)
+
+			// Add the scan to the union tree. If it is the final union in the
+			// tree, use the original scan's columns as the union's out columns.
+			// Otherwise, create new output column IDs for the union.
+			var outCols opt.ColList
+			finalUnion := i == n-1 && j == m-1 && noLimitSpans.Count() == 0
+			if finalUnion {
+				outCols = sp.Cols.ToList()
+			} else {
+				_, cols := c.DuplicateColumnIDs(sp.Table, sp.Cols)
+				outCols = cols.ToList()
+			}
+			last = makeNewUnion(last, newScan, outCols)
 		}
 	}
 	if noLimitSpans.Count() == spans.Count() {
@@ -302,11 +313,11 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// construct an unlimited Scan and add it to the Union tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 	newScanPrivate.Constraint = &constraint.Constraint{
-		Columns: sp.Constraint.Columns,
+		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	}
 	newScan := c.e.f.ConstructScan(newScanPrivate)
-	return makeNewUnion(last, newScan)
+	return makeNewUnion(last, newScan, sp.Cols.ToList())
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given

@@ -134,6 +134,10 @@ message ReadImportDataSpec {
   // NEXTID: 16
 }
 
+message StreamIngestionDataSpec {
+  repeated string partition_address = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.PartitionAddress",(gogoproto.nullable) = false];
+}
+
 message BackupDataSpec {
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
