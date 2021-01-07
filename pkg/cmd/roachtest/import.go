@@ -22,6 +22,8 @@ import (
 
 func registerImportTPCC(r *testRegistry) {
 	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
+		// Randomize starting with encryption-at-rest enabled.
+		c.encryptAtRandom = true
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
@@ -95,6 +97,8 @@ func registerImportTPCH(r *testRegistry) {
 			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
+				// Randomize starting with encryption-at-rest enabled.
+				c.encryptAtRandom = true
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
 				conn := c.Conn(ctx, 1)

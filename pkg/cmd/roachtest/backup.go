@@ -37,6 +37,8 @@ const (
 func registerBackup(r *testRegistry) {
 	importBankData := func(ctx context.Context, rows int, t *test, c *cluster) string {
 		dest := c.name
+		// Randomize starting with encryption-at-rest enabled.
+		c.encryptAtRandom = true
 
 		if local {
 			rows = 100
@@ -205,6 +207,8 @@ func registerBackup(r *testRegistry) {
 		Cluster: makeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			// Randomize starting with encryption-at-rest enabled.
+			c.encryptAtRandom = true
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 			c.Start(ctx, t)

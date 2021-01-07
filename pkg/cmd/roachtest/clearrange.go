@@ -13,7 +13,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,17 +38,12 @@ func registerClearRange(r *testRegistry) {
 }
 
 func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bool) {
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 	c.Put(ctx, cockroach, "./cockroach")
 
 	t.Status("restoring fixture")
-	// Randomize starting with encryption-at-rest enabled.
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	var opts []option
-	if rng.Intn(2) == 1 {
-		c.l.Printf("starting with encryption at rest enabled")
-		opts = append(opts, startArgs("--encrypt"))
-	}
-	c.Start(ctx, t, opts...)
+	c.Start(ctx, t)
 
 	// NB: on a 10 node cluster, this should take well below 3h.
 	tBegin := timeutil.Now()
@@ -59,6 +53,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	c.Stop(ctx)
 	t.Status()
 
+	var opts []option
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
