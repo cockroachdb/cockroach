@@ -331,6 +331,9 @@ func (s *Span) LogStructured(item Structured) {
 		return
 	}
 	s.crdb.logStructured(item)
+	if s.hasVerboseSink() {
+		s.Record(item.String())
+	}
 }
 
 // Record provides a way to record free-form text into verbose spans.
