@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/logtags"
@@ -335,4 +336,51 @@ func TestLightstepContext(t *testing.T) {
 	}
 	require.Equal(t, exp, s2.Meta().Baggage)
 	require.Equal(t, exp, shadowBaggage)
+}
+
+func getSortedActiveSpanOps(tr *Tracer) []string {
+	var sl []string
+	tr.VisitSpans(func(sp *Span) {
+		for _, rec := range sp.GetRecording() {
+			sl = append(sl, rec.Operation)
+		}
+	})
+	sort.Strings(sl)
+	return sl
+}
+
+// TestTracer_VisitSpans verifies that in-flight local root Spans
+// are tracked by the Tracer, and that Finish'ed Spans are not.
+func TestTracer_VisitSpans(t *testing.T) {
+	tr1 := NewTracer()
+	tr2 := NewTracer()
+
+	root := tr1.StartSpan("root", WithForceRealSpan())
+	root.SetVerbose(true)
+	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	require.Len(t, tr1.activeSpans.m, 1)
+
+	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
+	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
+	require.Len(t, tr2.activeSpans.m, 2)
+
+	require.NoError(t, child.ImportRemoteSpans(childChildFinished.GetRecording()))
+
+	childChildFinished.Finish()
+	require.Len(t, tr2.activeSpans.m, 1)
+
+	// Even though only `root` is tracked by tr1, we also reach
+	// root.child and (via ImportRemoteSpans) the remote child.
+	require.Equal(t, []string{"root", "root.child", "root.child.remotechilddone"}, getSortedActiveSpanOps(tr1))
+	require.Equal(t, []string{"root.child.remotechild"}, getSortedActiveSpanOps(tr2))
+
+	childChild.Finish()
+	child.Finish()
+	root.Finish()
+
+	// Nothing is tracked any more.
+	require.Len(t, getSortedActiveSpanOps(tr1), 0)
+	require.Len(t, getSortedActiveSpanOps(tr2), 0)
+	require.Len(t, tr1.activeSpans.m, 0)
+	require.Len(t, tr2.activeSpans.m, 0)
 }
