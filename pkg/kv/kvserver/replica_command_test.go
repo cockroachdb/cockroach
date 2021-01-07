@@ -92,6 +92,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	}
 }
 
+// TODO(aayush): This test has gotten unwieldy. It needs to be table-driven.
 func TestValidateReplicationChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -229,4 +230,228 @@ func TestValidateReplicationChanges(t *testing.T) {
 		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
 	})
 	require.NoError(t, err)
+
+	// Test Case 18: Adding a non-voter where we already have a voting replica
+	// without a simultaneous removal of that voter.
+	err = validateReplicationChanges(descSingle, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.Regexp(t, "unable to add replica .* which is already present as a voter", err)
+
+	// Test Case 19: Demoting a voter to a non-voter.
+	err = validateReplicationChanges(descSingle, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+	descWithOneVoterAndNonVoter := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeNonVoter()},
+		},
+	}
+
+	// Test Case 20: Adding a voter on a store where we already have a non-voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+	})
+	require.Regexp(t, "unable to add replica .* which is already present as a non-voter", err)
+
+	// Test Case 21: Promoting a non-voter to a voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 22: Swapping a voter with a non-voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+	})
+	require.NoError(t, err)
+}
+
+func TestSynthesizeTargetsByChangeType(t *testing.T) {
+	type testCase struct {
+		name                                      string
+		changes                                   []roachpb.ReplicationChange
+		expPromotions, expDemotions               []int32
+		expVoterAdditions, expVoterRemovals       []int32
+		expNonVoterAdditions, expNonVoterRemovals []int32
+	}
+
+	mkTarget := func(t int32) roachpb.ReplicationTarget {
+		return roachpb.ReplicationTarget{NodeID: roachpb.NodeID(t), StoreID: roachpb.StoreID(t)}
+	}
+
+	mkTargetList := func(targets []int32) []roachpb.ReplicationTarget {
+		if len(targets) == 0 {
+			return nil
+		}
+		res := make([]roachpb.ReplicationTarget, len(targets))
+		for i, t := range targets {
+			res[i] = mkTarget(t)
+		}
+		return res
+	}
+
+	tests := []testCase{
+		{
+			name: "simple voter addition",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+			},
+			expVoterAdditions: []int32{2},
+		},
+		{
+			name: "simple voter removal",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(2)},
+			},
+			expVoterRemovals: []int32{2},
+		},
+		{
+			name: "simple non-voter addition",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(2)},
+			},
+			expNonVoterAdditions: []int32{2},
+		},
+		{
+			name: "simple non-voter removal",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+			},
+			expNonVoterRemovals: []int32{2},
+		},
+		{
+			name: "promote non_voter to voter",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+			},
+			expPromotions: []int32{2},
+		},
+		{
+			name: "demote voter to non_voter",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+			},
+			expDemotions: []int32{1},
+		},
+		{
+			name: "swap voter with non_voter",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+			},
+			expPromotions: []int32{2},
+			expDemotions:  []int32{1},
+		},
+		{
+			name: "swap with simple addition",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(4)},
+			},
+			expPromotions:     []int32{2},
+			expDemotions:      []int32{1},
+			expVoterAdditions: []int32{4},
+		},
+		{
+			name: "swap with simple removal",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(4)},
+			},
+			expPromotions:    []int32{2},
+			expDemotions:     []int32{1},
+			expVoterRemovals: []int32{4},
+		},
+		{
+			name: "swap with addition promotion",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(3)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(3)},
+			},
+			expPromotions: []int32{2, 3},
+			expDemotions:  []int32{1},
+		},
+		{
+			name: "swap with additional demotion",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(4)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(4)},
+			},
+			expPromotions: []int32{2},
+			expDemotions:  []int32{1, 4},
+		},
+		{
+			name: "two swaps",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(4)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(4)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(3)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(3)},
+			},
+			expPromotions: []int32{2, 3},
+			expDemotions:  []int32{1, 4},
+		},
+		{
+			name: "all at once",
+			changes: []roachpb.ReplicationChange{
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.REMOVE_VOTER, Target: mkTarget(1)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(2)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(3)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(3)},
+				{ChangeType: roachpb.ADD_VOTER, Target: mkTarget(4)},
+				{ChangeType: roachpb.ADD_NON_VOTER, Target: mkTarget(5)},
+				{ChangeType: roachpb.REMOVE_NON_VOTER, Target: mkTarget(6)},
+			},
+			expPromotions:        []int32{2, 3},
+			expDemotions:         []int32{1},
+			expVoterAdditions:    []int32{4},
+			expNonVoterAdditions: []int32{5},
+			expNonVoterRemovals:  []int32{6},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := synthesizeTargetsByChangeType(test.changes)
+			require.Equal(t, result.nonVoterPromotions, mkTargetList(test.expPromotions))
+			require.Equal(t, result.voterDemotions, mkTargetList(test.expDemotions))
+			require.Equal(t, result.voterAdditions, mkTargetList(test.expVoterAdditions))
+			require.Equal(t, result.voterRemovals, mkTargetList(test.expVoterRemovals))
+			require.Equal(t, result.nonVoterAdditions, mkTargetList(test.expNonVoterAdditions))
+			require.Equal(t, result.nonVoterRemovals, mkTargetList(test.expNonVoterRemovals))
+		})
+	}
 }

@@ -620,7 +620,7 @@ func (rq *replicateQueue) findRemoveTarget(
 			rangeRaftProgress(repl.RaftStatus(), existingReplicas))}
 	}
 
-	return rq.allocator.RemoveTarget(ctx, zone, candidates, existingReplicas)
+	return rq.allocator.RemoveTarget(ctx, zone, roachpb.MakeReplicaSet(candidates).ReplicationTargets(), existingReplicas)
 }
 
 // maybeTransferLeaseAway is called whenever a replica on a given store is
