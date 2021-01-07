@@ -428,8 +428,25 @@ func (n *createIndexNode) startExec(params runParams) error {
 	indexDesc.Version = encodingVersion
 
 	if n.n.PartitionBy != nil {
-		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-			params.EvalContext(), n.tableDesc, indexDesc, n.n.PartitionBy)
+		newIndexDesc, numImplicitColumns, err := detectImplicitPartitionColumns(
+			params.p.EvalContext(),
+			n.tableDesc,
+			*indexDesc,
+			n.n.PartitionBy,
+		)
+		if err != nil {
+			return err
+		}
+		indexDesc = &newIndexDesc
+		partitioning, err := CreatePartitioning(
+			params.ctx,
+			params.p.ExecCfg().Settings,
+			params.EvalContext(),
+			n.tableDesc,
+			indexDesc,
+			numImplicitColumns,
+			n.n.PartitionBy,
+		)
 		if err != nil {
 			return err
 		}
