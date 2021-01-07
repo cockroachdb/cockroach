@@ -211,8 +211,8 @@ func (desc *wrapper) collectConstraintInfo(
 	info := make(map[string]descpb.ConstraintDetail)
 
 	// Indexes provide PK and Unique constraints that are enforced by an index.
-	indexes := desc.AllNonDropIndexes()
-	for _, index := range indexes {
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
@@ -341,14 +341,12 @@ func FindFKReferencedIndex(
 	// key columns.
 	primaryIndex := referencedTable.GetPrimaryIndex()
 	if primaryIndex.IsValidReferencedIndex(referencedColIDs) {
-		return primaryIndex, nil
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
-	indexes := referencedTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
 		if idx.IsValidReferencedIndex(referencedColIDs) {
-			return idx, nil
+			return idx.IndexDesc(), nil
 		}
 	}
 	return nil, pgerror.Newf(
@@ -366,14 +364,12 @@ func FindFKOriginIndex(
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
 	if primaryIndex := originTable.GetPrimaryIndex(); primaryIndex.IsValidOriginIndex(originColIDs) {
-		return primaryIndex, nil
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	indexes := originTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range originTable.PublicNonPrimaryIndexes() {
 		if idx.IsValidOriginIndex(originColIDs) {
-			return idx, nil
+			return idx.IndexDesc(), nil
 		}
 	}
 	return nil, pgerror.Newf(

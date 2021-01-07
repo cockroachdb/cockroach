@@ -101,7 +101,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		args = append(args, row.FetcherTableArgs{
 			Spans:            desc.AllIndexSpans(keys.SystemSQLCodec),
 			Desc:             desc,
-			Index:            desc.GetPrimaryIndex(),
+			Index:            desc.GetPrimaryIndex().IndexDesc(),
 			ColIdxMap:        colIdxMap,
 			IsSecondaryIndex: false,
 			Cols:             desc.Columns,

@@ -178,13 +178,15 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in partial index predicates.
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		if index := &tableDesc.GetPublicNonPrimaryIndexes()[i]; index.IsPartial() {
-			newExpr, err := schemaexpr.RenameColumn(index.Predicate, *oldName, *newName)
+	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
+		if index.IsPartial() {
+			newExpr, err := schemaexpr.RenameColumn(index.GetPredicate(), *oldName, *newName)
 			if err != nil {
 				return false, err
 			}
-			index.Predicate = newExpr
+			indexDesc := *index.IndexDesc()
+			indexDesc.Predicate = newExpr
+			tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), indexDesc)
 		}
 	}
 
@@ -216,8 +218,8 @@ func (p *planner) renameColumn(
 		// Keep the shardedDesc name in sync with the column name.
 		shardedDesc.Name = string(newName)
 	}
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		maybeUpdateShardedDesc(&idx.Sharded)
+	for _, idx := range tableDesc.NonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.IndexDesc().Sharded)
 	}
 
 	// Rename the column in the indexes.

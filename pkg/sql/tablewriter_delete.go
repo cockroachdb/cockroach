@@ -123,7 +123,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -254,7 +254,7 @@ func (td *tableDeleter) deleteIndexScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,

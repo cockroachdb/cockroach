@@ -286,7 +286,8 @@ func (n *scrubNode) startScrubTable(
 func getPrimaryColIdxs(
 	tableDesc *tabledesc.Immutable, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
-	for i, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
 		rowIdx := -1
 		for idx, col := range columns {
 			if col.ID == colID {
@@ -298,7 +299,7 @@ func getPrimaryColIdxs(
 			return nil, errors.Errorf(
 				"could not find primary index column in projection: columnID=%d columnName=%s",
 				colID,
-				tableDesc.GetPrimaryIndex().ColumnNames[i])
+				tableDesc.GetPrimaryIndex().GetColumnName(i))
 		}
 		primaryColIdxs = append(primaryColIdxs, rowIdx)
 	}
@@ -345,9 +346,8 @@ func pairwiseOp(left []string, right []string, op string) []string {
 func createPhysicalCheckOperations(
 	tableDesc *tabledesc.Immutable, tableName *tree.TableName,
 ) (checks []checkOperation) {
-	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, tableDesc.GetPrimaryIndex()))
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.GetPublicNonPrimaryIndexes()[i]))
+	for _, idx := range tableDesc.ActiveIndexes() {
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx.IndexDesc()))
 	}
 	return checks
 }
@@ -367,11 +367,11 @@ func createIndexCheckOperations(
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
 		// table.
-		for i := range tableDesc.GetPublicNonPrimaryIndexes() {
+		for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				&tableDesc.GetPublicNonPrimaryIndexes()[i],
+				idx.IndexDesc(),
 				asOf,
 			))
 		}
@@ -383,15 +383,15 @@ func createIndexCheckOperations(
 	for _, idxName := range indexNames {
 		names[idxName.String()] = struct{}{}
 	}
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		if _, ok := names[tableDesc.GetPublicNonPrimaryIndexes()[i].Name]; ok {
+	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
+		if _, ok := names[idx.GetName()]; ok {
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				&tableDesc.GetPublicNonPrimaryIndexes()[i],
+				idx.IndexDesc(),
 				asOf,
 			))
-			delete(names, tableDesc.GetPublicNonPrimaryIndexes()[i].Name)
+			delete(names, idx.GetName())
 		}
 	}
 	if len(names) > 0 {
