@@ -1132,3 +1132,74 @@ eval
 'hello t'::string::char(100)
 ----
 'hello t'
+
+# Test that numeric jsonb values can be cast to a numeric data type
+eval
+'1'::jsonb::int
+----
+1
+
+eval
+'1'::jsonb::float
+----
+1.0
+
+eval
+'1'::jsonb::decimal
+----
+1
+
+eval
+'1'::jsonb::string
+----
+'1'
+
+eval
+'2.0'::jsonb::int
+----
+2
+
+eval
+'2.0'::jsonb::float
+----
+2.0
+
+eval
+'2.0'::jsonb::decimal
+----
+2.0
+
+eval
+'2.0'::jsonb::string
+----
+'2.0'
+
+eval
+'3.14'::jsonb::float
+----
+3.14
+
+eval
+'3.14'::jsonb::decimal
+----
+3.14
+
+eval
+'true'::jsonb::float
+----
+invalid cast: jsonb -> float
+
+eval
+'null'::jsonb::float
+----
+invalid cast: jsonb -> float
+
+eval
+'{}'::jsonb::float
+----
+invalid cast: jsonb -> float
+
+eval
+'[]'::jsonb::float
+----
+invalid cast: jsonb -> float

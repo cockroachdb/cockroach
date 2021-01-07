@@ -98,6 +98,7 @@ var validCasts = []castInfo{
 	{from: types.IntervalFamily, to: types.IntFamily, volatility: VolatilityImmutable},
 	{from: types.OidFamily, to: types.IntFamily, volatility: VolatilityImmutable},
 	{from: types.BitFamily, to: types.IntFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.IntFamily, volatility: VolatilityImmutable},
 
 	// Casts to FloatFamily.
 	{from: types.UnknownFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
@@ -111,6 +112,7 @@ var validCasts = []castInfo{
 	{from: types.TimestampTZFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
 	{from: types.DateFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
 	{from: types.IntervalFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.FloatFamily, volatility: VolatilityImmutable},
 
 	// Casts to Box2D Family.
 	{from: types.UnknownFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
@@ -150,6 +152,7 @@ var validCasts = []castInfo{
 	{from: types.TimestampTZFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
 	{from: types.DateFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
 	{from: types.IntervalFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
+	{from: types.JsonFamily, to: types.DecimalFamily, volatility: VolatilityImmutable},
 
 	// Casts to StringFamily.
 	{from: types.UnknownFamily, to: types.StringFamily, volatility: VolatilityImmutable},
@@ -697,6 +700,13 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			res = NewDInt(DInt(iv))
 		case *DOid:
 			res = &v.DInt
+		case *DJSON:
+			if dec, ok := v.AsDecimal(); ok {
+				asInt, err := dec.Int64()
+				if err == nil {
+					res = NewDInt(DInt(asInt))
+				}
+			}
 		}
 		if res != nil {
 			return res, nil
@@ -747,6 +757,14 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 			return NewDFloat(DFloat(float64(v.UnixEpochDays()))), nil
 		case *DInterval:
 			return NewDFloat(DFloat(v.AsFloat64())), nil
+		case *DJSON:
+			if dec, ok := v.AsDecimal(); ok {
+				fl, err := dec.Float64()
+				if err != nil {
+					return nil, ErrFloatOutOfRange
+				}
+				return NewDFloat(DFloat(fl)), nil
+			}
 		}
 
 	case types.DecimalFamily:
@@ -795,6 +813,12 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 		case *DInterval:
 			v.AsBigInt(&dd.Coeff)
 			dd.Exponent = -9
+		case *DJSON:
+			if dec, ok := v.AsDecimal(); ok {
+				dd.Set(dec)
+			} else {
+				unset = false
+			}
 		default:
 			unset = true
 		}
