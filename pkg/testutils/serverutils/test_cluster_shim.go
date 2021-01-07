@@ -103,6 +103,12 @@ type TestClusterInterface interface {
 		t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 	) roachpb.RangeDescriptor
 
+	// SwapVoterWithNonVoter atomically swaps the voting replica located on
+	// `voterTarget` with the non-voting replica located on `nonVoterTarget`.
+	SwapVoterWithNonVoter(
+		startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+	) (roachpb.RangeDescriptor, error)
+
 	// FindRangeLeaseHolder returns the current lease holder for the given range.
 	// In particular, it returns one particular node's (the hint, if specified) view
 	// of the current lease.

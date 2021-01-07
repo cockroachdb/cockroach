@@ -92,6 +92,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	}
 }
 
+// TODO(aayush): This test has gotten unwieldy. It needs to be table-driven.
 func TestValidateReplicationChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -227,6 +228,49 @@ func TestValidateReplicationChanges(t *testing.T) {
 	}
 	err = validateReplicationChanges(descSingle, roachpb.ReplicationChanges{
 		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 2}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 18: Adding a non-voter where we already have a voting replica
+	// without a simultaneous removal of that voter.
+	err = validateReplicationChanges(descSingle, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.Regexp(t, "unable to add replica .* which is already present as a voter", err)
+
+	// Test Case 19: Demoting a voter to a non-voter.
+	err = validateReplicationChanges(descSingle, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+	})
+	require.NoError(t, err)
+
+	descWithOneVoterAndNonVoter := &roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeNonVoter()},
+		},
+	}
+
+	// Test Case 20: Adding a voter on a store where we already have a non-voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+	})
+	require.Regexp(t, "unable to add replica .* which is already present as a non-voter", err)
+
+	// Test Case 21: Promoting a non-voter to a voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+	})
+	require.NoError(t, err)
+
+	// Test Case 22: Swapping a voter with a non-voter.
+	err = validateReplicationChanges(descWithOneVoterAndNonVoter, roachpb.ReplicationChanges{
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: roachpb.ReplicationTarget{NodeID: 1, StoreID: 1}},
+		{ChangeType: roachpb.ADD_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: roachpb.ReplicationTarget{NodeID: 2, StoreID: 2}},
 	})
 	require.NoError(t, err)
 }
