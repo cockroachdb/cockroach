@@ -167,12 +167,16 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	); err != nil {
 		return err
 	}
+
+	qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, desc)
+	if err != nil {
+		return err
+	}
+
 	return params.p.logEvent(params.ctx,
 		desc.GetID(),
-		// TODO(knz): This is missing some details about the database.
-		// See: https://github.com/cockroachdb/cockroach/issues/57738
 		&eventpb.CreateSchema{
-			SchemaName: schemaName,
+			SchemaName: qualifiedSchemaName.String(),
 			Owner:      privs.Owner().Normalized(),
 		})
 }
