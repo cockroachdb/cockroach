@@ -2111,7 +2111,7 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 		targetRepl, details, err := a.RemoveTarget(
 			context.Background(),
 			zonepb.EmptyCompleteZoneConfig(),
-			existingRepls,
+			roachpb.MakeReplicaSet(existingRepls).ReplicationTargets(),
 			existingRepls,
 		)
 		if err != nil {
@@ -4214,7 +4214,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 		targetRepl, _, err := a.RemoveTarget(
 			ctx,
 			zonepb.EmptyCompleteZoneConfig(),
-			replicas,
+			roachpb.MakeReplicaSet(replicas).ReplicationTargets(),
 			replicas,
 		)
 		if err != nil {

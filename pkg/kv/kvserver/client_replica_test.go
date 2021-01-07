@@ -2289,6 +2289,37 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	}
 }
 
+func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 7
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	// NB: The test cluster starts with firstVoter having a voting replica (and
+	// the lease) for all ranges.
+	firstVoter, secondVoter, nonVoter := tc.Target(0), tc.Target(1), tc.Target(3)
+	firstStore, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	firstRepl := firstStore.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, firstRepl, `the first node in the TestCluster must have a replica for the ScratchRange`)
+
+	// TODO(aayush): Trying to swap the last voting replica with a non-voter hits
+	// the safeguard inside Replica.propose() as the last voting replica is always
+	// the leaseholder. There are a bunch of subtleties around getting a
+	// leaseholder to remove itself without another voter to immediately transfer
+	// the lease to. Determine if/how this needs to be fixed.
+	tc.AddNonVotersOrFatal(t, key, nonVoter)
+	_, err = tc.SwapVoterWithNonVoter(key, firstVoter, nonVoter)
+	require.Regexp(t, "received invalid ChangeReplicasTrigger", err)
+
+	tc.AddVotersOrFatal(t, key, secondVoter)
+	tc.SwapVoterWithNonVoterOrFatal(t, key, secondVoter, nonVoter)
+}
+
 // TestReplicaTombstone ensures that tombstones are written when we expect
 // them to be. Tombstones are laid down when replicas are removed.
 // Replicas are removed for several reasons:
