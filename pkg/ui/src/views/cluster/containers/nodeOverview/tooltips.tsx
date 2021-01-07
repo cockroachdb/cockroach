@@ -88,7 +88,7 @@ export const IntentBytesTooltip: React.FC<TooltipProps> = (props) => (
         <p>
           Number of bytes stored in &nbsp;
           <Anchor href={writeIntents} target="_blank">
-            ​write intents​
+            write intents
           </Anchor>{" "}
           &nbsp; of uncommitted values.
         </p>

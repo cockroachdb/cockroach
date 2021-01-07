@@ -29,13 +29,13 @@ export const CapacityGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
           has not been set, this metric displays the actual disk capacity.
         </p>
         <p>
-          <strong>Available:​ </strong>
+          <strong>Available: </strong>
           Free disk space available to CockroachDB data{" "}
           {tooltipSelection || "across all nodes / on node <node>"}.
         </p>
         <p>
           <strong>Used: </strong>
-          ​Disk space in use by CockroachDB data{" "}
+          Disk space in use by CockroachDB data{" "}
           {tooltipSelection || "across all nodes / on node <node>"}. This
           excludes the Cockroach binary, operating system, and other system
           files.
@@ -92,13 +92,13 @@ export const LiveBytesGraphTooltip: React.FC<{ tooltipSelection?: string }> = ({
         </p>
         <p>
           <strong>Live: </strong>
-          ​Number of logical bytes stored in live&nbsp;
+          Number of logical bytes stored in live&nbsp;
           <Anchor href={docsURL.keyValuePairs}>key-value pairs&nbsp;</Anchor>
           {tooltipSelection || "across all nodes / on node <node>"}. Live data
           excludes historical and deleted data.
         </p>
         <p>
-          <strong>System:​ </strong>
+          <strong>System: </strong>
           Number of physical bytes stored in&nbsp;
           <Anchor href={docsURL.keyValuePairs}>
             system key-value pairs&nbsp;
