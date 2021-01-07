@@ -742,6 +742,30 @@ func (tc *TestCluster) RemoveNonVotersOrFatal(
 	return desc
 }
 
+func (tc *TestCluster) SwapVoterWithNonVoter(
+	startKey roachpb.Key, voterTarget, nonVoterTarget roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	ctx := context.Background()
+	key := keys.MustAddr(startKey)
+	var beforeDesc roachpb.RangeDescriptor
+	if err := tc.Servers[0].DB().GetProto(
+		ctx, keys.RangeDescriptorKey(key), &beforeDesc,
+	); err != nil {
+		return roachpb.RangeDescriptor{}, errors.Wrap(err, "range descriptor lookup error")
+	}
+	changes := []roachpb.ReplicationChange{
+		{ChangeType: roachpb.ADD_VOTER, Target: nonVoterTarget},
+		{ChangeType: roachpb.REMOVE_NON_VOTER, Target: nonVoterTarget},
+		{ChangeType: roachpb.ADD_NON_VOTER, Target: voterTarget},
+		{ChangeType: roachpb.REMOVE_VOTER, Target: voterTarget},
+	}
+	afterDesc, err := tc.Servers[0].DB().AdminChangeReplicas(ctx, key, beforeDesc, changes)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, err
+	}
+	return *afterDesc, nil
+}
+
 // TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,

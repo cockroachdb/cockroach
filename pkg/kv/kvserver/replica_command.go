@@ -900,7 +900,7 @@ func waitForReplicasInit(
 // 1. s1/1 s2/2 s3/3 (VOTER_FULL is implied)
 // 2. s1/1 s2/2 s3/3 s4/4LEARNER
 // 3. s1/1 s2/2 s3/3 s4/4LEARNER s5/5LEARNER
-// 4. s1/1VOTER_DEMOTING s2/2VOTER_DEMOTING s3/3 s4/4VOTER_INCOMING s5/5VOTER_INCOMING
+// 4. s1/1VOTER_DEMOTING_LEARNER s2/2VOTER_DEMOTING_LEARNER s3/3 s4/4VOTER_INCOMING s5/5VOTER_INCOMING
 // 5. s1/1LEARNER s2/2LEARNER s3/3 s4/4 s5/5
 // 6. s2/2LEARNER s3/3 s4/4 s5/5
 // 7. s3/3 s4/4 s5/5
@@ -985,7 +985,22 @@ func (r *Replica) changeReplicasImpl(
 		return nil, err
 	}
 
-	if adds := chgs.NonVoterAdditions(); len(adds) > 0 {
+	// TODO DURING REVIEW: I can't rationalize one way or another if we should
+	// handle promotions/demotions before the rest of the changes. It should be
+	// fine either way. Are there any concerns regarding this?
+	desc, err = maybeExecNonVoterPromotionsAndDemotions(ctx, r.store, desc, reason, details, chgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Synthesize the additions and removals that didn't get executed above as
+	// promotions of non-voters or demotions of voters.
+	voterAdditions := subtractTargets(chgs.VoterAdditions(), chgs.NonVoterRemovals())
+	voterRemovals := subtractTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	nonVoterAdditions := subtractTargets(chgs.NonVoterAdditions(), chgs.VoterRemovals())
+	nonVoterRemovals := subtractTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+
+	if adds := nonVoterAdditions; len(adds) > 0 {
 		desc, err = addRaftLearners(ctx, r.store, desc, reason, details, adds, internalChangeTypeAddNonVoter)
 		if err != nil {
 			return nil, err
@@ -996,7 +1011,7 @@ func (r *Replica) changeReplicasImpl(
 		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
 	}
 
-	if removals := chgs.NonVoterRemovals(); len(removals) > 0 {
+	if removals := nonVoterRemovals; len(removals) > 0 {
 		for _, rem := range removals {
 			iChgs := []internalReplicationChange{{target: rem, typ: internalChangeTypeRemove}}
 			var err error
@@ -1014,7 +1029,7 @@ func (r *Replica) changeReplicasImpl(
 		}
 	}
 
-	if adds := chgs.VoterAdditions(); len(adds) > 0 {
+	if adds := voterAdditions; len(adds) > 0 {
 		// Lock learner snapshots even before we run the ConfChange txn to add them
 		// to prevent a race with the raft snapshot queue trying to send it first.
 		// Note that this lock needs to cover sending the snapshots which happens in
@@ -1042,7 +1057,7 @@ func (r *Replica) changeReplicasImpl(
 
 	// Catch up any learners, then run the atomic replication change that adds the
 	// final voters and removes any undesirable replicas.
-	desc, err = r.atomicReplicationChange(ctx, desc, priority, reason, details, chgs)
+	desc, err = r.atomicReplicationChange(ctx, desc, priority, reason, details, voterAdditions, voterRemovals)
 	if err != nil {
 		// If the error occurred while transitioning out of an atomic replication change,
 		// try again here with a fresh descriptor; this is a noop otherwise.
@@ -1054,15 +1069,50 @@ func (r *Replica) changeReplicasImpl(
 		}
 		// Don't leave a learner replica lying around if we didn't succeed in
 		// promoting it to a voter.
-		if targets := chgs.VoterAdditions(); len(targets) > 0 {
-			log.Infof(ctx, "could not promote %v to voter, rolling back: %v", targets, err)
-			for _, target := range targets {
+		if adds := voterAdditions; len(adds) > 0 {
+			log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
+			for _, target := range adds {
 				r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
 			}
 		}
 		return nil, err
 	}
 	return desc, err
+}
+
+// maybeExecNonVoterPromotionsAndDemotions performs promotions of non-voting
+// replicas to voting replicas, and likewise, demotions of voting replicas to
+// non-voting replicas. If both these types of operations are being applied to a
+// (voter, non-voter) pair, it will execute an atomic swap using joint
+// consensus.
+func maybeExecNonVoterPromotionsAndDemotions(
+	ctx context.Context,
+	s *Store,
+	desc *roachpb.RangeDescriptor,
+	reason kvserverpb.RangeLogEventReason,
+	details string,
+	chgs roachpb.ReplicationChanges,
+) (afterDesc *roachpb.RangeDescriptor, err error) {
+	// Isolate the promotions of voters and the demotions of non-voters from the
+	// rest of the changes, since we want to handle these together and execute
+	// atomic swaps of voters <-> non-voters if possible.
+	voterDemotions := intersectTargets(chgs.VoterRemovals(), chgs.NonVoterAdditions())
+	nonVoterPromotions := intersectTargets(chgs.NonVoterRemovals(), chgs.VoterAdditions())
+
+	swaps := getInternalChangesForNonVoterPromotionsAndDemotions(voterDemotions, nonVoterPromotions)
+	if len(swaps) > 0 {
+		desc, err = execChangeReplicasTxn(ctx, desc, reason, details, swaps, changeReplicasTxnArgs{
+			db:                                   s.DB(),
+			liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
+			logChange:                            s.logChange,
+			testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
+			testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return desc, nil
 }
 
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
@@ -1168,9 +1218,15 @@ func validateReplicationChanges(
 				}
 			}
 		}
-		if _, ok := byStoreID[chg.Target.StoreID]; ok {
-			return fmt.Errorf("changes %+v refer to n%d and s%d twice", chgs,
-				chg.Target.NodeID, chg.Target.StoreID)
+		if prevChg, ok := byStoreID[chg.Target.StoreID]; ok {
+			isVoterDemotion := prevChg.ChangeType == roachpb.ADD_NON_VOTER &&
+				chg.ChangeType == roachpb.REMOVE_VOTER
+			isNonVoterPromotion := prevChg.ChangeType == roachpb.ADD_VOTER &&
+				chg.ChangeType == roachpb.REMOVE_NON_VOTER
+			if !isNonVoterPromotion && !isVoterDemotion {
+				return fmt.Errorf("changes %+v refer to n%d and s%d twice", chgs,
+					chg.Target.NodeID, chg.Target.StoreID)
+			}
 		}
 		byStoreID[chg.Target.StoreID] = chg
 	}
@@ -1205,26 +1261,31 @@ func validateReplicationChanges(
 				continue
 			}
 			// Looks like we found a replica with the same store and node id. If the
-			// replica is already a learner, then either some previous leaseholder was
-			// trying to add it with the learner+snapshot+voter cycle and got
-			// interrupted or else we hit a race between the replicate queue and
-			// AdminChangeReplicas.
+			// replica is a learner, then one of the following is true:
+			// 1. some previous leaseholder was trying to add it with the
+			// learner+snapshot+voter cycle and got interrupted.
+			// 2. we hit a race between the replicate queue and AdminChangeReplicas.
+			// 3. We're trying to swap a voting replica with a non-voting replica
+			// before the voting replica has been upreplicated and switched from
+			// LEARNER to VOTER_FULL.
 			if rDesc.GetType() == roachpb.LEARNER {
 				return errors.Mark(errors.Errorf(
 					"unable to add replica %v which is already present as a learner in %s", chg.Target, desc),
 					errMarkInvalidReplicationChange)
 			}
-			if rDesc.GetType() == roachpb.NON_VOTER {
+			if rDesc.GetType() == roachpb.NON_VOTER && chg.ChangeType == roachpb.ADD_NON_VOTER {
 				return errors.Mark(errors.Errorf(
-					"unable to add replica %v which is already present as a non-voter in %s", chg.Target, desc),
+					"unable to add non-voter %v which is already present as a non-voter in %s", chg.Target, desc),
 					errMarkInvalidReplicationChange)
 			}
 
-			// Otherwise, we already had a full voter replica. Can't add another to
-			// this store.
-			return errors.Mark(
-				errors.Errorf("unable to add replica %v which is already present in %s", chg.Target, desc),
-				errMarkInvalidReplicationChange)
+			// Otherwise, we already had a full voter replica. Can't add another voter
+			// to this store.
+			if chg.ChangeType == roachpb.ADD_VOTER {
+				return errors.Mark(
+					errors.Errorf("unable to add voter %v which is already present in %s; chgs: %v", chg.Target, desc, chgs),
+					errMarkInvalidReplicationChange)
+			}
 		}
 
 		for _, chg := range byStoreID {
@@ -1347,7 +1408,7 @@ func (r *Replica) atomicReplicationChange(
 	priority SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
-	chgs roachpb.ReplicationChanges,
+	voterAdditions, voterRemovals []roachpb.ReplicationTarget,
 ) (*roachpb.RangeDescriptor, error) {
 	// TODO(dan): We allow ranges with learner replicas to split, so in theory
 	// this may want to detect that and retry, sending a snapshot and promoting
@@ -1381,9 +1442,9 @@ func (r *Replica) atomicReplicationChange(
 			"waited for %s and replication hasn't caught up with descriptor update", timeutil.Since(start))
 	}
 
-	iChgs := make([]internalReplicationChange, 0, len(chgs))
+	iChgs := make([]internalReplicationChange, 0, len(voterAdditions)+len(voterRemovals))
 
-	for _, target := range chgs.VoterAdditions() {
+	for _, target := range voterAdditions {
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteLearner})
 		// All adds must be present as learners right now, and we send them
 		// snapshots in anticipation of promoting them to voters.
@@ -1420,16 +1481,16 @@ func (r *Replica) atomicReplicationChange(
 		}
 	}
 
-	if adds := chgs.VoterAdditions(); len(adds) > 0 {
+	if adds := voterAdditions; len(adds) > 0 {
 		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
 			return desc, nil
 		}
 	}
 
-	for _, target := range chgs.VoterRemovals() {
+	for _, target := range voterRemovals {
 		typ := internalChangeTypeRemove
 		if rDesc, ok := desc.GetReplicaDescriptor(target.StoreID); ok && rDesc.GetType() == roachpb.VOTER_FULL {
-			typ = internalChangeTypeDemoteVoter
+			typ = internalChangeTypeDemoteVoterToLearner
 		}
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: typ})
 	}
@@ -1511,13 +1572,21 @@ const (
 	internalChangeTypeAddLearner
 	internalChangeTypeAddNonVoter
 	internalChangeTypePromoteLearner
-	// internalChangeTypeDemoteVoter changes a voter to an ephemeral learner. This will
+	// TODO DURING REVIEW: We don't really need a new internalChangeType here for
+	// non-voter promotions. The only purpose this serves is a sanity check
+	// assertion inside prepareChangeReplicasTrigger (which I do like). Should I
+	// generalize the existing internalChangeTypePromoteLearner and just use that?
+	internalChangeTypePromoteNonVoter
+	// internalChangeTypeDemoteVoterToLearner changes a voter to an ephemeral learner. This will
 	// necessarily go through joint consensus since it requires two individual
 	// changes (only one changes the quorum, so we could allow it in a simple
 	// change too, with some work here and upstream). Demotions are treated like
 	// removals throughout (i.e. they show up in `ChangeReplicasTrigger.Removed()`,
 	// but not in `.Added()`).
-	internalChangeTypeDemoteVoter
+	internalChangeTypeDemoteVoterToLearner
+	// internalChangeTypeDemoteVoterToNonVoter demotes a voter to a non-voter.
+	// This, like the demotion to learner, will go through joint consensus.
+	internalChangeTypeDemoteVoterToNonVoter
 	// NB: can't remove multiple learners at once (need to remove at least one
 	// voter with them), see:
 	// https://github.com/cockroachdb/cockroach/pull/40268
@@ -1539,7 +1608,8 @@ func (c internalReplicationChanges) leaveJoint() bool { return len(c) == 0 }
 func (c internalReplicationChanges) useJoint() bool {
 	// NB: demotions require joint consensus because of limitations in etcd/raft.
 	// These could be lifted, but it doesn't seem worth it.
-	return len(c) > 1 || c[0].typ == internalChangeTypeDemoteVoter
+	isDemotion := c[0].typ == internalChangeTypeDemoteVoterToNonVoter || c[0].typ == internalChangeTypeDemoteVoterToLearner
+	return len(c) > 1 || isDemotion
 }
 
 func prepareChangeReplicasTrigger(
@@ -1577,7 +1647,17 @@ func prepareChangeReplicasTrigger(
 				}
 				rDesc, prevTyp, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
 				if !ok || prevTyp != roachpb.LEARNER {
-					return nil, errors.Errorf("cannot promote target %v which is missing as Learner", chg.target)
+					return nil, errors.Errorf("cannot promote target %v which is missing as LEARNER", chg.target)
+				}
+				added = append(added, rDesc)
+			case internalChangeTypePromoteNonVoter:
+				typ := roachpb.VOTER_FULL
+				if useJoint {
+					typ = roachpb.VOTER_INCOMING
+				}
+				rDesc, prevTyp, ok := updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, typ)
+				if !ok || prevTyp != roachpb.NON_VOTER {
+					return nil, errors.Errorf("cannot promote target %v which is missing as NON_VOTER", chg.target)
 				}
 				added = append(added, rDesc)
 			case internalChangeTypeRemove:
@@ -1598,7 +1678,7 @@ func prepareChangeReplicasTrigger(
 					rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_OUTGOING)
 				}
 				removed = append(removed, rDesc)
-			case internalChangeTypeDemoteVoter:
+			case internalChangeTypeDemoteVoterToLearner:
 				// Demotion is similar to removal, except that a demotion
 				// cannot apply to a learner, and that the resulting type is
 				// different when entering a joint config.
@@ -1612,9 +1692,24 @@ func prepareChangeReplicasTrigger(
 					return nil, errors.Errorf("demotions require joint consensus")
 				}
 				if prevTyp := rDesc.GetType(); prevTyp != roachpb.VOTER_FULL {
-					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING", prevTyp)
+					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING_LEARNER", prevTyp)
 				}
-				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING)
+				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING_LEARNER)
+				removed = append(removed, rDesc)
+			case internalChangeTypeDemoteVoterToNonVoter:
+				rDesc, ok := updatedDesc.GetReplicaDescriptor(chg.target.StoreID)
+				if !ok {
+					return nil, errors.Errorf("target %s not found", chg.target)
+				}
+				if !useJoint {
+					// NB: this won't fire because cc.useJoint() is always true when
+					// there's a demotion. This is just a sanity check.
+					return nil, errors.Errorf("demotions require joint consensus")
+				}
+				if prevTyp := rDesc.GetType(); prevTyp != roachpb.VOTER_FULL {
+					return nil, errors.Errorf("cannot transition from %s to VOTER_DEMOTING_NON_VOTER", prevTyp)
+				}
+				rDesc, _, _ = updatedDesc.SetReplicaType(chg.target.NodeID, chg.target.StoreID, roachpb.VOTER_DEMOTING_NON_VOTER)
 				removed = append(removed, rDesc)
 			default:
 				return nil, errors.Errorf("unsupported internal change type %d", chg.typ)
@@ -1634,8 +1729,11 @@ func prepareChangeReplicasTrigger(
 			case roachpb.VOTER_OUTGOING:
 				updatedDesc.RemoveReplica(rDesc.NodeID, rDesc.StoreID)
 				isJoint = true
-			case roachpb.VOTER_DEMOTING:
+			case roachpb.VOTER_DEMOTING_LEARNER:
 				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.LEARNER)
+				isJoint = true
+			case roachpb.VOTER_DEMOTING_NON_VOTER:
+				updatedDesc.SetReplicaType(rDesc.NodeID, rDesc.StoreID, roachpb.NON_VOTER)
 				isJoint = true
 			default:
 			}
@@ -1850,6 +1948,27 @@ func execChangeReplicasTxn(
 	}
 	log.Event(ctx, "txn complete")
 	return returnDesc, nil
+}
+
+func getInternalChangesForNonVoterPromotionsAndDemotions(
+	voterDemotions, nonVoterPromotions []roachpb.ReplicationTarget,
+) []internalReplicationChange {
+	iChgs := make([]internalReplicationChange, len(voterDemotions)+len(nonVoterPromotions))
+	for i := range voterDemotions {
+		iChgs[i] = internalReplicationChange{
+			target: voterDemotions[i],
+			typ:    internalChangeTypeDemoteVoterToNonVoter,
+		}
+	}
+
+	for j := range nonVoterPromotions {
+		iChgs[j+len(voterDemotions)] = internalReplicationChange{
+			target: nonVoterPromotions[j],
+			typ:    internalChangeTypePromoteNonVoter,
+		}
+	}
+
+	return iChgs
 }
 
 type logChangeFn func(
@@ -2489,7 +2608,7 @@ func (s *Store) relocateOne(
 	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
-	getTargetsToRelocate := func() (targetsToAdd, targetsToRemove []roachpb.ReplicaDescriptor,
+	getTargetsToRelocate := func() (targetsToAdd, targetsToRemove []roachpb.ReplicationTarget,
 		addOp, removeOp roachpb.ReplicaChangeType, votersRelocated bool) {
 		votersToAdd := subtractTargets(voterTargets, desc.Replicas().Voters().ReplicationTargets())
 		votersToRemove := subtractTargets(desc.Replicas().Voters().ReplicationTargets(), voterTargets)
@@ -2527,7 +2646,7 @@ func (s *Store) relocateOne(
 		// have to move too much.
 		candidateTargets := targetsToAdd
 		if !votersRelocated && storeHasReplica(relocationTargets[0].StoreID, candidateTargets) {
-			candidateTargets = []roachpb.ReplicaDescriptor{
+			candidateTargets = []roachpb.ReplicationTarget{
 				{NodeID: relocationTargets[0].NodeID, StoreID: relocationTargets[0].StoreID},
 			}
 		}
@@ -2650,9 +2769,14 @@ func (s *Store) relocateOne(
 	return ops, transferTarget, nil
 }
 
-// subtractTargets returns the set of replication targets in `left` but not in
+// subtractTargets returns the set of replica descriptors in `left` but not in
 // `right` (i.e. left - right).
-func subtractTargets(left, right []roachpb.ReplicationTarget) (diff []roachpb.ReplicaDescriptor) {
+//
+// TODO(aayush): Make this and the `intersectTargets()` method below
+// (along with other utility methods operating on `ReplicationTarget`) operate
+// over an interface that both `ReplicaDescriptor` and `ReplicationTarget`
+// satisfy.
+func subtractTargets(left, right []roachpb.ReplicationTarget) (diff []roachpb.ReplicationTarget) {
 	for _, t := range left {
 		found := false
 		for _, replicaDesc := range right {
@@ -2662,13 +2786,27 @@ func subtractTargets(left, right []roachpb.ReplicationTarget) (diff []roachpb.Re
 			}
 		}
 		if !found {
-			diff = append(diff, roachpb.ReplicaDescriptor{
-				NodeID:  t.NodeID,
-				StoreID: t.StoreID,
-			})
+			diff = append(diff, t)
 		}
 	}
 	return diff
+}
+
+// intersectTargets returns the set of replica descriptors in `left` and
+// `right`.
+func intersectTargets(
+	left, right []roachpb.ReplicationTarget,
+) (intersection []roachpb.ReplicationTarget) {
+	leftByStoreID := make(map[roachpb.StoreID]interface{})
+	for i := range left {
+		leftByStoreID[left[i].StoreID] = struct{}{}
+	}
+	for i := range right {
+		if _, ok := leftByStoreID[right[i].StoreID]; ok {
+			intersection = append(intersection, right[i])
+		}
+	}
+	return intersection
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
