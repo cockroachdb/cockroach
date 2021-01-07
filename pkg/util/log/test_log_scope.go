@@ -256,7 +256,6 @@ func (l *TestLogScope) Close(t tShim) {
 			"bug in TestLogScope - previous config:\n%s\nafter restore:\n%s",
 			l.previous.appliedConfig, restoredConfig)
 	}
-	//	t.Logf("restored configuration:\n%s", restoredConfig)
 }
 
 // calledDuringPanic returns true if panic() is one of its callers.

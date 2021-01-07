@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func runFKBench(
@@ -53,16 +54,15 @@ func runFKBench(
 }
 
 func BenchmarkFKInsert(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const parentRows = 1000
 	setup := func(b *testing.B, r *sqlutils.SQLRunner, setupFKs bool) {
-		r.Exec(b, "CREATE TABLE child (k int primary key, p int)")
-		r.Exec(b, "CREATE TABLE parent (p int primary key, data int)")
-
+		r.Exec(b, "CREATE TABLE parent (p INT PRIMARY KEY, data INT)")
 		if setupFKs {
-			r.Exec(b, "ALTER TABLE child ADD CONSTRAINT fk FOREIGN KEY (p) REFERENCES parent(p)")
+			r.Exec(b, "CREATE TABLE child (k INT PRIMARY KEY, p INT REFERENCES parent(p))")
 		} else {
 			// Create the index on p manually so it's a more fair comparison.
-			r.Exec(b, "CREATE INDEX idx ON child(p)")
+			r.Exec(b, "CREATE TABLE child (k INT PRIMARY KEY, p INT, INDEX (p))")
 		}
 
 		r.Exec(b, fmt.Sprintf(
