@@ -67,11 +67,11 @@ func NewReplicaSlice(
 	}
 
 	// Learner replicas won't serve reads/writes, so we'll send only to the
-	// `Voters` replicas. This is just an optimization to save a network hop,
+	// `VoterDescriptors` replicas. This is just an optimization to save a network hop,
 	// everything would still work if we had `All` here.
-	voters := desc.Replicas().Voters()
+	voters := desc.Replicas().VoterDescriptors()
 	// If we know a leaseholder, though, let's make sure we include it.
-	if leaseholder != nil && len(voters) < len(desc.Replicas().All()) {
+	if leaseholder != nil && len(voters) < len(desc.Replicas().Descriptors()) {
 		found := false
 		for _, v := range voters {
 			if v == *leaseholder {

@@ -152,7 +152,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 			// replicas to move according to them.
 			tc.ToggleReplicateQueues(false)
 			defer tc.ToggleReplicateQueues(true)
-			voters := desc.Replicas().Voters()
+			voters := desc.Replicas().VoterDescriptors()
 			if len(voters) == 1 && voters[0].NodeID == tc.Server(1).NodeID() {
 				return nil
 			}
@@ -270,7 +270,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
 		s.SetReplicateQueueActive(false)
-		require.Len(t, repl.Desc().Replicas().All(), 1)
+		require.Len(t, repl.Desc().Replicas().Descriptors(), 1)
 		// We really need to make sure that the split queue has hit this range,
 		// otherwise we'll fail to backpressure.
 		go func() { _ = s.ForceSplitScanAndProcess() }()

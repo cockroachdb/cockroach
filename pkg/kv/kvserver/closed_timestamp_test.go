@@ -66,9 +66,9 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -127,9 +127,10 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -200,9 +201,10 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, _, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	ds := tc.Server(0).DistSenderI().(*kvcoord.DistSender)
 
 	// Write N different intents for the same transaction, where N is the number
@@ -282,8 +284,9 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 	// Disable the automatic merging.
 	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
 		t.Fatal(err)
@@ -362,9 +365,10 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, time.Hour,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, time.Hour, testingCloseFraction,
+		aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -400,9 +404,10 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -434,9 +439,10 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, testingTargetDuration,
-		testingCloseFraction, aggressiveResolvedTimestampClusterArgs)
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
 	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
 		t.Fatal(err)
@@ -556,7 +562,14 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 				},
 			},
 		}
-		tc, _, leftDesc, rightDesc := initClusterWithSplitRanges(ctx, t, testingTargetDuration,
+		// If the initial phase of the merge txn takes longer than the closed
+		// timestamp target duration, its initial CPuts can have their write
+		// timestamps bumped due to an intervening closed timestamp update. This
+		// causes the entire merge txn to retry. So we use a long closed timestamp
+		// duration at the beginning of the test until we have the merge txn
+		// suspended at its commit trigger, and then change it back down to
+		// `testingTargetDuration`.
+		tc, leftDesc, rightDesc := setupClusterForClosedTSTestingWithSplitRanges(ctx, t, 5*time.Second,
 			testingCloseFraction, clusterArgs)
 		defer tc.Stopper().Stop(ctx)
 
@@ -590,6 +603,13 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 			t.Fatal(err)
 		case <-time.After(45 * time.Second):
 			t.Fatal("did not receive merge commit trigger as expected")
+		}
+		// Reduce the closed timestamp target duration in order to make the rest of
+		// the test faster.
+		db := tc.ServerConn(0)
+		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';`,
+			testingTargetDuration)); err != nil {
+			t.Fatal(err)
 		}
 		// inactiveClosedTSBoundary indicates the low water mark for closed
 		// timestamp updates beyond which we expect none of the followers to be able
@@ -856,50 +876,70 @@ func mergeTxn(ctx context.Context, store *kvserver.Store, leftDesc roachpb.Range
 	return err.GoError()
 }
 
-func initClusterWithSplitRanges(
+func setupClusterForClosedTSTestingWithSplitRanges(
 	ctx context.Context,
 	t *testing.T,
 	targetDuration time.Duration,
 	closeFraction float64,
 	clusterArgs base.TestClusterArgs,
-) (
-	serverutils.TestClusterInterface,
-	*gosql.DB,
-	roachpb.RangeDescriptor,
-	roachpb.RangeDescriptor,
-) {
-	tc, db0, desc, repls := setupClusterForClosedTimestampTesting(ctx, t, targetDuration,
-		closeFraction, clusterArgs)
+) (serverutils.TestClusterInterface, roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
+	dbName, tableName := "cttest", "kv"
+	tc, _, _ := setupClusterForClosedTSTesting(ctx, t, targetDuration, closeFraction,
+		clusterArgs, dbName, tableName)
+	leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, dbName, tableName,
+		hlc.Timestamp{} /* splitExpirationTime */)
+	return tc, leftDesc, rightDesc
+}
 
-	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+// splitDummyRangeInTestCluster is supposed to be used in conjunction with the
+// dummy table created in setupTestClusterWithDummyRange. It adds two rows to
+// the given table and performs splits on the table's range such that the 2
+// resulting ranges contain exactly one of the rows each.
+func splitDummyRangeInTestCluster(
+	t *testing.T,
+	tc serverutils.TestClusterInterface,
+	dbName, tableName string,
+	splitExpirationTime hlc.Timestamp,
+) (roachpb.RangeDescriptor, roachpb.RangeDescriptor) {
+	db0 := tc.ServerConn(0)
+	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.%s VALUES(1, '%s')`,
+		dbName, tableName, "foo")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(3, $1)`, "foo"); err != nil {
+	if _, err := db0.Exec(fmt.Sprintf(`INSERT INTO %s.%s VALUES(3, '%s')`,
+		dbName, tableName, "foo")); err != nil {
 		t.Fatal(err)
 	}
-	// Start by ensuring that the values can be read from all replicas at ts.
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	baRead := makeReadBatchRequestForDesc(desc, ts)
-	testutils.SucceedsSoon(t, func() error {
-		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(2))
-	})
 	// Manually split the table to have easier access to descriptors.
-	tableID, err := getTableID(db0, "cttest", "kv")
+	tableID, err := getTableID(db0, dbName, tableName)
 	if err != nil {
 		t.Fatalf("failed to lookup ids: %+v", err)
 	}
 
 	idxPrefix := keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
-	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	k, err := rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(1), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode split key: %+v", err)
 	}
 	tcImpl := tc.(*testcluster.TestCluster)
-	leftDesc, rightDesc := tcImpl.SplitRangeOrFatal(t, k)
-	if err := tcImpl.WaitForFullReplication(); err != nil {
-		t.Fatal(err)
+	// Split at `k` so that the table has exactly two ranges: [1,2) and [2, Max).
+	// This split will never be merged by the merge queue so the expiration time
+	// doesn't matter here.
+	tcImpl.SplitRangeOrFatal(t, k)
+	idxPrefix = keys.SystemSQLCodec.IndexPrefix(uint32(tableID), 1)
+	k, err = rowenc.EncodeTableKey(idxPrefix, tree.NewDInt(2), encoding.Ascending)
+	if err != nil {
+		t.Fatalf("failed to encode split key: %+v", err)
 	}
-	return tc, db0, leftDesc, rightDesc
+	leftDesc, rightDesc, err := tcImpl.SplitRangeWithExpiration(k, splitExpirationTime)
+	require.NoError(t, err)
+
+	if tc.ReplicationMode() != base.ReplicationManual {
+		if err := tcImpl.WaitForFullReplication(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return leftDesc, rightDesc
 }
 
 func getCurrentMaxClosed(
@@ -1092,100 +1132,84 @@ func aggressiveResolvedTimestampPushKnobs() *kvserver.StoreTestingKnobs {
 	}
 }
 
-// setupClusterForClosedTimestampTesting creates a test cluster that is prepared
-// to exercise follower reads. The returned test cluster has follower reads
-// enabled using the given targetDuration and testingCloseFraction. In addition
-// to the newly minted test cluster, this function returns a db handle to node
-// 0, a range descriptor for the range used by the table `cttest.kv` and the
-// replica objects corresponding to the replicas for the range. It is the
-// caller's responsibility to Stop the Stopper on the returned test cluster when
-// done.
-func setupClusterForClosedTimestampTesting(
+// setupClusterForClosedTSTesting creates a test cluster that is prepared to
+// exercise follower reads. The returned test cluster has follower reads enabled
+// using the given targetDuration and testingCloseFraction. In addition to the
+// newly minted test cluster, this function returns a db handle to node 0, a
+// range descriptor for the range used by the table `{dbName}.{tableName}`. It
+// is the caller's responsibility to Stop the Stopper on the returned test
+// cluster when done.
+func setupClusterForClosedTSTesting(
 	ctx context.Context,
 	t *testing.T,
 	targetDuration time.Duration,
 	closeFraction float64,
 	clusterArgs base.TestClusterArgs,
-) (
-	tc serverutils.TestClusterInterface,
-	db0 *gosql.DB,
-	kvTableDesc roachpb.RangeDescriptor,
-	repls []*kvserver.Replica,
-) {
-	tc = serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
-	db0 = tc.ServerConn(0)
+	dbName, tableName string,
+) (tc serverutils.TestClusterInterface, db0 *gosql.DB, kvTableDesc roachpb.RangeDescriptor) {
+	tc, desc := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
+	require.NoError(t, enableFollowerReadsForTesting(tc.ServerConn(0), targetDuration, closeFraction))
+	return tc, tc.ServerConn(0), desc
+}
+
+func enableFollowerReadsForTesting(
+	db *gosql.DB, targetDuration time.Duration, closeFraction float64,
+) error {
+	if _, err := db.Exec(fmt.Sprintf(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
+SET CLUSTER SETTING kv.closed_timestamp.close_fraction = %.3f;
+SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
+`, targetDuration, closeFraction)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// setupTestClusterWithDummyRange creates a TestCluster with an empty table and
+// returns a handle to the range descriptor corresponding to this table.
+func setupTestClusterWithDummyRange(
+	t *testing.T, clusterArgs base.TestClusterArgs, dbName, tableName string, numNodes int,
+) (serverutils.TestClusterInterface, roachpb.RangeDescriptor) {
+	tc := serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
+	db0 := tc.ServerConn(0)
 
 	if _, err := db0.Exec(fmt.Sprintf(`
 -- Set a timeout to get nicer test failures from these statements. Because of
 -- the aggressiveResolvedTimestampPushKnobs() these statements can restart
 -- forever under high load (testrace under high concurrency).
 SET statement_timeout='30s';
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.close_fraction = %.3f;
-SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-CREATE DATABASE cttest;
-CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
+CREATE DATABASE %[1]s;
+CREATE TABLE %[1]s.%[2]s (id INT PRIMARY KEY, value STRING);
 -- Reset the timeout set above.
 RESET statement_timeout;
-`, targetDuration, closeFraction)); err != nil {
+`, dbName, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
 	var rangeID roachpb.RangeID
 	var startKey roachpb.Key
 	var numReplicas int
-	testutils.SucceedsSoon(t, func() error {
-		if err := db0.QueryRow(
-			`SELECT range_id, start_key, array_length(replicas, 1) FROM crdb_internal.ranges WHERE table_name = 'kv' AND database_name = 'cttest'`,
-		).Scan(&rangeID, &startKey, &numReplicas); err != nil {
-			return err
-		}
-		if numReplicas != 3 {
-			return errors.New("not fully replicated yet")
-		}
-		return nil
-	})
+	// If replicate queue is not disabled, wait until the table's range is fully
+	// replicated.
+	if clusterArgs.ReplicationMode != base.ReplicationManual {
+		testutils.SucceedsSoon(t, func() error {
+			if err := db0.QueryRow(
+				fmt.Sprintf(
+					`SELECT range_id, start_key, array_length(replicas, 1) FROM crdb_internal.ranges WHERE table_name = '%s' AND database_name = '%s'`,
+					tableName, dbName),
+			).Scan(&rangeID, &startKey, &numReplicas); err != nil {
+				return err
+			}
+			if numReplicas != numNodes {
+				return errors.New("not fully replicated yet")
+			}
+			return nil
+		})
+	}
 
 	desc, err := tc.LookupRange(startKey)
 	require.Nil(t, err)
-
-	// First, we perform an arbitrary lease transfer because that will turn the
-	// lease into an epoch based one (the initial lease is likely expiration based
-	// since the range just split off from the very first range which is expiration
-	// based).
-	var lh roachpb.ReplicationTarget
-	testutils.SucceedsSoon(t, func() error {
-		var err error
-		lh, err = tc.FindRangeLeaseHolder(desc, nil)
-		return err
-	})
-
-	for i := 0; i < numNodes; i++ {
-		target := tc.Target(i)
-		if target != lh {
-			if err := tc.TransferRangeLease(desc, target); err != nil {
-				t.Fatal(err)
-			}
-			break
-		}
-	}
-	repls = replsForRange(ctx, t, tc, desc, numNodes)
-	require.Equal(t, numReplicas, len(repls))
-	// Wait until we see an epoch based lease on our chosen range. This should
-	// happen fairly quickly since we just transferred a lease (as a means to make
-	// it epoch based). If the lease transfer fails, we'll be sitting out the lease
-	// expiration, which is on the order of seconds. Not great, but good enough since
-	// the transfer basically always works.
-	for ok := false; !ok; time.Sleep(10 * time.Millisecond) {
-		for _, repl := range repls {
-			lease, _ := repl.GetLease()
-			if lease.Epoch != 0 {
-				ok = true
-				break
-			}
-		}
-	}
-	return tc, db0, desc, repls
+	return tc, desc
 }
 
 type respFunc func(*roachpb.BatchResponse, *roachpb.Error) (shouldRetry bool, err error)

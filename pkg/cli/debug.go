@@ -955,7 +955,7 @@ func removeDeadReplicas(
 	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
 		hasSelf := false
 		numDeadPeers := 0
-		allReplicas := desc.Replicas().All()
+		allReplicas := desc.Replicas().Descriptors()
 		maxLivePeer := roachpb.StoreID(-1)
 		for _, rep := range allReplicas {
 			if rep.StoreID == storeIdent.StoreID {
@@ -998,7 +998,7 @@ func removeDeadReplicas(
 				StoreID:   storeIdent.StoreID,
 				ReplicaID: desc.NextReplicaID,
 			}}
-			newDesc.SetReplicas(roachpb.MakeReplicaDescriptors(replicas))
+			newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 			newDesc.NextReplicaID++
 			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)

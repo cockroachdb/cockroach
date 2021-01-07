@@ -1068,7 +1068,7 @@ func (n *Node) ResetQuorum(
 	}
 
 	// Update the range descriptor and update meta ranges for the descriptor, removing all replicas.
-	deadReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().All()...)
+	deadReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().Descriptors()...)
 	for _, rd := range deadReplicas {
 		desc.RemoveReplica(rd.NodeID, rd.StoreID)
 	}

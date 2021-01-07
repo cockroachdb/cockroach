@@ -1126,15 +1126,16 @@ func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor,
 	return ts.LookupRange(leftKey)
 }
 
-// SplitRange splits the range containing splitKey.
+// SplitRangeWithExpiration splits the range containing splitKey with a sticky
+// bit expiring at expirationTime.
 // The right range created by the split starts at the split key and extends to the
 // original range's end key.
 // Returns the new descriptors of the left and right ranges.
 //
 // splitKey must correspond to a SQL table key (it must end with a family ID /
 // col ID).
-func (ts *TestServer) SplitRange(
-	splitKey roachpb.Key,
+func (ts *TestServer) SplitRangeWithExpiration(
+	splitKey roachpb.Key, expirationTime hlc.Timestamp,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	ctx := context.Background()
 	splitRKey, err := keys.Addr(splitKey)
@@ -1146,7 +1147,7 @@ func (ts *TestServer) SplitRange(
 			Key: splitKey,
 		},
 		SplitKey:       splitKey,
-		ExpirationTime: hlc.MaxTimestamp,
+		ExpirationTime: expirationTime,
 	}
 	_, pErr := kv.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
@@ -1218,6 +1219,14 @@ func (ts *TestServer) SplitRange(
 	}
 
 	return leftRangeDesc, rightRangeDesc, nil
+}
+
+// SplitRange is exactly like SplitRangeWithExpiration, except that it creates a
+// split with a sticky bit that never expires.
+func (ts *TestServer) SplitRange(
+	splitKey roachpb.Key,
+) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
+	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
 // GetRangeLease returns the current lease for the range containing key, and a

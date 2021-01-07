@@ -137,7 +137,7 @@ func consistencyQueueShouldQueueImpl(
 		}
 	}
 	// Check if all replicas are live.
-	for _, rep := range data.desc.Replicas().All() {
+	for _, rep := range data.desc.Replicas().Descriptors() {
 		if live, err := data.isNodeLive(rep.NodeID); err != nil {
 			log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
 			return false, 0

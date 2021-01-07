@@ -1950,7 +1950,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
 			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) error {
-				if len(desc.Replicas().Learners()) > 0 {
+				if len(desc.Replicas().LearnerDescriptors()) > 0 {
 					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}
 				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(&desc) {
@@ -1964,7 +1964,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		}
 		var totalReplicas int
 		for _, desc := range replicas {
-			totalReplicas += len(desc.Replicas().Voters())
+			totalReplicas += len(desc.Replicas().VoterDescriptors())
 		}
 		if totalReplicas != expectedReplicas {
 			return fmt.Errorf("got %d voters, want %d; details: %+v", totalReplicas, expectedReplicas, replicas)
@@ -2314,7 +2314,9 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	key := roachpb.Key("a")
 	db := tc.Servers[0].DB()
-	require.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
+	require.Nil(t, db.AdminRelocateRange(
+		ctx, key, makeReplicationTargets(1, 2, 3), nil,
+	))
 	// Random targets consisting of a random number of nodes from the set of nodes
 	// in the cluster which currently do not have a replica.
 	pickTargets := func() []roachpb.ReplicationTarget {
@@ -2334,9 +2336,12 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	require.Nil(t, err)
 	addReplicas := func() error {
+		op := roachpb.ADD_VOTER
+		if rand.Intn(2) == 0 {
+			op = roachpb.ADD_NON_VOTER
+		}
 		_, err := db.AdminChangeReplicas(
-			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(
-				roachpb.ADD_VOTER, pickTargets()...))
+			ctx, key, rangeInfo.Desc, roachpb.MakeReplicationChanges(op, pickTargets()...))
 		return err
 	}
 	wg.Add(actors)
@@ -2820,7 +2825,9 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	// to set up the replication and then verify the assumed state.
 
 	key := roachpb.Key("a")
-	assert.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
+	assert.Nil(t, db.AdminRelocateRange(
+		ctx, key, makeReplicationTargets(1, 2, 3), makeReplicationTargets(),
+	))
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	assert.Nil(t, err)
 	assert.Len(t, rangeInfo.Desc.InternalReplicas, 3)
@@ -2855,7 +2862,9 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserver.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
-		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))
+		relocateErr = db.AdminRelocateRange(
+			ctx, key, makeReplicationTargets(1, 2, 4), makeReplicationTargets(),
+		)
 	}
 	useSeenAdd.Store(true)
 	var wg sync.WaitGroup

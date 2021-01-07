@@ -283,12 +283,12 @@ func (r *Replica) CheckConsistency(
 	}
 	// args.Terminate is a slice of properly redactable values, but
 	// with %v `redact` will not realize that and will redact the
-	// whole thing. Wrap it as a ReplicaDescriptors which is a SafeFormatter
+	// whole thing. Wrap it as a ReplicaSet which is a SafeFormatter
 	// and will get the job done.
 	//
 	// TODO(knz): clean up after https://github.com/cockroachdb/redact/issues/5.
 	{
-		var tmp redact.SafeFormatter = roachpb.MakeReplicaDescriptors(args.Terminate)
+		var tmp redact.SafeFormatter = roachpb.MakeReplicaSet(args.Terminate)
 		log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
 	}
 
@@ -361,7 +361,7 @@ func (r *Replica) RunConsistencyCheck(
 
 		// Move the local replica to the front (which makes it the "master"
 		// we're comparing against).
-		orderedReplicas = append(orderedReplicas, desc.Replicas().All()...)
+		orderedReplicas = append(orderedReplicas, desc.Replicas().Descriptors()...)
 
 		sort.Slice(orderedReplicas, func(i, j int) bool {
 			return orderedReplicas[i] == localReplica

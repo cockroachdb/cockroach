@@ -2554,9 +2554,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			voterReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().Voters()...)
+			voterReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().VoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
-			for _, rd := range desc.Replicas().Learners() {
+			for _, rd := range desc.Replicas().LearnerDescriptors() {
 				learnerReplicaStoreIDs = append(learnerReplicaStoreIDs, int(rd.StoreID))
 			}
 			sort.Slice(voterReplicas, func(i, j int) bool {

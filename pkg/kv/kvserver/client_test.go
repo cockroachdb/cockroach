@@ -239,7 +239,7 @@ func createTestStoreWithOpts(
 	var ba roachpb.BatchRequest
 	get := roachpb.GetRequest{}
 	get.Key = keys.LocalMax
-	ba.Header.Replica = repl.Desc().Replicas().Voters()[0]
+	ba.Header.Replica = repl.Desc().Replicas().VoterDescriptors()[0]
 	ba.Header.RangeID = repl.RangeID
 	ba.Add(&get)
 	_, pErr := store.Send(ctx, ba)

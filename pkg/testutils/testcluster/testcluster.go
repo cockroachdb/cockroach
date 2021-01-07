@@ -488,6 +488,20 @@ func (tc *TestCluster) LookupRangeOrFatal(t testing.TB, key roachpb.Key) roachpb
 	return desc
 }
 
+// SplitRangeWithExpiration splits the range containing splitKey with a sticky
+// bit expiring at expirationTime.
+// The right range created by the split starts at the split key and extends to the
+// original range's end key.
+// Returns the new descriptors of the left and right ranges.
+//
+// splitKey must correspond to a SQL table key (it must end with a family ID /
+// col ID).
+func (tc *TestCluster) SplitRangeWithExpiration(
+	splitKey roachpb.Key, expirationTime hlc.Timestamp,
+) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
+	return tc.Servers[0].SplitRangeWithExpiration(splitKey, expirationTime)
+}
+
 // SplitRange splits the range containing splitKey.
 // The right range created by the split starts at the split key and extends to the
 // original range's end key.
@@ -581,6 +595,17 @@ func (tc *TestCluster) AddNonVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+}
+
+// AddNonVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) AddNonVotersOrFatal(
+	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) roachpb.RangeDescriptor {
+	desc, err := tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return desc
 }
 
 // AddVotersMulti is part of TestClusterInterface.
@@ -705,6 +730,18 @@ func (tc *TestCluster) RemoveNonVoters(
 	return tc.changeReplicas(roachpb.REMOVE_NON_VOTER, keys.MustAddr(startKey), targets...)
 }
 
+// RemoveNonVotersOrFatal is part of TestClusterInterface.
+func (tc *TestCluster) RemoveNonVotersOrFatal(
+	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) roachpb.RangeDescriptor {
+	desc, err := tc.RemoveNonVoters(startKey, targets...)
+	if err != nil {
+		t.Fatalf(`could not remove %v replicas from range containing %s: %+v`,
+			targets, startKey, err)
+	}
+	return desc
+}
+
 // TransferRangeLease is part of the TestServerInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
@@ -740,8 +777,8 @@ func (tc *TestCluster) FindRangeLease(
 		}
 	} else {
 		hint = &roachpb.ReplicationTarget{
-			NodeID:  rangeDesc.Replicas().All()[0].NodeID,
-			StoreID: rangeDesc.Replicas().All()[0].StoreID}
+			NodeID:  rangeDesc.Replicas().Descriptors()[0].NodeID,
+			StoreID: rangeDesc.Replicas().Descriptors()[0].StoreID}
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
@@ -816,7 +853,7 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 				startKey, desc.StartKey)
 		}
 		// Once we've verified the split, make sure that replicas exist.
-		for _, rDesc := range desc.Replicas().All() {
+		for _, rDesc := range desc.Replicas().Descriptors() {
 			store, err := tc.findMemberStore(rDesc.StoreID)
 			if err != nil {
 				return err
@@ -899,6 +936,10 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				}
 				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
 					log.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
+					notReplicated = true
+				}
+				if n := s.Metrics().OverReplicatedRangeCount.Value(); n > 0 {
+					log.Infof(context.TODO(), "%s has %d overreplicated ranges", s, n)
 					notReplicated = true
 				}
 				return nil
