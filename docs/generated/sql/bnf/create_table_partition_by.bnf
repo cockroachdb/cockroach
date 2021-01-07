@@ -1,7 +1,1 @@
 create_table_stmt ::=
-	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' table_definition ')'  'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')' opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' table_definition ')'  'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')' opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' table_definition ')'  'PARTITION' 'BY' 'NOTHING' opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')'  'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')' opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')'  'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')' opt_table_with opt_create_table_on_commit opt_locality
-	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' table_definition ')'  'PARTITION' 'BY' 'NOTHING' opt_table_with opt_create_table_on_commit opt_locality

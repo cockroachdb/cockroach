@@ -1095,6 +1095,29 @@ const (
 	PartitionByRange PartitionByType = "RANGE"
 )
 
+// PartitionTableBy represents a PARTITION [ALL] BY definition within
+// a CREATE/ALTER TABLE statement.
+type PartitionTableBy struct {
+	// All denotes PARTITION ALL BY.
+	All bool
+
+	*PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node *PartitionTableBy) Format(ctx *FmtCtx) {
+	if node == nil {
+		ctx.WriteString(` PARTITION BY NOTHING`)
+		return
+	}
+	ctx.WriteString(` PARTITION `)
+	if node.All {
+		ctx.WriteString(`ALL `)
+	}
+	ctx.WriteString(`BY `)
+	node.PartitionBy.formatListOrRange(ctx)
+}
+
 // PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
 // TABLE/INDEX statement.
 type PartitionBy struct {
@@ -1106,14 +1129,19 @@ type PartitionBy struct {
 
 // Format implements the NodeFormatter interface.
 func (node *PartitionBy) Format(ctx *FmtCtx) {
+	ctx.WriteString(` PARTITION BY `)
+	node.formatListOrRange(ctx)
+}
+
+func (node *PartitionBy) formatListOrRange(ctx *FmtCtx) {
 	if node == nil {
-		ctx.WriteString(` PARTITION BY NOTHING`)
+		ctx.WriteString(`NOTHING`)
 		return
 	}
 	if len(node.List) > 0 {
-		ctx.WriteString(` PARTITION BY LIST (`)
+		ctx.WriteString(`LIST (`)
 	} else if len(node.Range) > 0 {
-		ctx.WriteString(` PARTITION BY RANGE (`)
+		ctx.WriteString(`RANGE (`)
 	}
 	ctx.FormatNode(&node.Fields)
 	ctx.WriteString(`) (`)
@@ -1210,13 +1238,13 @@ const (
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists   bool
-	Table         TableName
-	Interleave    *InterleaveDef
-	PartitionBy   *PartitionBy
-	Persistence   Persistence
-	StorageParams StorageParams
-	OnCommit      CreateTableOnCommitSetting
+	IfNotExists      bool
+	Table            TableName
+	Interleave       *InterleaveDef
+	PartitionTableBy *PartitionTableBy
+	Persistence      Persistence
+	StorageParams    StorageParams
+	OnCommit         CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -1281,8 +1309,8 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		if node.Interleave != nil {
 			ctx.FormatNode(node.Interleave)
 		}
-		if node.PartitionBy != nil {
-			ctx.FormatNode(node.PartitionBy)
+		if node.PartitionTableBy != nil {
+			ctx.FormatNode(node.PartitionTableBy)
 		}
 		// No storage parameters are implemented, so we never list the storage
 		// parameters in the output format.

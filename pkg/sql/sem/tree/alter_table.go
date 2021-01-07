@@ -74,7 +74,7 @@ func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
-func (*AlterTablePartitionBy) alterTableCmd()        {}
+func (*AlterTablePartitionTableBy) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
 func (*AlterTableOwner) alterTableCmd()              {}
 
@@ -91,7 +91,7 @@ var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
-var _ AlterTableCmd = &AlterTablePartitionBy{}
+var _ AlterTableCmd = &AlterTablePartitionTableBy{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
 var _ AlterTableCmd = &AlterTableOwner{}
 
@@ -478,20 +478,20 @@ func (node *AlterTableDropStored) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP STORED")
 }
 
-// AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
-// command.
-type AlterTablePartitionBy struct {
-	*PartitionBy
+// AlterTablePartitionTableBy represents an ALTER TABLE PARTITION [ALL]
+// BY command.
+type AlterTablePartitionTableBy struct {
+	*PartitionTableBy
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
-func (node *AlterTablePartitionBy) TelemetryCounter() telemetry.Counter {
+func (node *AlterTablePartitionTableBy) TelemetryCounter() telemetry.Counter {
 	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "partition_by")
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTablePartitionBy) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.PartitionBy)
+func (node *AlterTablePartitionTableBy) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.PartitionTableBy)
 }
 
 // AuditMode represents a table audit mode

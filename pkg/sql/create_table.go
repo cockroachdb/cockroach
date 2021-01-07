@@ -251,7 +251,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Warn against creating non-partitioned indexes on a partitioned table,
 	// which is undesirable in most cases.
-	if n.n.PartitionBy != nil {
+	if n.n.PartitionTableBy != nil {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionBy == nil {
@@ -1372,7 +1372,7 @@ func NewTableDesc(
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
 				}
-				if n.PartitionBy != nil {
+				if n.PartitionTableBy != nil {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 				}
 				if n.Interleave != nil {
@@ -1473,7 +1473,7 @@ func NewTableDesc(
 
 	var primaryIndexColumnSet map[string]struct{}
 	setupShardedIndexForNewTable := func(d *tree.IndexTableDef, idx *descpb.IndexDescriptor) error {
-		if n.PartitionBy != nil {
+		if n.PartitionTableBy != nil {
 			return pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
 		shardCol, newColumn, err := setupShardedIndex(
@@ -1714,9 +1714,12 @@ func NewTableDesc(
 		}
 	}
 
-	if n.PartitionBy != nil {
+	if n.PartitionTableBy != nil {
+		if n.PartitionTableBy.All {
+			return nil, unimplemented.New("CREATE TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
+		}
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionTableBy.PartitionBy)
 		if err != nil {
 			return nil, err
 		}
