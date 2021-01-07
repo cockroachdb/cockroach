@@ -614,7 +614,7 @@ func (a Allocator) simulateRemoveTarget(
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_VOTER)
 	}()
 	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
-	return a.RemoveTarget(ctx, zone, candidates, existingReplicas)
+	return a.RemoveTarget(ctx, zone, roachpb.MakeReplicaSet(candidates).ReplicationTargets(), existingReplicas)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -625,7 +625,7 @@ func (a Allocator) simulateRemoveTarget(
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
-	candidates []roachpb.ReplicaDescriptor,
+	candidates []roachpb.ReplicationTarget,
 	existingReplicas []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
@@ -923,7 +923,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// If the current leaseholder is not preferred, set checkTransferLeaseSource
 		// to false to motivate the below logic to transfer the lease.
 		existing = preferred
-		if !storeHasReplica(leaseStoreID, preferred) {
+		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
 			checkTransferLeaseSource = false
 		}
 	}
@@ -1023,7 +1023,7 @@ func (a *Allocator) ShouldTransferLease(
 		existing = preferred
 		// If the current leaseholder isn't one of the preferred stores, then we
 		// should try to transfer the lease.
-		if !storeHasReplica(leaseStoreID, existing) {
+		if !storeHasReplica(leaseStoreID, roachpb.MakeReplicaSet(existing).ReplicationTargets()) {
 			return true
 		}
 	}

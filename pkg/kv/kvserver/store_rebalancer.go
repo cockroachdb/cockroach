@@ -433,7 +433,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
-			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, preferred) {
+			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, roachpb.MakeReplicaSet(preferred).ReplicationTargets()) {
 				log.VEventf(ctx, 3, "s%d not a preferred leaseholder for r%d; preferred: %v",
 					candidate.StoreID, desc.RangeID, preferred)
 				continue
