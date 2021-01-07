@@ -84,6 +84,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
     ],
 )
