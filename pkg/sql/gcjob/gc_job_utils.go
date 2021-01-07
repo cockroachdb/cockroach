@@ -101,7 +101,7 @@ func initializeProgress(
 			progress.Indexes = append(progress.Indexes, jobspb.SchemaChangeGCProgress_IndexProgress{IndexID: index.IndexID})
 		}
 
-		// Write out new progress.
+		// Write out new progress and set running status to waiting for GC TTL.
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 			if err != nil {
@@ -161,12 +161,14 @@ func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	return nil
 }
 
-// persistProgress sets the current state of the progress back on the job.
+// persistProgress sets the current state of the progress and running status
+// back on the job.
 func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	jobID int64,
 	progress *jobspb.SchemaChangeGCProgress,
+	runningStatus jobs.RunningStatus,
 ) {
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
@@ -177,9 +179,16 @@ func persistProgress(
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
+		err = job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return runningStatus, nil
+		})
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "updated running status: %+v", runningStatus)
 		return nil
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload err: %+v", err)
+		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
 }
 

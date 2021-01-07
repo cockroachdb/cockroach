@@ -32,6 +32,9 @@ var (
 	MaxSQLGCInterval = 5 * time.Minute
 )
 
+// runningStatusPerformGC is for jobs that are currently garbage-collecting.
+const runningStatusPerformGC jobs.RunningStatus = "garbage-collecting"
+
 // SetSmallMaxGCIntervalForTest sets the MaxSQLGCInterval and then returns a closure
 // that resets it.
 // This is to be used in tests like:
@@ -137,11 +140,11 @@ func (r schemaChangeGCResumer) Resume(
 
 		if expired {
 			// Some elements have been marked as DELETING so save the progress.
-			persistProgress(ctx, execCfg, r.jobID, progress)
+			persistProgress(ctx, execCfg, r.jobID, progress, runningStatusPerformGC)
 			if err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, execCfg, r.jobID, progress)
+			persistProgress(ctx, execCfg, r.jobID, progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
