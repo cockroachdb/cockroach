@@ -847,7 +847,7 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 	}
 
 	// Process all indexes.
-	if err := descI.ForEachIndex(catalog.IndexOpts{
+	if err := catalog.ForEachIndex(descI, catalog.IndexOpts{
 		NonPhysicalPrimaryIndex: true,
 		DropMutations:           true,
 		AddMutations:            true,
@@ -1048,7 +1048,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	}
 
 	// Assign names to unnamed indexes.
-	_ = desc.ForEachDeletableNonPrimaryIndex(func(idx catalog.Index) error {
+	_ = catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
 		if len(idx.GetName()) == 0 {
 			idx.IndexDesc().Name = buildIndexName(desc, idx)
 		}
@@ -1437,7 +1437,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		// un-upgraded foreign key references on the other table. This logic
 		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
 		unupgradedFKsPresent := false
-		if err := referencedTable.ForEachIndex(catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
+		if err := catalog.ForEachIndex(referencedTable, catalog.IndexOpts{}, func(referencedIdx catalog.Index) error {
 			if found {
 				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
 				// a way to break out of the index loop.
@@ -1516,7 +1516,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		// un-upgraded foreign key references on the other table. This logic
 		// somewhat parallels the logic in maybeUpgradeForeignKeyRepOnIndex.
 		unupgradedFKsPresent := false
-		if err := originTable.ForEachIndex(catalog.IndexOpts{}, func(originIdx catalog.Index) error {
+		if err := catalog.ForEachIndex(originTable, catalog.IndexOpts{}, func(originIdx catalog.Index) error {
 			if found {
 				// TODO (lucy): If we ever revisit the tabledesc.Immutable methods, add
 				// a way to break out of the index loop.
@@ -1740,7 +1740,7 @@ func ValidateTableLocalityConfig(
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
 func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
-	if desc.FindNonDropIndex(func(idx catalog.Index) bool {
+	if catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
 		return idx.GetName() == indexName
 	}) != nil {
 		return sqlerrors.NewRelationAlreadyExistsError(indexName)
@@ -2494,7 +2494,7 @@ func (desc *wrapper) validatePartitioning() error {
 	partitionNames := make(map[string]string)
 
 	a := &rowenc.DatumAlloc{}
-	return desc.ForEachNonDropIndex(func(idx catalog.Index) error {
+	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
 		idxDesc := idx.IndexDesc()
 		return desc.validatePartitioningDescriptor(
 			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
@@ -3228,7 +3228,7 @@ func (desc *wrapper) FindFKByName(name string) (*descpb.ForeignKeyConstraint, er
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *wrapper) IsInterleaved() bool {
-	return nil != desc.FindNonDropIndex(func(idx catalog.Index) bool {
+	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
 		return idx.IsInterleaved()
 	})
 }
@@ -4071,7 +4071,7 @@ func (desc *Immutable) MutationColumns() []descpb.ColumnDescriptor {
 // IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 // index. This method assumes that col is currently a member of desc.
 func (desc *Mutable) IsShardColumn(col *descpb.ColumnDescriptor) bool {
-	return nil != desc.FindNonDropIndex(func(idx catalog.Index) bool {
+	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
 		return idx.IsSharded() && idx.GetShardColumnName() == col.Name
 	})
 }

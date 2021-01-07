@@ -1297,7 +1297,7 @@ CREATE TABLE information_schema.statistics (
 					)
 				}
 
-				return table.ForEachIndex(catalog.IndexOpts{}, func(index catalog.Index) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					// Columns in the primary key that aren't in index.ColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}

@@ -668,7 +668,7 @@ func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	}
 
 	for _, table := range tables {
-		if err := table.ForEachIndex(catalog.IndexOpts{
+		if err := catalog.ForEachIndex(table, catalog.IndexOpts{
 			AddMutations: true,
 		}, func(index catalog.Index) error {
 			for i := 0; i < index.NumInterleaveAncestors(); i++ {

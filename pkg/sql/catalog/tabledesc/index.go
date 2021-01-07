@@ -40,7 +40,11 @@ func (w index) IndexDescDeepCopy() descpb.IndexDescriptor {
 	return *protoutil.Clone(w.desc).(*descpb.IndexDescriptor)
 }
 
-// Ordinal returns the ordinal of the index within the table descriptor.
+// Ordinal returns the ordinal of the index in its parent TableDescriptor.
+// The ordinal is defined as follows:
+// - 0 is the ordinal of the primary index,
+// - [1:1+len(desc.Indexes)] is the range of public non-primary indexes,
+// - [1+len(desc.Indexes):] is the range of non-public indexes.
 func (w index) Ordinal() int {
 	return w.ordinal
 }
@@ -61,7 +65,7 @@ func (w index) Adding() bool {
 	return w.mutationDirection == descpb.DescriptorMutation_ADD
 }
 
-// Adding returns true iff the index is a drop mutation in the table descriptor.
+// Dropped returns true iff the index is a drop mutation in the table descriptor.
 func (w index) Dropped() bool {
 	return w.mutationDirection == descpb.DescriptorMutation_DROP
 }
