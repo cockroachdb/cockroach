@@ -778,7 +778,7 @@ func (r *Replica) applySnapshot(
 				// the snapshot queue) if we end up truncating the raft log before it
 				// gets promoted to a voter. We count such snapshot applications as
 				// "applied by voters" here.
-				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING,
+				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER,
 					roachpb.VOTER_OUTGOING, roachpb.LEARNER:
 					r.store.metrics.RangeSnapshotsAppliedByVoters.Inc(1)
 				case roachpb.NON_VOTER:

@@ -48,7 +48,7 @@ func predOutgoing(rDesc roachpb.ReplicaDescriptor) bool {
 }
 
 func predDemoting(rDesc roachpb.ReplicaDescriptor) bool {
-	return rDesc.GetType() == roachpb.VOTER_DEMOTING
+	return rDesc.GetType() == roachpb.VOTER_DEMOTING_LEARNER
 }
 
 type replicationTestKnobs struct {
@@ -768,7 +768,7 @@ func TestJointConfigLease(t *testing.T) {
 	// it's asked to do.
 	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 	err = tc.TransferRangeLease(desc, tc.Target(1))
-	exp = `cannot transfer lease to replica of type VOTER_DEMOTING`
+	exp = `cannot transfer lease to replica of type VOTER_DEMOTING_LEARNER`
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
@@ -973,26 +973,26 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	checkFails()
 
 	// Turn the incoming voters on desc1 and desc3 into VOTER_DEMOTINGs.
-	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL) (VOTER_FULL, VOTER_DEMOTING)
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING_LEARNER) (VOTER_FULL) (VOTER_FULL, VOTER_DEMOTING_LEARNER)
 	desc1 = tc.RemoveVotersOrFatal(t, desc1.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc1.Replicas().FilterToDescriptors(predDemoting), 1)
 	desc3 = tc.RemoveVotersOrFatal(t, desc3.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc3.Replicas().FilterToDescriptors(predDemoting), 1)
 
-	// VOTER_DEMOTING on the lhs or rhs should fail.
+	// VOTER_DEMOTING_LEARNER on the lhs or rhs should fail.
 	checkFails()
 
 	// Add a VOTER_INCOMING to desc2 to make sure it actually excludes this type
 	// of replicas from merges (rather than really just checking whether the
 	// replica sets are equal).
-	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_DEMOTING)
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING_LEARNER) (VOTER_FULL, VOTER_INCOMING) (VOTER_FULL, VOTER_DEMOTING_LEARNER)
 	desc2 := tc.AddVotersOrFatal(t, splitKey1, tc.Target(1))
 	require.Len(t, desc2.Replicas().FilterToDescriptors(predIncoming), 1)
 
 	checkFails()
 
-	// Ditto VOTER_DEMOTING.
-	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING) (VOTER_FULL, VOTER_DEMOTING)
+	// Ditto VOTER_DEMOTING_LEARNER.
+	// desc{1,2,3} = (VOTER_FULL, VOTER_DEMOTING_LEARNER) (VOTER_FULL, VOTER_DEMOTING_LEARNER) (VOTER_FULL, VOTER_DEMOTING_LEARNER)
 	desc2 = tc.RemoveVotersOrFatal(t, desc2.StartKey.AsRawKey(), tc.Target(1))
 	require.Len(t, desc2.Replicas().FilterToDescriptors(predDemoting), 1)
 
