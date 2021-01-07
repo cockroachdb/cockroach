@@ -417,8 +417,10 @@ func (c *indexCache) cachedIndexes(
 ) []catalog.Index {
 	if *cached == nil {
 		c.ensureBackingSlices(desc, requiredState)
-		s := factory(c, desc)
-		*cached = append(make([]catalog.Index, 0, len(s)), s...)
+		*cached = factory(c, desc)
+		if *cached == nil {
+			*cached = []catalog.Index{}
+		}
 	}
 	if len(*cached) == 0 {
 		return nil
