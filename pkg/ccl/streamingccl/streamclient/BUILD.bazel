@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "client.go",
         "event.go",
+        "stream_client.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
     visibility = ["//visibility:public"],

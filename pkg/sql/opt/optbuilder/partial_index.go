@@ -13,10 +13,92 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+// addPartialIndexPredicatesForTable finds all partial indexes in the table and
+// adds their predicates to the table metadata (see
+// TableMeta.partialIndexPredicates). The predicates are converted from strings
+// to ScalarExprs here.
+//
+// The predicates are used as "known truths" about table data. Any predicates
+// containing non-immutable operators are omitted.
+//
+// scan is an optional argument that is a Scan expression on the table. If scan
+// outputs all the ordinary columns in the table, we avoid constructing a new
+// scan. A scan and its logical properties are required in order to fully
+// normalize the partial index predicates.
+func (b *Builder) addPartialIndexPredicatesForTable(
+	tabMeta *opt.TableMeta, scan memo.RelExpr, includeDeletable bool,
+) {
+	tab := tabMeta.Table
+	var numIndexes int
+	if includeDeletable {
+		numIndexes = tab.DeletableIndexCount()
+	} else {
+		numIndexes = tab.IndexCount()
+	}
+
+	// Find the first partial index.
+	indexOrd := 0
+	for ; indexOrd < numIndexes; indexOrd++ {
+		if _, ok := tab.Index(indexOrd).Predicate(); ok {
+			break
+		}
+	}
+
+	// Return early if there are no partial indexes. Only partial indexes have
+	// predicates.
+	if indexOrd == numIndexes {
+		return
+	}
+
+	// Construct a scan as the tableScope expr so that logical properties of the
+	// scan can be used to fully normalize the index predicate.
+	tableScope := b.allocScope()
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+
+	// If the optional scan argument was provided and it outputs all of the
+	// ordinary table columns, we use it as tableScope.expr. Otherwise, we must
+	// construct a new scan. Attaching a scan to tableScope.expr is required to
+	// fully normalize the partial index predicates with logical properties of
+	// the scan.
+	if scan != nil && tableScope.colSet().SubsetOf(scan.Relational().OutputCols) {
+		tableScope.expr = scan
+	} else {
+		tableScope.expr = b.factory.ConstructScan(&memo.ScanPrivate{
+			Table: tabMeta.MetaID,
+			Cols:  tableScope.colSet(),
+		})
+	}
+
+	// Skip to the first partial index we found above.
+	for ; indexOrd < numIndexes; indexOrd++ {
+		index := tab.Index(indexOrd)
+		pred, ok := index.Predicate()
+
+		// If the index is not a partial index, do nothing.
+		if !ok {
+			continue
+		}
+
+		expr, err := parser.ParseExpr(pred)
+		if err != nil {
+			panic(err)
+		}
+
+		// Build the partial index predicate as a memo.FiltersExpr and add it
+		// to the table metadata.
+		predExpr, err := b.buildPartialIndexPredicate(tableScope, expr, "index predicate")
+		if err != nil {
+			panic(err)
+		}
+		tabMeta.AddPartialIndexPredicate(indexOrd, &predExpr)
+	}
+}
 
 // buildPartialIndexPredicate builds a memo.FiltersExpr from the given
 // tree.Expr. The expression must be of type Bool and it must be immutable.
@@ -25,7 +107,7 @@ import (
 // Note: This function should only be used to build partial index or arbiter
 // predicate expressions that have only a table's ordinary columns in scope and
 // that are not part of the relational expression tree. For example, this is
-// used to populate the TableMeta.PartialIndexPredicates cache and for
+// used to populate the partial index predicates map in TableMeta and for
 // determining arbiter indexes in UPSERT and INSERT ON CONFLICT mutations. But
 // it is not used for building synthesized mutation columns that determine
 // whether to issue PUT or DEL operations on a partial index for a mutated row;

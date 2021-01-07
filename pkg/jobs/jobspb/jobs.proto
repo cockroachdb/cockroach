@@ -77,6 +77,11 @@ message EncryptionInfo {
   map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
 }
 
+message StreamIngestionDetails {
+  // StreamAddress is the location of the stream which the ingestion job will
+  // read from.
+  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.StreamAddress"];
+}
 
 message BackupDetails {
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
@@ -601,6 +606,7 @@ enum Type {
   // We can't name this TYPE_SCHEMA_CHANGE due to how proto generates actual
   // names for this enum, which cause a conflict with the SCHEMA_CHANGE entry.
   TYPEDESC_SCHEMA_CHANGE = 9 [(gogoproto.enumvalue_customname) = "TypeTypeSchemaChange"];
+  STREAM_INGESTION = 10 [(gogoproto.enumvalue_customname) = "TypeStreamIngestion"];
 }
 
 message Job {

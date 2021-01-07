@@ -65,6 +65,9 @@ CREATE TABLE partial_index_tab
 )
 ----
 
+# Insert statistics for index_tab. Histogram buckets are included for the
+# latitude column in order to make the optimizer choose specific plans for
+# SplitScanIntoUnionScans tests.
 exec-ddl
 ALTER TABLE index_tab INJECT STATISTICS '[
   {
@@ -83,7 +86,14 @@ ALTER TABLE index_tab INJECT STATISTICS '[
     "columns": ["latitude"],
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 1000000,
-    "distinct_count": 100
+    "distinct_count": 100,
+    "null_count": 0,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "-5"},
+      {"num_eq": 1000, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 0, "num_range": 998000, "distinct_range": 98, "upper_bound": "2000"}
+    ]
   },
   {
     "columns": ["longitude"],
@@ -832,16 +842,16 @@ limit
  │    ├── limit hint: 10.00
  │    └── union
  │         ├── columns: val:2!null data1:6!null
- │         ├── left columns: val:2!null data1:6!null
- │         ├── right columns: val:32 data1:36
+ │         ├── left columns: val:32 data1:36
+ │         ├── right columns: val:42 data1:46
  │         ├── cardinality: [0 - 30]
  │         ├── key: (2,6)
  │         ├── union
- │         │    ├── columns: val:2!null data1:6!null
+ │         │    ├── columns: val:32!null data1:36!null
  │         │    ├── left columns: val:12 data1:16
  │         │    ├── right columns: val:22 data1:26
  │         │    ├── cardinality: [0 - 20]
- │         │    ├── key: (2,6)
+ │         │    ├── key: (32,36)
  │         │    ├── scan index_tab@b
  │         │    │    ├── columns: val:12!null data1:16!null
  │         │    │    ├── constraint: /12/16/17/11: [/1 - /1]
@@ -853,10 +863,10 @@ limit
  │         │         ├── limit: 10
  │         │         └── fd: ()-->(22)
  │         └── scan index_tab@b
- │              ├── columns: val:32!null data1:36!null
- │              ├── constraint: /32/36/37/31: [/3 - /3]
+ │              ├── columns: val:42!null data1:46!null
+ │              ├── constraint: /42/46/47/41: [/3 - /3]
  │              ├── limit: 10
- │              └── fd: ()-->(32)
+ │              └── fd: ()-->(42)
  └── 10
 
 # Case with single-key spans.
@@ -972,16 +982,16 @@ scalar-group-by
  │    │    ├── limit hint: 1.00
  │    │    └── union
  │    │         ├── columns: val:2!null data1:6!null
- │    │         ├── left columns: val:2!null data1:6!null
- │    │         ├── right columns: val:33 data1:37
+ │    │         ├── left columns: val:33 data1:37
+ │    │         ├── right columns: val:43 data1:47
  │    │         ├── cardinality: [0 - 3]
  │    │         ├── key: (2,6)
  │    │         ├── union
- │    │         │    ├── columns: val:2!null data1:6!null
+ │    │         │    ├── columns: val:33!null data1:37!null
  │    │         │    ├── left columns: val:13 data1:17
  │    │         │    ├── right columns: val:23 data1:27
  │    │         │    ├── cardinality: [0 - 2]
- │    │         │    ├── key: (2,6)
+ │    │         │    ├── key: (33,37)
  │    │         │    ├── scan index_tab@b,rev
  │    │         │    │    ├── columns: val:13!null data1:17!null
  │    │         │    │    ├── constraint: /13/17/18/12: [/1 - /1]
@@ -995,11 +1005,11 @@ scalar-group-by
  │    │         │         ├── key: ()
  │    │         │         └── fd: ()-->(23,27)
  │    │         └── scan index_tab@b,rev
- │    │              ├── columns: val:33!null data1:37!null
- │    │              ├── constraint: /33/37/38/32: [/3 - /3]
+ │    │              ├── columns: val:43!null data1:47!null
+ │    │              ├── constraint: /43/47/48/42: [/3 - /3]
  │    │              ├── limit: 1(rev)
  │    │              ├── key: ()
- │    │              └── fd: ()-->(33,37)
+ │    │              └── fd: ()-->(43,47)
  │    └── 1
  └── aggregations
       └── const-agg [as=max:11, outer=(6)]
@@ -1174,27 +1184,27 @@ limit
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
  ├── sort
- │    ├── columns: latitude:4 longitude:5 data1:6!null data2:7!null
+ │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  │    ├── key: (4-7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    └── union
- │         ├── columns: latitude:4 longitude:5 data1:6!null data2:7!null
- │         ├── left columns: latitude:4 longitude:5 data1:6!null data2:7!null
- │         ├── right columns: latitude:64 longitude:65 data1:66 data2:67
+ │         ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
+ │         ├── left columns: latitude:74 longitude:75 data1:76 data2:77
+ │         ├── right columns: latitude:84 longitude:85 data1:86 data2:87
  │         ├── key: (4-7)
  │         ├── union
- │         │    ├── columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
- │         │    ├── left columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
- │         │    ├── right columns: latitude:54 longitude:55 data1:56 data2:57
+ │         │    ├── columns: latitude:74!null longitude:75!null data1:76!null data2:77!null
+ │         │    ├── left columns: latitude:54 longitude:55 data1:56 data2:57
+ │         │    ├── right columns: latitude:64 longitude:65 data1:66 data2:67
  │         │    ├── cardinality: [0 - 30]
- │         │    ├── key: (4-7)
+ │         │    ├── key: (74-77)
  │         │    ├── union
- │         │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null data2:7!null
+ │         │    │    ├── columns: latitude:54!null longitude:55!null data1:56!null data2:57!null
  │         │    │    ├── left columns: latitude:34 longitude:35 data1:36 data2:37
  │         │    │    ├── right columns: latitude:44 longitude:45 data1:46 data2:47
  │         │    │    ├── cardinality: [0 - 20]
- │         │    │    ├── key: (4-7)
+ │         │    │    ├── key: (54-57)
  │         │    │    ├── scan index_tab@d
  │         │    │    │    ├── columns: latitude:34!null longitude:35!null data1:36!null data2:37!null
  │         │    │    │    ├── constraint: /34/35/36/37/31: [/10/11 - /10/11]
@@ -1206,13 +1216,13 @@ limit
  │         │    │         ├── limit: 10
  │         │    │         └── fd: ()-->(44,45)
  │         │    └── scan index_tab@d
- │         │         ├── columns: latitude:54!null longitude:55!null data1:56!null data2:57!null
- │         │         ├── constraint: /54/55/56/57/51: [/10/13 - /10/13]
+ │         │         ├── columns: latitude:64!null longitude:65!null data1:66!null data2:67!null
+ │         │         ├── constraint: /64/65/66/67/61: [/10/13 - /10/13]
  │         │         ├── limit: 10
- │         │         └── fd: ()-->(54,55)
+ │         │         └── fd: ()-->(64,65)
  │         └── scan index_tab@d
- │              ├── columns: latitude:64 longitude:65 data1:66!null data2:67!null
- │              └── constraint: /4/5/6/7/1
+ │              ├── columns: latitude:84!null longitude:85 data1:86!null data2:87!null
+ │              └── constraint: /84/85/86/87/81
  │                   ├── [/-5 - /-5]
  │                   └── [/0 - /0]
  └── 10
@@ -1281,16 +1291,16 @@ limit
  │    ├── limit hint: 5.00
  │    └── union
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
- │         ├── left columns: p:1!null q:2!null r:3!null s:4!null
- │         ├── right columns: p:16 q:17 r:18 s:19
+ │         ├── left columns: p:16 q:17 r:18 s:19
+ │         ├── right columns: p:21 q:22 r:23 s:24
  │         ├── cardinality: [0 - 15]
  │         ├── key: (1-4)
  │         ├── union
- │         │    ├── columns: p:1!null q:2!null r:3!null s:4!null
+ │         │    ├── columns: p:16!null q:17!null r:18!null s:19!null
  │         │    ├── left columns: p:6 q:7 r:8 s:9
  │         │    ├── right columns: p:11 q:12 r:13 s:14
  │         │    ├── cardinality: [0 - 10]
- │         │    ├── key: (1-4)
+ │         │    ├── key: (16-19)
  │         │    ├── scan pqrs
  │         │    │    ├── columns: p:6!null q:7!null r:8!null s:9!null
  │         │    │    ├── constraint: /6/7: [/1 - /1]
@@ -1304,11 +1314,11 @@ limit
  │         │         ├── key: (12)
  │         │         └── fd: ()-->(11), (12)-->(13,14)
  │         └── scan pqrs
- │              ├── columns: p:16!null q:17!null r:18!null s:19!null
- │              ├── constraint: /16/17: [/10 - /10]
+ │              ├── columns: p:21!null q:22!null r:23!null s:24!null
+ │              ├── constraint: /21/22: [/10 - /10]
  │              ├── limit: 5
- │              ├── key: (17)
- │              └── fd: ()-->(16), (17)-->(18,19)
+ │              ├── key: (22)
+ │              └── fd: ()-->(21), (22)-->(23,24)
  └── 5
 
 # Case where multiple check constraints are combined into one constraint

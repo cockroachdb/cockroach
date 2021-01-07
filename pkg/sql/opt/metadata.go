@@ -396,7 +396,7 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 // ScalarExpr to new column IDs. It takes as arguments a ScalarExpr and a
 // mapping of old column IDs to new column IDs, and returns a new ScalarExpr.
 // This function is used when duplicating Constraints, ComputedCols, and
-// PartialIndexPredicates. DuplicateTable requires this callback function,
+// partialIndexPredicates. DuplicateTable requires this callback function,
 // rather than performing the remapping itself, because remapping column IDs
 // requires constructing new expressions with norm.Factory. The norm package
 // depends on opt, and cannot be imported here.
@@ -450,9 +450,9 @@ func (md *Metadata) DuplicateTable(
 	// Create new partial index predicate expressions by remapping the column
 	// IDs in each ScalarExpr.
 	var partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
-	if len(tabMeta.PartialIndexPredicates) > 0 {
-		partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(tabMeta.PartialIndexPredicates))
-		for idxOrd, e := range tabMeta.PartialIndexPredicates {
+	if len(tabMeta.partialIndexPredicates) > 0 {
+		partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(tabMeta.partialIndexPredicates))
+		for idxOrd, e := range tabMeta.partialIndexPredicates {
 			partialIndexPredicates[idxOrd] = remapColumnIDs(e, colMap)
 		}
 	}
@@ -464,7 +464,7 @@ func (md *Metadata) DuplicateTable(
 		IgnoreForeignKeys:      tabMeta.IgnoreForeignKeys,
 		Constraints:            constraints,
 		ComputedCols:           computedCols,
-		PartialIndexPredicates: partialIndexPredicates,
+		partialIndexPredicates: partialIndexPredicates,
 	})
 
 	return newTabID

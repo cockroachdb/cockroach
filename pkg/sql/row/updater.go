@@ -149,9 +149,6 @@ func MakeUpdater(
 		}
 	}
 
-	// Columns of the table to update, including those in delete/write-only state
-	tableCols := tableDesc.DeletableColumns()
-
 	var deleteOnlyIndexes []descpb.IndexDescriptor
 	for _, idx := range tableDesc.DeleteOnlyIndexes() {
 		if needsUpdate(idx) {
@@ -172,6 +169,8 @@ func MakeUpdater(
 	ru := Updater{
 		Helper:                newRowHelper(codec, tableDesc, includeIndexes),
 		DeleteHelper:          deleteOnlyHelper,
+		FetchCols:             requestedCols,
+		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),
 		UpdateCols:            updateCols,
 		UpdateColIDtoRowIndex: updateColIDtoRowIndex,
 		primaryKeyColChange:   primaryKeyColChange,
@@ -185,72 +184,12 @@ func MakeUpdater(
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
 		var err error
+		tableCols := tableDesc.DeletableColumns()
 		ru.rd = MakeDeleter(codec, tableDesc, tableCols)
-		ru.FetchCols = ru.rd.FetchCols
-		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 		if ru.ri, err = MakeInserter(
 			ctx, txn, codec, tableDesc, tableCols, alloc,
 		); err != nil {
 			return Updater{}, err
-		}
-	} else {
-		ru.FetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
-		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
-
-		// maybeAddCol adds the provided column to ru.FetchCols and
-		// ru.FetchColIDtoRowIndex if it isn't already present.
-		maybeAddCol := func(colID descpb.ColumnID) error {
-			if _, ok := ru.FetchColIDtoRowIndex.Get(colID); !ok {
-				col, _, err := tableDesc.FindReadableColumnByID(colID)
-				if err != nil {
-					return err
-				}
-				ru.FetchColIDtoRowIndex.Set(col.ID, len(ru.FetchCols))
-				ru.FetchCols = append(ru.FetchCols, *col)
-			}
-			return nil
-		}
-
-		// Fetch all columns in the primary key so that we can construct the
-		// keys when writing out the new kvs to the primary index.
-		for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
-			if err := maybeAddCol(colID); err != nil {
-				return Updater{}, err
-			}
-		}
-
-		// If any part of a column family is being updated, fetch all columns in
-		// that column family so that we can reconstruct the column family with
-		// the updated columns before writing it.
-		for i := range tableDesc.Families {
-			family := &tableDesc.Families[i]
-			familyBeingUpdated := false
-			for _, colID := range family.ColumnIDs {
-				if _, ok := ru.UpdateColIDtoRowIndex.Get(colID); ok {
-					familyBeingUpdated = true
-					break
-				}
-			}
-			if familyBeingUpdated {
-				for _, colID := range family.ColumnIDs {
-					if err := maybeAddCol(colID); err != nil {
-						return Updater{}, err
-					}
-				}
-			}
-		}
-
-		// Fetch all columns from indices that are being update so that they can
-		// be used to create the new kv pairs for those indices.
-		for _, index := range includeIndexes {
-			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
-				return Updater{}, err
-			}
-		}
-		for _, index := range deleteOnlyIndexes {
-			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
-				return Updater{}, err
-			}
 		}
 	}
 

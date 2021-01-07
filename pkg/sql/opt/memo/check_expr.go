@@ -103,6 +103,30 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 	case *SelectExpr:
 		checkFilters(t.Filters)
 
+	case *UnionExpr, *UnionAllExpr:
+		setPrivate := t.Private().(*SetPrivate)
+		outColSet := setPrivate.OutCols.ToSet()
+
+		// Check that columns on the left side of the union are not reused in
+		// the output.
+		leftColSet := setPrivate.LeftCols.ToSet()
+		if outColSet.Intersects(leftColSet) {
+			panic(errors.AssertionFailedf(
+				"union reuses columns in left input: %v",
+				outColSet.Intersection(leftColSet),
+			))
+		}
+
+		// Check that columns on the right side of the union are not reused in
+		// the output.
+		rightColSet := setPrivate.RightCols.ToSet()
+		if outColSet.Intersects(rightColSet) {
+			panic(errors.AssertionFailedf(
+				"union reuses columns in right input: %v",
+				outColSet.Intersection(rightColSet),
+			))
+		}
+
 	case *AggregationsExpr:
 		var checkAggs func(scalar opt.ScalarExpr)
 		checkAggs = func(scalar opt.ScalarExpr) {
