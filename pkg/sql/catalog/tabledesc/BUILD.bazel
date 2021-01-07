@@ -45,6 +45,7 @@ go_test(
     name = "tabledesc_test",
     srcs = [
         "helpers_test.go",
+        "index_test.go",
         "main_test.go",
         "safe_format_test.go",
         "structured_test.go",
@@ -54,6 +55,7 @@ go_test(
     embed = [":tabledesc"],
     deps = [
         "//pkg/base",
+        "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/security",
         "//pkg/security/securitytest",
