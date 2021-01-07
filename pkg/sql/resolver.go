@@ -423,6 +423,25 @@ func (p *planner) getQualifiedTableName(
 	return &tbName, nil
 }
 
+// getQualifiedSchemaName returns the database-qualified name of the
+// schema represented by the provided descriptor.
+func (p *planner) getQualifiedSchemaName(
+	ctx context.Context, desc catalog.SchemaDescriptor,
+) (*tree.ObjectNamePrefix, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(dbDesc.GetName()),
+		SchemaName:      tree.Name(desc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}, nil
+}
+
 // findTableContainingIndex returns the descriptor of a table
 // containing the index of the given name.
 // This is used by expandMutableIndexName().

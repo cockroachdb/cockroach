@@ -93,18 +93,27 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 func (n *alterSchemaNode) startExec(params runParams) error {
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
-		oldName := n.desc.Name
 		newName := string(t.NewName)
+
+		oldQualifiedSchemaName, err := params.p.getQualifiedSchemaName(params.ctx, n.desc)
+		if err != nil {
+			return err
+		}
+
 		if err := params.p.renameSchema(
 			params.ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
 			return err
 		}
+
+		newQualifiedSchemaName, err := params.p.getQualifiedSchemaName(params.ctx, n.desc)
+		if err != nil {
+			return err
+		}
+
 		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameSchema{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57738
-			SchemaName:    oldName,
-			NewSchemaName: newName,
+			SchemaName:    oldQualifiedSchemaName.String(),
+			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
 		newOwner := t.Owner
@@ -158,12 +167,15 @@ func (p *planner) checkCanAlterSchemaAndSetNewOwner(
 	privs := scDesc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
+	qualifiedSchemaName, err := p.getQualifiedSchemaName(ctx, scDesc)
+	if err != nil {
+		return err
+	}
+
 	return p.logEvent(ctx,
 		scDesc.GetID(),
 		&eventpb.AlterSchemaOwner{
-			// TODO(knz): This name is insufficiently qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57738
-			SchemaName: scDesc.GetName(),
+			SchemaName: qualifiedSchemaName.String(),
 			Owner:      newOwner.Normalized(),
 		})
 }
