@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -220,9 +221,26 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
+					var numImplicitColumns int
+					var err error
+					idx, numImplicitColumns, err = detectImplicitPartitionColumns(
+						params.EvalContext(),
+						n.tableDesc,
+						idx,
+						d.PartitionBy,
+					)
+					if err != nil {
+						return err
+					}
 					partitioning, err := CreatePartitioning(
-						params.ctx, params.p.ExecCfg().Settings,
-						params.EvalContext(), n.tableDesc, &idx, d.PartitionBy)
+						params.ctx,
+						params.p.ExecCfg().Settings,
+						params.EvalContext(),
+						n.tableDesc,
+						&idx,
+						numImplicitColumns,
+						d.PartitionBy,
+					)
 					if err != nil {
 						return err
 					}
@@ -739,10 +757,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTablePartitionBy:
+			if n.tableDesc.GetPrimaryIndex().Partitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER TABLE PARTITION BY",
+					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
+				)
+			}
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
-				n.tableDesc, n.tableDesc.GetPrimaryIndex(), t.PartitionBy)
+				n.tableDesc,
+				n.tableDesc.GetPrimaryIndex(),
+				0, /* numImplicitColumns */
+				t.PartitionBy,
+			)
 			if err != nil {
 				return err
 			}

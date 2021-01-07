@@ -1157,13 +1157,16 @@ func CreatePartitioning(
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
+	numImplicitColumns int,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {
 	if partBy == nil {
 		// No CCL necessary if we're looking at PARTITION BY NOTHING.
 		return descpb.PartitioningDescriptor{}, nil
 	}
-	return CreatePartitioningCCL(ctx, st, evalCtx, tableDesc, indexDesc, partBy)
+	return CreatePartitioningCCL(
+		ctx, st, evalCtx, tableDesc, indexDesc, numImplicitColumns, partBy,
+	)
 }
 
 // CreatePartitioningCCL is the public hook point for the CCL-licensed
@@ -1174,6 +1177,7 @@ var CreatePartitioningCCL = func(
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
+	numImplicitColumns int,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {
 	return descpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
@@ -1554,7 +1558,26 @@ func NewTableDesc(
 				}
 			}
 			if d.PartitionBy != nil {
-				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				var numImplicitColumns int
+				var err error
+				idx, numImplicitColumns, err = detectImplicitPartitionColumns(
+					evalCtx,
+					&desc,
+					idx,
+					d.PartitionBy,
+				)
+				if err != nil {
+					return nil, err
+				}
+				partitioning, err := CreatePartitioning(
+					ctx,
+					st,
+					evalCtx,
+					&desc,
+					&idx,
+					numImplicitColumns,
+					d.PartitionBy,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -1607,7 +1630,26 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				var numImplicitColumns int
+				var err error
+				idx, numImplicitColumns, err = detectImplicitPartitionColumns(
+					evalCtx,
+					&desc,
+					idx,
+					d.PartitionBy,
+				)
+				if err != nil {
+					return nil, err
+				}
+				partitioning, err := CreatePartitioning(
+					ctx,
+					st,
+					evalCtx,
+					&desc,
+					&idx,
+					numImplicitColumns,
+					d.PartitionBy,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -1715,16 +1757,32 @@ func NewTableDesc(
 	}
 
 	if n.PartitionBy != nil {
-		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
+		primaryIndex := *desc.GetPrimaryIndex()
+		var numImplicitColumns int
+		var err error
+		primaryIndex, numImplicitColumns, err = detectImplicitPartitionColumns(
+			evalCtx,
+			&desc,
+			primaryIndex,
+			n.PartitionBy,
+		)
 		if err != nil {
 			return nil, err
 		}
-		{
-			newPrimaryIndex := *desc.GetPrimaryIndex()
-			newPrimaryIndex.Partitioning = partitioning
-			desc.SetPrimaryIndex(newPrimaryIndex)
+		partitioning, err := CreatePartitioning(
+			ctx,
+			st,
+			evalCtx,
+			&desc,
+			&primaryIndex,
+			numImplicitColumns,
+			n.PartitionBy,
+		)
+		if err != nil {
+			return nil, err
 		}
+		primaryIndex.Partitioning = partitioning
+		desc.SetPrimaryIndex(primaryIndex)
 	}
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
@@ -2337,4 +2395,50 @@ func CreateInheritedPrivilegesFromDBDesc(
 	privs.SetOwner(user)
 
 	return privs
+}
+
+// detectImplicitPartitionColumns detects implicit partitioning columns
+// and returns a new index descriptor with the implicit columns modified
+// on the index descriptor and the number of implicit columns prepended.
+func detectImplicitPartitionColumns(
+	evalCtx *tree.EvalContext,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	partBy *tree.PartitionBy,
+) (descpb.IndexDescriptor, int, error) {
+	if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+		return indexDesc, 0, nil
+	}
+	seenImplicitColumnNames := map[string]struct{}{}
+	var implicitColumnIDs []descpb.ColumnID
+	var numImplicitColumns []string
+	var implicitColumnDirections []descpb.IndexDescriptor_Direction
+	for _, field := range partBy.Fields {
+		if string(field) == indexDesc.ColumnNames[0] {
+			break
+		}
+
+		col, err := tableDesc.FindActiveColumnByName(string(field))
+		if err != nil {
+			return indexDesc, 0, err
+		}
+		if _, ok := seenImplicitColumnNames[col.Name]; ok {
+			return indexDesc, 0, pgerror.Newf(
+				pgcode.InvalidObjectDefinition,
+				`found multiple definitions in partition using column "%s"`,
+				col.Name,
+			)
+		}
+		seenImplicitColumnNames[col.Name] = struct{}{}
+		numImplicitColumns = append(numImplicitColumns, col.Name)
+		implicitColumnIDs = append(implicitColumnIDs, col.ID)
+		implicitColumnDirections = append(implicitColumnDirections, descpb.IndexDescriptor_ASC)
+	}
+
+	if len(numImplicitColumns) > 0 {
+		indexDesc.ColumnNames = append(numImplicitColumns, indexDesc.ColumnNames...)
+		indexDesc.ColumnIDs = append(implicitColumnIDs, indexDesc.ColumnIDs...)
+		indexDesc.ColumnDirections = append(implicitColumnDirections, indexDesc.ColumnDirections...)
+	}
+	return indexDesc, len(numImplicitColumns), nil
 }

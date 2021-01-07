@@ -144,8 +144,9 @@ func MakeSimpleTableDescriptor(
 	create.Defs = filteredDefs
 
 	evalCtx := tree.EvalContext{
-		Context:  ctx,
-		Sequence: &importSequenceOperators{},
+		Context:     ctx,
+		Sequence:    &importSequenceOperators{},
+		SessionData: &sessiondata.SessionData{},
 	}
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
 
