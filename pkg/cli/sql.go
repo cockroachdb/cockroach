@@ -562,7 +562,7 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 	}
 
 	if demoCtx.simulateLatency {
-		fmt.Printf("add command is not supported in --global configurations")
+		fmt.Printf("add command is not supported in --global configurations\n")
 		return nextState
 	}
 
