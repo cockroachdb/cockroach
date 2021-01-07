@@ -777,9 +777,10 @@ func (r *Replica) applySnapshot(
 				// NB: A replica of type LEARNER can receive a non-initial snapshot (via
 				// the snapshot queue) if we end up truncating the raft log before it
 				// gets promoted to a voter. We count such snapshot applications as
-				// "applied by voters" here.
-				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING,
-					roachpb.VOTER_OUTGOING, roachpb.LEARNER:
+				// "applied by voters" here, since the LEARNER will soon be promoted to
+				// a voting replica.
+				case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER,
+					roachpb.VOTER_OUTGOING, roachpb.LEARNER, roachpb.VOTER_DEMOTING_NON_VOTER:
 					r.store.metrics.RangeSnapshotsAppliedByVoters.Inc(1)
 				case roachpb.NON_VOTER:
 					r.store.metrics.RangeSnapshotsAppliedByNonVoters.Inc(1)
