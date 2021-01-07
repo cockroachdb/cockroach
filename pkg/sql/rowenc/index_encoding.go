@@ -546,7 +546,8 @@ func DecodeIndexKeyPrefix(
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
-	interleaves := desc.ActiveIndexes()
+	interleaves := make([]catalog.Index, 0, len(desc.ActiveIndexes()))
+	interleaves = append(interleaves, desc.ActiveIndexes()...)
 
 	for component := 0; ; component++ {
 		var tableID descpb.ID
