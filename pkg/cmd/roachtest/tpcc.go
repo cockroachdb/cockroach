@@ -110,7 +110,14 @@ func setupTPCC(
 	func() {
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
+		// Randomize starting with encryption-at-rest enabled.
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		startOpts := []option{crdbNodes}
+		if rng.Intn(2) == 1 {
+			c.l.Printf("starting with encryption at rest enabled")
+			startOpts = append(startOpts, startArgs("--encrypt"))
+		}
+		c.Start(ctx, t, startOpts...)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
 		case usingImport:

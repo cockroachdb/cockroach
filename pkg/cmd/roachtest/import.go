@@ -13,10 +13,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,7 +27,14 @@ func registerImportTPCC(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx, t)
+		// Randomize starting with encryption-at-rest enabled.
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		var startOpts []option
+		if rng.Intn(2) == 1 {
+			c.l.Printf("starting with encryption at rest enabled")
+			startOpts = append(startOpts, startArgs("--encrypt"))
+		}
+		c.Start(ctx, t, startOpts...)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -96,7 +105,14 @@ func registerImportTPCH(r *testRegistry) {
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx, t)
+				// Randomize starting with encryption-at-rest enabled.
+				rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+				var startOpts []option
+				if rng.Intn(2) == 1 {
+					c.l.Printf("starting with encryption at rest enabled")
+					startOpts = append(startOpts, startArgs("--encrypt"))
+				}
+				c.Start(ctx, t, startOpts...)
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`
 					CREATE DATABASE csv;

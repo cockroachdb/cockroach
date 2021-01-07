@@ -13,6 +13,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // runManySplits attempts to create 2000 tiny ranges on a 4-node cluster using
@@ -20,7 +23,14 @@ import (
 func runManySplits(ctx context.Context, t *test, c *cluster) {
 	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, t, args)
+	// Randomize starting with encryption-at-rest enabled.
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	startOpts := []option{args}
+	if rng.Intn(2) == 1 {
+		c.l.Printf("starting with encryption at rest enabled")
+		startOpts = append(startOpts, startArgs("--encrypt"))
+	}
+	c.Start(ctx, t, startOpts...)
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()

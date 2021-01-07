@@ -224,7 +224,14 @@ func registerRestore(r *testRegistry) {
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx, t)
+				// Randomize starting with encryption-at-rest enabled.
+				rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+				var startOpts []option
+				if rng.Intn(2) == 1 {
+					c.l.Printf("starting with encryption at rest enabled")
+					startOpts = append(startOpts, startArgs("--encrypt"))
+				}
+				c.Start(ctx, t, startOpts...)
 				m := newMonitor(ctx, c)
 
 				// Run the disk usage logger in the monitor to guarantee its

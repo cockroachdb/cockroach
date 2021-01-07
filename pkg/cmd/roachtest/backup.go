@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"strings"
@@ -46,9 +47,16 @@ func registerBackup(r *testRegistry) {
 		c.Put(ctx, workload, "./workload")
 		c.Put(ctx, cockroach, "./cockroach")
 
+		// Randomize starting with encryption-at-rest enabled.
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		var startOpts []option
+		if rng.Intn(2) == 1 {
+			c.l.Printf("starting with encryption at rest enabled")
+			startOpts = append(startOpts, startArgs("--encrypt"))
+		}
 		// NB: starting the cluster creates the logs dir as a side effect,
 		// needed below.
-		c.Start(ctx, t)
+		c.Start(ctx, t, startOpts...)
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 		time.Sleep(time.Second) // wait for csv server to open listener
 
@@ -207,7 +215,14 @@ func registerBackup(r *testRegistry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
-			c.Start(ctx, t)
+			// Randomize starting with encryption-at-rest enabled.
+			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+			var startOpts []option
+			if rng.Intn(2) == 1 {
+				c.l.Printf("starting with encryption at rest enabled")
+				startOpts = append(startOpts, startArgs("--encrypt"))
+			}
+			c.Start(ctx, t, startOpts...)
 			conn := c.Conn(ctx, 1)
 
 			duration := 5 * time.Minute
