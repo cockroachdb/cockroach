@@ -64,12 +64,12 @@ export const SessionTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            {"The age of the session."}
+            {"The duration of the session."}
           </p>
         </div>
       }
     >
-      Session Age
+      Session Duration
     </Tooltip>
   ),
   txnAge: (
@@ -78,12 +78,12 @@ export const SessionTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            {"The age of the open transaction, if there is one."}
+            {"The duration of the open transaction, if there is one."}
           </p>
         </div>
       }
     >
-      Txn Age
+      Transaction Duration
     </Tooltip>
   ),
   statementAge: (
@@ -92,12 +92,12 @@ export const SessionTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            {"The age of the active statement, if there is one."}
+            {"The duration of the active statement, if there is one."}
           </p>
         </div>
       }
     >
-      Statement Age
+      Statement Duration
     </Tooltip>
   ),
   memUsage: (
