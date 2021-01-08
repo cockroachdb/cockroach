@@ -42,7 +42,7 @@ func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (ch
 
 	events := make(chan Event, 100)
 	events <- MakeKVEvent(sampleKV)
-	events <- MakeCheckpointEvent(timeutil.Now())
+	events <- MakeCheckpointEvent(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	close(events)
 
 	return events, nil
