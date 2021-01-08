@@ -218,7 +218,12 @@ func (desc *Immutable) Regions() (descpb.Regions, error) {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region database")
 	}
-	return desc.RegionConfig.Regions, nil
+	regions := make(descpb.Regions, len(desc.RegionConfig.Regions))
+	for i, region := range desc.RegionConfig.Regions {
+		regions[i] = region.Name
+	}
+
+	return regions, nil
 }
 
 // PrimaryRegion returns the primary region for a multi-region database.

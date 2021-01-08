@@ -102,7 +102,7 @@ func zoneConfigFromRegionConfigForDatabase(
 			conjunctions,
 			zonepb.ConstraintsConjunction{
 				NumReplicas: 1,
-				Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region.Name)},
 			},
 		)
 	}
