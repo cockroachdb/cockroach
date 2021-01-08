@@ -13,6 +13,7 @@
 #   - arm64-linux-gnueabi:  arm64, Linux 3.7.10, dynamically link glibc 2.12.2
 #   - amd64-darwin:         amd64, macOS 10.9
 #   - amd64-windows:        amd64, Windows 8, statically link all non-Windows libraries
+#   - s390x-linux-gnu:      s390x, Linux 2.6.32, dynamically link glibc 2.12.2
 #
 # When specifying configurations on the command line, the architecture prefix
 # and/or the ABI suffix can be omitted, in which case a suitable default will
@@ -89,6 +90,22 @@ case "${1-}" in
       SUFFIX=-windows-6.2-amd64
     ) ;;
 
+  ?(s390x-)linux?(-gnu))
+    # Manually set the correct values for configure checks that libkrb5 won't be
+    # able to perform because we're cross-compiling.
+    export krb5_cv_attr_constructor_destructor=yes
+    export ac_cv_func_regcomp=yes
+    export ac_cv_printf_positional=yes
+    args=(
+      XGOOS=linux
+      XGOARCH=s390x
+      XCMAKE_SYSTEM_NAME=Linux
+      TARGET_TRIPLE=s390x-ibm-linux-gnu
+      # -lrt is needed as clock_gettime isn't part of glibc prior to 2.17.
+      # If we update to a newer glibc, the -lrt can be removed.
+      LDFLAGS="-static-libgcc -static-libstdc++ -lrt"
+      SUFFIX=-linux-2.6.32-gnu-s390x
+    ) ;;
   *)  die "unknown release configuration: $1" ;;
 esac
 
