@@ -117,6 +117,9 @@ export class DatabaseSummaryBase extends React.Component<
     }
   }
 
+  // Leaving this render method alone during linting cleanup since it's
+  // used to discourage render without subclassing.
+  // eslint-disable-next-line react/require-render-return
   render(): React.ReactElement<any> {
     throw new Error(
       "DatabaseSummaryBase should never be instantiated directly. ",
