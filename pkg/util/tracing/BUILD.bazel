@@ -4,7 +4,9 @@ go_library(
     name = "tracing",
     srcs = [
         "context.go",
+        "crdbspan.go",
         "grpc_interceptor.go",
+        "otspan.go",
         "recording.go",
         "shadow.go",
         "span.go",
@@ -54,7 +56,6 @@ go_test(
     embed = [":tracing"],
     deps = [
         "//pkg/settings",
-        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_gogo_protobuf//types",

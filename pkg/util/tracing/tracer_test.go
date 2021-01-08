@@ -43,7 +43,7 @@ func TestTracerRecording(t *testing.T) {
 	if !noop1.isNoop() {
 		t.Error("expected noop Span")
 	}
-	noop1.LogKV("hello", "void")
+	noop1.Record("hello")
 
 	noop2 := tr.StartSpan("noop2", WithParentAndManualCollection(noop1.Meta()))
 	if !noop2.isNoop() {
@@ -67,22 +67,22 @@ func TestTracerRecording(t *testing.T) {
 	}
 	noop3.Finish()
 
-	s1.LogKV("x", 1)
+	s1.Recordf("x=%d", 1)
 	s1.SetVerbose(true)
-	s1.LogKV("x", 2)
+	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	if s2.IsBlackHole() {
 		t.Error("recording Span should not be black hole")
 	}
-	s2.LogKV("x", 3)
+	s2.Recordf("x=%d", 3)
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
 			tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
 			tags: _unfinished=1 _verbose=1
-			x: 3
+			event: x=3
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -90,13 +90,13 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
 		Span b:
 			tags: _unfinished=1 _verbose=1
-			x: 3
+			event: x=3
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
-	s3.LogKV("x", 4)
+	s3.Recordf("x=%d", 4)
 	s3.SetTag("tag", "val")
 
 	s2.Finish()
@@ -104,13 +104,13 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
 			tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
 			tags: _verbose=1
-			x: 3
+			event: x=3
 		Span c:
 			tags: _unfinished=1 _verbose=1 tag=val
-			x: 4
+			event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -118,29 +118,29 @@ func TestTracerRecording(t *testing.T) {
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
       tags: _unfinished=1 _verbose=1
-			x: 2
+			event: x=2
 		Span b:
       tags: _verbose=1
-			x: 3
+			event: x=3
 		Span c:
 			tags: _verbose=1 tag=val
-			x: 4
+			event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
 	s1.SetVerbose(false)
-	s1.LogKV("x", 100)
+	s1.Recordf("x=%d", 100)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
 	}
 
 	// The child Span is still recording.
-	s3.LogKV("x", 5)
+	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
 			tags: _verbose=1 tag=val
-			x: 4
-			x: 5
+			event: x=4
+			event: x=5
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if trace1 != trace2 {
 		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
-	s2.LogKV("x", 1)
+	s2.Recordf("x=%d", 1)
 	s2.Finish()
 
 	// Verify that recording was started automatically.
@@ -263,7 +263,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err := TestingCheckRecordedSpans(rec, `
 		Span remote op:
 			tags: _verbose=1
-			x: 1
+			event: x=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestTracerInjectExtract(t *testing.T) {
 			tags: _verbose=1
 		Span remote op:
 			tags: _verbose=1
-			x: 1
+			event: x=1
 	`); err != nil {
 		t.Fatal(err)
 	}
