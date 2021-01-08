@@ -53,6 +53,7 @@ export function RollupStoreMetrics(ns: INodeStatus): void {
  * MetricConstants contains the name of several stats provided by
  * CockroachDB.
  */
+// eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace MetricConstants {
   // Store level metrics.
   export const replicas: string = "replicas";
