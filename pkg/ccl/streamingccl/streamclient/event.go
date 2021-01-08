@@ -9,9 +9,8 @@
 package streamclient
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // EventType enumerates all possible events emitted over a cluster stream.
@@ -37,7 +36,7 @@ type Event interface {
 	// GetResolved returns a resolved timestamp if the EventType is
 	// CheckpointEvent. The resolved timestamp indicates that all KV events until
 	// this time have been emitted.
-	GetResolved() *time.Time
+	GetResolved() *hlc.Timestamp
 }
 
 // kvEvent is a key value pair that needs to be ingested.
@@ -58,14 +57,14 @@ func (kve kvEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetResolved implements the Event interface.
-func (kve kvEvent) GetResolved() *time.Time {
+func (kve kvEvent) GetResolved() *hlc.Timestamp {
 	return nil
 }
 
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
 type checkpointEvent struct {
-	resolvedTimestamp time.Time
+	resolvedTimestamp hlc.Timestamp
 }
 
 var _ Event = checkpointEvent{}
@@ -81,7 +80,7 @@ func (ce checkpointEvent) GetKV() *roachpb.KeyValue {
 }
 
 // GetResolved implements the Event interface.
-func (ce checkpointEvent) GetResolved() *time.Time {
+func (ce checkpointEvent) GetResolved() *hlc.Timestamp {
 	return &ce.resolvedTimestamp
 }
 
@@ -91,6 +90,6 @@ func MakeKVEvent(kv roachpb.KeyValue) Event {
 }
 
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
-func MakeCheckpointEvent(resolvedTimestamp time.Time) Event {
+func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
 	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
 }

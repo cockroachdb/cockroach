@@ -9,7 +9,10 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+    ],
 )
 
 go_test(
