@@ -775,6 +775,23 @@ func (ctx *Context) grpcDialOptions(
 			dialOpts = append(dialOpts, grpc.WithStreamInterceptor(testingStreamInterceptor))
 		}
 	}
+	if ctx.Knobs.ArtificialLatencyMap != nil {
+		dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
+			dialer := net.Dialer{
+				LocalAddr: sourceAddr,
+			}
+			return dialer.DialContext(ctx, "tcp", target)
+		}
+		latency := ctx.Knobs.ArtificialLatencyMap[target]
+		log.VEventf(ctx.masterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
+		dialer := artificialLatencyDialer{
+			dialerFunc: dialerFunc,
+			latencyMS:  latency,
+		}
+		dialerFunc = dialer.dial
+		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
+	}
+
 	return dialOpts, nil
 }
 
