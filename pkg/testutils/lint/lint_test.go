@@ -720,6 +720,7 @@ func TestLint(t *testing.T) {
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
 			":!util/tracing/span.go",
+			":!util/tracing/crdbspan.go",
 			":!util/tracing/tracer.go",
 		)
 		if err != nil {
