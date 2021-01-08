@@ -23,7 +23,7 @@ export default function getHighlightedText(
     return text;
   }
   highlight = highlight.replace(
-    /[°§%()\[\]{}\\?´`'#|;:+-]+/g,
+    /[°§%()[\]{}\\?´`'#|;:+-]+/g,
     "highlightNotDefined",
   );
   const search = highlight
