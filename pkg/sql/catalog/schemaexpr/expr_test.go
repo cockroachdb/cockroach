@@ -79,7 +79,8 @@ func TestValidateExpr(t *testing.T) {
 
 			deqExpr, _, err := schemaexpr.DequalifyAndValidateExpr(
 				ctx,
-				desc,
+				desc.GetID(),
+				desc.AllNonDropColumns(),
 				expr,
 				d.typ,
 				"test-validate-expr",

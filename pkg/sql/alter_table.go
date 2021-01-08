@@ -462,13 +462,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
-			computedColValidator := schemaexpr.MakeComputedColumnValidator(
-				params.ctx,
-				n.tableDesc,
-				&params.p.semaCtx,
-				tn,
-			)
-			if err := computedColValidator.ValidateNoDependents(colToDrop); err != nil {
+			if err := schemaexpr.ValidateComputedExprHasNoDependents(n.tableDesc, colToDrop); err != nil {
 				return err
 			}
 

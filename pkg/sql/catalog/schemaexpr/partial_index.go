@@ -62,7 +62,8 @@ func MakeIndexPredicateValidator(
 func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
 	expr, _, err := DequalifyAndValidateExpr(
 		v.ctx,
-		v.desc,
+		v.desc.GetID(),
+		v.desc.AllNonDropColumns(),
 		e,
 		types.Bool,
 		"index predicate",

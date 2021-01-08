@@ -274,7 +274,8 @@ func alterColumnTypeGeneral(
 		// Validate the provided using expr and ensure it has the correct type.
 		expr, _, err := schemaexpr.DequalifyAndValidateExpr(
 			ctx,
-			tableDesc,
+			tableDesc.GetID(),
+			tableDesc.AllNonDropColumns(),
 			using,
 			toType,
 			"ALTER COLUMN TYPE USING EXPRESSION",

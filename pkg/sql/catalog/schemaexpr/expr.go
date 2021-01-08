@@ -36,7 +36,8 @@ import (
 // the expression.
 func DequalifyAndValidateExpr(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
+	tableID descpb.ID,
+	cols []descpb.ColumnDescriptor,
 	expr tree.Expr,
 	typ *types.T,
 	op string,
@@ -46,10 +47,7 @@ func DequalifyAndValidateExpr(
 ) (string, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColDescs(
-			desc.GetID(),
-			desc.AllNonDropColumns(),
-		),
+		*tn, colinfo.ResultColumnsFromColDescs(tableID, cols),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
@@ -58,7 +56,15 @@ func DequalifyAndValidateExpr(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
+	replacedExpr, colIDs, err := replaceColumnVars(
+		func(name tree.Name) (col *descpb.ColumnDescriptor, dropped bool, err error) {
+			for i := range cols {
+				if cols[i].ColName() == name {
+					return &cols[i], false, nil
+				}
+			}
+			return nil, false, colinfo.NewUndefinedColumnError(string(name))
+		}, expr)
 	if err != nil {
 		return "", colIDs, err
 	}
@@ -185,7 +191,7 @@ func deserializeExprForFormatting(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	replacedExpr, _, err := replaceColumnVars(desc.FindColumnByName, expr)
 	if err != nil {
 		return nil, err
 	}

@@ -157,17 +157,39 @@ func (b *Builder) alterTableAddColumn(
 		if d.IsVirtual() {
 			return unimplemented.NewWithIssue(57608, "virtual computed columns")
 		}
-		// TODO (lucy): This is not probably not going to work when the referenced
-		// columns were added in the same transaction, since we'll expect the
-		// referenced columns to all be on the table descriptor. We may just want
-		// to reimplement this.
-		computedColValidator := schemaexpr.MakeComputedColumnValidator(
-			ctx,
-			table,
+		// Determine the expected columns at the conclusion of the
+		// schema change for the computed expression validation.
+		// TODO (lucy): Do this also for foreign keys.
+		// TODO (lucy): We need a faster way to look up targets for a specific
+		// descriptor element.
+		cols := make([]descpb.ColumnDescriptor, 0, len(table.Columns))
+		for i := range table.Columns {
+			dropped := false
+			for j := range b.targetStates {
+				if dc, ok := b.targetStates[j].Target.(*scpb.DropColumn); ok &&
+					dc.Column.Name == table.Columns[i].Name {
+					dropped = true
+					break
+				}
+			}
+			if !dropped {
+				cols = append(cols, table.Columns[i])
+			}
+		}
+		for i := range b.targetStates {
+			if ac, ok := b.targetStates[i].Target.(*scpb.AddColumn); ok {
+				cols = append(cols, ac.Column)
+			}
+		}
+
+		serializedExpr, err := schemaexpr.ValidateComputedExpr(ctx,
+			table.GetID(),
+			cols,
+			table.AllActiveAndInactiveForeignKeys(),
 			b.semaCtx,
 			tn,
+			d,
 		)
-		serializedExpr, err := computedColValidator.Validate(d)
 		if err != nil {
 			return err
 		}
@@ -183,6 +205,7 @@ func (b *Builder) alterTableAddColumn(
 		scpb.State_ABSENT,
 	)
 	newPrimaryIdxID := b.addOrUpdatePrimaryIndexTargetsForAddColumn(table, colID, col.Name)
+
 	if idx != nil {
 		idxID := b.nextIndexID(table)
 		idx.ID = idxID
@@ -275,7 +298,7 @@ func (b *Builder) alterTableDropColumn(
 	}
 	// Check whether the column is being dropped.
 	for _, ts := range b.targetStates {
-		if _, ok := ts.Target.(*scpb.DropColumn); ok {
+		if dc, ok := ts.Target.(*scpb.DropColumn); ok && dc.Column.ColName() == t.Column {
 			return nil
 		}
 	}

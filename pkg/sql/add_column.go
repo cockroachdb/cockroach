@@ -146,13 +146,15 @@ func (p *planner) addColumnImpl(
 		if d.IsVirtual() {
 			return unimplemented.NewWithIssue(57608, "virtual computed columns")
 		}
-		computedColValidator := schemaexpr.MakeComputedColumnValidator(
+		serializedExpr, err := schemaexpr.ValidateComputedExpr(
 			params.ctx,
-			n.tableDesc,
+			n.tableDesc.GetID(),
+			n.tableDesc.AllNonDropColumns(),
+			n.tableDesc.AllActiveAndInactiveForeignKeys(),
 			&params.p.semaCtx,
 			tn,
+			d,
 		)
-		serializedExpr, err := computedColValidator.Validate(d)
 		if err != nil {
 			return err
 		}

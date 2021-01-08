@@ -91,7 +91,8 @@ func (b *CheckConstraintBuilder) Build(
 	// invalid functions.
 	expr, colIDs, err := DequalifyAndValidateExpr(
 		b.ctx,
-		b.desc,
+		b.desc.GetID(),
+		b.desc.AllNonDropColumns(),
 		c.Expr,
 		types.Bool,
 		"CHECK",
@@ -161,7 +162,7 @@ func (b *CheckConstraintBuilder) DefaultName(expr tree.Expr) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
 
-	err := iterColDescriptors(b.desc, expr, func(c *descpb.ColumnDescriptor) error {
+	err := iterColDescriptors(b.desc.FindColumnByName, expr, func(c *descpb.ColumnDescriptor) error {
 		nameBuf.WriteByte('_')
 		nameBuf.WriteString(c.Name)
 		return nil

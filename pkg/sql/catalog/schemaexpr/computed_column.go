@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -45,8 +46,8 @@ func MakeComputedColumnValidator(
 	}
 }
 
-// Validate verifies that an expression is a valid computed column expression.
-// If it is not valid, an error is returned.
+// ValidateComputedExpr verifies that an expression is a valid computed column
+// expression. If it is not valid, an error is returned.
 //
 // A computed column expression is valid if all of the following are true:
 //
@@ -55,8 +56,16 @@ func MakeComputedColumnValidator(
 //
 // It additionally updates the target computed column with the serialized
 // typed expression.
-// TODO(mgartner): Add unit tests for Validate.
-func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, error) {
+// TODO(mgartner): Add unit tests for ValidateComputedExpr.
+func ValidateComputedExpr(
+	ctx context.Context,
+	tableID descpb.ID,
+	cols []descpb.ColumnDescriptor,
+	fks []*descpb.ForeignKeyConstraint,
+	semaCtx *tree.SemaContext,
+	tableName *tree.TableName,
+	d *tree.ColumnTableDef,
+) (string, error) {
 	if d.HasDefaultExpr() {
 		return "", pgerror.New(
 			pgcode.InvalidTableDefinition,
@@ -66,15 +75,26 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, erro
 
 	var depColIDs catalog.TableColSet
 	// First, check that no column in the expression is a computed column.
-	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *descpb.ColumnDescriptor) error {
-		if c.IsComputed() {
-			return pgerror.New(pgcode.InvalidTableDefinition,
-				"computed columns cannot reference other computed columns")
-		}
-		depColIDs.Add(c.ID)
+	err := iterColDescriptors(
+		func(name tree.Name) (col *descpb.ColumnDescriptor, dropped bool, err error) {
+			for i := range cols {
+				if cols[i].ColName() == name {
+					return &cols[i], false, nil
+				}
+			}
+			return nil, false, colinfo.NewUndefinedColumnError(string(name))
+		},
+		d.Computed.Expr,
+		func(c *descpb.ColumnDescriptor) error {
+			if c.IsComputed() {
+				return pgerror.New(pgcode.InvalidTableDefinition,
+					"computed columns cannot reference other computed columns")
+			}
+			depColIDs.Add(c.ID)
 
-		return nil
-	})
+			return nil
+		},
+	)
 	if err != nil {
 		return "", err
 	}
@@ -82,11 +102,11 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, erro
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	if err := v.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+	for _, fk := range fks {
 		for _, id := range fk.OriginColumnIDs {
 			if !depColIDs.Contains(id) {
 				// We don't depend on this column.
-				return nil
+				continue
 			}
 			for _, action := range []descpb.ForeignKeyReference_Action{
 				fk.OnDelete,
@@ -96,18 +116,15 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, erro
 				case descpb.ForeignKeyReference_CASCADE,
 					descpb.ForeignKeyReference_SET_NULL,
 					descpb.ForeignKeyReference_SET_DEFAULT:
-					return pgerror.New(pgcode.InvalidTableDefinition,
+					return "", pgerror.New(pgcode.InvalidTableDefinition,
 						"computed columns cannot reference non-restricted FK columns")
 				}
 			}
 		}
-		return nil
-	}); err != nil {
-		return "", err
 	}
 
 	// Resolve the type of the computed column expression.
-	defType, err := tree.ResolveType(v.ctx, d.Type, v.semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return "", err
 	}
@@ -117,23 +134,25 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) (string, erro
 	// functions. In order to safely serialize user defined types and their
 	// members, we need to serialize the typed expression here.
 	expr, _, err := DequalifyAndValidateExpr(
-		v.ctx,
-		v.desc,
+		ctx,
+		tableID,
+		cols,
 		d.Computed.Expr,
 		defType,
 		"computed column",
-		v.semaCtx,
+		semaCtx,
 		tree.VolatilityImmutable,
-		v.tableName,
+		tableName,
 	)
 	return expr, err
 }
 
-// ValidateNoDependents verifies that the input column is not dependent on a
-// computed column. The function errs if any existing computed columns or
-// computed columns being added reference the given column.
-// TODO(mgartner): Add unit tests for ValidateNoDependents.
-func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescriptor) error {
+// ValidateComputedExprHasNoDependents verifies that the input column is not
+// dependent on a computed column. The function errs if any existing computed
+// columns or computed columns being added reference the given column.
+func ValidateComputedExprHasNoDependents(
+	desc catalog.TableDescriptor, col *descpb.ColumnDescriptor,
+) error {
 	checkComputed := func(c *descpb.ColumnDescriptor) error {
 		if !c.IsComputed() {
 			return nil
@@ -145,7 +164,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 			return errors.WithAssertionFailure(err)
 		}
 
-		return iterColDescriptors(v.desc, expr, func(colVar *descpb.ColumnDescriptor) error {
+		return iterColDescriptors(desc.FindColumnByName, expr, func(colVar *descpb.ColumnDescriptor) error {
 			if colVar.ID == col.ID {
 				return pgerror.Newf(
 					pgcode.InvalidColumnReference,
@@ -158,7 +177,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 		})
 	}
 
-	return v.desc.ForeachNonDropColumn(func(col *descpb.ColumnDescriptor) error {
+	return desc.ForeachNonDropColumn(func(col *descpb.ColumnDescriptor) error {
 		return checkComputed(col)
 	})
 }
