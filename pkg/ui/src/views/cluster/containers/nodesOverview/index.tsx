@@ -205,7 +205,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "region",
       title: "nodes",
       render: (_text, record) => {
-        if (!!record.nodeId) {
+        if (record.nodeId) {
           return <NodeNameColumn record={record} />;
         } else {
           return <NodeLocalityColumn record={record} />;
