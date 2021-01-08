@@ -277,10 +277,9 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
     }
 
     return (
-      <section
-        className="cluster-summary"
-        children={React.Children.toArray(children)}
-      />
+      <section className="cluster-summary">
+        {React.Children.toArray(children)}
+      </section>
     );
   }
 }
