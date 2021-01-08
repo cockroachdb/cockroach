@@ -1,7 +1,9 @@
 #! /usr/bin/env expect -f
 
-# This testcase is disabled until #56264 is resolved
 source [file join [file dirname $argv0] common.tcl]
+
+# Set a larger timeout since we are going global.
+set timeout 90
 
 start_test "Check --global flag runs as expected"
 
