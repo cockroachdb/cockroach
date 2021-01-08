@@ -58,7 +58,8 @@ type Span struct {
 	crdb *crdbSpan
 	// x/net/trace.Trace instance; nil if not tracing to x/net/trace.
 	netTr trace.Trace
-	// Shadow tracer and Span; zero if not using a shadow tracer.
+	// External opentracing compatible tracer such as lightstep, zipkin, jaeger;
+	// zero if not using one.
 	ot otSpan
 }
 
@@ -240,12 +241,12 @@ func (s *Span) Meta() *SpanMeta {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
 		s.crdb.mu.Lock()
 		defer s.crdb.mu.Unlock()
-		n := len(s.crdb.mu.Baggage)
+		n := len(s.crdb.mu.baggage)
 		// In the common case, we have no baggage, so avoid making an empty map.
 		if n > 0 {
 			baggage = make(map[string]string, n)
 		}
-		for k, v := range s.crdb.mu.Baggage {
+		for k, v := range s.crdb.mu.baggage {
 			baggage[k] = v
 		}
 		recordingType = s.crdb.mu.recording.recordingType.load()
