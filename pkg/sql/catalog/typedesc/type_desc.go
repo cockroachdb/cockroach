@@ -202,7 +202,7 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 }
 
 // PrimaryRegion returns the primary region for a multi-region type descriptor.
-func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
 			"can not get primary region of a non multi-region type desc")
@@ -504,13 +504,13 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 					len(dbRegions), len(desc.EnumMembers))
 			}
 
-			regions := make(map[descpb.Region]struct{}, len(dbRegions))
+			regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
 			for _, region := range dbRegions {
 				regions[region] = struct{}{}
 			}
 
 			for i := range desc.EnumMembers {
-				enumRegion := descpb.Region(desc.EnumMembers[i].LogicalRepresentation)
+				enumRegion := descpb.RegionName(desc.EnumMembers[i].LogicalRepresentation)
 				if _, ok := regions[enumRegion]; !ok {
 					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
 				}

@@ -290,7 +290,7 @@ func (p *planner) createRegionConfig(
 	if err != nil {
 		return nil, err
 	}
-	regionConfig.PrimaryRegion = descpb.Region(primaryRegion)
+	regionConfig.PrimaryRegion = descpb.RegionName(primaryRegion)
 	if regionConfig.PrimaryRegion != "" {
 		if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
 			return nil, err
@@ -304,9 +304,9 @@ func (p *planner) createRegionConfig(
 			)
 		}
 		regionConfig.Regions = make([]descpb.DatabaseDescriptor_RegionConfig_Region, 0, len(regions)+1)
-		seenRegions := make(map[descpb.Region]struct{}, len(regions)+1)
+		seenRegions := make(map[descpb.RegionName]struct{}, len(regions)+1)
 		for _, r := range regions {
-			region := descpb.Region(r)
+			region := descpb.RegionName(r)
 			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
 				return nil, err
 			}
