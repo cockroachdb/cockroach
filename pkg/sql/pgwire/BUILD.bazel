@@ -112,6 +112,7 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//stdstrings",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@com_github_jackc_pgx//:pgx",
         "@com_github_lib_pq//:pq",

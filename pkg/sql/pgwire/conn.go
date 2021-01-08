@@ -139,14 +139,12 @@ func (s *Server) serveConn(
 	reserved mon.BoundAccount,
 	authOpt authOptions,
 ) {
-	sArgs.RemoteAddr = netConn.RemoteAddr()
-
 	if log.V(2) {
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
 	c := newConn(netConn, sArgs, &s.metrics, &s.execCfg.Settings.SV)
-	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingLogEnabled) > 0
+	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, s.IsDraining, s.SQLServer, reserved, authOpt)

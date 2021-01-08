@@ -176,9 +176,9 @@ func (c *conn) lookupAuthenticationMethodUsingRules(
 	var ip net.IP
 	if connType != hba.ConnLocal {
 		// Extract the IP address of the client.
-		tcpAddr, ok := c.conn.RemoteAddr().(*net.TCPAddr)
+		tcpAddr, ok := c.sessionArgs.RemoteAddr.(*net.TCPAddr)
 		if !ok {
-			err = errors.AssertionFailedf("client address type %T unsupported", c.conn.RemoteAddr())
+			err = errors.AssertionFailedf("client address type %T unsupported", c.sessionArgs.RemoteAddr)
 			return
 		}
 		ip = tcpAddr.IP

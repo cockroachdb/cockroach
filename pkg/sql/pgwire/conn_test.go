@@ -538,7 +538,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	// Consume the connection options.
-	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf); err != nil {
+	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf, conn.RemoteAddr(), false /* trustRemoteAddr */); err != nil {
 		return nil, err
 	}
 
