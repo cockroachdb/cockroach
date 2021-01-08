@@ -60,7 +60,7 @@ func (l *fileSink) gcOldFiles() {
 		return
 	}
 
-	files := selectFiles(allFiles, math.MaxInt64)
+	files := selectFilesInGroup(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return
 	}

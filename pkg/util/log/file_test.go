@@ -71,7 +71,7 @@ func TestSelectFiles(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		actualFiles := selectFiles(testFiles, testCase.EndTimestamp)
+		actualFiles := selectFilesInGroup(testFiles, testCase.EndTimestamp)
 		previousTimestamp := year2200.UnixNano()
 		if len(actualFiles) != testCase.ExpectedCount {
 			t.Errorf("%d: expected %d files, actual %d", i, testCase.ExpectedCount, len(actualFiles))
