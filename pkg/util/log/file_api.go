@@ -88,6 +88,20 @@ func ParseLogFilename(filename string) (logpb.FileDetails, error) {
 
 var errNoFileLogging = errors.New("log: file logging is not configured")
 
+// listLogGroups returns slices of logpb.FileInfo structs.
+// There is one logpb.FileInfo slice per file sink.
+func listLogGroups() (logGroups [][]logpb.FileInfo, err error) {
+	err = allSinkInfos.iterFileSinks(func(l *fileSink) error {
+		_, thisLoggerFiles, err := l.listLogFiles()
+		if err != nil {
+			return err
+		}
+		logGroups = append(logGroups, thisLoggerFiles)
+		return nil
+	})
+	return logGroups, err
+}
+
 // ListLogFiles returns a slice of logpb.FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() (logFiles []logpb.FileInfo, err error) {
@@ -248,7 +262,7 @@ func (a sortableFileInfoSlice) Less(i, j int) bool {
 // selectFiles selects all log files that have an timestamp before the
 // endTime. It then sorts them in decreasing order, with the most
 // recent as the first one.
-func selectFiles(logFiles []logpb.FileInfo, endTimestamp int64) []logpb.FileInfo {
+func selectFilesInGroup(logFiles []logpb.FileInfo, endTimestamp int64) []logpb.FileInfo {
 	files := sortableFileInfoSlice{}
 	for _, logFile := range logFiles {
 		if logFile.Details.Time <= endTimestamp {
@@ -273,36 +287,62 @@ func FetchEntriesFromFiles(
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
 ) ([]logpb.Entry, error) {
-	logFiles, err := ListLogFiles()
+	logGroups, err := listLogGroups()
 	if err != nil {
 		return nil, err
 	}
 
-	selectedFiles := selectFiles(logFiles, endTimestamp)
-
 	entries := []logpb.Entry{}
-	for _, file := range selectedFiles {
-		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
-			file,
-			startTimestamp,
-			endTimestamp,
-			maxEntries-len(entries),
-			pattern,
-			editMode)
-		if err != nil {
-			return nil, err
+	numGroupsWithEntries := 0
+	for _, logFiles := range logGroups {
+		selectedFiles := selectFilesInGroup(logFiles, endTimestamp)
+
+		groupHasEntries := false
+		for _, file := range selectedFiles {
+			newEntries, entryBeforeStart, err := readAllEntriesFromFile(
+				file,
+				startTimestamp,
+				endTimestamp,
+				maxEntries-len(entries),
+				pattern,
+				editMode)
+			if err != nil {
+				return nil, err
+			}
+			groupHasEntries = true
+			entries = append(entries, newEntries...)
+			if len(entries) >= maxEntries {
+				break
+			}
+			if entryBeforeStart {
+				// Stop processing files inside the group that won't have any
+				// timestamps after startTime.
+				break
+			}
 		}
-		entries = append(entries, newEntries...)
-		if len(entries) >= maxEntries {
-			break
-		}
-		if entryBeforeStart {
-			// Stop processing files that won't have any timestamps after
-			// startTime.
-			break
+		if groupHasEntries {
+			numGroupsWithEntries++
 		}
 	}
+
+	// Within each group, entries are sorted. However if there were
+	// multiple groups, the final result is not sorted any more. Do it
+	// now.
+	if numGroupsWithEntries > 1 {
+		e := sortableEntries(entries)
+		sort.Stable(e)
+	}
+
 	return entries, nil
+}
+
+type sortableEntries []logpb.Entry
+
+func (a sortableEntries) Len() int      { return len(a) }
+func (a sortableEntries) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortableEntries) Less(i, j int) bool {
+	// Note: FetchEntries returns entries in reverse order.
+	return a[i].Time > a[j].Time
 }
 
 // readAllEntriesFromFile reads in all log entries from a given file that are
