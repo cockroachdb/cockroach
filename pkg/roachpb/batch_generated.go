@@ -68,6 +68,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.RangefeedRetry
 	case *ErrorDetail_IndeterminateCommit:
 		return t.IndeterminateCommit
+	case *ErrorDetail_OptimisticEvalConflicts:
+		return t.OptimisticEvalConflicts
 	default:
 		return nil
 	}
@@ -328,6 +330,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_RangefeedRetry{t}
 	case *IndeterminateCommitError:
 		union = &ErrorDetail_IndeterminateCommit{t}
+	case *OptimisticEvalConflictsError:
+		union = &ErrorDetail_OptimisticEvalConflicts{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}

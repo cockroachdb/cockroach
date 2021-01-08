@@ -63,6 +63,8 @@ type mockLockTableGuard struct {
 	toResolve     []roachpb.LockUpdate
 }
 
+var _ lockTableGuard = &mockLockTableGuard{}
+
 // mockLockTableGuard implements the lockTableGuard interface.
 func (g *mockLockTableGuard) ShouldWait() bool            { return true }
 func (g *mockLockTableGuard) NewStateChan() chan struct{} { return g.signal }
@@ -75,6 +77,9 @@ func (g *mockLockTableGuard) CurState() waitingState {
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
+}
+func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool) {
+	return true
 }
 func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
 

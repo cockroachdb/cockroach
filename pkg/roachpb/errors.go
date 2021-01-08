@@ -316,6 +316,7 @@ const (
 	MergeInProgressErrType                  ErrorDetailType = 37
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
+	OptimisticEvalConflictsErrType          ErrorDetailType = 40
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -1238,3 +1239,24 @@ func (e *IndeterminateCommitError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
+
+// NewOptimisticEvalConflictsError initializes a new
+// OptimisticEvalConflictsError.
+func NewOptimisticEvalConflictsError() *OptimisticEvalConflictsError {
+	return &OptimisticEvalConflictsError{}
+}
+
+func (e *OptimisticEvalConflictsError) Error() string {
+	return e.message(nil)
+}
+
+func (e *OptimisticEvalConflictsError) message(pErr *Error) string {
+	return "optimistic eval encountered conflict"
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *OptimisticEvalConflictsError) Type() ErrorDetailType {
+	return OptimisticEvalConflictsErrType
+}
+
+var _ ErrorDetailInterface = &OptimisticEvalConflictsError{}
