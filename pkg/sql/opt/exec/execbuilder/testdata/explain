@@ -1411,26 +1411,20 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: primary, u_v_key
 │
-└── • filter
-    │ filter: k IS NULL
+└── • lookup join (anti)
+    │ table: u@u_v_key
+    │ equality: (column2) = (v)
+    │ equality cols are key
     │
-    └── • lookup join (left outer)
-        │ table: u@u_v_key
-        │ equality: (column2) = (v)
-        │ equality cols are key
+    └── • cross join (anti)
         │
-        └── • filter
-            │ filter: k IS NULL
-            │
-            └── • cross join (left outer)
-                │
-                ├── • values
-                │     size: 2 columns, 1 row
-                │
-                └── • scan
-                      missing stats
-                      table: u@primary
-                      spans: [/1 - /1]
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: u@primary
+              spans: [/1 - /1]
 
 # Make sure EXPLAIN (VERBOSE) works when there is a constrained scan of a
 # virtual table (#58193).
