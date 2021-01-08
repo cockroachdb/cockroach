@@ -16,7 +16,7 @@ go_library(
         "privilege.go",
         "privilege.pb.go",
         "privilegedescversion_string.go",
-        "region.go",
+        "region_name.go",
         "structured.go",
         "structured.pb.go",
         "tenant.pb.go",

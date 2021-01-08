@@ -213,12 +213,12 @@ func (desc *Immutable) IsMultiRegion() bool {
 }
 
 // Regions returns the multi-region regions that have been added to a database.
-func (desc *Immutable) Regions() (descpb.Regions, error) {
+func (desc *Immutable) Regions() (descpb.RegionNames, error) {
 	if !desc.IsMultiRegion() {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region database")
 	}
-	regions := make(descpb.Regions, len(desc.RegionConfig.Regions))
+	regions := make(descpb.RegionNames, len(desc.RegionConfig.Regions))
 	for i, region := range desc.RegionConfig.Regions {
 		regions[i] = region.Name
 	}
@@ -227,7 +227,7 @@ func (desc *Immutable) Regions() (descpb.Regions, error) {
 }
 
 // PrimaryRegion returns the primary region for a multi-region database.
-func (desc *Immutable) PrimaryRegion() (descpb.Region, error) {
+func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
 	if !desc.IsMultiRegion() {
 		return "", errors.AssertionFailedf(
 			"can not get the primary region of a non multi-region database")
@@ -253,7 +253,7 @@ func (desc *Immutable) Validate() error {
 
 	if desc.IsMultiRegion() {
 		// Ensure no regions are duplicated.
-		regions := make(map[descpb.Region]struct{})
+		regions := make(map[descpb.RegionName]struct{})
 		dbRegions, err := desc.Regions()
 		if err != nil {
 			return err

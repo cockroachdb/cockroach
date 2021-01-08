@@ -174,7 +174,7 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 	}
 }
 
-func protoRegion(region descpb.Region) *descpb.Region {
+func protoRegionName(region descpb.RegionName) *descpb.RegionName {
 	return &region
 }
 
@@ -322,7 +322,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 			localityConfig: descpb.TableDescriptor_LocalityConfig{
 				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
-						Region: protoRegion("region_c"),
+						Region: protoRegionName("region_c"),
 					},
 				},
 			},
@@ -351,7 +351,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 			localityConfig: descpb.TableDescriptor_LocalityConfig{
 				Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 					RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
-						Region: protoRegion("region_c"),
+						Region: protoRegionName("region_c"),
 					},
 				},
 			},

@@ -10,14 +10,14 @@
 
 package descpb
 
-// Region is an alias for a region stored on the database.
-type Region string
+// RegionName is an alias for a region stored on the database.
+type RegionName string
 
-// Regions is an alias for a slice of regions.
-type Regions []Region
+// RegionNames is an alias for a slice of regions.
+type RegionNames []RegionName
 
-// ToStrings converts the Regions slice to a string slice.
-func (regions Regions) ToStrings() []string {
+// ToStrings converts the RegionNames slice to a string slice.
+func (regions RegionNames) ToStrings() []string {
 	ret := make([]string, len(regions))
 	for i, region := range regions {
 		ret[i] = string(region)
