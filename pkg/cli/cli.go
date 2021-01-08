@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -93,6 +94,12 @@ func doMain(cmd *cobra.Command, cmdName string) error {
 
 	defer logcrash.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
+	if cmd != nil {
+		// Handle --version. We do this here to ensure --version is
+		// supported on every sub-command.
+		cmd.Version = fullVersionString
+	}
+
 	return Run(os.Args[1:])
 }
 
@@ -162,23 +169,36 @@ Output build version information.
 `,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info := build.GetInfo()
-		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
-		fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
-		fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
-		fmt.Fprintf(tw, "Platform:         %s", info.Platform)
-		if info.CgoTargetTriple != "" {
-			fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
+		if cliCtx.showVersionUsingOnlyBuildTag {
+			info := build.GetInfo()
+			fmt.Println(info.Tag)
+		} else {
+			fmt.Println(fullVersionString)
 		}
-		fmt.Fprintln(tw)
-		fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
-		fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
-		fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
-		fmt.Fprintf(tw, "Build Type:       %s\n", info.Type)
-		return tw.Flush()
+		return nil
 	},
 }
+
+var fullVersionString = func() string {
+	info := build.GetInfo()
+	var buf bytes.Buffer
+	buf.WriteString("details:\n")
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
+	fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
+	fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
+	fmt.Fprintf(tw, "Platform:         %s", info.Platform)
+	if info.CgoTargetTriple != "" {
+		fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
+	}
+	fmt.Fprintln(tw)
+	fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
+	fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
+	fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
+	fmt.Fprintf(tw, "Build Type:       %s\n", info.Type)
+	_ = tw.Flush()
+	return buf.String()
+}()
 
 var cockroachCmd = &cobra.Command{
 	Use:   "cockroach [command] (flags)",

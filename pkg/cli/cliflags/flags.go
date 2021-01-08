@@ -1308,4 +1308,12 @@ may need to be tweaked if the Postgres dump file has extremely long lines.
 If non-empty, create a SQL audit log in this directory.
 `,
 	}
+
+	BuildTag = FlagInfo{
+		Name: "build-tag",
+		Description: `
+When set, the command prints only the build tag for the executable,
+without any other details.
+`,
+	}
 )
