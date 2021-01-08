@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx"
 	"github.com/spf13/pflag"
 )
 
@@ -66,6 +67,8 @@ type kv struct {
 	cycleLength                          int64
 	readPercent                          int
 	spanPercent                          int
+	spanLimit                            int
+	writesUseSelectForUpdate             bool
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
@@ -114,6 +117,10 @@ var kvMeta = workload.Meta{
 			`Percent (0-100) of operations that are reads of existing keys.`)
 		g.flags.IntVar(&g.spanPercent, `span-percent`, 0,
 			`Percent (0-100) of operations that are spanning queries of all ranges.`)
+		g.flags.IntVar(&g.spanLimit, `span-limit`, 0,
+			`LIMIT count for each spanning query, or 0 for no limit`)
+		g.flags.BoolVar(&g.writesUseSelectForUpdate, `sfu-writes`, false,
+			`Use SFU and transactional writes.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
@@ -301,8 +308,32 @@ func (w *kv) Ops(
 	}
 	writeStmtStr := buf.String()
 
+	// Select for update statement
+	var sfuStmtStr string
+	if w.writesUseSelectForUpdate {
+		if w.shards != 0 {
+			return workload.QueryLoad{}, fmt.Errorf("select for update in kv requires shard=0")
+		}
+		buf.Reset()
+		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+		for i := 0; i < w.batchSize; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `$%d`, i+1)
+		}
+		buf.WriteString(`) FOR UPDATE`)
+		sfuStmtStr = buf.String()
+	}
+
 	// Span statement
-	spanStmtStr := "SELECT count(v) FROM kv"
+	buf.Reset()
+	buf.WriteString(`SELECT count(v) FROM [SELECT v FROM kv`)
+	if w.spanLimit > 0 {
+		fmt.Fprintf(&buf, ` WHERE k >= $1 LIMIT %d`, w.spanLimit)
+	}
+	buf.WriteString(`]`)
+	spanStmtStr := buf.String()
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: int64(writeSeq)}
@@ -315,6 +346,9 @@ func (w *kv) Ops(
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
 		op.writeStmt = op.sr.Define(writeStmtStr)
+		if len(sfuStmtStr) > 0 {
+			op.sfuStmt = op.sr.Define(sfuStmtStr)
+		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
@@ -339,6 +373,7 @@ type kvOp struct {
 	readStmt        workload.StmtHandle
 	writeStmt       workload.StmtHandle
 	spanStmt        workload.StmtHandle
+	sfuStmt         workload.StmtHandle
 	g               keyGenerator
 	numEmptyResults *int64 // accessed atomically
 }
@@ -371,20 +406,53 @@ func (o *kvOp) run(ctx context.Context) error {
 	statementProbability -= o.config.readPercent
 	if statementProbability < o.config.spanPercent {
 		start := timeutil.Now()
-		_, err := o.spanStmt.Exec(ctx)
+		var args []interface{}
+		if o.config.spanLimit > 0 {
+			args = append(args, o.g.readKey())
+		}
+		rows, err := o.spanStmt.Query(ctx, args...)
+		if err != nil {
+			return err
+		}
+		rows.Close()
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`span`).Record(elapsed)
-		return err
+		return rows.Err()
 	}
 	const argCount = 2
-	args := make([]interface{}, argCount*o.config.batchSize)
+	writeArgs := make([]interface{}, argCount*o.config.batchSize)
+	var sfuArgs []interface{}
+	if o.config.writesUseSelectForUpdate {
+		sfuArgs = make([]interface{}, o.config.batchSize)
+	}
 	for i := 0; i < o.config.batchSize; i++ {
 		j := i * argCount
-		args[j+0] = o.g.writeKey()
-		args[j+1] = randomBlock(o.config, o.g.rand())
+		writeArgs[j+0] = o.g.writeKey()
+		if sfuArgs != nil {
+			sfuArgs[i] = writeArgs[j]
+		}
+		writeArgs[j+1] = randomBlock(o.config, o.g.rand())
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.Exec(ctx, args...)
+	var err error
+	if o.config.writesUseSelectForUpdate {
+		// TODO: need to construct a *pgx.Tx
+		var tx *pgx.Tx
+		rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
+		if err != nil {
+			return err
+		}
+		rows.Close()
+		if err = rows.Err(); err != nil {
+			return err
+		}
+		_, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...)
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	} else {
+		_, err = o.writeStmt.Exec(ctx, writeArgs...)
+	}
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
 	return err

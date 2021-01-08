@@ -162,13 +162,20 @@ type RequestSequencer interface {
 	// request is guaranteed sufficient isolation for the duration of its
 	// evaluation, until the returned request guard is released.
 	// NOTE: this last part will not be true until replicated locks are pulled
-	// into the concurrency manager.
+	// into the concurrency manager. This is the normal behavior for a request
+	// marked as PessimisticEval. For OptimisticEval, it can optimize by not
+	// acquiring locks, and the request must call
+	// Guard.CheckOptimisticNoConflicts after evaluation. For
+	// PessimisticAfterFailedOptimisticEval, latches are already held.
+	// TODO(sumeer): change OptimisticEval to only queue the latches and not
+	// wait for them, so PessimisticAfterFailedOptimisticEval will wait for them.
 	//
 	// An optional existing request guard can be provided to SequenceReq. This
 	// allows the request's position in lock wait-queues to be retained across
 	// sequencing attempts. If provided, the guard should not be holding latches
-	// already. The expected usage of this parameter is that it will only be
-	// provided after acquiring a Guard from a ContentionHandler method.
+	// already for PessimisticEval. The expected usage of this parameter is that
+	// it will only be provided after acquiring a Guard from a ContentionHandler
+	// method (for non-OptimisticEval).
 	//
 	// If the method returns a non-nil request guard then the caller must ensure
 	// that the guard is eventually released by passing it to FinishReq.
@@ -308,6 +315,27 @@ type MetricExporter interface {
 // External API Type Definitions //
 ///////////////////////////////////
 
+// RequestEvalKind informs the manager of the evaluation kind for the current
+// evaluation attempt. Optimistic evaluation is used for requests involving
+// limited scans, where the checking of locks and latches may be (partially)
+// postponed until after evaluation, using Guard.CheckOptimisticNoConflicts.
+// Note that intents (replicated single-key locks) will still be observed
+// during evaluation.
+//
+// The setting can change across different calls to SequenceReq. The current
+// sequence of possibilities is:
+// - OptimisticEval: when optimistic evaluation succeeds.
+// - OptimisticEval, PessimisticAfterFailedOptimisticEval, PessimisticEval*:
+//   when optimistic evaluation failed.
+// - PessimisticEval+: when only pessimistic evaluation was attempted.
+type RequestEvalKind int
+
+const (
+	PessimisticEval RequestEvalKind = iota
+	OptimisticEval
+	PessimisticAfterFailedOptimisticEval
+)
+
 // Request is the input to Manager.SequenceReq. The struct contains all of the
 // information necessary to sequence a KV request and determine which locks and
 // other in-flight requests it conflicts with.
@@ -351,6 +379,13 @@ type Request struct {
 	// (Txn == nil), all reads and writes are considered to take place at
 	// Timestamp.
 	LockSpans *spanset.SpanSet
+
+	// EvalKinds represents the evaluation kind for the current evaluation
+	// attempt of the request.
+	// TODO(sumeer): Move this into Guard. Confirm that the Request object
+	// passed to SequenceReq should not change across calls since we stash
+	// the first one into Guard.
+	EvalKind RequestEvalKind
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -459,6 +494,13 @@ type lockTable interface {
 	// one. The latches needed by the request must be held when calling this
 	// function.
 	ScanAndEnqueue(Request, lockTableGuard) lockTableGuard
+
+	// ScanOptimistic takes a snapshot of the lock table for later checking for
+	// conflicts, and returns a guard. It is for optimistic evaluation of
+	// requests that will typically scan a small subset of the spans mentioned
+	// in the Request. After Request evaluation, CheckOptimisticNoConflicts
+	// must be called on the guard.
+	ScanOptimistic(Request) lockTableGuard
 
 	// Dequeue removes the request from its lock wait-queues. It should be
 	// called when the request is finished, whether it evaluated or not. The
@@ -599,6 +641,15 @@ type lockTableGuard interface {
 	// This must be called after the waiting state has transitioned to
 	// doneWaiting.
 	ResolveBeforeScanning() []roachpb.LockUpdate
+
+	// CheckOptimisticNoConflicts uses the SpanSet representing the spans that
+	// were actually read, to check for conflicting locks, after an optimistic
+	// evaluation. It returns true if there were no conflicts. See
+	// lockTable.ScanOptimistic for context. Note that the evaluation has
+	// already seen any intents (replicated single-key locks) that conflicted,
+	// so this checking is practically only going to find unreplicated locks
+	// that conflict.
+	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held
