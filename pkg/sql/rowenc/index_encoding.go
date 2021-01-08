@@ -41,8 +41,8 @@ import (
 func MakeIndexKeyPrefix(
 	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
 ) []byte {
-	if i, err := desc.FindIndexWithID(indexID); err == nil && i.NumInterleaveAncestors() > 0 {
-		ancestor := i.GetInterleaveAncestor(0)
+	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
+		ancestor := &i.Interleave.Ancestors[0]
 		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
 	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
@@ -546,7 +546,7 @@ func DecodeIndexKeyPrefix(
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
 
-	interleaves := append(make([]catalog.Index, 0, len(desc.ActiveIndexes())), desc.ActiveIndexes()...)
+	interleaves := append([]descpb.IndexDescriptor{*desc.GetPrimaryIndex()}, desc.GetPublicNonPrimaryIndexes()...)
 
 	for component := 0; ; component++ {
 		var tableID descpb.ID
@@ -561,9 +561,9 @@ func DecodeIndexKeyPrefix(
 		}
 
 		for i := len(interleaves) - 1; i >= 0; i-- {
-			if interleaves[i].NumInterleaveAncestors() <= component ||
-				interleaves[i].GetInterleaveAncestor(component).TableID != tableID ||
-				interleaves[i].GetInterleaveAncestor(component).IndexID != indexID {
+			if len(interleaves[i].Interleave.Ancestors) <= component ||
+				interleaves[i].Interleave.Ancestors[component].TableID != tableID ||
+				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
 
 				// This component, and thus this interleave, doesn't match what was
 				// decoded, remove it.
@@ -578,7 +578,7 @@ func DecodeIndexKeyPrefix(
 
 		// Anything left has the same SharedPrefixLen at index `component`, so just
 		// use the first one.
-		for i := uint32(0); i < interleaves[0].GetInterleaveAncestor(component).SharedPrefixLen; i++ {
+		for i := uint32(0); i < interleaves[0].Interleave.Ancestors[component].SharedPrefixLen; i++ {
 			l, err := encoding.PeekLength(key)
 			if err != nil {
 				return 0, nil, err

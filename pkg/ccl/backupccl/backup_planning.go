@@ -182,13 +182,13 @@ func getLogicallyMergedTableSpans(
 	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
 ) ([]roachpb.Span, error) {
 	var nonDropIndexIDs []descpb.IndexID
-	if err := catalog.ForEachNonDropIndex(table, func(idx catalog.Index) error {
-		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
+	if err := table.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
+		key := tableAndIndex{tableID: table.GetID(), indexID: idxDesc.ID}
 		if added[key] {
 			return nil
 		}
 		added[key] = true
-		nonDropIndexIDs = append(nonDropIndexIDs, idx.GetID())
+		nonDropIndexIDs = append(nonDropIndexIDs, idxDesc.ID)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -225,11 +225,11 @@ func getLogicallyMergedTableSpans(
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
 
-		lhsIndex, err := table.FindIndexWithID(lhsIndexID)
+		lhsIndex, err := table.FindIndexByID(lhsIndexID)
 		if err != nil {
 			return nil, err
 		}
-		rhsIndex, err := table.FindIndexWithID(rhsIndexID)
+		rhsIndex, err := table.FindIndexByID(rhsIndexID)
 		if err != nil {
 			return nil, err
 		}

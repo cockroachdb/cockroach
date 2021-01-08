@@ -1807,7 +1807,7 @@ CREATE TABLE crdb_internal.create_statements (
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.PublicNonPrimaryIndexes(), table, alterStmts,
+			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.GetPublicNonPrimaryIndexes(), table, alterStmts,
 				validateStmts, &p.semaCtx); err != nil {
 				return err
 			}
@@ -1823,8 +1823,12 @@ CREATE TABLE crdb_internal.create_statements (
 		if createNofk == "" {
 			createNofk = stmt
 		}
-		hasPartitions := nil != catalog.FindIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) bool {
-			return idx.GetPartitioning().NumColumns != 0
+		hasPartitions := false
+		_ = table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+			if idxDesc.Partitioning.NumColumns != 0 {
+				hasPartitions = true
+			}
+			return nil
 		})
 		return addRow(
 			dbDescID,
@@ -1847,7 +1851,7 @@ func showAlterStatementWithInterleave(
 	tn *tree.TableName,
 	contextName string,
 	lCtx simpleSchemaResolver,
-	allIdx []catalog.Index,
+	allIdx []descpb.IndexDescriptor,
 	table catalog.TableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
@@ -1888,12 +1892,14 @@ func showAlterStatementWithInterleave(
 		return err
 	}
 
-	for _, idx := range allIdx {
+	for i := range allIdx {
+		idx := &allIdx[i]
 		// Create CREATE INDEX commands for INTERLEAVE tables. These commands
 		// are included in the ALTER TABLE statements.
-		if idx.NumInterleaveAncestors() > 0 {
+		if len(idx.Interleave.Ancestors) > 0 {
 			f := tree.NewFmtCtx(tree.FmtSimple)
-			parentTableID := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1).TableID
+			intl := idx.Interleave
+			parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
 			var err error
 			var parentName tree.TableName
 			if lCtx != nil {
@@ -1919,11 +1925,11 @@ func showAlterStatementWithInterleave(
 				tableName.ExplicitSchema = false
 			}
 			var sharedPrefixLen int
-			for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-				sharedPrefixLen += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
+			for _, ancestor := range intl.Ancestors {
+				sharedPrefixLen += int(ancestor.SharedPrefixLen)
 			}
 			// Write the CREATE INDEX statements.
-			if err := showCreateIndexWithInterleave(ctx, f, table, idx.IndexDesc(), tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
+			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
 				return err
 			}
 			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -2050,22 +2056,22 @@ CREATE TABLE crdb_internal.table_indexes (
 					tableName := tree.NewDString(table.GetName())
 					// We report the primary index of non-physical tables here. These
 					// indexes are not reported as a part of ForeachIndex.
-					return catalog.ForEachIndex(table, catalog.IndexOpts{
+					return table.ForeachIndex(catalog.IndexOpts{
 						NonPhysicalPrimaryIndex: true,
-					}, func(idx catalog.Index) error {
+					}, func(idx *descpb.IndexDescriptor, isPrimary bool) error {
 						row = row[:0]
 						idxType := secondary
-						if idx.Primary() {
+						if isPrimary {
 							idxType = primary
 						}
 						row = append(row,
 							tableID,
 							tableName,
-							tree.NewDInt(tree.DInt(idx.GetID())),
-							tree.NewDString(idx.GetName()),
+							tree.NewDInt(tree.DInt(idx.ID)),
+							tree.NewDString(idx.Name),
 							idxType,
-							tree.MakeDBool(tree.DBool(idx.IsUnique())),
-							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
+							tree.MakeDBool(tree.DBool(idx.Unique)),
+							tree.MakeDBool(idx.Type == descpb.IndexDescriptor_INVERTED),
 						)
 						return pusher.pushRow(row...)
 					})
@@ -2110,8 +2116,7 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
 
-				reportIndex := func(idxI catalog.Index) error {
-					idx := idxI.IndexDesc()
+				reportIndex := func(idx *descpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					idxName := tree.NewDString(idx.Name)
 
@@ -2179,7 +2184,11 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				return catalog.ForEachIndex(table, catalog.IndexOpts{NonPhysicalPrimaryIndex: true}, reportIndex)
+				return table.ForeachIndex(catalog.IndexOpts{
+					NonPhysicalPrimaryIndex: true,
+				}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+					return reportIndex(idxDesc)
+				})
 			})
 	},
 }
@@ -2211,19 +2220,17 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		viewDep := tree.NewDString("view")
 		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
-
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual, func(
 			db *dbdesc.Immutable, _ string, table catalog.TableDescriptor, tableLookup tableLookupFn,
 		) error {
 			tableID := tree.NewDInt(tree.DInt(table.GetID()))
 			tableName := tree.NewDString(table.GetName())
 
-			reportIdxDeps := func(idx catalog.Index) error {
-				for i := 0; i < idx.NumInterleaveAncestors(); i++ {
-					interleaveParent := idx.GetInterleaveAncestor(i)
+			reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
+				for _, interleaveParent := range idx.Interleave.Ancestors {
 					if err := addRow(
 						tableID, tableName,
-						tree.NewDInt(tree.DInt(idx.GetID())),
+						tree.NewDInt(tree.DInt(idx.ID)),
 						tree.DNull,
 						tree.NewDInt(tree.DInt(interleaveParent.TableID)),
 						interleaveDep,
@@ -2261,7 +2268,10 @@ CREATE TABLE crdb_internal.backward_dependencies (
 			}
 
 			// Record the backward references of the primary index.
-			if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
+			if err := table.ForeachIndex(catalog.IndexOpts{},
+				func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+					return reportIdxDeps(idxDesc)
+				}); err != nil {
 				return err
 			}
 
@@ -2357,12 +2367,11 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				tableName := tree.NewDString(table.GetName())
 
-				reportIdxDeps := func(idx catalog.Index) error {
-					for i := 0; i < idx.NumInterleavedBy(); i++ {
-						interleaveRef := idx.GetInterleavedBy(i)
+				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
+					for _, interleaveRef := range idx.InterleavedBy {
 						if err := addRow(
 							tableID, tableName,
-							tree.NewDInt(tree.DInt(idx.GetID())),
+							tree.NewDInt(tree.DInt(idx.ID)),
 							tree.NewDInt(tree.DInt(interleaveRef.Table)),
 							interleaveDep,
 							tree.NewDInt(tree.DInt(interleaveRef.Index)),
@@ -2390,7 +2399,9 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				}
 
 				// Record the backward references of the primary index.
-				if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, reportIdxDeps); err != nil {
+				if err := table.ForeachIndex(catalog.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+					return reportIdxDeps(idxDesc)
+				}); err != nil {
 					return err
 				}
 				reportDependedOnBy := func(
@@ -2502,8 +2513,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.PublicNonPrimaryIndexes() {
-					indexNames[id][uint32(idx.GetID())] = idx.GetName()
+				for _, idx := range desc.GetPublicNonPrimaryIndexes() {
+					indexNames[id][uint32(idx.ID)] = idx.Name
 				}
 			case *dbdesc.Immutable:
 				dbNames[id] = desc.GetName()
@@ -2820,9 +2831,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 
 				for i, s := range subzones {
-					index := catalog.FindActiveIndex(table, func(idx catalog.Index) bool {
-						return idx.GetID() == descpb.IndexID(s.IndexID)
-					})
+					index := table.FindActiveIndexByID(descpb.IndexID(s.IndexID))
 					if index == nil {
 						// If we can't find an active index that corresponds to this index
 						// ID then continue, as the index is being dropped, or is already
@@ -2831,7 +2840,7 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if zoneSpecifier != nil {
 						zs := zs
-						zs.TableOrIndex.Index = tree.UnrestrictedName(index.GetName())
+						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
 						zs.Partition = tree.Name(s.PartitionName)
 						zoneSpecifier = &zs
 					}
@@ -2847,7 +2856,7 @@ CREATE TABLE crdb_internal.zones (
 					} else {
 						// We have a partition. Get the parent index partition from the zone and
 						// have it inherit constraints.
-						if indexSubzone := fullZone.GetSubzone(uint32(index.GetID()), ""); indexSubzone != nil {
+						if indexSubzone := fullZone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
 							subZoneConfig.InheritFromParent(&indexSubzone.Config)
 						}
 						// Inherit remaining fields from the full parent zone.
@@ -3404,10 +3413,10 @@ CREATE TABLE crdb_internal.partitions (
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 				func(db *dbdesc.Immutable, _ string, table catalog.TableDescriptor) error {
-					return catalog.ForEachIndex(table, catalog.IndexOpts{
+					return table.ForeachIndex(catalog.IndexOpts{
 						AddMutations: true,
-					}, func(index catalog.Index) error {
-						return addPartitioningRows(ctx, p, dbName, table, index.IndexDesc(), &index.IndexDesc().Partitioning,
+					}, func(index *descpb.IndexDescriptor, _ bool) error {
+						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})

@@ -1418,12 +1418,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		return nil
 	})
 
-	indexes := make([]descpb.IndexDescriptor, len(table.desc.PublicNonPrimaryIndexes()))
-	for i, idx := range table.desc.PublicNonPrimaryIndexes() {
-		indexes[i] = *idx.IndexDesc()
-	}
-
-	rh := rowHelper{TableDesc: table.desc, Indexes: indexes}
+	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.GetPublicNonPrimaryIndexes()}
 
 	return table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var lastColID descpb.ColumnID

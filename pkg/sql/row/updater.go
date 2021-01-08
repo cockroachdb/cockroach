@@ -98,8 +98,7 @@ func MakeUpdater(
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
+	for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
 		primaryIndexCols.Add(colID)
 	}
 
@@ -113,7 +112,7 @@ func MakeUpdater(
 
 	// needsUpdate returns true if the given index may need to be updated for
 	// the current UPDATE mutation.
-	needsUpdate := func(index catalog.Index) bool {
+	needsUpdate := func(index descpb.IndexDescriptor) bool {
 		// If the UPDATE is set to only update columns and not secondary
 		// indexes, return false.
 		if updateType == UpdaterOnlyColumns {
@@ -134,7 +133,7 @@ func MakeUpdater(
 		if index.IsPartial() {
 			return true
 		}
-		return index.ForEachColumnID(func(id descpb.ColumnID) error {
+		return index.RunOverAllColumns(func(id descpb.ColumnID) error {
 			if _, ok := updateColIDtoRowIndex.Get(id); ok {
 				return returnTruePseudoError
 			}
@@ -142,20 +141,22 @@ func MakeUpdater(
 		}) != nil
 	}
 
-	includeIndexes := make([]descpb.IndexDescriptor, 0, len(tableDesc.WritableNonPrimaryIndexes()))
-	var deleteOnlyIndexes []descpb.IndexDescriptor
-	for _, index := range tableDesc.DeletableNonPrimaryIndexes() {
-		if !needsUpdate(index) {
-			continue
+	writableIndexes := tableDesc.WritableIndexes()
+	includeIndexes := make([]descpb.IndexDescriptor, 0, len(writableIndexes))
+	for _, index := range writableIndexes {
+		if needsUpdate(index) {
+			includeIndexes = append(includeIndexes, index)
 		}
-		if !index.DeleteOnly() {
-			includeIndexes = append(includeIndexes, *index.IndexDesc())
-		} else {
+	}
+
+	var deleteOnlyIndexes []descpb.IndexDescriptor
+	for _, idx := range tableDesc.DeleteOnlyIndexes() {
+		if needsUpdate(idx) {
 			if deleteOnlyIndexes == nil {
 				// Allocate at most once.
-				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(tableDesc.DeleteOnlyNonPrimaryIndexes()))
+				deleteOnlyIndexes = make([]descpb.IndexDescriptor, 0, len(tableDesc.DeleteOnlyIndexes()))
 			}
-			deleteOnlyIndexes = append(deleteOnlyIndexes, *index.IndexDesc())
+			deleteOnlyIndexes = append(deleteOnlyIndexes, idx)
 		}
 	}
 

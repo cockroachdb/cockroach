@@ -100,23 +100,23 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
+	if err := tableDesc.ForeachIndex(catalog.IndexOpts{
 		AddMutations: true,
-	}, func(idx catalog.Index) error {
-		_, indexSubzoneExists := subzoneIndexByIndexID[idx.GetID()]
+	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
 		if indexSubzoneExists {
-			idxSpan := tableDesc.IndexSpan(codec, idx.GetID())
+			idxSpan := tableDesc.IndexSpan(codec, idxDesc.ID)
 			// Each index starts with a unique prefix, so (from a precedence
 			// perspective) it's safe to append them all together.
 			indexCovering = append(indexCovering, covering.Range{
 				Start: idxSpan.Key, End: idxSpan.EndKey,
-				Payload: zonepb.Subzone{IndexID: uint32(idx.GetID())},
+				Payload: zonepb.Subzone{IndexID: uint32(idxDesc.ID)},
 			})
 		}
 
 		var emptyPrefix []tree.Datum
 		indexPartitionCoverings, err := indexCoveringsForPartitioning(
-			a, codec, tableDesc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, subzoneIndexByPartition, emptyPrefix)
+			a, codec, tableDesc, idxDesc, &idxDesc.Partitioning, subzoneIndexByPartition, emptyPrefix)
 		if err != nil {
 			return err
 		}

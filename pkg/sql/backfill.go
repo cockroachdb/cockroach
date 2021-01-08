@@ -1648,28 +1648,27 @@ func runSchemaChangesInTxn(
 			// write the modified table descriptors explicitly.
 			for _, idxID := range append(
 				[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
-				oldIndex, err := tableDesc.FindIndexWithID(idxID)
+				oldIndex, err := tableDesc.FindIndexByID(idxID)
 				if err != nil {
 					return err
 				}
-				if oldIndex.NumInterleaveAncestors() != 0 {
-					ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
+				if len(oldIndex.Interleave.Ancestors) != 0 {
+					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
 					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
-					ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
+					ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
 					if err != nil {
 						return err
 					}
-					ancestorIdx := ancestorIdxI.IndexDesc()
 					foundAncestor := false
 					for k, ref := range ancestorIdx.InterleavedBy {
-						if ref.Table == tableDesc.ID && ref.Index == oldIndex.GetID() {
+						if ref.Table == tableDesc.ID && ref.Index == oldIndex.ID {
 							if foundAncestor {
 								return errors.AssertionFailedf(
 									"ancestor entry in %s for %s@%s found more than once",
-									ancestor.Name, tableDesc.Name, oldIndex.GetName())
+									ancestor.Name, tableDesc.Name, oldIndex.Name)
 							}
 							ancestorIdx.InterleavedBy = append(
 								ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)

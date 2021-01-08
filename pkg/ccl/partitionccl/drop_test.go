@@ -70,11 +70,11 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		PARTITION p2 VALUES IN (2)
 	)`)
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	index, err := tableDesc.FindIndexWithName("i")
+	indexDesc, _, err := tableDesc.FindIndexByName("i")
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, index.GetID())
+	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 	// Set zone configs on the primary index, secondary index, and one partition
@@ -117,7 +117,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		}
 	}
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("i"); err == nil {
+	if _, _, err := tableDesc.FindIndexByName("i"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	close(asyncNotification)

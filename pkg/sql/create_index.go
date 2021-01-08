@@ -371,9 +371,9 @@ func maybeCreateAndAddShardCol(
 
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
-	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
+	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
-		if foundIndex.Dropped() {
+		if dropped {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", string(n.n.Name))
 		}
@@ -391,7 +391,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
-	if n.n.PartitionBy == nil && n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+	if n.n.PartitionBy == nil && n.tableDesc.GetPrimaryIndex().Partitioning.NumColumns > 0 {
 		params.p.BufferClientNotice(
 			params.ctx,
 			errors.WithHint(

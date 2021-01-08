@@ -296,11 +296,12 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Create a set of partial index IDs to not add entries or remove entries
 	// from.
 	var pm row.PartialIndexUpdateHelper
-	if n := len(u.run.tu.tableDesc().PartialIndexes()); n > 0 {
+	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
+	if !partialIndexOrds.Empty() {
 		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
 		partialIndexVals := sourceVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:n]
-		partialIndexDelVals := partialIndexVals[n : n*2]
+		partialIndexPutVals := partialIndexVals[:partialIndexOrds.Len()]
+		partialIndexDelVals := partialIndexVals[partialIndexOrds.Len() : partialIndexOrds.Len()*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
 		if err != nil {

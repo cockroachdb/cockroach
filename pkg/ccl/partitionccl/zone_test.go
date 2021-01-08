@@ -301,14 +301,13 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			var actual []string
 			for _, span := range spans {
 				subzone := test.parsed.subzones[span.SubzoneIndex]
-				idx, err := test.parsed.tableDesc.FindIndexWithID(descpb.IndexID(subzone.IndexID))
+				idxDesc, err := test.parsed.tableDesc.FindIndexByID(descpb.IndexID(subzone.IndexID))
 				if err != nil {
 					t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
 				}
 
 				directions := []encoding.Direction{encoding.Ascending /* index ID */}
-				for i := 0; i < idx.NumColumns(); i++ {
-					cd := idx.GetColumnDirection(i)
+				for _, cd := range idxDesc.ColumnDirections {
 					ed, err := cd.ToEncodingDirection()
 					if err != nil {
 						t.Fatal(err)
@@ -320,7 +319,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				if len(subzone.PartitionName) > 0 {
 					subzoneShort = "." + subzone.PartitionName
 				} else {
-					subzoneShort = "@" + idx.GetName()
+					subzoneShort = "@" + idxDesc.Name
 				}
 
 				// Verify that we're always doing the space savings when we can.

@@ -48,11 +48,11 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 	// different copy than the one in the tableDesc. To make it easier for the
 	// code below, get a pointer to the index descriptor that's actually in
 	// tableDesc.
-	index, err := tableDesc.FindIndexWithID(indexDesc.ID)
+	indexDesc, err = tableDesc.FindIndexByID(indexDesc.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: index.IndexDesc()}, nil
+	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: indexDesc}, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
