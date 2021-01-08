@@ -36,10 +36,6 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 func checkCanReceiveLease(newLease *roachpb.Lease, rec EvalContext) error {
 	repDesc, ok := rec.Desc().GetReplicaDescriptorByID(newLease.Replica.ReplicaID)
 	if !ok {
-		if newLease.Replica.StoreID == rec.StoreID() {
-			return errors.AssertionFailedf(
-				`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
-		}
 		return errors.Errorf(`replica %s not found in %s`, newLease.Replica, rec.Desc())
 	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
 		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
