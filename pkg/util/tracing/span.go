@@ -335,11 +335,6 @@ func (s *Span) LogStructured(item Structured) {
 
 // Record provides a way to record free-form text into verbose spans.
 //
-// TODO(irfansharif): Similar to our log package, span.Record("%v") with no
-// additional parameters would just record "%v" in the trace. What a sane API
-// would do would be to print an error that %v was not provisioned with a
-// positional argument.
-//
 // TODO(irfansharif): We don't currently have redactability with trace
 // recordings (both here, and using LogStructured above). We'll want to do this
 // soon.
