@@ -44,11 +44,7 @@ type Deleter struct {
 func MakeDeleter(
 	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, requestedCols []descpb.ColumnDescriptor,
 ) Deleter {
-	indexes := tableDesc.DeletableNonPrimaryIndexes()
-	indexDescs := make([]descpb.IndexDescriptor, len(indexes))
-	for i, index := range indexes {
-		indexDescs[i] = *index.IndexDesc()
-	}
+	indexes := tableDesc.DeletableIndexes()
 
 	var fetchCols []descpb.ColumnDescriptor
 	var fetchColIDtoRowIndex catalog.TableColMap
@@ -67,22 +63,19 @@ func MakeDeleter(
 			}
 			return nil
 		}
-		for j := 0; j < tableDesc.GetPrimaryIndex().NumColumns(); j++ {
-			colID := tableDesc.GetPrimaryIndex().GetColumnID(j)
+		for _, colID := range tableDesc.GetPrimaryIndex().ColumnIDs {
 			if err := maybeAddCol(colID); err != nil {
 				return Deleter{}
 			}
 		}
 		for _, index := range indexes {
-			for j := 0; j < index.NumColumns(); j++ {
-				colID := index.GetColumnID(j)
+			for _, colID := range index.ColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}
 			}
 			// The extra columns are needed to fix #14601.
-			for j := 0; j < index.NumExtraColumns(); j++ {
-				colID := index.GetExtraColumnID(j)
+			for _, colID := range index.ExtraColumnIDs {
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}
@@ -91,7 +84,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexDescs),
+		Helper:               newRowHelper(codec, tableDesc, indexes),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}

@@ -548,7 +548,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	}
 
 	primaryIndex := tabDesc.GetPrimaryIndex()
-	tableScan.index = primaryIndex.IndexDesc()
+	tableScan.index = primaryIndex
 	tableScan.disableBatchLimit()
 
 	n := &indexJoinNode{
@@ -1562,7 +1562,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := tabDesc.GetPrimaryIndex().IndexDesc()
+	indexDesc := tabDesc.GetPrimaryIndex()
 	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {

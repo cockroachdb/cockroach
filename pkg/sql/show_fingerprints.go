@@ -65,15 +65,9 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	indexes := tableDesc.NonDropIndexes()
-	indexDescs := make([]*descpb.IndexDescriptor, len(indexes))
-	for i, index := range indexes {
-		indexDescs[i] = index.IndexDesc()
-	}
-
 	return &showFingerprintsNode{
 		tableDesc: tableDesc,
-		indexes:   indexDescs,
+		indexes:   tableDesc.AllNonDropIndexes(),
 	}, nil
 }
 

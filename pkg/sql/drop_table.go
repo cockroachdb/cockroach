@@ -84,9 +84,8 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 				}
 			}
 		}
-		for _, idx := range droppedDesc.NonDropIndexes() {
-			for i := 0; i < idx.NumInterleavedBy(); i++ {
-				ref := idx.GetInterleavedBy(i)
+		for _, idx := range droppedDesc.AllNonDropIndexes() {
+			for _, ref := range idx.InterleavedBy {
 				if _, ok := td[ref.Table]; !ok {
 					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
 						return nil, err
@@ -258,11 +257,11 @@ func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyRef
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	idx, err := table.FindIndexWithID(ref.Index)
+	idx, err := table.FindIndexByID(ref.Index)
 	if err != nil {
 		return err
 	}
-	idx.IndexDesc().Interleave.Ancestors = nil
+	idx.Interleave.Ancestors = nil
 	// No job description, since this is presumably part of some larger schema change.
 	return p.writeSchemaChange(ctx, table, descpb.InvalidMutationID, "")
 }
@@ -301,14 +300,13 @@ func (p *planner) dropTableImpl(
 	tableDesc.InboundFKs = nil
 
 	// Remove interleave relationships.
-	for _, idx := range tableDesc.NonDropIndexes() {
-		if idx.NumInterleaveAncestors() > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx.IndexDesc()); err != nil {
+	for _, idx := range tableDesc.AllNonDropIndexes() {
+		if len(idx.Interleave.Ancestors) > 0 {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 				return droppedViews, err
 			}
 		}
-		for i := 0; i < idx.NumInterleavedBy(); i++ {
-			ref := idx.GetInterleavedBy(i)
+		for _, ref := range idx.InterleavedBy {
 			if err := p.removeInterleave(ctx, ref); err != nil {
 				return droppedViews, err
 			}
@@ -644,11 +642,10 @@ func (p *planner) removeInterleaveBackReference(
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	targetIdxI, err := t.FindIndexWithID(ancestor.IndexID)
+	targetIdx, err := t.FindIndexByID(ancestor.IndexID)
 	if err != nil {
 		return err
 	}
-	targetIdx := targetIdxI.IndexDesc()
 	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
 		if ref.Table == tableDesc.ID && ref.Index == idx.ID {

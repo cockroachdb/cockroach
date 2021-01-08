@@ -1070,12 +1070,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// If any old indexes (including the old primary index) being rewritten are interleaved
 				// children, we will have to update their parents as well.
 				for _, idxID := range append([]descpb.IndexID{swap.OldPrimaryIndexId}, swap.OldIndexes...) {
-					oldIndex, err := scTable.FindIndexWithID(idxID)
+					oldIndex, err := scTable.FindIndexByID(idxID)
 					if err != nil {
 						return err
 					}
-					if oldIndex.NumInterleaveAncestors() != 0 {
-						ancestor := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
+					if len(oldIndex.Interleave.Ancestors) != 0 {
+						ancestor := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
 						if ancestor.TableID != scTable.ID {
 							interleaveParents[ancestor.TableID] = struct{}{}
 						}
@@ -1176,13 +1176,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// existing indexes on the table.
 				if mutation.Direction == descpb.DescriptorMutation_ADD {
 					desc := fmt.Sprintf("REFRESH MATERIALIZED VIEW %q cleanup", scTable.Name)
-					pkJob, err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex().IndexDesc(), txn, desc)
+					pkJob, err := sc.createIndexGCJob(ctx, scTable.GetPrimaryIndex(), txn, desc)
 					if err != nil {
 						return err
 					}
 					childJobs = append(childJobs, pkJob)
-					for _, idx := range scTable.PublicNonPrimaryIndexes() {
-						idxJob, err := sc.createIndexGCJob(ctx, idx.IndexDesc(), txn, desc)
+					for i := range scTable.GetPublicNonPrimaryIndexes() {
+						idxJob, err := sc.createIndexGCJob(ctx, &scTable.GetPublicNonPrimaryIndexes()[i], txn, desc)
 						if err != nil {
 							return err
 						}
@@ -1222,28 +1222,27 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// corresponding piece in runSchemaChangesInTxn.
 				for _, idxID := range append(
 					[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
-					oldIndex, err := scTable.FindIndexWithID(idxID)
+					oldIndex, err := scTable.FindIndexByID(idxID)
 					if err != nil {
 						return err
 					}
-					if oldIndex.NumInterleaveAncestors() != 0 {
-						ancestorInfo := oldIndex.GetInterleaveAncestor(oldIndex.NumInterleaveAncestors() - 1)
+					if len(oldIndex.Interleave.Ancestors) != 0 {
+						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
 						ancestor, err := descsCol.GetMutableTableVersionByID(ctx, ancestorInfo.TableID, txn)
 						if err != nil {
 							return err
 						}
-						ancestorIdxI, err := ancestor.FindIndexWithID(ancestorInfo.IndexID)
+						ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
 						if err != nil {
 							return err
 						}
-						ancestorIdx := ancestorIdxI.IndexDesc()
 						foundAncestor := false
 						for k, ref := range ancestorIdx.InterleavedBy {
-							if ref.Table == scTable.ID && ref.Index == oldIndex.GetID() {
+							if ref.Table == scTable.ID && ref.Index == oldIndex.ID {
 								if foundAncestor {
 									return errors.AssertionFailedf(
 										"ancestor entry in %s for %s@%s found more than once",
-										ancestor.Name, scTable.Name, oldIndex.GetName())
+										ancestor.Name, scTable.Name, oldIndex.Name)
 								}
 								ancestorIdx.InterleavedBy = append(
 									ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)

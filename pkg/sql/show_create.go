@@ -96,7 +96,7 @@ func ShowCreateTable(
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().GetColumnID(0) == col.ID {
+		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().ColumnIDs[0] == col.ID {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
 			primaryKeyIsOnVisibleColumn = true
@@ -105,7 +105,7 @@ func ShowCreateTable(
 	if primaryKeyIsOnVisibleColumn ||
 		(desc.IsPhysicalTable() && desc.GetPrimaryIndex().IsSharded()) {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().GetName())
+		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().Name)
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
@@ -141,15 +141,16 @@ func ShowCreateTable(
 		}
 	}
 	allIdx := append(
-		append([]catalog.Index{}, desc.PublicNonPrimaryIndexes()...),
-		desc.GetPrimaryIndex())
-	for _, idx := range allIdx {
+		append([]descpb.IndexDescriptor{}, desc.GetPublicNonPrimaryIndexes()...),
+		*desc.GetPrimaryIndex())
+	for i := range allIdx {
+		idx := &allIdx[i]
 		// Only add indexes to the create_statement column, and not to the
 		// create_nofks column if they are not associated with an INTERLEAVE
 		// statement.
 		// Initialize to false if Interleave has no ancestors, indicating that the
 		// index is not interleaved at all.
-		includeInterleaveClause := idx.NumInterleaveAncestors() == 0
+		includeInterleaveClause := len(idx.Interleave.Ancestors) == 0
 		if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
 			// The caller is instructing us to not omit FK clauses from inside the CREATE.
 			// (i.e. the caller does not want them as separate DDL.)
@@ -157,10 +158,10 @@ func ShowCreateTable(
 			// clauses as well.
 			includeInterleaveClause = true
 		}
-		if !idx.Primary() && includeInterleaveClause {
+		if idx.ID != desc.GetPrimaryIndex().ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			idxStr, err := catformat.IndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx.IndexDesc(), &p.RunParams(ctx).p.semaCtx)
+			idxStr, err := catformat.IndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
 			if err != nil {
 				return "", err
 			}
@@ -171,12 +172,12 @@ func ShowCreateTable(
 			// Add interleave or Foreign Key indexes only to the create_table columns,
 			// and not the create_nofks column.
 			if includeInterleaveClause {
-				if err := showCreateInterleave(idx.IndexDesc(), &f.Buffer, dbPrefix, lCtx); err != nil {
+				if err := showCreateInterleave(idx, &f.Buffer, dbPrefix, lCtx); err != nil {
 					return "", err
 				}
 			}
 			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
+				a, p.ExecCfg().Codec, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -189,11 +190,11 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(desc.GetPrimaryIndex().IndexDesc(), &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex().IndexDesc(), &desc.GetPrimaryIndex().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}

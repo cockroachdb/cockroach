@@ -103,11 +103,11 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 				t.Fatal(err)
 			}
 			desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
-			idx, err := desc.FindIndexWithName(tc.index)
+			idx, _, err := desc.FindIndexByName(tc.index)
 			if err != nil {
 				t.Fatal(err)
 			}
-			builder := span.MakeBuilder(evalCtx, execCfg.Codec, desc, idx.IndexDesc())
+			builder := span.MakeBuilder(evalCtx, execCfg.Codec, desc, idx)
 			if res := builder.CanSplitSpanIntoSeparateFamilies(
 				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
 				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
