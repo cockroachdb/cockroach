@@ -230,18 +230,35 @@ func (n *scanNode) initTable(
 func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 	if indexFlags.Index != "" {
 		// Search index by name.
-		foundIndex, _ := n.desc.FindIndexWithName(string(indexFlags.Index))
-		if foundIndex == nil || !foundIndex.Public() {
+		indexName := string(indexFlags.Index)
+		if indexName == n.desc.GetPrimaryIndex().Name {
+			n.specifiedIndex = n.desc.GetPrimaryIndex()
+		} else {
+			for i := range n.desc.GetPublicNonPrimaryIndexes() {
+				if indexName == n.desc.GetPublicNonPrimaryIndexes()[i].Name {
+					n.specifiedIndex = &n.desc.GetPublicNonPrimaryIndexes()[i]
+					break
+				}
+			}
+		}
+		if n.specifiedIndex == nil {
 			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
-		n.specifiedIndex = foundIndex.IndexDesc()
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
-		if foundIndex == nil || !foundIndex.Public() {
+		if n.desc.GetPrimaryIndexID() == descpb.IndexID(indexFlags.IndexID) {
+			n.specifiedIndex = n.desc.GetPrimaryIndex()
+		} else {
+			for i := range n.desc.GetPublicNonPrimaryIndexes() {
+				if n.desc.GetPublicNonPrimaryIndexes()[i].ID == descpb.IndexID(indexFlags.IndexID) {
+					n.specifiedIndex = &n.desc.GetPublicNonPrimaryIndexes()[i]
+					break
+				}
+			}
+		}
+		if n.specifiedIndex == nil {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
-		n.specifiedIndex = foundIndex.IndexDesc()
 	}
 	return nil
 }
@@ -315,7 +332,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = n.desc.GetPrimaryIndex().IndexDesc()
+	n.index = n.desc.GetPrimaryIndex()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)

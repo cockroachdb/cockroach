@@ -629,9 +629,9 @@ func newOptTable(
 	colDescs := ot.desc.DeletableColumns()
 	numCols := len(colDescs) + len(colinfo.AllSystemColumnDescs)
 	// One for each inverted index virtual column.
-	secondaryIndexes := ot.desc.DeletableNonPrimaryIndexes()
-	for _, index := range secondaryIndexes {
-		if index.GetType() == descpb.IndexDescriptor_INVERTED {
+	secondaryIndexes := ot.desc.DeletableIndexes()
+	for i := range secondaryIndexes {
+		if secondaryIndexes[i].Type == descpb.IndexDescriptor_INVERTED {
 			numCols++
 		}
 	}
@@ -719,9 +719,9 @@ func newOptTable(
 	for i := range ot.indexes {
 		var idxDesc *descpb.IndexDescriptor
 		if i == 0 {
-			idxDesc = desc.GetPrimaryIndex().IndexDesc()
+			idxDesc = desc.GetPrimaryIndex()
 		} else {
-			idxDesc = secondaryIndexes[i-1].IndexDesc()
+			idxDesc = &secondaryIndexes[i-1]
 		}
 
 		// If there is a subzone that applies to the entire index, use that,
@@ -989,19 +989,19 @@ func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
 // IndexCount is part of the cat.Table interface.
 func (ot *optTable) IndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.ActiveIndexes())
+	return 1 + len(ot.desc.GetPublicNonPrimaryIndexes())
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optTable) WritableIndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return 1 + len(ot.desc.WritableNonPrimaryIndexes())
+	return 1 + len(ot.desc.WritableIndexes())
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optTable) DeletableIndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.AllIndexes())
+	return 1 + len(ot.desc.DeletableIndexes())
 }
 
 // Index is part of the cat.Table interface.
@@ -1121,7 +1121,7 @@ func (oi *optIndex) init(
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedVirtualColOrd = invertedVirtualColOrd
-	if desc == tab.desc.GetPrimaryIndex().IndexDesc() {
+	if desc == tab.desc.GetPrimaryIndex() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
@@ -1717,7 +1717,7 @@ func newOptVirtualTable(
 
 	// Build the indexes (add 1 to account for lack of primary index in
 	// indexes slice).
-	ot.indexes = make([]optVirtualIndex, len(ot.desc.ActiveIndexes()))
+	ot.indexes = make([]optVirtualIndex, 1+len(ot.desc.GetPublicNonPrimaryIndexes()))
 	// Set up the primary index.
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
@@ -1730,16 +1730,17 @@ func newOptVirtualTable(
 		},
 	}
 
-	for _, idx := range ot.desc.PublicNonPrimaryIndexes() {
-		if idx.NumColumns() > 1 {
+	for i := range ot.desc.GetPublicNonPrimaryIndexes() {
+		idxDesc := &ot.desc.GetPublicNonPrimaryIndexes()[i]
+		if len(idxDesc.ColumnIDs) > 1 {
 			panic(errors.AssertionFailedf("virtual indexes with more than 1 col not supported"))
 		}
 
 		// Add 1, since the 0th index will the primary that we added above.
-		ot.indexes[idx.Ordinal()] = optVirtualIndex{
+		ot.indexes[i+1] = optVirtualIndex{
 			tab:          ot,
-			desc:         idx.IndexDesc(),
-			indexOrdinal: idx.Ordinal(),
+			desc:         idxDesc,
+			indexOrdinal: i + 1,
 			// The virtual indexes don't return the bogus PK key?
 			numCols: ot.ColumnCount(),
 		}
@@ -1811,19 +1812,19 @@ func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
 // IndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) IndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.ActiveIndexes())
+	return 1 + len(ot.desc.GetPublicNonPrimaryIndexes())
 }
 
 // WritableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) WritableIndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return 1 + len(ot.desc.WritableNonPrimaryIndexes())
+	return 1 + len(ot.desc.WritableIndexes())
 }
 
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optVirtualTable) DeletableIndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.AllIndexes())
+	return 1 + len(ot.desc.DeletableIndexes())
 }
 
 // Index is part of the cat.Table interface.

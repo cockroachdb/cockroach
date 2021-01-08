@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -191,10 +190,11 @@ func makeInputConverter(
 	}
 
 	if singleTable != nil {
-		if idx := catalog.FindDeletableNonPrimaryIndex(singleTable, func(idx catalog.Index) bool {
-			return idx.IsPartial()
-		}); idx != nil {
-			return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
+		indexes := singleTable.DeletableIndexes()
+		for _, idx := range indexes {
+			if idx.IsPartial() {
+				return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
+			}
 		}
 
 		// If we're using a format like CSV where data columns are not "named", and

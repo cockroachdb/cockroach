@@ -44,38 +44,43 @@ func (pm *PartialIndexUpdateHelper) Init(
 	partialIndexPutVals tree.Datums, partialIndexDelVals tree.Datums, tabDesc catalog.TableDescriptor,
 ) error {
 	colIdx := 0
+	partialIndexOrds := tabDesc.PartialIndexOrds()
+	indexes := tabDesc.DeletableIndexes()
 
-	for _, idx := range tabDesc.PartialIndexes() {
+	for i, ok := partialIndexOrds.Next(0); ok; i, ok = partialIndexOrds.Next(i + 1) {
+		index := &indexes[i]
+		if index.IsPartial() {
 
-		// Check the boolean partial index put column, if it exists.
-		if colIdx < len(partialIndexPutVals) {
-			val, err := tree.GetBool(partialIndexPutVals[colIdx])
-			if err != nil {
-				return err
+			// Check the boolean partial index put column, if it exists.
+			if colIdx < len(partialIndexPutVals) {
+				val, err := tree.GetBool(partialIndexPutVals[colIdx])
+				if err != nil {
+					return err
+				}
+				if !val {
+					// If the value of the column for the index predicate
+					// expression is false, the row should not be added to the
+					// partial index.
+					pm.IgnoreForPut.Add(int(index.ID))
+				}
 			}
-			if !val {
-				// If the value of the column for the index predicate
-				// expression is false, the row should not be added to the
-				// partial index.
-				pm.IgnoreForPut.Add(int(idx.GetID()))
+
+			// Check the boolean partial index del column, if it exists.
+			if colIdx < len(partialIndexDelVals) {
+				val, err := tree.GetBool(partialIndexDelVals[colIdx])
+				if err != nil {
+					return err
+				}
+				if !val {
+					// If the value of the column for the index predicate
+					// expression is false, the row should not be removed from
+					// the partial index.
+					pm.IgnoreForDel.Add(int(index.ID))
+				}
 			}
+
+			colIdx++
 		}
-
-		// Check the boolean partial index del column, if it exists.
-		if colIdx < len(partialIndexDelVals) {
-			val, err := tree.GetBool(partialIndexDelVals[colIdx])
-			if err != nil {
-				return err
-			}
-			if !val {
-				// If the value of the column for the index predicate
-				// expression is false, the row should not be removed from
-				// the partial index.
-				pm.IgnoreForDel.Add(int(idx.GetID()))
-			}
-		}
-
-		colIdx++
 	}
 
 	return nil

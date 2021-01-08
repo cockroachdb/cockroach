@@ -668,19 +668,17 @@ func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	}
 
 	for _, table := range tables {
-		if err := catalog.ForEachIndex(table, catalog.IndexOpts{
+		if err := table.ForeachIndex(catalog.IndexOpts{
 			AddMutations: true,
-		}, func(index catalog.Index) error {
-			for i := 0; i < index.NumInterleaveAncestors(); i++ {
-				a := index.GetInterleaveAncestor(i)
+		}, func(index *descpb.IndexDescriptor, _ bool) error {
+			for _, a := range index.Interleave.Ancestors {
 				if !inBackup[a.TableID] {
 					return errors.Errorf(
 						"cannot backup table %q without interleave parent (ID %d)", table.GetName(), a.TableID,
 					)
 				}
 			}
-			for i := 0; i < index.NumInterleavedBy(); i++ {
-				c := index.GetInterleavedBy(i)
+			for _, c := range index.InterleavedBy {
 				if !inBackup[c.Table] {
 					return errors.Errorf(
 						"cannot backup table %q without interleave child table (ID %d)", table.GetName(), c.Table,
