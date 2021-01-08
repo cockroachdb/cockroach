@@ -193,7 +193,11 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	//   and it cannot be an inverted index.
 	// * We have all of the lookup columns of the index.
 	// * We don't need all of the families.
-	return s.index.Unique && len(s.table.Families) > 1 &&
+	// * The table is not a special system table. (System tables claim to have
+	//   column families, but actually do not, since they're written to with
+	//   raw KV puts in a "legacy" way.)
+	isSystemTable := s.table.ID > 0 && s.table.ID < keys.MaxReservedDescID
+	return !isSystemTable && s.index.Unique && len(s.table.Families) > 1 &&
 		(s.index.ID == s.table.GetPrimaryIndexID() ||
 			// Secondary index specific checks.
 			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
