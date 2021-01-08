@@ -48,6 +48,7 @@ describe("Query Management Saga", function () {
     id: "testQueryError",
     refreshInterval: moment.duration(500),
     retryDelay: moment.duration(50),
+    // eslint-disable-next-line require-yield
     querySaga: function* (): IterableIterator<void> {
       queryErrorCalled++;
       throw sentinelError;
@@ -148,6 +149,7 @@ describe("Query Management Saga", function () {
             if (queryCalled > 3) {
               tester.dispatch(stopAutoRefresh(selfStopQuery));
             }
+            yield;
           },
         };
         return tester
@@ -314,7 +316,7 @@ describe("Query Management Saga", function () {
         state.query = {
           id: "defaultQuery",
           querySaga: function* () {
-            return null;
+            yield null;
           },
         };
         state.queryCompletedAt = moment(5000);
@@ -340,7 +342,7 @@ describe("Query Management Saga", function () {
         state.query = {
           id: "defaultQuery",
           querySaga: function* () {
-            return null;
+            yield null;
           },
         };
         state.queryCompletedAt = moment(5000);
