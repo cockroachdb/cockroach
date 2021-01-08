@@ -37,7 +37,7 @@ go_library(
         "@com_github_opentracing_opentracing_go//ext",
         "@com_github_opentracing_opentracing_go//log",
         "@com_github_openzipkin_contrib_zipkin_go_opentracing//:zipkin-go-opentracing",
-        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",

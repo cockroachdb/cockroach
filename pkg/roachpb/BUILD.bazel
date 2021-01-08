@@ -1,26 +1,20 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "roachpb",
     srcs = [
         "api.go",
-        "api.pb.go",
         "app_stats.go",
-        "app_stats.pb.go",
         "batch.go",
         "batch_generated.go",
         "data.go",
-        "data.pb.go",
         "errordetailtype_string.go",
         "errors.go",
-        "errors.pb.go",
         "internal.go",
-        "internal.pb.go",
-        "internal_raft.pb.go",
-        "io-formats.pb.go",
         "merge_spans.go",
         "metadata.go",
-        "metadata.pb.go",
         "metadata_replicas.go",
         "method.go",
         "method_string.go",
@@ -28,6 +22,7 @@ go_library(
         "tenant.go",
         "version.go",
     ],
+    embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
     visibility = ["//visibility:public"],
     deps = [
@@ -46,7 +41,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timetz",
-        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "@com_github_aws_aws_sdk_go//aws",
         "@com_github_aws_aws_sdk_go//aws/credentials",
@@ -54,11 +48,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_gogo_protobuf//proto",
-        "@com_github_gogo_protobuf//sortkeys",
-        "@com_github_gogo_protobuf//types",
         "@io_etcd_go_etcd_raft_v3//raftpb",
-        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -110,5 +100,49 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//quorum",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
+    ],
+)
+
+proto_library(
+    name = "roachpb_proto",
+    srcs = [
+        "api.proto",
+        "app_stats.proto",
+        "data.proto",
+        "errors.proto",
+        "internal.proto",
+        "internal_raft.proto",
+        "io-formats.proto",
+        "metadata.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock:lock_proto",
+        "//pkg/storage/enginepb:enginepb_proto",
+        "//pkg/util:util_proto",
+        "//pkg/util/hlc:hlc_proto",
+        "//pkg/util/tracing/tracingpb:tracingpb_proto",
+        "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+go_proto_library(
+    name = "roachpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
+    proto = ":roachpb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/storage/enginepb",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_gogo_protobuf//gogoproto",
     ],
 )

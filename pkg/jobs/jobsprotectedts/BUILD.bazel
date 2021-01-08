@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/kv",
-        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/roachpb",
         "//pkg/util/hlc",
@@ -31,7 +31,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",

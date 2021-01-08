@@ -13,14 +13,27 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
 
-# We disable protobuf generation for our dependencies.
+# Enable protobuf generation.
 #
-# gazelle:proto disable_global
+# gazelle:proto package
+# gazelle:proto_group go_package
+# gazelle:go_proto_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler
 
 # Gazelle needs the following resolve hints.
 #
 # gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/runtime @com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library
 # gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/utilities @com_github_grpc_ecosystem_grpc_gateway//utilities:go_default_library
+# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal @com_github_grpc_ecosystem_grpc_gateway//internal
+# gazelle:resolve proto proto errorspb/errors.proto @com_github_cockroachdb_errors//errorspb:errorspb_proto
+# gazelle:resolve proto go errorspb/errors.proto @com_github_cockroachdb_errors//errorspb
+# gazelle:resolve proto proto etcd/raft/v3/raftpb/raft.proto @io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto
+# gazelle:resolve proto go etcd/raft/v3/raftpb/raft.proto @io_etcd_go_etcd_raft_v3//raftpb
+# gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
+# gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
+# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
+# gazelle:resolve proto prometheus/client_model/metrics.proto @com_github_prometheus_client_model//:client_proto
+# gazelle:resolve proto go prometheus/client_model/metrics.proto @com_github_prometheus_client_model//go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
 #
@@ -38,12 +51,14 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # - The vendor directory. We're using external targets for go dependencies,
 #   generated without actually looking at vendor. See #58229.
 #
+# gazelle:exclude c-deps/krb5
 # gazelle:exclude c-deps/protobuf
 # gazelle:exclude artifacts
 # gazelle:exclude **/zcgo_flags.go
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
+# gazelle:exclude **/*.pb.gw.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
@@ -58,12 +73,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 #   https://docs.bazel.build/versions/master/user-manual.html
 #   https://docs.bazel.build/versions/master/guide.html
-
-# TODO(irfansharif): Today we let bazel take over the vendor directory and
-# define each vendored dependency as a bazel target. We should be able to have
-# bazel ignore all of vendor/ and create those dependencies on the fly.
-# Deleting the vendor directory and running `bazel run //:gazelle` shows what
-# that would look like (though that doesn't quite work yet).
 
 # TODO(irfansharif): Document a few usage patterns for bazel and how to
 # understand all the autogen stuff. Probably as a tech note. Here are a few
@@ -83,7 +92,6 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #   bazel run //:gazelle
 #   bazel run //pkg/cmd/cockroach-short -- demo
 #   bazel run //pkg/sql/opt/optgen/cmd/langgen -- -h
-#   bazel run //:gazelle -- update-repos -from_file=go.mod -to_macro=DEPS.bzl%go_deps
 #
 # The //<stuff> names can also be fully qualified using @cockroach, and that
 # appears in certain parts of the codebase/elsewhere. Specifically it'll look
