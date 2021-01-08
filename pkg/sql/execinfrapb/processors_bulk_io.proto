@@ -136,6 +136,7 @@ message ReadImportDataSpec {
 
 message StreamIngestionDataSpec {
   repeated string partition_address = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.PartitionAddress",(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {
