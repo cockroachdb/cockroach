@@ -17,7 +17,7 @@
 # EliminateJoinUnderGroupByLeft so that it can remove any interfering Projects.
 [EliminateGroupByProject, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn | EnsureDistinctOn
-        | UpsertDistinctOn | EnsureUpsertDistinctOn
+        | EnsureUpsertDistinctOn
     $input:(Project $innerInput:*) &
         (ColsAreSubset
             (OutputCols $input)
