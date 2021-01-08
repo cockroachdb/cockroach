@@ -22,6 +22,6 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
-        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )

@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -5,7 +7,6 @@ go_library(
     srcs = [
         "constraint_name.go",
         "errors.go",
-        "errors.pb.go",
         "flatten.go",
         "internal_errors.go",
         "pgcode.go",
@@ -13,6 +14,7 @@ go_library(
         "with_candidate_code.go",
         "wrap.go",
     ],
+    embed = [":pgerror_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
     visibility = ["//visibility:public"],
     deps = [
@@ -50,4 +52,19 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+proto_library(
+    name = "pgerror_proto",
+    srcs = ["errors.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "pgerror_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror",
+    proto = ":pgerror_proto",
+    visibility = ["//visibility:public"],
 )
