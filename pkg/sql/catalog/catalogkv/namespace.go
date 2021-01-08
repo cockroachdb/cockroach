@@ -168,6 +168,11 @@ func LookupObjectID(
 	parentSchemaID descpb.ID,
 	name string,
 ) (bool, descpb.ID, error) {
+	// Avoid a network round-trip if we accidentally ended up here without a
+	// name to look up.
+	if name == "" {
+		return false, descpb.InvalidID, nil
+	}
 	var key catalogkeys.DescriptorKey
 	if parentID == keys.RootNamespaceID {
 		key = catalogkeys.NewDatabaseKey(name)
