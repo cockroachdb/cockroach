@@ -26,7 +26,7 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
+	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/select_for_update")
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments

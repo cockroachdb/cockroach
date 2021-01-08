@@ -61,9 +61,16 @@ new-request r=<name> txn=<name>|none ts=<int>[,<int>] spans=r|w@<start>[,<end>]+
 
 scan r=<name>
 ----
-<error string>|start-waiting: <bool>
+start-waiting: <bool>
 
  Calls lockTable.ScanAndEnqueue. If the request has an existing guard, uses it.
+ If a guard is returned, stores it for later use.
+
+scan-opt r=<name>
+----
+start-waiting: <bool>
+
+ Calls lockTable.ScanOptimistic. The request must not have an existing guard.
  If a guard is returned, stores it for later use.
 
 acquire r=<name> k=<key> durability=r|u
@@ -94,6 +101,12 @@ add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-finalized-
 <error string>
 
  Adds a discovered lock that is discovered by the named request.
+
+check-opt-no-conflicts r=<name> spans=r|w@<start>[,<end>]+...
+----
+no-conflicts: <bool>
+
+ Checks whether the request, which previously called ScanOptimistic, has no lock conflicts.
 
 dequeue r=<name>
 ----
@@ -262,6 +275,21 @@ func TestLockTableBasic(t *testing.T) {
 				guardsByReqName[reqName] = g
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
+			case "scan-opt":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				g, ok := guardsByReqName[reqName]
+				if ok {
+					d.Fatalf(t, "request has an existing guard: %s", reqName)
+				}
+				g = lt.ScanOptimistic(req)
+				guardsByReqName[reqName] = g
+				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
+
 			case "acquire":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
@@ -383,6 +411,20 @@ func TestLockTableBasic(t *testing.T) {
 					return err.Error()
 				}
 				return lt.(*lockTableImpl).String()
+
+			case "check-opt-no-conflicts":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				req, ok := requestsByName[reqName]
+				if !ok {
+					d.Fatalf(t, "unknown request: %s", reqName)
+				}
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				spans := scanSpans(t, d, req.Timestamp)
+				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(spans))
 
 			case "dequeue":
 				var reqName string
