@@ -31,7 +31,9 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "one region, zone survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_a"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_a"},
+				},
 				PrimaryRegion: "region_a",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -48,7 +50,10 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "two regions, zone survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_a"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_a"},
+				},
 				PrimaryRegion: "region_a",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -66,7 +71,11 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "three regions, zone survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -85,7 +94,11 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "three regions, region survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
@@ -104,7 +117,12 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "four regions, zone survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -124,7 +142,12 @@ func TestZoneConfigFromRegionConfigForDatabase(t *testing.T) {
 		{
 			desc: "four regions, region survival",
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
@@ -172,7 +195,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -190,7 +218,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -208,7 +241,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -224,7 +262,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -242,7 +285,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -258,7 +306,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
@@ -274,7 +327,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
@@ -298,7 +356,12 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				},
 			},
 			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions:       []descpb.Region{"region_b", "region_c", "region_a", "region_d"},
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
