@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -3785,4 +3786,197 @@ func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
 	// Assert that the node liveness range is prioritized.
 	priorityID := store.RaftSchedulerPriorityID()
 	require.Equal(t, livenessRangeID, priorityID)
+}
+
+func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(t, args)
+
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		defer func() {
+			t.Log(err)
+		}()
+		if err := txn.Put(ctx, "a", "a"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "b", "b"); err != nil {
+			return err
+		}
+		return txn.Commit(ctx)
+	}))
+	tup, err := db.Get(ctx, "a")
+	require.NoError(t, err)
+	require.NotNil(t, tup.Value)
+	tup, err = db.Get(ctx, "b")
+	require.NoError(t, err)
+	require.NotNil(t, tup.Value)
+	return s, db
+}
+
+// TestOptimisticEvalRetry tests the case where an optimistically evaluated
+// scan encounters contention from a concurrent txn holding unreplicated
+// exclusive locks, and therefore re-evaluates pessimistically, and eventually
+// succeeds once the contending txn commits.
+func TestOptimisticEvalRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	txn1 := db.NewTxn(ctx, "locking txn")
+	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0)
+	require.NoError(t, err)
+
+	readDone := make(chan error)
+	go func() {
+		readDone <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			defer func() {
+				t.Log(err)
+			}()
+			// We can't actually prove that the optimistic evaluation path was
+			// taken, but it should happen based on the fact that this is a limited
+			// scan with a limit of 1 row, and the replica has 2 rows.
+			_, err = txn.Scan(ctx, "a", "c", 1)
+			if err != nil {
+				return err
+			}
+			return txn.Commit(ctx)
+		})
+	}()
+	removedLocks := false
+	timer := timeutil.NewTimer()
+	timer.Reset(time.Second * 2)
+	defer timer.Stop()
+	done := false
+	for !done {
+		select {
+		case err := <-readDone:
+			if !removedLocks {
+				t.Fatal("read completed before exclusive locks were released")
+			}
+			require.NoError(t, err)
+			require.True(t, removedLocks)
+			done = true
+		case <-timer.C:
+			require.NoError(t, txn1.Commit(ctx))
+			removedLocks = true
+		}
+	}
+}
+
+// TestOptimisticEvalNoContention tests the case where an optimistically
+// evaluated scan has a span that overlaps with a concurrent txn holding
+// unreplicated exclusive locks, but the actual span that is read does not
+// overlap, and therefore the scan succeeds before the lock holding txn
+// commits.
+func TestOptimisticEvalNoContention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	txn1 := db.NewTxn(ctx, "locking txn")
+	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0)
+	require.NoError(t, err)
+
+	readDone := make(chan error)
+	go func() {
+		readDone <- db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			defer func() {
+				t.Log(err)
+			}()
+			// There is no contention when doing optimistic evaluation, since it can read a
+			// which is not locked.
+			_, err = txn.Scan(ctx, "a", "c", 1)
+			if err != nil {
+				return err
+			}
+			return txn.Commit(ctx)
+		})
+	}()
+	err = <-readDone
+	require.NoError(t, err)
+	require.NoError(t, txn1.Commit(ctx))
+}
+
+func BenchmarkOptimisticEval(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	s, _, db := serverutils.StartServer(b, args)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		defer func() {
+			b.Log(err)
+		}()
+		if err := txn.Put(ctx, "a", "a"); err != nil {
+			return err
+		}
+		if err := txn.Put(ctx, "b", "b"); err != nil {
+			return err
+		}
+		return txn.Commit(ctx)
+	}))
+	tup, err := db.Get(ctx, "a")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+	tup, err = db.Get(ctx, "b")
+	require.NoError(b, err)
+	require.NotNil(b, tup.Value)
+
+	for _, realContention := range []bool{false, true} {
+		b.Run(fmt.Sprintf("real-contention=%t", realContention),
+			func(b *testing.B) {
+				lockStart := "b"
+				if realContention {
+					lockStart = "a"
+				}
+				finishWrites := make(chan struct{})
+				var writers sync.WaitGroup
+				for i := 0; i < 1; i++ {
+					writers.Add(1)
+					go func() {
+						for {
+							txn := db.NewTxn(ctx, "locking txn")
+							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0)
+							require.NoError(b, err)
+							time.Sleep(5 * time.Millisecond)
+							// Normally, it would do a write here, but we don't bother.
+							require.NoError(b, txn.Commit(ctx))
+							select {
+							case _, recv := <-finishWrites:
+								if !recv {
+									writers.Done()
+									return
+								}
+							default:
+							}
+						}
+					}()
+				}
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+						_, err = txn.Scan(ctx, "a", "c", 1)
+						if err != nil {
+							panic(err)
+						}
+						err = txn.Commit(ctx)
+						if err != nil {
+							panic(err)
+						}
+						return err
+					})
+				}
+				b.StopTimer()
+				close(finishWrites)
+				writers.Wait()
+			})
+	}
 }

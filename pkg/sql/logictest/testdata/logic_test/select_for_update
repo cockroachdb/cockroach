@@ -433,7 +433,7 @@ SELECT * FROM p1_0 FOR SHARE NOWAIT
 query error pgcode 55P03 could not obtain lock on row in interleaved table
 SELECT * FROM p1_1 FOR SHARE NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row \(i\)=\(7\) in p2@primary
+query error pgcode 55P03 could not obtain lock on row (\(i\)=\(7\) in p2@primary|in interleaved table)
 SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s FOR SHARE NOWAIT
 
 user root
@@ -456,7 +456,7 @@ SELECT * FROM p1_0 FOR SHARE NOWAIT
 query error pgcode 55P03 could not obtain lock on row in interleaved table
 SELECT * FROM p1_1 FOR SHARE NOWAIT
 
-query error pgcode 55P03 could not obtain lock on row in interleaved table
+query error pgcode 55P03 could not obtain lock on row (\(i\)=\(5\) in p1_0@primary|in interleaved table)
 SELECT s, s1 FROM p2 JOIN p1_0 USING (i) ORDER BY s FOR SHARE NOWAIT
 
 user root
