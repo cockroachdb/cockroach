@@ -114,14 +114,40 @@ func (m *managerImpl) SequenceReq(
 	var g *Guard
 	if prev == nil {
 		g = newGuard(req)
-		log.Event(ctx, "sequencing request")
+		if req.Optimistic {
+			log.Event(ctx, "optimistically sequencing request")
+		} else {
+			log.Event(ctx, "sequencing request")
+		}
 	} else {
 		g = prev
 		g.AssertNoLatches()
 		log.Event(ctx, "re-sequencing request")
 	}
 
-	resp, err := m.sequenceReqWithGuard(ctx, g, req)
+	resp, err := m.sequenceReqWithGuard(ctx, g, req, false /* holdsLatches */)
+	if resp != nil || err != nil {
+		// Ensure that we release the guard if we return a response or an error.
+		m.FinishReq(g)
+		return nil, resp, err
+	}
+	return g, nil, nil
+}
+
+// SequenceOptimisticRetryingAsPessimistic implements the RequestSequencer
+// interface.
+func (m *managerImpl) SequenceOptimisticRetryingAsPessimistic(
+	ctx context.Context, g *Guard, req Request,
+) (*Guard, Response, *Error) {
+	if g == nil {
+		panic("retry should have non-nil guard")
+	}
+	if g.Req.Optimistic {
+		panic("pessimistic retry has optimistic bit set to true")
+	}
+	g.AssertLatches()
+	log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
+	resp, err := m.sequenceReqWithGuard(ctx, g, req, true /* holdsLatches */)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
 		m.FinishReq(g)
@@ -131,7 +157,7 @@ func (m *managerImpl) SequenceReq(
 }
 
 func (m *managerImpl) sequenceReqWithGuard(
-	ctx context.Context, g *Guard, req Request,
+	ctx context.Context, g *Guard, req Request, holdsLatches bool,
 ) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
 	if !shouldAcquireLatches(req) {
@@ -148,12 +174,18 @@ func (m *managerImpl) sequenceReqWithGuard(
 	}
 
 	for {
-		// Acquire latches for the request. This synchronizes the request
-		// with all conflicting in-flight requests.
-		log.Event(ctx, "acquiring latches")
-		g.lg, err = m.lm.Acquire(ctx, req)
-		if err != nil {
-			return nil, err
+		if !holdsLatches {
+			// TODO(sumeer): optimistic requests could register their need for
+			// latches, but not actually wait until acquisition.
+			// https://github.com/cockroachdb/cockroach/issues/9521
+
+			// Acquire latches for the request. This synchronizes the request
+			// with all conflicting in-flight requests.
+			log.Event(ctx, "acquiring latches")
+			g.lg, err = m.lm.Acquire(ctx, req)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Some requests don't want the wait on locks.
@@ -161,9 +193,17 @@ func (m *managerImpl) sequenceReqWithGuard(
 			return nil, nil
 		}
 
-		// Scan for conflicting locks.
-		log.Event(ctx, "scanning lock table for conflicting locks")
-		g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+		if req.Optimistic {
+			if g.ltg != nil {
+				panic("Optimistic locking should not have a non-nil lockTableGuard")
+			}
+			log.Event(ctx, "scanning lock table for conflicting locks")
+			g.ltg = m.lt.ScanOptimistic(g.Req)
+		} else {
+			// Scan for conflicting locks.
+			log.Event(ctx, "scanning lock table for conflicting locks")
+			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+		}
 
 		// Wait on conflicting locks, if necessary.
 		if g.ltg.ShouldWait() {

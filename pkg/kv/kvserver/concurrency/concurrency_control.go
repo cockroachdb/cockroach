@@ -178,6 +178,18 @@ type RequestSequencer interface {
 	// does so, it will not return a request guard.
 	SequenceReq(context.Context, *Guard, Request) (*Guard, Response, *Error)
 
+	// SequenceOptimisticRetryingAsPessimistic is akin to SequenceReq, but used
+	// for the first pessimistic retry of a previously optimistic request
+	// evaluation. Request.Optimistic must be false here. The first pessimistic
+	// retry has not called any methods in ContentionHandler, so the state of
+	// latches and locks is whatever it was when the optimistic request
+	// previously went through SequenceReq. In the current implementation,
+	// latches are held, but only a snapshot of the lock table has been taken
+	// (which will need to be snapshot again). In the future, latches will not
+	// be held either.
+	SequenceOptimisticRetryingAsPessimistic(
+		context.Context, *Guard, Request) (*Guard, Response, *Error)
+
 	// FinishReq marks the request as complete, releasing any protection
 	// the request had against conflicting requests and allowing conflicting
 	// requests that are blocked on this one to proceed. The guard should not
@@ -351,6 +363,11 @@ type Request struct {
 	// (Txn == nil), all reads and writes are considered to take place at
 	// Timestamp.
 	LockSpans *spanset.SpanSet
+
+	// Set to true when the request is desiring optimistic evaluation, i.e.,
+	// locks will be checked after evaluation using
+	// Guard.CheckOptimisticNoConflicts.
+	Optimistic bool
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -359,6 +376,10 @@ type Guard struct {
 	Req Request
 	lg  latchGuard
 	ltg lockTableGuard
+}
+
+func (g *Guard) CheckOptimisticNoConflicts(lockSpansRead *spanset.SpanSet) (ok bool) {
+	return g.ltg.CheckOptimisticNoConflicts(lockSpansRead)
 }
 
 // Response is a slice of responses to requests in a batch. This type is used
@@ -459,6 +480,13 @@ type lockTable interface {
 	// one. The latches needed by the request must be held when calling this
 	// function.
 	ScanAndEnqueue(Request, lockTableGuard) lockTableGuard
+
+	// ScanOptimistic takes a snapshot of the lock table for later checking for
+	// conflicts, and returns a guard. It is for optimistic evaluation of
+	// requests that will typically scan a small subset of the spans mentioned
+	// in the Request. After Request evaluation, CheckOptimisticNoConflicts
+	// must be called on the guard.
+	ScanOptimistic(Request) lockTableGuard
 
 	// Dequeue removes the request from its lock wait-queues. It should be
 	// called when the request is finished, whether it evaluated or not. The
@@ -599,6 +627,12 @@ type lockTableGuard interface {
 	// This must be called after the waiting state has transitioned to
 	// doneWaiting.
 	ResolveBeforeScanning() []roachpb.LockUpdate
+
+	// CheckOptimisticNoConflicts uses the SpanSet representing the spans that
+	// were actually read, to check for conflicting locks, after an optimistic
+	// evaluation. It returns true if there were no conflicts. See
+	// lockTable.ScanOptimistic for context.
+	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held

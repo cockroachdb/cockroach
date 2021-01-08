@@ -420,6 +420,30 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	return g.mu.state
 }
 
+func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet) (ok bool) {
+	// Temporarily replace the SpanSet in the guard.
+	originalSpanSet := g.spans
+	g.spans = spanSet
+	defer func() {
+		g.spans = originalSpanSet
+	}()
+	span := stepToNextSpan(g)
+	for span != nil {
+		startKey := span.Key
+		tree := g.tableSnapshot[g.ss]
+		iter := tree.MakeIter()
+		ltRange := &lockState{key: startKey, endKey: span.EndKey}
+		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
+			l := iter.Cur()
+			if !l.isNonConflictingLock(g, g.sa) {
+				return false
+			}
+		}
+		span = stepToNextSpan(g)
+	}
+	return true
+}
+
 func (g *lockTableGuardImpl) notify() {
 	select {
 	case g.mu.signal <- struct{}{}:
@@ -1357,6 +1381,45 @@ func (l *lockState) tryActiveWait(
 	return true, false
 }
 
+func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanAccess) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// It is possible that this lock is empty and has not yet been deleted.
+	if l.isEmptyLock() {
+		return true
+	}
+	// Lock is not empty.
+	lockHolderTxn, lockHolderTS := l.getLockHolder()
+	if lockHolderTxn == nil {
+		// Reservation holders are non-conflicting.
+		//
+		// When optimistic evaluation holds latches, there cannot be a conflicting
+		// reservation holder that is also holding latches (reservation holder
+		// without latches can happen due to AddDiscoveredLock). So when this
+		// optimistic evaluation succeeds and releases latches the reservation
+		// holder will need to acquire latches and scan the lock table again. When
+		// optimistic evaluation does not hold latches, it will check for
+		// conflicting latches before declaring success and a reservation holder
+		// that holds latches will be discovered, and the optimistic evaluation
+		// will retry as pessimistic.
+		return true
+	}
+	if g.isSameTxn(lockHolderTxn) {
+		// Already locked by this txn.
+		return true
+	}
+	// NB: We do not look at the finalizedTxnCache in this optimistic evaluation
+	// path. A conflict with a finalized txn will be noticed when retrying
+	// pessimistically.
+
+	if sa == spanset.SpanReadOnly && g.readTS.Less(lockHolderTS) {
+		return true
+	}
+	// Conflicts.
+	return false
+}
+
 // Acquires this lock. Returns the list of guards that are done actively
 // waiting at this key -- these will be requests from the same transaction
 // that is acquiring the lock.
@@ -1957,6 +2020,12 @@ func (t *treeMu) nextLockSeqNum() uint64 {
 	return t.lockIDSeqNum
 }
 
+func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
+	g := t.newGuardForReq(req)
+	t.doSnapshotForGuard(g)
+	return g
+}
+
 // ScanAndEnqueue implements the lockTable interface.
 func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTableGuard {
 	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
@@ -1967,15 +2036,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 
 	var g *lockTableGuardImpl
 	if guard == nil {
-		g = newLockTableGuardImpl()
-		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
-		g.lt = t
-		g.txn = req.txnMeta()
-		g.spans = req.LockSpans
-		g.readTS = req.readConflictTimestamp()
-		g.writeTS = req.writeConflictTimestamp()
-		g.sa = spanset.NumSpanAccess - 1
-		g.index = -1
+		g = t.newGuardForReq(req)
 	} else {
 		g = guard.(*lockTableGuardImpl)
 		g.key = nil
@@ -1988,6 +2049,25 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g.mu.Unlock()
 		g.toResolve = g.toResolve[:0]
 	}
+	t.doSnapshotForGuard(g)
+	g.findNextLockAfter(true /* notify */)
+	return g
+}
+
+func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
+	g := newLockTableGuardImpl()
+	g.seqNum = atomic.AddUint64(&t.seqNum, 1)
+	g.lt = t
+	g.txn = req.txnMeta()
+	g.spans = req.LockSpans
+	g.readTS = req.readConflictTimestamp()
+	g.writeTS = req.writeConflictTimestamp()
+	g.sa = spanset.NumSpanAccess - 1
+	g.index = -1
+	return g
+}
+
+func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 	for ss := spanset.SpanScope(0); ss < spanset.NumSpanScope; ss++ {
 		for sa := spanset.SpanAccess(0); sa < spanset.NumSpanAccess; sa++ {
 			if len(g.spans.GetSpans(sa, ss)) > 0 {
@@ -2003,8 +2083,6 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 			}
 		}
 	}
-	g.findNextLockAfter(true /* notify */)
-	return g
 }
 
 // Dequeue implements the lockTable interface.

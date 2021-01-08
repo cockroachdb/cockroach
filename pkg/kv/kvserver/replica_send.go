@@ -273,6 +273,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	// Try to execute command; exit retry loop on success.
 	var g *concurrency.Guard
 	var latchSpans, lockSpans *spanset.SpanSet
+	var optimistic, retryingAsPessimistic bool
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -308,10 +309,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 
 		// Determine the maximal set of key spans that the batch will operate
 		// on. We only need to do this once and we make sure to do so after we
-		// have limited the transaction's maximum timestamp.
+		// have limited the transaction's maximum timestamp. This will be done
+		// only in the first iteration of the for loop, which means optimistic
+		// can be set to true only in the first iteration.
 		if latchSpans == nil {
 			var err error
-			latchSpans, lockSpans, err = r.collectSpans(ba)
+			latchSpans, lockSpans, optimistic, err = r.collectSpans(ba)
 			if err != nil {
 				return nil, roachpb.NewError(err)
 			}
@@ -324,8 +327,15 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// this request completes. After latching, wait on any conflicting locks
 		// to ensure that the request has full isolation during evaluation. This
 		// returns a request guard that must be eventually released.
+		sequenceReq := r.concMgr.SequenceReq
+		if retryingAsPessimistic {
+			sequenceReq = r.concMgr.SequenceOptimisticRetryingAsPessimistic
+			// Subsequent retries will not follow optimistic evaluation, so set
+			// retryingAsPessimistic to false.
+			retryingAsPessimistic = false
+		}
 		var resp []roachpb.ResponseUnion
-		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
+		g, resp, pErr = sequenceReq(ctx, g, concurrency.Request{
 			Txn:             ba.Txn,
 			Timestamp:       ba.Timestamp,
 			Priority:        ba.UserPriority,
@@ -334,6 +344,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans,
 			LockSpans:       lockSpans,
+			Optimistic:      optimistic,
 		})
 		if pErr != nil {
 			return nil, pErr
@@ -392,6 +403,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if pErr = r.handleMergeInProgressError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+		case *roachpb.OptimisticEvalConflictsError:
+			optimistic = false
+			retryingAsPessimistic = true
 		default:
 			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
@@ -400,11 +414,16 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 }
 
 // isConcurrencyRetryError returns whether or not the provided error is a
-// "server-side concurrency retry error" that will be captured and retried by
-// executeBatchWithConcurrencyRetries. Server-side concurrency retry errors are
-// handled by dropping a request's latches, waiting for and/or ensuring that the
-// condition which caused the error is handled, re-sequencing through the
-// concurrency manager, and executing the request again.
+// "concurrency retry error" that will be captured and retried by
+// executeBatchWithConcurrencyRetries. There are two kinds of concurrency
+// retry errors:
+// - Server-side concurrency retry errors are handled by dropping a request's
+//   latches, waiting for and/or ensuring that the condition which caused the
+//   error is handled, re-sequencing through the concurrency manager, and
+//   executing the request again.
+// - Client-side concurrency retry errors are currently limited to conflicts
+//   encountered in optimistic evaluation. There is no need to drop latches,
+//   and the request can immediately proceed to retrying pessimistically.
 func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 	switch pErr.GetDetail().(type) {
 	case *roachpb.WriteIntentError:
@@ -424,11 +443,14 @@ func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 		// retrying.
 	case *roachpb.MergeInProgressError:
 		// If a request hits a MergeInProgressError, the replica it is being
-		// evaluted against is in the process of being merged into its left-hand
+		// evaluated against is in the process of being merged into its left-hand
 		// neighbor. The request cannot proceed until the range merge completes,
 		// either successfully or unsuccessfully, so it waits before retrying.
 		// If the merge does complete successfully, the retry will be rejected
 		// with an error that will propagate back to the client.
+	case *roachpb.OptimisticEvalConflictsError:
+	// Optimistic evaluation encountered a conflict. The request will
+	// immediately retry pessimistically.
 	default:
 		return false
 	}
@@ -663,8 +685,14 @@ func (r *Replica) checkBatchRequest(ba *roachpb.BatchRequest, isReadOnly bool) e
 
 func (r *Replica) collectSpans(
 	ba *roachpb.BatchRequest,
-) (latchSpans, lockSpans *spanset.SpanSet, _ error) {
+) (latchSpans, lockSpans *spanset.SpanSet, optimistic bool, _ error) {
 	latchSpans, lockSpans = new(spanset.SpanSet), new(spanset.SpanSet)
+	isReadOnly := ba.IsReadOnly()
+	r.mu.RLock()
+	desc := r.descRLocked()
+	liveCount := r.mu.state.Stats.LiveCount
+	r.mu.RUnlock()
+
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -695,14 +723,13 @@ func (r *Replica) collectSpans(
 	// than the request timestamp, and may have to retry at a higher timestamp.
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
-	desc := r.Desc()
 	batcheval.DeclareKeysForBatch(desc, ba.Header, latchSpans)
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, latchSpans, lockSpans)
 		} else {
-			return nil, nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, nil, false, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
@@ -714,9 +741,30 @@ func (r *Replica) collectSpans(
 		// If any command gave us spans that are invalid, bail out early
 		// (before passing them to the spanlatch manager, which may panic).
 		if err := s.Validate(); err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 	}
 
-	return latchSpans, lockSpans, nil
+	optimistic = false
+	if isReadOnly {
+		// Evaluate batches optimistically if they have a key limit which is less
+		// than the number of live keys on the Range. Ignoring write latches and
+		// locks can be beneficial because it can help avoid waiting on writes to
+		// keys that the batch will never actually need to read due to the
+		// overestimate of its key bounds. Only after it is clear exactly what
+		// spans were read do we verify whether there were any conflicts with
+		// concurrent writes.
+		//
+		// This case is not uncommon; for example, a Scan which requests the entire
+		// range but has a limit of 1 result. We want to avoid allowing overly broad
+		// spans from backing up the latch manager, or encountering too much contention
+		// in the lock table.
+		//
+		// The heuristic is limit < k * liveCount, where k <= 1. The use of k=1
+		// below is an un-tuned setting.
+		limit := ba.Header.MaxSpanRequestKeys
+		optimistic = limit > 0 && limit < liveCount
+	}
+
+	return latchSpans, lockSpans, optimistic, nil
 }
