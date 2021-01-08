@@ -292,11 +292,12 @@ func (c *transientCluster) start(
 	if err := runInitialSQL(ctx, c.s.Server, demoCtx.nodes < 3, demoUsername, demoPassword); err != nil {
 		return err
 	}
-	c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
-	c.adminPassword = demoPassword
 	if demoCtx.insecure {
 		c.adminUser = security.RootUserName()
 		c.adminPassword = "unused"
+	} else {
+		c.adminUser = security.MakeSQLUsernameFromPreNormalizedString(demoUsername)
+		c.adminPassword = demoPassword
 	}
 
 	// Prepare the URL for use by the SQL shell.
@@ -885,14 +886,18 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 			// the demo.
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
-		// Print node ID and console URL. Embed the autologin feature inside the URL.
-		pwauth := url.Values{
-			"username": []string{c.adminUser.Normalized()},
-			"password": []string{c.adminPassword},
-		}
 		serverURL := s.Cfg.AdminURL()
-		serverURL.Path = server.DemoLoginPath
-		serverURL.RawQuery = pwauth.Encode()
+		if !demoCtx.insecure {
+			// Print node ID and console URL. Embed the autologin feature inside the URL.
+			// We avoid printing those when insecure, as the autologin path is not available
+			// in that case.
+			pwauth := url.Values{
+				"username": []string{c.adminUser.Normalized()},
+				"password": []string{c.adminPassword},
+			}
+			serverURL.Path = server.DemoLoginPath
+			serverURL.RawQuery = pwauth.Encode()
+		}
 		fmt.Fprintf(w, "  (console) %s\n", serverURL)
 		// Print unix socket if defined.
 		if c.useSockets {
