@@ -84,18 +84,35 @@ func getCockroachVersion(c *SyncedCluster, node int) (*version.Version, error) {
 	}
 	defer sess.Close()
 
+	var verString string
+
 	cmd := cockroachNodeBinary(c, node) + " version"
-	out, err := sess.CombinedOutput(cmd)
+	out, err := sess.CombinedOutput(cmd + " --build-tag")
 	if err != nil {
-		return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
-	}
+		// The --build-tag may not be supported. Try without.
+		// Note: this way to extract the version number is brittle.
+		// It should be removed once 'roachprod' is not used
+		// to invoke pre-v20.2 binaries any more.
+		sess, err := c.newSession(node)
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
+		out, err = sess.CombinedOutput(cmd)
+		if err != nil {
+			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+		}
 
-	matches := regexp.MustCompile(`(?m)^Build Tag:\s+(.*)$`).FindSubmatch(out)
-	if len(matches) != 2 {
-		return nil, fmt.Errorf("unable to parse cockroach version output:%s", out)
-	}
+		matches := regexp.MustCompile(`(?m)^Build Tag:\s+(.*)$`).FindSubmatch(out)
+		if len(matches) != 2 {
+			return nil, fmt.Errorf("unable to parse cockroach version output:%s", out)
+		}
 
-	return version.Parse(string(matches[1]))
+		verString = string(matches[1])
+	} else {
+		verString = strings.TrimSpace(string(out))
+	}
+	return version.Parse(verString)
 }
 
 // GetAdminUIPort returns the admin UI port for ths specified RPC port.

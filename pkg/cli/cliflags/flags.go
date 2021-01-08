@@ -1250,4 +1250,12 @@ The zip command will block for the duration specified. Zero disables this featur
 		Name:        "all",
 		Description: `Cancel all outstanding requests.`,
 	}
+
+	BuildTag = FlagInfo{
+		Name: "build-tag",
+		Description: `
+When set, the command prints only the build tag for the executable,
+without any other details.
+`,
+	}
 )
