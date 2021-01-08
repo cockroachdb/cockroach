@@ -174,7 +174,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	thresh := kvserverbase.TxnCleanupThreshold.Nanoseconds()
 	// Make sure this test doesn't run out of padding time if we significantly
 	// reduce TxnCleanupThreshold in the future for whatever reason.
-	require.Greater(t, thresh, time.Minute)
+	require.Greater(t, thresh, int64(time.Minute))
 	// Pick a non-gcable and gcable timestamp, respectively.
 	// Use the current time for some non-expired abort span records.
 	// Note that the cleanup threshold is so large that while this test runs,
