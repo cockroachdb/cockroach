@@ -80,7 +80,10 @@ export class CachedDataReducer<
   ) {
     // check actionNamespace
     assert(
-      !CachedDataReducer.namespaces.hasOwnProperty(actionNamespace),
+      !Object.prototype.hasOwnProperty.call(
+        CachedDataReducer.namespaces,
+        actionNamespace,
+      ),
       "Expected actionNamespace to be unique.",
     );
     CachedDataReducer.namespaces[actionNamespace] = true;
