@@ -152,7 +152,7 @@ export class QueryManagerSagaState {
   // Creates a new state object if the given id has not yet been encountered.
   getQueryState(query: ManagedQuery) {
     const { id } = query;
-    if (!this.queryStates.hasOwnProperty(id)) {
+    if (!Object.prototype.hasOwnProperty.call(this.queryStates, id)) {
       this.queryStates[id] = new ManagedQuerySagaState();
       this.queryStates[id].query = query;
     }
