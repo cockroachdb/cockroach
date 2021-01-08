@@ -51,7 +51,7 @@ export class DatabaseSummaryGrants extends DatabaseSummaryBase {
         No users have been granted access to this database.
       </h3>
       <p className="table__no-results--description">
-        <a href={privileges} target="_blank">
+        <a href={privileges} target="_blank" rel="noreferrer">
           Read more about privileges.
         </a>
       </p>

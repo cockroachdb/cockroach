@@ -43,7 +43,11 @@ type ZoneConfig$Properties = cockroach.server.serverpb.DataDistributionResponse.
 const ZONE_CONFIG_TEXT = (
   <span>
     Zone configurations (
-    <a href={docsURL.configureReplicationZones} target="_blank">
+    <a
+      href={docsURL.configureReplicationZones}
+      target="_blank"
+      rel="noreferrer"
+    >
       see documentation
     </a>
     ) control how CockroachDB distributes data across nodes.

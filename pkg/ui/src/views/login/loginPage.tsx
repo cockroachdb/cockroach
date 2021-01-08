@@ -188,6 +188,7 @@ export class LoginPage extends React.Component<Props> {
                   href={docsURL.adminUILoginNoVersion}
                   className="login-docs-link"
                   target="_blank"
+                  rel="noreferrer"
                 >
                   <span className="login-docs-link__text">
                     Read more about configuring login
