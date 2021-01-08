@@ -91,7 +91,7 @@ func (t ConnType) String() string {
 	case ConnHostAny:
 		return "host"
 	default:
-		panic("unimplemented")
+		panic(errors.Newf("unimplemented conn type: %v", int(t)))
 	}
 }
 

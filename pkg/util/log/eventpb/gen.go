@@ -19,6 +19,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -43,6 +44,18 @@ type catInfo struct {
 	Events     []*eventInfo
 }
 
+type enumInfo struct {
+	Comment string
+	GoType  string
+	Values  []enumValInfo
+}
+
+type enumValInfo struct {
+	Comment string
+	Name    string
+	Value   int
+}
+
 type eventInfo struct {
 	Comment         string
 	LogChannel      string
@@ -59,6 +72,7 @@ type fieldInfo struct {
 	FieldName     string
 	ReportingSafe bool
 	Inherited     bool
+	IsEnum        bool
 }
 
 func run() error {
@@ -98,9 +112,10 @@ func run() error {
 
 	// Read the input .proto file.
 	info := map[string]*eventInfo{}
+	enums := map[string]*enumInfo{}
 	cats := map[string]*catInfo{}
 	for i := 2; i < len(os.Args); i++ {
-		if err := readInput(info, cats, os.Args[i]); err != nil {
+		if err := readInput(enums, info, cats, os.Args[i]); err != nil {
 			return err
 		}
 	}
@@ -133,13 +148,24 @@ func run() error {
 		allSortedInfos = append(allSortedInfos, info[k])
 	}
 
+	keys = nil
+	for k := range enums {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var allSortedEnums []*enumInfo
+	for _, k := range keys {
+		allSortedEnums = append(allSortedEnums, enums[k])
+	}
+
 	// Render the template.
 	var src bytes.Buffer
 	if err := tmpl.Execute(&src, struct {
 		Categories []*catInfo
 		Events     []*eventInfo
 		AllEvents  []*eventInfo
-	}{sortedCats, sortedInfos, allSortedInfos}); err != nil {
+		Enums      []*enumInfo
+	}{sortedCats, sortedInfos, allSortedInfos, allSortedEnums}); err != nil {
 		return err
 	}
 
@@ -161,16 +187,23 @@ func run() error {
 	return nil
 }
 
-func readInput(infos map[string]*eventInfo, cats map[string]*catInfo, protoName string) error {
+func readInput(
+	enums map[string]*enumInfo,
+	infos map[string]*eventInfo,
+	cats map[string]*catInfo,
+	protoName string,
+) error {
 	protoData, err := ioutil.ReadFile(protoName)
 	if err != nil {
 		return err
 	}
 	inMsg := false
+	inEnum := false
 	comment := ""
 	channel := ""
 	var curCat *catInfo
 	var curMsg *eventInfo
+	var curEnum *enumInfo
 	for _, line := range strings.Split(string(protoData), "\n") {
 		line = strings.TrimSpace(line)
 
@@ -202,7 +235,56 @@ func readInput(infos map[string]*eventInfo, cats map[string]*catInfo, protoName 
 			continue
 		}
 
-		if !inMsg && strings.HasPrefix(line, "message ") {
+		if !inEnum && !inMsg && strings.HasPrefix(line, "enum ") {
+			inEnum = true
+
+			typ := strings.Split(line, " ")[1]
+			if _, ok := enums[typ]; ok {
+				return errors.Newf("duplicate enum type: %q", typ)
+			}
+
+			curEnum = &enumInfo{
+				Comment: comment,
+				GoType:  typ,
+			}
+			comment = ""
+			enums[typ] = curEnum
+			continue
+		}
+		if inEnum {
+			if strings.HasPrefix(line, "}") {
+				inEnum = false
+				comment = ""
+				continue
+			}
+
+			// At this point, we don't support definitions that don't fit on a single line.
+			if !strings.Contains(line, ";") {
+				return errors.Newf("enum value definition must not span multiple lines: %q", line)
+			}
+
+			if !enumValDefRe.MatchString(line) {
+				return errors.Newf("invalid enum value definition: %q", line)
+			}
+
+			tag := enumValDefRe.ReplaceAllString(line, "$tag")
+			val := enumValDefRe.ReplaceAllString(line, "$val")
+			vali, err := strconv.Atoi(val)
+			if err != nil {
+				return errors.Wrapf(err, "parsing %q", line)
+			}
+
+			comment = strings.TrimSpace(strings.TrimPrefix(comment, tag))
+
+			curEnum.Values = append(curEnum.Values, enumValInfo{
+				Comment: comment,
+				Name:    tag,
+				Value:   vali,
+			})
+			comment = ""
+		}
+
+		if !inMsg && !inEnum && strings.HasPrefix(line, "message ") {
 			inMsg = true
 
 			typ := strings.Split(line, " ")[1]
@@ -266,6 +348,8 @@ func readInput(infos map[string]*eventInfo, cats map[string]*catInfo, protoName 
 					Inherited: true,
 				})
 			} else {
+				_, isEnum := enums[typ]
+
 				name := snakeToCamel(fieldDefRe.ReplaceAllString(line, "$name"))
 				safe := false
 				if nameOverride := fieldDefRe.ReplaceAllString(line, "$noverride"); nameOverride != "" {
@@ -282,6 +366,7 @@ func readInput(infos map[string]*eventInfo, cats map[string]*catInfo, protoName 
 					FieldType:     typ,
 					FieldName:     name,
 					ReportingSafe: safe,
+					IsEnum:        isEnum,
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -300,6 +385,8 @@ func isSafeType(typ string) bool {
 	}
 	return false
 }
+
+var enumValDefRe = regexp.MustCompile(`\s*(?P<tag>[_A-Z0-9]+)[^=]*=[^0-9]*(?P<val>[0-9]+).*;`)
 
 var fieldDefRe = regexp.MustCompile(`\s*(?P<typ>[a-z._A-Z0-9]+)` +
 	`\s+(?P<name>[a-z_]+)` +
@@ -402,6 +489,12 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      b = append(b, "\"{{.FieldName}}\":"...)
      b = strconv.AppendUint(b, uint64(m.{{.FieldName}}), 10)
    }
+   {{- else if .IsEnum }}
+   if m.{{.FieldName}} != 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = strconv.AppendInt(b, int64(m.{{.FieldName}}), 10)
+   }
    {{- else}}
    {{ error  .FieldType }}
    {{- end}}
@@ -462,7 +555,7 @@ Events in this category are logged to channel {{.LogChannel}}.
 | Field | Description | Sensitive |
 |--|--|--|
 {{range .Fields -}}
-| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }} | {{ if .ReportingSafe }}no{{else}}yes{{end}} |
+| ` + "`" + `{{- .FieldName -}}` + "`" + ` | {{ .Comment | tableCell }}{{- if .IsEnum }} See below for possible values for type ` + "`" + `{{- .FieldType -}}` + "`" + `.{{- end }} | {{ if .ReportingSafe }}no{{else}}yes{{end}} |
 {{end}}
 {{- end}}
 
@@ -477,6 +570,21 @@ Events in this category are logged to channel {{.LogChannel}}.
 {{- end}}
 
 {{- end}}
+{{end}}
+
+{{if .Enums}}
+## Enumeration types
+{{range .Enums}}
+### ` + "`" + `{{ .GoType }}` + "`" + `
+
+{{ .Comment }}
+
+| Value | Textual alias in code or documentation | Description |
+|--|--|
+{{range .Values -}}
+| {{ .Value }} | {{ .Name }} | {{ .Comment | tableCell }} |
+{{end}}
+{{end}}
 {{end}}
 `,
 }

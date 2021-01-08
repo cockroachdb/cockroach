@@ -13,6 +13,7 @@ package pgwire_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -311,18 +312,32 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								// t.Logf("found log entry: %+v", *entry)
 
-								// The tag part is going to contain a client address, with a random port number.
-								// To make the test deterministic, erase the random part.
-								tags := addrRe.ReplaceAllString(entry.Tags, ",client=XXX")
-								tags = peerRe.ReplaceAllString(tags, ",peer=XXX")
-								var maybeTags string
-								if len(tags) > 0 {
-									maybeTags = "[" + tags + "] "
+								parts := strings.SplitN(entry.Message, " ", 4)
+								if len(parts) < 4 || parts[1] != "Structured" || parts[2] != "entry:" {
+									// TODO(knz): Enhance this when the log file
+									// contains proper markers for structured entries.
+									t.Errorf("malformed structured message: %q", entry.Message)
 								}
-								// Ditto with the duration.
-								msg := durationRe.ReplaceAllString(entry.Message, "duration: XXX")
 
-								fmt.Fprintf(&buf, "%c: %s%s\n", entry.Severity.String()[0], maybeTags, msg)
+								jsonPayload := []byte(parts[3])
+								if entry.Redactable {
+									jsonPayload = redact.RedactableBytes(jsonPayload).StripMarkers()
+								}
+								var info map[string]interface{}
+								if err := json.Unmarshal(jsonPayload, &info); err != nil {
+									t.Fatalf("unable to decode json: %q: %v", jsonPayload, err)
+								}
+								// Erase non-deterministic fields.
+								info["Timestamp"] = "XXX"
+								info["RemoteAddress"] = "XXX"
+								if _, ok := info["Duration"]; ok {
+									info["Duration"] = "NNN"
+								}
+								msg, err := json.Marshal(info)
+								if err != nil {
+									t.Fatal(err)
+								}
+								fmt.Fprintf(&buf, "%s %s\n", parts[0], msg)
 							}
 							lastLogMsg := entries[0].Message
 							if !re.MatchString(lastLogMsg) {
@@ -439,10 +454,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 	})
 }
 
-var authLogFileRe = regexp.MustCompile(`pgwire/(auth|conn|server)\.go`)
-var addrRe = regexp.MustCompile(`,client(=[^\],]*)?`)
-var peerRe = regexp.MustCompile(`,peer(=[^\],]*)?`)
-var durationRe = regexp.MustCompile(`duration: \d.*s`)
+var authLogFileRe = regexp.MustCompile(`"EventType":"client_`)
 
 // fmtErr formats an error into an expected output.
 func fmtErr(err error) string {
@@ -627,4 +639,4 @@ func TestClientAddrOverride(t *testing.T) {
 	}
 }
 
-var sessionTerminatedRe = regexp.MustCompile("session terminated")
+var sessionTerminatedRe = regexp.MustCompile("client_session_end")
