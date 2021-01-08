@@ -35,6 +35,7 @@ func registerKV(r *testRegistry) {
 		nodes       int
 		cpus        int
 		readPercent int
+		spanReads   bool
 		batchSize   int
 		blockSize   int
 		splits      int // 0 implies default, negative implies 0
@@ -72,7 +73,13 @@ func registerKV(r *testRegistry) {
 				opts.duration = 10 * time.Minute
 			}
 			duration := " --duration=" + ifLocal("10s", opts.duration.String())
-			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+			var readPercent string
+			if opts.spanReads {
+				readPercent =
+					fmt.Sprintf(" --span-percent=%d --span-limit=1 --sfu-writes=true", opts.readPercent)
+			} else {
+				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+			}
 			histograms := " --histograms=" + perfArtifactsDir + "/stats.json"
 			var batchSize string
 			if opts.batchSize > 0 {
@@ -143,6 +150,10 @@ func registerKV(r *testRegistry) {
 		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
+		// Configs with reads, that are of limited spans, along with SFU writes.
+		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true},
+		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true},
+
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
 		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
@@ -150,7 +161,11 @@ func registerKV(r *testRegistry) {
 		opts := opts
 
 		var nameParts []string
-		nameParts = append(nameParts, fmt.Sprintf("kv%d", opts.readPercent))
+		var limitedSpanStr string
+		if opts.spanReads {
+			limitedSpanStr = "limited-spans"
+		}
+		nameParts = append(nameParts, fmt.Sprintf("kv%d%s", opts.readPercent, limitedSpanStr))
 		if len(opts.tags) > 0 {
 			nameParts = append(nameParts, strings.Join(opts.tags, "/"))
 		}
