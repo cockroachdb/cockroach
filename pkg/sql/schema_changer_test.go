@@ -143,7 +143,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// Check that RunStateMachineBeforeBackfill functions properly.
 	expectedVersion = tableDesc.Version
 	// Make a copy of the index for use in a mutation.
-	index := tableDesc.PublicNonPrimaryIndexes()[0].IndexDescDeepCopy()
+	index := protoutil.Clone(&tableDesc.GetPublicNonPrimaryIndexes()[0]).(*descpb.IndexDescriptor)
 	index.Name = "bar"
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
@@ -152,7 +152,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
 	tableDesc.Mutations = append(tableDesc.Mutations, descpb.DescriptorMutation{
-		Descriptor_: &descpb.DescriptorMutation_Index{Index: &index},
+		Descriptor_: &descpb.DescriptorMutation_Index{Index: index},
 		Direction:   descpb.DescriptorMutation_ADD,
 		State:       descpb.DescriptorMutation_DELETE_ONLY,
 		MutationID:  tableDesc.NextMutationID,
@@ -251,7 +251,7 @@ CREATE INDEX foo ON t.test (v)
 	for r := retry.Start(retryOpts); r.Next(); {
 		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.PublicNonPrimaryIndexes()) == 1 {
+		if len(tableDesc.GetPublicNonPrimaryIndexes()) == 1 {
 			break
 		}
 	}
@@ -278,7 +278,7 @@ CREATE INDEX foo ON t.test (v)
 		// Ensure that the version gets incremented.
 		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
-		name := tableDesc.PublicNonPrimaryIndexes()[0].GetName()
+		name := tableDesc.GetPublicNonPrimaryIndexes()[0].Name
 		if name != "ufo" {
 			t.Fatalf("bad index name %s", name)
 		}
@@ -298,7 +298,7 @@ CREATE INDEX foo ON t.test (v)
 	for r := retry.Start(retryOpts); r.Next(); {
 		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.PublicNonPrimaryIndexes()) == count+1 {
+		if len(tableDesc.GetPublicNonPrimaryIndexes()) == count+1 {
 			break
 		}
 	}
@@ -2218,8 +2218,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 
 	// The index is not regenerated.
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 {
-		t.Fatalf("indexes %+v", tableDesc.PublicNonPrimaryIndexes())
+	if len(tableDesc.GetPublicNonPrimaryIndexes()) > 0 {
+		t.Fatalf("indexes %+v", tableDesc.GetPublicNonPrimaryIndexes())
 	}
 
 	// Unfortunately this is the same failure present when an index drop
@@ -3078,7 +3078,7 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 		if len(tableDesc.Mutations) != 0 {
 			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.Mutations))
 		}
-		if tableDesc.GetPrimaryIndex().NumColumns() != 1 || tableDesc.GetPrimaryIndex().GetColumnName(0) != "rowid" {
+		if len(tableDesc.GetPrimaryIndex().ColumnNames) != 1 || tableDesc.GetPrimaryIndex().ColumnNames[0] != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
 		}
 		return nil
@@ -3663,17 +3663,16 @@ CREATE TABLE d.t (
 		kvDB, keys.SystemSQLCodec, "d", "t")
 	// Verify that this descriptor uses the new STORING encoding. Overwrite it
 	// with one that uses the old encoding.
-	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.NumExtraColumns() != 1 {
+	for i, index := range tableDesc.GetPublicNonPrimaryIndexes() {
+		if len(index.ExtraColumnIDs) != 1 {
 			t.Fatalf("ExtraColumnIDs not set properly: %s", tableDesc)
 		}
-		if index.NumStoredColumns() != 1 {
+		if len(index.StoreColumnIDs) != 1 {
 			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
 		}
-		newIndexDesc := *index.IndexDesc()
-		newIndexDesc.ExtraColumnIDs = append(newIndexDesc.ExtraColumnIDs, newIndexDesc.StoreColumnIDs...)
-		newIndexDesc.StoreColumnIDs = nil
-		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)
+		index.ExtraColumnIDs = append(index.ExtraColumnIDs, index.StoreColumnIDs...)
+		index.StoreColumnIDs = nil
+		tableDesc.SetPublicNonPrimaryIndex(i+1, index)
 	}
 	if err := kvDB.Put(
 		context.Background(),
@@ -5109,8 +5108,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.Mutations) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.Mutations))
+	if len(tableDesc.GetPublicNonPrimaryIndexes()) > 0 || len(tableDesc.Mutations) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.GetPublicNonPrimaryIndexes()), len(tableDesc.Mutations))
 	}
 }
 
@@ -5182,8 +5181,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.Mutations) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.Mutations))
+	if len(tableDesc.GetPublicNonPrimaryIndexes()) > 0 || len(tableDesc.Mutations) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.GetPublicNonPrimaryIndexes()), len(tableDesc.Mutations))
 	}
 }
 
@@ -5889,7 +5888,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// Wait until indexes are created.
 	for r := retry.Start(retryOpts); r.Next(); {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.PublicNonPrimaryIndexes()) == 1 {
+		if len(tableDesc.GetPublicNonPrimaryIndexes()) == 1 {
 			break
 		}
 	}
@@ -6294,13 +6293,13 @@ CREATE INDEX i ON t.test (a) WHERE b > 2
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	index, err := tableDesc.FindIndexWithName("i")
+	indexDesc, _, err := tableDesc.FindIndexByName("i")
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
 	// Collect all the keys in the partial index.
-	span := tableDesc.IndexSpan(keys.SystemSQLCodec, index.GetID())
+	span := tableDesc.IndexSpan(keys.SystemSQLCodec, indexDesc.ID)
 	keys, err := kvDB.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)

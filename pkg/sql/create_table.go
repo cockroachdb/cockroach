@@ -350,9 +350,9 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	for _, index := range desc.NonDropIndexes() {
-		if index.NumInterleaveAncestors() > 0 {
-			if err := params.p.finalizeInterleave(params.ctx, desc, index.IndexDesc()); err != nil {
+	for _, index := range desc.AllNonDropIndexes() {
+		if len(index.Interleave.Ancestors) > 0 {
+			if err := params.p.finalizeInterleave(params.ctx, desc, index); err != nil {
 				return err
 			}
 		}
@@ -785,9 +785,9 @@ func ResolveFK(
 	referencedColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(referencedColNames) == 0 {
-		referencedColNames = make(tree.NameList, target.GetPrimaryIndex().NumColumns())
-		for i := range referencedColNames {
-			referencedColNames[i] = tree.Name(target.GetPrimaryIndex().GetColumnName(i))
+		referencedColNames = make(tree.NameList, len(target.GetPrimaryIndex().ColumnNames))
+		for i, n := range target.GetPrimaryIndex().ColumnNames {
+			referencedColNames[i] = tree.Name(n)
 		}
 	}
 
@@ -977,8 +977,8 @@ func addIndexForFK(
 		if err := tbl.AllocateIDs(ctx); err != nil {
 			return 0, err
 		}
-		added := tbl.PublicNonPrimaryIndexes()[len(tbl.PublicNonPrimaryIndexes())-1]
-		return added.GetID(), nil
+		added := tbl.GetPublicNonPrimaryIndexes()[len(tbl.GetPublicNonPrimaryIndexes())-1]
+		return added.ID, nil
 	}
 
 	// TODO (lucy): In the EmptyTable case, we add an index mutation, making this
@@ -1035,12 +1035,12 @@ func addInterleave(
 		typeOfIndex = "index"
 	}
 
-	if len(interleave.Fields) != parentIndex.NumColumns() {
+	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
 		return pgerror.Newf(
 			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
 			&interleave.Fields,
-			strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
+			strings.Join(parentIndex.ColumnNames, ", "),
 		)
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
@@ -1053,8 +1053,7 @@ func addInterleave(
 		)
 	}
 
-	for i := 0; i < parentIndex.NumColumns(); i++ {
-		targetColID := parentIndex.GetColumnID(i)
+	for i, targetColID := range parentIndex.ColumnIDs {
 		targetCol, err := parentTable.FindColumnByID(targetColID)
 		if err != nil {
 			return err
@@ -1072,25 +1071,22 @@ func addInterleave(
 				strings.Join(index.ColumnNames, ", "),
 			)
 		}
-		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.GetColumnDirection(i) {
+		if !col.Type.Identical(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
 				&interleave.Fields,
-				strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
+				strings.Join(parentIndex.ColumnNames, ", "),
 			)
 		}
 	}
 
-	ancestorPrefix := make([]descpb.InterleaveDescriptor_Ancestor, parentIndex.NumInterleaveAncestors())
-	for i := range ancestorPrefix {
-		ancestorPrefix[i] = parentIndex.GetInterleaveAncestor(i)
-	}
-
+	ancestorPrefix := append(
+		[]descpb.InterleaveDescriptor_Ancestor(nil), parentIndex.Interleave.Ancestors...)
 	intl := descpb.InterleaveDescriptor_Ancestor{
 		TableID:         parentTable.ID,
-		IndexID:         parentIndex.GetID(),
-		SharedPrefixLen: uint32(parentIndex.NumColumns()),
+		IndexID:         parentIndex.ID,
+		SharedPrefixLen: uint32(len(parentIndex.ColumnIDs)),
 	}
 	for _, ancestor := range ancestorPrefix {
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
@@ -1122,11 +1118,11 @@ func (p *planner) finalizeInterleave(
 			return err
 		}
 	}
-	ancestorIndex, err := ancestorTable.FindIndexWithID(ancestor.IndexID)
+	ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
 	if err != nil {
 		return err
 	}
-	ancestorIndex.IndexDesc().InterleavedBy = append(ancestorIndex.IndexDesc().InterleavedBy,
+	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
 		descpb.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
 	if err := p.writeSchemaChange(
@@ -1652,7 +1648,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if desc.GetPrimaryIndex().NumColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if len(desc.GetPrimaryIndex().ColumnNames) == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -1686,14 +1682,14 @@ func NewTableDesc(
 
 	// Assign any implicitly added shard columns to the column family of the first column
 	// in their corresponding set of index columns.
-	for _, index := range desc.NonDropIndexes() {
-		if index.IsSharded() && !columnsInExplicitFamilies[index.GetShardColumnName()] {
+	for _, index := range desc.AllNonDropIndexes() {
+		if index.IsSharded() && !columnsInExplicitFamilies[index.Sharded.Name] {
 			// Ensure that the shard column wasn't explicitly assigned a column family
 			// during table creation (this will happen when a create statement is
 			// "roundtripped", for example).
-			family := tabledesc.GetColumnFamilyForShard(&desc, index.GetSharded().ColumnNames)
+			family := tabledesc.GetColumnFamilyForShard(&desc, index.Sharded.ColumnNames)
 			if family != "" {
-				if err := desc.AddColumnToFamilyMaybeCreate(index.GetShardColumnName(), family, false, false); err != nil {
+				if err := desc.AddColumnToFamilyMaybeCreate(index.Sharded.Name, family, false, false); err != nil {
 					return nil, err
 				}
 			}
@@ -1704,27 +1700,28 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	for _, idx := range desc.PublicNonPrimaryIndexes() {
+	for i := range desc.GetPublicNonPrimaryIndexes() {
+		idx := &desc.GetPublicNonPrimaryIndexes()[i]
 		// Increment the counter if this index could be storing data across multiple column families.
-		if idx.NumStoredColumns() > 1 && len(desc.Families) > 1 {
+		if len(idx.StoreColumnNames) > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 		}
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex().IndexDesc(), n.Interleave); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, desc.GetPrimaryIndex(), n.Interleave); err != nil {
 			return nil, err
 		}
 	}
 
 	if n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(
-			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex().IndexDesc(), n.PartitionBy)
+			ctx, st, evalCtx, &desc, desc.GetPrimaryIndex(), n.PartitionBy)
 		if err != nil {
 			return nil, err
 		}
 		{
-			newPrimaryIndex := *desc.GetPrimaryIndex().IndexDesc()
+			newPrimaryIndex := *desc.GetPrimaryIndex()
 			newPrimaryIndex.Partitioning = partitioning
 			desc.SetPrimaryIndex(newPrimaryIndex)
 		}
@@ -1886,17 +1883,16 @@ func NewTableDesc(
 	}
 
 	// Record the types of indexes that the table has.
-	if err := catalog.ForEachNonDropIndex(&desc, func(idx catalog.Index) error {
+	if err := desc.ForeachNonDropIndex(func(idx *descpb.IndexDescriptor) error {
 		if idx.IsSharded() {
 			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 		}
-		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
+		if idx.Type == descpb.IndexDescriptor_INVERTED {
 			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
-			geoConfig := idx.GetGeoConfig()
-			if !geoindex.IsEmptyConfig(&geoConfig) {
-				if geoindex.IsGeographyConfig(&geoConfig) {
+			if !geoindex.IsEmptyConfig(&idx.GeoConfig) {
+				if geoindex.IsGeographyConfig(&idx.GeoConfig) {
 					telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
-				} else if geoindex.IsGeometryConfig(&geoConfig) {
+				} else if geoindex.IsGeometryConfig(&idx.GeoConfig) {
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
@@ -2138,50 +2134,47 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 		}
 		if opts.Has(tree.LikeTableOptIndexes) {
-			for _, idx := range td.NonDropIndexes() {
+			for _, idx := range td.AllNonDropIndexes() {
 				indexDef := tree.IndexTableDef{
-					Name:     tree.Name(idx.GetName()),
-					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
-					Storing:  make(tree.NameList, 0, idx.NumStoredColumns()),
-					Columns:  make(tree.IndexElemList, 0, idx.NumColumns()),
+					Name:     tree.Name(idx.Name),
+					Inverted: idx.Type == descpb.IndexDescriptor_INVERTED,
+					Storing:  make(tree.NameList, 0, len(idx.StoreColumnNames)),
+					Columns:  make(tree.IndexElemList, 0, len(idx.ColumnNames)),
 				}
-				numColumns := idx.NumColumns()
+				columnNames := idx.ColumnNames
 				if idx.IsSharded() {
 					indexDef.Sharded = &tree.ShardedIndexDef{
-						ShardBuckets: tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets)),
+						ShardBuckets: tree.NewDInt(tree.DInt(idx.Sharded.ShardBuckets)),
 					}
-					numColumns = len(idx.GetSharded().ColumnNames)
+					columnNames = idx.Sharded.ColumnNames
 				}
-				for j := 0; j < numColumns; j++ {
-					name := idx.GetColumnName(j)
-					if idx.IsSharded() {
-						name = idx.GetSharded().ColumnNames[j]
-					}
+				for i, name := range columnNames {
 					elem := tree.IndexElem{
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					if idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC {
+					if idx.ColumnDirections[i] == descpb.IndexDescriptor_DESC {
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				for j := 0; j < idx.NumStoredColumns(); j++ {
-					indexDef.Storing = append(indexDef.Storing, tree.Name(idx.GetStoredColumnName(j)))
+				for _, name := range idx.StoreColumnNames {
+					indexDef.Storing = append(indexDef.Storing, tree.Name(name))
 				}
 				var def tree.TableDef = &indexDef
-				if idx.IsUnique() {
-					if idx.Primary() && td.IsPrimaryIndexDefaultRowID() {
+				if idx.Unique {
+					isPK := idx.ID == td.GetPrimaryIndexID()
+					if isPK && td.IsPrimaryIndexDefaultRowID() {
 						continue
 					}
 
 					def = &tree.UniqueConstraintTableDef{
 						IndexTableDef: indexDef,
-						PrimaryKey:    idx.Primary(),
+						PrimaryKey:    isPK,
 					}
 				}
 				if idx.IsPartial() {
-					indexDef.Predicate, err = parser.ParseExpr(idx.GetPredicate())
+					indexDef.Predicate, err = parser.ParseExpr(idx.Predicate)
 					if err != nil {
 						return nil, err
 					}

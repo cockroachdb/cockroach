@@ -50,23 +50,16 @@ func MakeInserter(
 	insertCols []descpb.ColumnDescriptor,
 	alloc *rowenc.DatumAlloc,
 ) (Inserter, error) {
-	writableIndexes := tableDesc.WritableNonPrimaryIndexes()
-	writableIndexDescs := make([]descpb.IndexDescriptor, len(writableIndexes))
-	for i, index := range writableIndexes {
-		writableIndexDescs[i] = *index.IndexDesc()
-	}
-
 	ri := Inserter{
-		Helper:                newRowHelper(codec, tableDesc, writableIndexDescs),
+		Helper:                newRowHelper(codec, tableDesc, tableDesc.WritableIndexes()),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
-		if _, ok := ri.InsertColIDtoRowIndex.Get(colID); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetColumnName(i))
+	for i, col := range tableDesc.GetPrimaryIndex().ColumnIDs {
+		if _, ok := ri.InsertColIDtoRowIndex.Get(col); !ok {
+			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().ColumnNames[i])
 		}
 	}
 
