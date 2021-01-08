@@ -18,12 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/logtags"
 )
-
-// TODO(adityamaru): Figure out what the processors will return.
-var streamIngestionResultTypes = []*types.T{}
 
 func distStreamIngestionPlanSpecs(
 	topology streamclient.Topology, nodes []roachpb.NodeID,
