@@ -237,7 +237,7 @@ func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) co
 //
 // All gRPC client spans will inject the tracing SpanMeta into the gRPC
 // metadata; they will also look in the context.Context for an active
-// in-process parent Span and establish a ChildOf reference if such a parent
+// in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
 func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterceptor {
 	if init == nil {
@@ -285,7 +285,7 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 //
 // All gRPC client spans will inject the tracing SpanMeta into the gRPC
 // metadata; they will also look in the context.Context for an active
-// in-process parent Span and establish a ChildOf reference if such a parent
+// in-process parent Span and establish a ChildOf relationship if such a parent
 // Span could be found.
 func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClientInterceptor {
 	if init == nil {

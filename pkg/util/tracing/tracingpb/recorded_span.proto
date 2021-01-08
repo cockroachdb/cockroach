@@ -41,7 +41,7 @@ message RecordedSpan {
   uint64 trace_id = 1 [(gogoproto.customname) = "TraceID"];
   // ID of the span.
   uint64 span_id = 2 [(gogoproto.customname) = "SpanID"];
-  // Span ID of the parent span.
+  // ID of the parent span.
   uint64 parent_span_id = 3 [(gogoproto.customname) = "ParentSpanID"];
   // Operation name.
   string operation = 4;
@@ -53,11 +53,11 @@ message RecordedSpan {
   // Time when the span was started.
   google.protobuf.Timestamp start_time = 7 [(gogoproto.nullable) = false,
                                             (gogoproto.stdtime) = true];
-  // Duration is the span's duration, measured from start to Finish().
+  // The span's duration, measured from start to Finish().
   //
-  // A spans whose recording is collected before it's finished will have the
-  // duration set as the time of collection - start_time. Such a span will have
-  // an "unfinished" tag.
+  // A span whose recording is collected before it's finished will have the
+  // duration set as the "time of collection - start time". Such a span will
+  // have an "unfinished" tag.
   google.protobuf.Duration duration = 8 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
 
@@ -66,8 +66,8 @@ message RecordedSpan {
 
   // Stats collected in this span.
   //
-  // Deprecated - remove in 21.2 cycle. Stats will use the structured field
-  // below; 21.1 nodes already know to look there.
+  // TODO(tbg): remove in 21.2 cycle. Stats will use the structured field below;
+  // 21.1 nodes already know to look there.
   google.protobuf.Any deprecated_stats = 10;
 
   // InternalStructured are payloads attached to this Span.

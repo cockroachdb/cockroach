@@ -39,7 +39,7 @@ func (m *LogRecord) Reset()         { *m = LogRecord{} }
 func (m *LogRecord) String() string { return proto.CompactTextString(m) }
 func (*LogRecord) ProtoMessage()    {}
 func (*LogRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_321dd1621e5fb764, []int{0}
+	return fileDescriptor_recorded_span_00644d603767e262, []int{0}
 }
 func (m *LogRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -73,7 +73,7 @@ func (m *LogRecord_Field) Reset()         { *m = LogRecord_Field{} }
 func (m *LogRecord_Field) String() string { return proto.CompactTextString(m) }
 func (*LogRecord_Field) ProtoMessage()    {}
 func (*LogRecord_Field) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_321dd1621e5fb764, []int{0, 0}
+	return fileDescriptor_recorded_span_00644d603767e262, []int{0, 0}
 }
 func (m *LogRecord_Field) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -107,7 +107,7 @@ type RecordedSpan struct {
 	TraceID uint64 `protobuf:"varint,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	// ID of the span.
 	SpanID uint64 `protobuf:"varint,2,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
-	// Span ID of the parent span.
+	// ID of the parent span.
 	ParentSpanID uint64 `protobuf:"varint,3,opt,name=parent_span_id,json=parentSpanId,proto3" json:"parent_span_id,omitempty"`
 	// Operation name.
 	Operation string `protobuf:"bytes,4,opt,name=operation,proto3" json:"operation,omitempty"`
@@ -118,18 +118,18 @@ type RecordedSpan struct {
 	Tags map[string]string `protobuf:"bytes,6,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// Time when the span was started.
 	StartTime time.Time `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3,stdtime" json:"start_time"`
-	// Duration is the span's duration, measured from start to Finish().
+	// The span's duration, measured from start to Finish().
 	//
-	// A spans whose recording is collected before it's finished will have the
-	// duration set as the time of collection - start_time. Such a span will have
-	// an "unfinished" tag.
+	// A span whose recording is collected before it's finished will have the
+	// duration set as the "time of collection - start time". Such a span will
+	// have an "unfinished" tag.
 	Duration time.Duration `protobuf:"bytes,8,opt,name=duration,proto3,stdduration" json:"duration"`
 	// Events logged in the span.
 	Logs []LogRecord `protobuf:"bytes,9,rep,name=logs,proto3" json:"logs"`
 	// Stats collected in this span.
 	//
-	// Deprecated - remove in 21.2 cycle. Stats will use the structured field
-	// below; 21.1 nodes already know to look there.
+	// TODO(tbg): remove in 21.2 cycle. Stats will use the structured field below;
+	// 21.1 nodes already know to look there.
 	DeprecatedStats *types.Any `protobuf:"bytes,10,opt,name=deprecated_stats,json=deprecatedStats,proto3" json:"deprecated_stats,omitempty"`
 	// InternalStructured are payloads attached to this Span.
 	//
@@ -142,7 +142,7 @@ type RecordedSpan struct {
 func (m *RecordedSpan) Reset()      { *m = RecordedSpan{} }
 func (*RecordedSpan) ProtoMessage() {}
 func (*RecordedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_321dd1621e5fb764, []int{1}
+	return fileDescriptor_recorded_span_00644d603767e262, []int{1}
 }
 func (m *RecordedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -185,7 +185,7 @@ func (m *NormalizedSpan) Reset()         { *m = NormalizedSpan{} }
 func (m *NormalizedSpan) String() string { return proto.CompactTextString(m) }
 func (*NormalizedSpan) ProtoMessage()    {}
 func (*NormalizedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_321dd1621e5fb764, []int{2}
+	return fileDescriptor_recorded_span_00644d603767e262, []int{2}
 }
 func (m *NormalizedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1828,10 +1828,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_321dd1621e5fb764)
+	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_00644d603767e262)
 }
 
-var fileDescriptor_recorded_span_321dd1621e5fb764 = []byte{
+var fileDescriptor_recorded_span_00644d603767e262 = []byte{
 	// 668 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x93, 0xcd, 0x6e, 0xd3, 0x4e,
 	0x14, 0xc5, 0xe3, 0xc4, 0xf9, 0xba, 0x89, 0xfa, 0xaf, 0xe6, 0xdf, 0x85, 0x1b, 0x21, 0xbb, 0x2a,

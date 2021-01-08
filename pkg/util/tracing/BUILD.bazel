@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "context.go",
         "crdbspan.go",
+        "doc.go",
         "grpc_interceptor.go",
         "otspan.go",
         "recording.go",

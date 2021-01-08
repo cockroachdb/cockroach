@@ -421,7 +421,7 @@ func (t *Tracer) startSpanGeneric(
 	if opts.Parent != nil {
 		if !opts.Parent.isNoop() {
 			opts.Parent.crdb.mu.Lock()
-			m := opts.Parent.crdb.mu.Baggage
+			m := opts.Parent.crdb.mu.baggage
 			for k, v := range m {
 				s.SetBaggageItem(k, v)
 			}
@@ -496,15 +496,6 @@ func (t *Tracer) Inject(sc *SpanMeta, format interface{}, carrier interface{}) e
 	}
 
 	return nil
-}
-
-type textMapReaderFn func(handler func(key, val string) error) error
-
-var _ opentracing.TextMapReader = textMapReaderFn(nil)
-
-// ForeachKey is part of the opentracing.TextMapReader interface.
-func (fn textMapReaderFn) ForeachKey(handler func(key, val string) error) error {
-	return fn(handler)
 }
 
 var noopSpanContext = &SpanMeta{}
