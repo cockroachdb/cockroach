@@ -268,6 +268,40 @@ func createSymlink(fname, symlink string) {
 	}
 }
 
+// listLogGroups returns slices of logpb.FileInfo structs.
+// There is one logpb.FileInfo slice per file sink.
+func listLogGroups() (logGroups [][]FileInfo, err error) {
+	mainDir, isSet := mainLog.logDir.get()
+	if !isSet {
+		// Shortcut.
+		return nil, nil
+	}
+	logFiles, err := mainLog.listLogFiles()
+	if err != nil {
+		return nil, err
+	}
+	logGroups = append(logGroups, logFiles)
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, logger := range secondaryLogRegistry.mu.loggers {
+		// For now, only gather logs from the main log directory.
+		// This is because the other APIs don't yet understand
+		// secondary log directories, and we don't want
+		// to list a file that cannot be retrieved.
+		thisLogDir, isSet := logger.logger.logDir.get()
+		if !isSet || thisLogDir != mainDir {
+			continue
+		}
+
+		thisLoggerFiles, err := logger.logger.listLogFiles()
+		if err != nil {
+			return nil, err
+		}
+		logGroups = append(logGroups, thisLoggerFiles)
+	}
+	return logGroups, nil
+}
+
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
@@ -426,10 +460,10 @@ func (a sortableFileInfoSlice) Less(i, j int) bool {
 	return a[i].Details.Time < a[j].Details.Time
 }
 
-// selectFiles selects all log files that have an timestamp before the
+// selectFilesInGroup selects all log files that have an timestamp before the
 // endTime. It then sorts them in decreasing order, with the most
 // recent as the first one.
-func selectFiles(logFiles []FileInfo, endTimestamp int64) []FileInfo {
+func selectFilesInGroup(logFiles []FileInfo, endTimestamp int64) []FileInfo {
 	files := sortableFileInfoSlice{}
 	for _, logFile := range logFiles {
 		if logFile.Details.Time <= endTimestamp {
@@ -454,37 +488,60 @@ func FetchEntriesFromFiles(
 	pattern *regexp.Regexp,
 	editMode EditSensitiveData,
 ) ([]Entry, error) {
-	logFiles, err := ListLogFiles()
+	logGroups, err := listLogGroups()
 	if err != nil {
 		return nil, err
 	}
 
-	selectedFiles := selectFiles(logFiles, endTimestamp)
-
 	entries := []Entry{}
-	for _, file := range selectedFiles {
-		newEntries, entryBeforeStart, err := readAllEntriesFromFile(
-			file,
-			startTimestamp,
-			endTimestamp,
-			maxEntries-len(entries),
-			pattern,
-			editMode)
-		if err != nil {
-			return nil, err
+	numGroupsWithEntries := 0
+	for _, logFiles := range logGroups {
+		selectedFiles := selectFilesInGroup(logFiles, endTimestamp)
+
+		groupHasEntries := false
+		for _, file := range selectedFiles {
+			newEntries, entryBeforeStart, err := readAllEntriesFromFile(
+				file,
+				startTimestamp,
+				endTimestamp,
+				maxEntries-len(entries),
+				pattern,
+				editMode)
+			if err != nil {
+				return nil, err
+			}
+			groupHasEntries = true
+			entries = append(entries, newEntries...)
+			if len(entries) >= maxEntries {
+				break
+			}
+			if entryBeforeStart {
+				// Stop processing files inside the group that won't have any
+				// timestamps after startTime.
+				break
+			}
 		}
-		entries = append(entries, newEntries...)
-		if len(entries) >= maxEntries {
-			break
-		}
-		if entryBeforeStart {
-			// Stop processing files that won't have any timestamps after
-			// startTime.
-			break
+		if groupHasEntries {
+			numGroupsWithEntries++
 		}
 	}
+
+	// Within each group, entries are sorted. However if there were
+	// multiple groups, the final result is not sorted any more. Do it
+	// now.
+	if numGroupsWithEntries > 1 {
+		e := sortableEntries(entries)
+		sort.Stable(e)
+	}
+
 	return entries, nil
 }
+
+type sortableEntries []Entry
+
+func (a sortableEntries) Len() int           { return len(a) }
+func (a sortableEntries) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a sortableEntries) Less(i, j int) bool { return a[i].Time > a[j].Time }
 
 // readAllEntriesFromFile reads in all log entries from a given file that are
 // between the 'startTimestamp' and 'endTimestamp' and match the 'pattern' if it

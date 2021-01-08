@@ -75,7 +75,7 @@ func (l *loggerT) gcOldFiles() {
 	}
 
 	logFilesCombinedMaxSize := atomic.LoadInt64(&LogFilesCombinedMaxSize)
-	files := selectFiles(allFiles, math.MaxInt64)
+	files := selectFilesInGroup(allFiles, math.MaxInt64)
 	if len(files) == 0 {
 		return
 	}
