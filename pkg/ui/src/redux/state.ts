@@ -24,6 +24,7 @@ import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
 import { loginReducer, LoginAPIState } from "./login";
 import rootSaga from "./sagas";
+import { rootReducer, AppState, sagas as adminUiSagas } from "@cockroachlabs/admin-ui-components";
 
 export interface AdminUIState {
   cachedData: APIReducersState;
@@ -35,6 +36,7 @@ export interface AdminUIState {
   timewindow: TimeWindowState;
   uiData: UIDataState;
   login: LoginAPIState;
+  adminUI: AppState["adminUI"];
 }
 
 const history = createHashHistory();
@@ -57,6 +59,7 @@ export function createAdminUIStore(historyInst: History<any>) {
       timewindow: timeWindowReducer,
       uiData: uiDataReducer,
       login: loginReducer,
+      adminUI: rootReducer,
     }),
     compose(
       applyMiddleware(thunk, sagaMiddleware, routerMiddleware(historyInst)),
@@ -78,6 +81,7 @@ export function createAdminUIStore(historyInst: History<any>) {
   );
 
   sagaMiddleware.run(rootSaga);
+  sagaMiddleware.run(adminUiSagas);
   return s;
 }
 

@@ -64,6 +64,7 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionsPage from "src/views/transactions/transactionsPage";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import "styl/app.styl";
+import { ConnectedStatementsPage, BasePathContext } from "@cockroachlabs/admin-ui-components";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -137,6 +138,19 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
                   <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
                   <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+
+                  {/* statement statistics with altered base path */}
+                  {/* Routes below replicate the same logic as `/statements` rotes above, but with arbitrary paths */}
+                  <Route path="/some/nested/path">
+                    <Switch>
+                      <BasePathContext.Provider value="/some/nested/path">
+                        <Route exact path="/some/nested/path/statements" component={ ConnectedStatementsPage }/>
+                        <Route exact path={ `/some/nested/path/statements/:${appAttr}`} component={ ConnectedStatementsPage } />
+                        <Route exact path={ `/some/nested/path/statements/:${appAttr}/:${statementAttr}` } component={ ConnectedStatementsPage } />
+                        <Route exact path={ `/some/nested/path/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ ConnectedStatementsPage } />
+                      </BasePathContext.Provider>
+                    </Switch>
+                  </Route>
 
                   <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
                   <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
