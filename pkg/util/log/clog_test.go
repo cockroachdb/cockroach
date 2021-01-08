@@ -170,6 +170,7 @@ func TestEntryDecoder(t *testing.T) {
 	t7 := t6.Add(time.Microsecond)
 	t8 := t7.Add(time.Microsecond)
 	t9 := t8.Add(time.Microsecond)
+	t10 := t9.Add(time.Microsecond)
 
 	// Verify the truncation logic for reading logs that are longer than the
 	// default scanner can handle.
@@ -192,6 +193,8 @@ func TestEntryDecoder(t *testing.T) {
 	contents += formatEntry(severity.INFO, channel.DEV, t8, 9, "clog_test.go", 145, ``, "bar" /* no tags */)
 	// Different channel.
 	contents += formatEntry(severity.INFO, channel.SESSIONS, t9, 10, "clog_test.go", 146, ``, "info")
+	// Ensure that IPv6 addresses in tags get parsed properly.
+	contents += formatEntry(severity.INFO, channel.DEV, t10, 11, "clog_test.go", 147, `client=[1::]:2`, "foo")
 
 	readAllEntries := func(contents string) []logpb.Entry {
 		decoder := NewEntryDecoder(strings.NewReader(contents), WithFlattenedSensitiveData)
@@ -313,6 +316,16 @@ trace`,
 			File:      `clog_test.go`,
 			Line:      146,
 			Message:   `info`,
+		},
+		{
+			Severity:  severity.INFO,
+			Channel:   channel.DEV,
+			Time:      t10.UnixNano(),
+			Goroutine: 11,
+			File:      `clog_test.go`,
+			Line:      147,
+			Tags:      `client=[1::]:2`,
+			Message:   `foo`,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {
