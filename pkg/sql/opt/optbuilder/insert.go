@@ -160,8 +160,8 @@ func init() {
 //
 // If the ON CONFLICT clause contains a DO NOTHING clause, then each UNIQUE
 // index on the target table requires its own DISTINCT ON to ensure that the
-// input has no duplicates, and its own LEFT OUTER JOIN to check whether a
-// conflict exists. For example:
+// input has no duplicates, and an ANTI JOIN to check whether a conflict exists.
+// For example:
 //
 //   CREATE TABLE ab (a INT PRIMARY KEY, b INT)
 //   INSERT INTO ab (a, b) VALUES (1, 2), (1, 3) ON CONFLICT DO NOTHING
@@ -170,9 +170,9 @@ func init() {
 //
 //   SELECT x, y
 //   FROM (SELECT DISTINCT ON (x) * FROM (VALUES (1, 2), (1, 3))) AS input(x, y)
-//   LEFT OUTER JOIN ab
-//   ON input.x = ab.a
-//   WHERE ab.a IS NULL
+//   WHERE NOT EXISTS(
+//     SELECT ab.a WHERE input.x = ab.a
+//   )
 //
 // Note that an ordered input to the INSERT does not provide any guarantee about
 // the order in which mutations are applied, or the order of any returned rows
@@ -287,9 +287,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	// Case 2: INSERT..ON CONFLICT DO NOTHING.
 	case ins.OnConflict.DoNothing:
-		// Wrap the input in one LEFT OUTER JOIN per UNIQUE index, and filter out
-		// rows that have conflicts. See the buildInputForDoNothing comment for
-		// more details.
+		// Wrap the input in one ANTI JOIN per UNIQUE index, and filter out rows
+		// that have conflicts. See the buildInputForDoNothing comment for more
+		// details.
 		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
 		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
 
@@ -658,11 +658,9 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	mb.buildReturning(returning)
 }
 
-// buildInputForDoNothing wraps the input expression in LEFT OUTER JOIN
-// expressions, one for each UNIQUE index on the target table. It then adds a
-// filter that discards rows that have a conflict (by checking a not-null table
-// column to see if it was null-extended by the left join). See the comment
-// header for Builder.buildInsert for an example.
+// buildInputForDoNothing wraps the input expression in ANTI JOIN expressions,
+// one for each UNIQUE index on the target table. See the comment header for
+// Builder.buildInsert for an example.
 func (mb *mutationBuilder) buildInputForDoNothing(
 	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
 ) {
@@ -670,7 +668,6 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	arbiterIndexes := mb.arbiterIndexes(conflictOrds, arbiterPredicate)
 	mb.arbiters = arbiterIndexes.Ordered()
 
-	insertColSet := mb.outScope.expr.Relational().OutputCols
 	insertColScope := mb.outScope.replace()
 	insertColScope.appendColumnsFromScope(mb.outScope)
 
@@ -678,8 +675,8 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
-	// Loop over each arbiter index, potentially creating a left join + filter
-	// for each one.
+	// Loop over each arbiter index, potentially creating an anti-join for each
+	// one.
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 		// Skip non-arbiter indexes.
 		if !arbiterIndexes.Contains(idx) {
@@ -693,7 +690,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 			predExpr = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
-		// Build the right side of the left outer join. Use a new metadata instance
+		// Build the right side of the anti-join. Use a new metadata instance
 		// of the mutation table so that a different set of column IDs are used for
 		// the two tables in the self-join.
 		fetchScope := mb.b.buildScan(
@@ -711,8 +708,8 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 
 		// If the index is a unique partial index, then rows that are not in the
 		// partial index cannot conflict with insert rows. Therefore, a Select
-		// wraps the scan on the right side of the left outer join with the
-		// partial index predicate expression as the filter.
+		// wraps the scan on the right side of the anti-join with the partial
+		// index predicate expression as the filter.
 		if isPartial {
 			texpr := fetchScope.resolveAndRequireType(predExpr, types.Bool)
 			predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
@@ -721,12 +718,6 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(predScalar)},
 			)
 		}
-
-		// Remember the column ID of a scan column that is not null. This will be
-		// used to detect whether a conflict was detected for a row. Such a column
-		// must always exist, since the index always contains the primary key
-		// columns, either explicitly or implicitly.
-		notNullColID := fetchScope.cols[findNotNullIndexCol(index)].id
 
 		// Build the join condition by creating a conjunction of equality conditions
 		// that test each conflict column:
@@ -755,26 +746,12 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 			on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 		}
 
-		// Construct the left join + filter.
-		// TODO(andyk): Convert this to use anti-join once we have support for
-		// lookup anti-joins.
-		mb.outScope.expr = mb.b.factory.ConstructProject(
-			mb.b.factory.ConstructSelect(
-				mb.b.factory.ConstructLeftJoin(
-					mb.outScope.expr,
-					fetchScope.expr,
-					on,
-					memo.EmptyJoinPrivate,
-				),
-				memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(
-					mb.b.factory.ConstructIs(
-						mb.b.factory.ConstructVariable(notNullColID),
-						memo.NullSingleton,
-					),
-				)},
-			),
-			memo.EmptyProjectionsExpr,
-			insertColSet,
+		// Construct the anti-join.
+		mb.outScope.expr = mb.b.factory.ConstructAntiJoin(
+			mb.outScope.expr,
+			fetchScope.expr,
+			on,
+			memo.EmptyJoinPrivate,
 		)
 
 		// If the index is a partial index, project a new column that allows the
@@ -1180,9 +1157,9 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 // arbiter indexes are found.
 //
 // Arbiter indexes ensure that the columns designated by conflictOrds reference
-// at most one target row of a UNIQUE index. Using LEFT OUTER JOINs to detect
-// conflicts relies upon this being true (otherwise result cardinality could
-// increase). This is also a Postgres requirement.
+// at most one target row of a UNIQUE index. Using ANTI JOINs and LEFT OUTER
+// JOINs to detect conflicts relies upon this being true (otherwise result
+// cardinality could increase). This is also a Postgres requirement.
 //
 // An arbiter index:
 //
