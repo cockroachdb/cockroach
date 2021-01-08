@@ -354,6 +354,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.err.nodeunavailableerrtype",
 					"distsender.rpc.err.notleaseholdererrtype",
 					"distsender.rpc.err.oprequirestxnerrtype",
+					"distsender.rpc.err.optimisticevalconflictserrtype",
 					"distsender.rpc.err.raftgroupdeletederrtype",
 					"distsender.rpc.err.rangefeedretryerrtype",
 					"distsender.rpc.err.rangekeymismatcherrtype",

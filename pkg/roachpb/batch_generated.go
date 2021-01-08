@@ -70,6 +70,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IndeterminateCommit
 	case *ErrorDetail_InvalidLeaseError:
 		return t.InvalidLeaseError
+	case *ErrorDetail_OptimisticEvalConflicts:
+		return t.OptimisticEvalConflicts
 	default:
 		return nil
 	}
@@ -328,6 +330,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_IndeterminateCommit{t}
 	case *InvalidLeaseError:
 		union = &ErrorDetail_InvalidLeaseError{t}
+	case *OptimisticEvalConflictsError:
+		union = &ErrorDetail_OptimisticEvalConflicts{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
