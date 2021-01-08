@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
@@ -93,6 +94,15 @@ func doMain(cmd *cobra.Command, cmdName string) error {
 
 	defer logcrash.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
+	if cmd != nil {
+		// The presence of a string in the Version field makes cobra
+		// automatically support the --version flag.  We do this here to
+		// ensure --version is supported on every sub-command. This makes
+		// it convenient to add `--version` to arbitrarily long command
+		// invocations.
+		cmd.Version = cockroachCmd.Version
+	}
+
 	return Run(os.Args[1:])
 }
 
@@ -162,22 +172,34 @@ Output build version information.
 `,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info := build.GetInfo()
-		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
-		fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
-		fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
-		fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
-		fmt.Fprintf(tw, "Platform:         %s", info.Platform)
-		if info.CgoTargetTriple != "" {
-			fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
+		if cliCtx.showVersionUsingOnlyBuildTag {
+			info := build.GetInfo()
+			fmt.Println(info.Tag)
+		} else {
+			fmt.Println(fullVersionString())
 		}
-		fmt.Fprintln(tw)
-		fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
-		fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
-		fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
-		fmt.Fprintf(tw, "Build Type:       %s\n", info.Type)
-		return tw.Flush()
+		return nil
 	},
+}
+
+func fullVersionString() string {
+	info := build.GetInfo()
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "Build Tag:        %s\n", info.Tag)
+	fmt.Fprintf(tw, "Build Time:       %s\n", info.Time)
+	fmt.Fprintf(tw, "Distribution:     %s\n", info.Distribution)
+	fmt.Fprintf(tw, "Platform:         %s", info.Platform)
+	if info.CgoTargetTriple != "" {
+		fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
+	}
+	fmt.Fprintln(tw)
+	fmt.Fprintf(tw, "Go Version:       %s\n", info.GoVersion)
+	fmt.Fprintf(tw, "C Compiler:       %s\n", info.CgoCompiler)
+	fmt.Fprintf(tw, "Build Commit ID:  %s\n", info.Revision)
+	fmt.Fprintf(tw, "Build Type:       %s", info.Type) // No final newline: cobra prints one for us.
+	_ = tw.Flush()
+	return buf.String()
 }
 
 var cockroachCmd = &cobra.Command{
@@ -196,6 +218,10 @@ var cockroachCmd = &cobra.Command{
 	// details and hints, which cobra does not do for us. Instead
 	// we do the printing in Main().
 	SilenceErrors: true,
+	// Version causes cobra to automatically support a --version flag
+	// that reports this string.
+	Version: "details:\n" + fullVersionString() +
+		"\n(use '" + os.Args[0] + " version --build-tag' to display only the build tag)",
 }
 
 var workloadCmd = workloadcli.WorkloadCmd(true /* userFacing */)
