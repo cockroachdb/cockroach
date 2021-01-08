@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -331,7 +332,16 @@ func (s *Span) LogStructured(item Structured) {
 	s.crdb.logStructured(item)
 }
 
-// Record provides a way to put free-form text into verbose spans.
+// Record provides a way to record free-form text into verbose spans.
+//
+// TODO(irfansharif): Similar to our log package, span.Record("%v") with no
+// additional parameters would just record "%v" in the trace. What a sane API
+// would do would be to print an error that %v was not provisioned with a
+// positional argument.
+//
+// TODO(irfansharif): We don't currently have redactability with trace
+// recordings (both here, and using LogStructured above). We'll want to do this
+// soon.
 func (s *Span) Record(msg string) {
 	if !s.hasVerboseSink() {
 		return
@@ -343,6 +353,21 @@ func (s *Span) Record(msg string) {
 		s.netTr.LazyPrintf("%s", msg)
 	}
 	s.crdb.record(msg)
+}
+
+// Recordf is like Record, but accepts a format specifier.
+func (s *Span) Recordf(format string, args ...interface{}) {
+	if !s.hasVerboseSink() {
+		return
+	}
+	str := fmt.Sprintf(format, args...)
+	if s.ot.shadowSpan != nil {
+		s.ot.shadowSpan.LogFields(otlog.String(tracingpb.LogMessageField, str))
+	}
+	if s.netTr != nil {
+		s.netTr.LazyPrintf(format, args)
+	}
+	s.crdb.record(str)
 }
 
 // hasVerboseSink returns false if there is no reason to even evaluate Record

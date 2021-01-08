@@ -12,7 +12,6 @@ package tracing
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -136,7 +135,7 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		resp, err = handler(ctx, req)
 		if err != nil {
 			SetSpanTags(serverSpan, err, false)
-			serverSpan.Record(fmt.Sprintf("error: %s", err))
+			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
 	}
@@ -182,7 +181,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		err = handler(srv, ss)
 		if err != nil {
 			SetSpanTags(serverSpan, err, false)
-			serverSpan.Record(fmt.Sprintf("error: %s", err))
+			serverSpan.Recordf("error: %s", err)
 		}
 		return err
 	}
@@ -221,7 +220,7 @@ func injectSpanContext(ctx context.Context, tracer *Tracer, clientSpan *Span) co
 	err := tracer.Inject(clientSpan.Meta(), opentracing.HTTPHeaders, mdWriter)
 	// We have no better place to record an error than the Span itself :-/
 	if err != nil {
-		clientSpan.Record(fmt.Sprintf("error: %s", err))
+		clientSpan.Recordf("error: %s", err)
 	}
 	return metadata.NewOutgoingContext(ctx, md)
 }
@@ -267,7 +266,7 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
 			SetSpanTags(clientSpan, err, true)
-			clientSpan.Record(fmt.Sprintf("error: %s", err))
+			clientSpan.Recordf("error: %s", err)
 		}
 		return err
 	}
@@ -314,7 +313,7 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		ctx = injectSpanContext(ctx, tracer, clientSpan)
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
-			clientSpan.Record(fmt.Sprintf("error: %s", err))
+			clientSpan.Recordf("error: %s", err)
 			SetSpanTags(clientSpan, err, true)
 			clientSpan.Finish()
 			return cs, err
@@ -341,7 +340,7 @@ func newTracingClientStream(
 		close(finishChan)
 		defer clientSpan.Finish()
 		if err != nil {
-			clientSpan.Record(fmt.Sprintf("error: %s", err))
+			clientSpan.Recordf("error: %s", err)
 			SetSpanTags(clientSpan, err, true)
 		}
 	}

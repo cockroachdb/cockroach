@@ -85,6 +85,8 @@ var requireConstFmt = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/util/tracing.Span).Recordf": true,
+
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
 

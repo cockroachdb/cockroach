@@ -11,7 +11,6 @@
 package tracing
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 
@@ -68,14 +67,14 @@ func TestTracerRecording(t *testing.T) {
 	}
 	noop3.Finish()
 
-	s1.Record(fmt.Sprintf("x=%d", 1))
+	s1.Recordf("x=%d", 1)
 	s1.SetVerbose(true)
-	s1.Record(fmt.Sprintf("x=%d", 2))
+	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParentAndAutoCollection(s1))
 	if s2.IsBlackHole() {
 		t.Error("recording Span should not be black hole")
 	}
-	s2.Record(fmt.Sprintf("x=%d", 3))
+	s2.Recordf("x=%d", 3)
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		Span a:
@@ -97,7 +96,7 @@ func TestTracerRecording(t *testing.T) {
 	}
 
 	s3 := tr.StartSpan("c", WithParentAndAutoCollection(s2))
-	s3.Record(fmt.Sprintf("x=%d", 4))
+	s3.Recordf("x=%d", 4)
 	s3.SetTag("tag", "val")
 
 	s2.Finish()
@@ -130,13 +129,13 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	s1.SetVerbose(false)
-	s1.Record(fmt.Sprintf("x=%d", 100))
+	s1.Recordf("x=%d", 100)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), ``); err != nil {
 		t.Fatal(err)
 	}
 
 	// The child Span is still recording.
-	s3.Record(fmt.Sprintf("x=%d", 5))
+	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		Span c:
 			tags: _verbose=1 tag=val
@@ -256,7 +255,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if trace1 != trace2 {
 		t.Errorf("traceID doesn't match: parent %d child %d", trace1, trace2)
 	}
-	s2.Record(fmt.Sprintf("x=%d", 1))
+	s2.Recordf("x=%d", 1)
 	s2.Finish()
 
 	// Verify that recording was started automatically.
