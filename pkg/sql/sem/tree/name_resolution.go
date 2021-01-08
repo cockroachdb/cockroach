@@ -308,19 +308,22 @@ func ResolveExisting(
 		// Two parts: D.T.
 		// Try to use the current database, and be satisfied if it's sufficient to find the object.
 		//
-		// Note: we test this even if curDb == "", because CockroachDB
-		// supports querying virtual schemas even when the current
-		// database is not set. For example, `select * from
-		// pg_catalog.pg_tables` is meant to show all tables across all
-		// databases when there is no current database set.
+		// Note: CockroachDB supports querying virtual schemas even when the current
+		// database is not set. For example, `select * from pg_catalog.pg_tables` is
+		// meant to show all tables across all databases when there is no current
+		// database set. Therefore, we test this even if curDb == "", as long as the
+		// schema name is for a virtual schema.
 
-		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
-			if err == nil {
-				namePrefix.CatalogName = Name(curDb)
-				namePrefix.SchemaName = Name(scName)
+		if _, isVirtualSchema := sessiondata.VirtualSchemaNames[scName]; isVirtualSchema || curDb != "" {
+			if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
+				if err == nil {
+					namePrefix.CatalogName = Name(curDb)
+					namePrefix.SchemaName = Name(scName)
+				}
+				return found, namePrefix, objMeta, err
 			}
-			return found, namePrefix, objMeta, err
 		}
+
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
 		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, u.Schema(), PublicSchema, u.Object()); found || err != nil {
 			if err == nil {
