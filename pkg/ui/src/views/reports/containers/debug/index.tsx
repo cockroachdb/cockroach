@@ -159,6 +159,11 @@ export default function Debug() {
             url="#/reports/stores/1"
             note="#/reports/stores/[node_id]"
           />
+          <DebugTableLink
+            name="Store LSM details on this node"
+            url="/debug/lsm/1"
+            note="/debug/lsm/[store_id]"
+          />
         </DebugTableRow>
         <DebugTableRow title="Security">
           <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
