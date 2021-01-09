@@ -50,59 +50,6 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 	return desc.postDeserializationChanges
 }
 
-// mutationIndexes returns all non-public indexes in the specified state.
-func (desc *wrapper) mutationIndexes(
-	mutationState descpb.DescriptorMutation_State,
-) []descpb.IndexDescriptor {
-	if len(desc.Mutations) == 0 {
-		return nil
-	}
-	indexes := make([]descpb.IndexDescriptor, 0, len(desc.Mutations))
-	for _, m := range desc.Mutations {
-		if m.State != mutationState {
-			continue
-		}
-		if idx := m.GetIndex(); idx != nil {
-			indexes = append(indexes, *idx)
-		}
-	}
-	return indexes
-}
-
-// DeleteOnlyIndexes returns a list of delete-only mutation indexes.
-// This method is deprecated, use DeleteOnlyNonPrimaryIndexes instead.
-func (desc *wrapper) DeleteOnlyIndexes() []descpb.IndexDescriptor {
-	return desc.mutationIndexes(descpb.DescriptorMutation_DELETE_ONLY)
-}
-
-// WritableIndexes returns a list of public and write-only mutation indexes.
-// This method is deprecated, use WritableNonPrimaryIndexes instead.
-func (desc *wrapper) WritableIndexes() []descpb.IndexDescriptor {
-	if len(desc.Mutations) == 0 {
-		return desc.Indexes
-	}
-	indexes := make([]descpb.IndexDescriptor, 0, len(desc.Indexes)+len(desc.Mutations))
-	// Add all public indexes.
-	indexes = append(indexes, desc.Indexes...)
-	// Add all non-public writable indexes.
-	indexes = append(indexes, desc.mutationIndexes(descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)...)
-	return indexes
-}
-
-// DeletableIndexes returns a list of deletable indexes.
-// This method is deprecated, use DeletableNonPrimaryIndexes instead.
-func (desc *wrapper) DeletableIndexes() []descpb.IndexDescriptor {
-	if len(desc.Mutations) == 0 {
-		return desc.Indexes
-	}
-	indexes := make([]descpb.IndexDescriptor, 0, len(desc.Indexes)+len(desc.Mutations))
-	// Add all writable indexes.
-	indexes = append(indexes, desc.WritableIndexes()...)
-	// Add all delete-only indexes.
-	indexes = append(indexes, desc.DeleteOnlyIndexes()...)
-	return indexes
-}
-
 // mutationColumns returns all non-public writable columns in the specified
 // state.
 func (desc *wrapper) mutationColumns(
