@@ -67,7 +67,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := n.desc.PrimaryIndexInterface().IndexDescDeepCopy()
+	newPrimaryIndex := n.desc.GetPrimaryIndex().IndexDescDeepCopy()
 	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.PublicNonPrimaryIndexes()))
 	for i, idx := range n.desc.PublicNonPrimaryIndexes() {
 		newIndexes[i] = idx.IndexDescDeepCopy()

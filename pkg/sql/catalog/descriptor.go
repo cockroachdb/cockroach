@@ -114,12 +114,11 @@ type TableDescriptor interface {
 	GetFormatVersion() descpb.FormatVersion
 
 	GetPrimaryIndexID() descpb.IndexID
+	GetPrimaryIndex() Index
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
-
-	PrimaryIndexInterface() Index
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
 	// in the underlying proto, in their canonical order:

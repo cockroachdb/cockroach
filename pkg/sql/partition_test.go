@@ -50,7 +50,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
 	{
-		primaryIndex := *tableDesc.PrimaryIndexInterface().IndexDesc()
+		primaryIndex := *tableDesc.GetPrimaryIndex().IndexDesc()
 		primaryIndex.Partitioning = descpb.PartitioningDescriptor{
 			NumColumns: 1,
 			Range: []descpb.PartitioningDescriptor_Range{{

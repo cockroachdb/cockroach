@@ -102,7 +102,7 @@ func TestIndexInterface(t *testing.T) {
 	s6 := indexes[6]
 
 	// Check that GetPrimaryIndex returns the primary index.
-	require.Equal(t, pk, tableI.PrimaryIndexInterface())
+	require.Equal(t, pk, tableI.GetPrimaryIndex())
 	require.Equal(t, pk.GetID(), tableI.GetPrimaryIndexID())
 	require.True(t, pk.Primary())
 	require.True(t, pk.Public())
