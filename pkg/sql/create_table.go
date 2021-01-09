@@ -1118,11 +1118,11 @@ func (p *planner) finalizeInterleave(
 			return err
 		}
 	}
-	ancestorIndex, err := ancestorTable.FindIndexByID(ancestor.IndexID)
+	ancestorIndex, err := ancestorTable.FindIndexWithID(ancestor.IndexID)
 	if err != nil {
 		return err
 	}
-	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
+	ancestorIndex.IndexDesc().InterleavedBy = append(ancestorIndex.IndexDesc().InterleavedBy,
 		descpb.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
 	if err := p.writeSchemaChange(

@@ -41,8 +41,8 @@ import (
 func MakeIndexKeyPrefix(
 	codec keys.SQLCodec, desc catalog.TableDescriptor, indexID descpb.IndexID,
 ) []byte {
-	if i, err := desc.FindIndexByID(indexID); err == nil && len(i.Interleave.Ancestors) > 0 {
-		ancestor := &i.Interleave.Ancestors[0]
+	if i, err := desc.FindIndexWithID(indexID); err == nil && i.NumInterleaveAncestors() > 0 {
+		ancestor := i.GetInterleaveAncestor(0)
 		return codec.IndexPrefix(uint32(ancestor.TableID), uint32(ancestor.IndexID))
 	}
 	return codec.IndexPrefix(uint32(desc.GetID()), uint32(indexID))
