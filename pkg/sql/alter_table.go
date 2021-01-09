@@ -459,7 +459,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
 			var idxNamesToDelete []string
-			for _, idx := range n.tableDesc.AllNonDropIndexes() {
+			for _, idx := range n.tableDesc.NonDropIndexes() {
 				// We automatically drop indexes that reference the column
 				// being dropped.
 
@@ -468,14 +468,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				containsThisColumn := false
 
 				// Analyze the index.
-				for _, id := range idx.ColumnIDs {
-					if id == colToDrop.ID {
+				for j := 0; j < idx.NumColumns(); j++ {
+					if idx.GetColumnID(j) == colToDrop.ID {
 						containsThisColumn = true
 						break
 					}
 				}
 				if !containsThisColumn {
-					for _, id := range idx.ExtraColumnIDs {
+					for j := 0; j < idx.NumExtraColumns(); j++ {
+						id := idx.GetExtraColumnID(j)
 						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
@@ -494,8 +495,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for _, id := range idx.StoreColumnIDs {
-						if id == colToDrop.ID {
+					for j := 0; j < idx.NumStoredColumns(); j++ {
+						if idx.GetStoredColumnID(j) == colToDrop.ID {
 							containsThisColumn = true
 							break
 						}
@@ -505,7 +506,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// If the column being dropped is referenced in the partial
 				// index predicate, then the index should be dropped.
 				if !containsThisColumn && idx.IsPartial() {
-					expr, err := parser.ParseExpr(idx.Predicate)
+					expr, err := parser.ParseExpr(idx.GetPredicate())
 					if err != nil {
 						return err
 					}
@@ -522,7 +523,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					idxNamesToDelete = append(idxNamesToDelete, idx.Name)
+					idxNamesToDelete = append(idxNamesToDelete, idx.GetName())
 				}
 			}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -201,14 +202,9 @@ func (n *dropIndexNode) maybeDropShardColumn(
 	if dropped {
 		return nil
 	}
-	shouldDropShardColumn := true
-	for _, otherIdx := range tableDesc.AllNonDropIndexes() {
-		if otherIdx.ContainsColumnID(shardColDesc.ID) {
-			shouldDropShardColumn = false
-			break
-		}
-	}
-	if !shouldDropShardColumn {
+	if catalog.FindNonDropIndex(tableDesc, func(otherIdx catalog.Index) bool {
+		return otherIdx.ContainsColumnID(shardColDesc.ID)
+	}) != nil {
 		return nil
 	}
 	return n.dropShardColumnAndConstraint(params, tableDesc, shardColDesc)

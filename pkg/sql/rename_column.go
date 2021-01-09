@@ -216,8 +216,8 @@ func (p *planner) renameColumn(
 		// Keep the shardedDesc name in sync with the column name.
 		shardedDesc.Name = string(newName)
 	}
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		maybeUpdateShardedDesc(&idx.Sharded)
+	for _, idx := range tableDesc.NonDropIndexes() {
+		maybeUpdateShardedDesc(&idx.IndexDesc().Sharded)
 	}
 
 	// Rename the column in the indexes.

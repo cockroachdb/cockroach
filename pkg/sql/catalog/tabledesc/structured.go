@@ -330,18 +330,6 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 	return name
 }
 
-// AllNonDropIndexes returns all the indexes, including those being added
-// in the mutations.
-// This method is deprecated, use NonDropIndexes instead.
-func (desc *wrapper) AllNonDropIndexes() []*descpb.IndexDescriptor {
-	nonDropIndexes := desc.NonDropIndexes()
-	indexes := make([]*descpb.IndexDescriptor, len(nonDropIndexes))
-	for i, idx := range nonDropIndexes {
-		indexes[i] = idx.IndexDesc()
-	}
-	return indexes
-}
-
 // AllActiveAndInactiveChecks returns all check constraints, including both
 // "active" ones on the table descriptor which are being enforced for all
 // writes, and "inactive" ones queued in the mutations list.
@@ -1611,7 +1599,8 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			backref.Name, desc.Name, originTable.GetName())
 	}
 
-	for _, index := range desc.AllNonDropIndexes() {
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		// Check interleaves.
 		if len(index.Interleave.Ancestors) > 0 {
 			// Only check the most recent ancestor, the rest of them don't point
@@ -1782,10 +1771,10 @@ func ValidateTableLocalityConfig(
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
 func (desc *wrapper) ValidateIndexNameIsUnique(indexName string) error {
-	for _, index := range desc.AllNonDropIndexes() {
-		if indexName == index.Name {
-			return sqlerrors.NewRelationAlreadyExistsError(indexName)
-		}
+	if catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
+		return idx.GetName() == indexName
+	}) != nil {
+		return sqlerrors.NewRelationAlreadyExistsError(indexName)
 	}
 	return nil
 }
@@ -2220,7 +2209,8 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
-	for _, index := range desc.AllNonDropIndexes() {
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		if err := catalog.ValidateName(index.Name, "index"); err != nil {
 			return err
 		}
@@ -3288,12 +3278,9 @@ func (desc *wrapper) FindFKByName(name string) (*descpb.ForeignKeyConstraint, er
 // IsInterleaved returns true if any part of this this table is interleaved with
 // another table's data.
 func (desc *wrapper) IsInterleaved() bool {
-	for _, index := range desc.AllNonDropIndexes() {
-		if index.IsInterleaved() {
-			return true
-		}
-	}
-	return false
+	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
+		return idx.IsInterleaved()
+	})
 }
 
 // IsPrimaryIndexDefaultRowID returns whether or not the table's primary
@@ -4056,8 +4043,8 @@ func (desc *wrapper) GetFamilyOfColumn(
 // subpartition in an arbitrary order.
 func (desc *wrapper) PartitionNames() []string {
 	var names []string
-	for _, index := range desc.AllNonDropIndexes() {
-		names = append(names, index.Partitioning.PartitionNames()...)
+	for _, index := range desc.NonDropIndexes() {
+		names = append(names, index.PartitionNames()...)
 	}
 	return names
 }
@@ -4141,12 +4128,9 @@ func (desc *Immutable) MutationColumns() []descpb.ColumnDescriptor {
 // IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 // index. This method assumes that col is currently a member of desc.
 func (desc *Mutable) IsShardColumn(col *descpb.ColumnDescriptor) bool {
-	for _, idx := range desc.AllNonDropIndexes() {
-		if idx.Sharded.IsSharded && idx.Sharded.Name == col.Name {
-			return true
-		}
-	}
-	return false
+	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
+		return idx.IsSharded() && idx.GetShardColumnName() == col.Name
+	})
 }
 
 // TableDesc implements the TableDescriptor interface.

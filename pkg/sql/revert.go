@@ -54,13 +54,15 @@ func RevertTables(
 		if !tables[i].IsPhysicalTable() {
 			return errors.Errorf("cannot revert virtual table %s", tables[i].Name)
 		}
-		for _, idx := range tables[i].AllNonDropIndexes() {
-			for _, parent := range idx.Interleave.Ancestors {
+		for _, idx := range tables[i].NonDropIndexes() {
+			for j := 0; j < idx.NumInterleaveAncestors(); j++ {
+				parent := idx.GetInterleaveAncestor(j)
 				if !reverting[parent.TableID] {
 					return errors.New("cannot revert table without reverting all interleaved tables and indexes")
 				}
 			}
-			for _, child := range idx.InterleavedBy {
+			for j := 0; j < idx.NumInterleavedBy(); j++ {
+				child := idx.GetInterleavedBy(j)
 				if !reverting[child.Table] {
 					return errors.New("cannot revert table without reverting all interleaved tables and indexes")
 				}

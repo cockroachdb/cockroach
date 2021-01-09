@@ -211,8 +211,8 @@ func (desc *wrapper) collectConstraintInfo(
 	info := make(map[string]descpb.ConstraintDetail)
 
 	// Indexes provide PK and Unique constraints that are enforced by an index.
-	indexes := desc.AllNonDropIndexes()
-	for _, index := range indexes {
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,

@@ -132,8 +132,9 @@ func (t *truncateNode) startExec(params runParams) error {
 				return err
 			}
 		}
-		for _, idx := range tableDesc.AllNonDropIndexes() {
-			for _, ref := range idx.InterleavedBy {
+		for _, idx := range tableDesc.NonDropIndexes() {
+			for i := 0; i < idx.NumInterleavedBy(); i++ {
+				ref := idx.GetInterleavedBy(i)
 				if err := maybeEnqueue(ref.Table, "interleaved by"); err != nil {
 					return err
 				}
