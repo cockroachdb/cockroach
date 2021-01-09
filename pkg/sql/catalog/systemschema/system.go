@@ -40,6 +40,8 @@ func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
 		return true
 	case *descpb.Descriptor_Database:
 		return false
+	case *descpb.Descriptor_Func:
+		return false
 	case *descpb.Descriptor_Type:
 		return false
 	case *descpb.Descriptor_Schema:

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1858,6 +1859,45 @@ func forEachTypeDesc(
 			continue
 		}
 		if err := fn(dbDesc, scName, typ); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// forEachFuncDesc calls a function for each FuncDescriptor. If dbContext is
+// not nil, then the function is called for only FuncDescriptors within the
+// given database.
+func forEachFuncDesc(
+	ctx context.Context,
+	p *planner,
+	dbContext *dbdesc.Immutable,
+	fn func(db *dbdesc.Immutable, sc string, fnDesc *funcdesc.Immutable) error,
+) error {
+	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+	schemaNames, err := getSchemaNames(ctx, p, dbContext)
+	if err != nil {
+		return err
+	}
+	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
+		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
+	for _, id := range lCtx.funcIDs {
+		fnDesc := lCtx.funcDescs[id]
+		dbDesc, parentExists := lCtx.dbDescs[fnDesc.ParentID]
+		if !parentExists {
+			continue
+		}
+		scName, ok := schemaNames[fnDesc.GetParentSchemaID()]
+		if !ok {
+			return errors.AssertionFailedf("schema id %d not found", fnDesc.GetParentSchemaID())
+		}
+		if !userCanSeeDescriptor(ctx, p, fnDesc, false /* allowAdding */) {
+			continue
+		}
+		if err := fn(dbDesc, scName, fnDesc); err != nil {
 			return err
 		}
 	}

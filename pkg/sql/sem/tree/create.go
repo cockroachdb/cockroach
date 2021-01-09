@@ -1859,3 +1859,55 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	}
 	ctx.WriteString(node.Name)
 }
+
+// CreateFunction represents a CREATE FUNCTION statement.
+type CreateFunction struct {
+	Name       *UnresolvedObjectName
+	OrReplace  bool
+	Params     []FormalParam
+	ReturnType ResolvableTypeReference
+	FuncDef    *StrVal
+	// Currently, only accepts "SQL".
+	Language string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateFunction) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE ")
+	if node.OrReplace {
+		ctx.WriteString("OR REPLACE ")
+	}
+	ctx.WriteString("FUNCTION ")
+	node.Name.Format(ctx)
+	ctx.WriteString(" (")
+	for i := range node.Params {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		node.Params[i].Format(ctx)
+	}
+	ctx.WriteString(") RETURNS ")
+	ctx.WriteString(node.ReturnType.SQLString())
+
+	ctx.WriteString(" AS ")
+	node.FuncDef.Format(ctx)
+	ctx.WriteString(" LANGUAGE ")
+	ctx.WriteString(node.Language)
+}
+
+type FormalParam struct {
+	// Name might or might not be present. If it's not present, it indicates
+	// an "anonymous" formal parameter that's only referencable by number ($1).
+	Name string
+
+	// Type is the type of the formal parameter.
+	Type ResolvableTypeReference
+}
+
+func (node *FormalParam) Format(ctx *FmtCtx) {
+	if node.Name != "" {
+		ctx.WriteString(node.Name)
+		ctx.WriteString(" ")
+	}
+	ctx.WriteString(node.Type.SQLString())
+}

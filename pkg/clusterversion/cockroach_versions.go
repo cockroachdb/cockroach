@@ -222,6 +222,8 @@ const (
 	// using the replicated legacy TruncatedState. It's also used in asserting
 	// that no replicated truncated state representation is found.
 	PostTruncatedAndRangeAppliedStateMigration
+	// ScalarUDFs enables the use of scalar user-defined functions.
+	ScalarUDFs
 
 	// Step (1): Add new versions here.
 )
@@ -367,6 +369,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     PostTruncatedAndRangeAppliedStateMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 16},
+	},
+	{
+		Key:     ScalarUDFs,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 18},
 	},
 
 	// Step (2): Add new versions here.

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -143,6 +144,24 @@ func ResolveMutableType(
 	return &tn, desc.(*typedesc.Mutable), nil
 }
 
+// ResolveMutableFunc resolves a func descriptor for mutable access. It
+// returns the resolved descriptor, as well as the fully qualified resolved
+// object name.
+func ResolveMutableFunc(
+	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
+) (*tree.FuncName, *funcdesc.Mutable, error) {
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: true},
+		DesiredObjectKind: tree.FuncObject,
+	}
+	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
+	if err != nil || desc == nil {
+		return nil, nil, err
+	}
+	fn := tree.MakeNewQualifiedFuncName(prefix.Catalog(), prefix.Schema(), un.Object())
+	return &fn, desc.(*funcdesc.Mutable), nil
+}
+
 // ResolveExistingObject resolves an object with the given flags.
 func ResolveExistingObject(
 	ctx context.Context,
@@ -207,6 +226,15 @@ func ResolveExistingObject(
 		}
 
 		return descI.(*tabledesc.Immutable), prefix, nil
+	case tree.FuncObject:
+		_, isFunc := obj.(funcdesc.Descriptor)
+		if !isFunc {
+			return nil, prefix, sqlerrors.NewUndefinedFuncError(&resolvedTn)
+		}
+		if lookupFlags.RequireMutable {
+			return obj.(*funcdesc.Mutable), prefix, nil
+		}
+		return obj.(*funcdesc.Immutable), prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
 			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)

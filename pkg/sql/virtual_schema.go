@@ -367,6 +367,10 @@ func (v *virtualSchemaEntry) GetObjectByName(
 			desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
 			mutable: flags.RequireMutable,
 		}, nil
+	case tree.FuncObject:
+		// TODO(anyone): this would be a good place to unify the builtin name
+		// resolution with the UDF name resolution.
+		return nil, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}

@@ -6,5 +6,6 @@ drop_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_function_stmt
 	| drop_role_stmt
 	| drop_schedule_stmt

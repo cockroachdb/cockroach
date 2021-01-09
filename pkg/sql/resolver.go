@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -268,6 +270,44 @@ func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, 
 		return nil, err
 	}
 	return desc.MakeTypesT(ctx, &name, p)
+}
+
+func (p *planner) ResolveFunc(
+	ctx context.Context, searchPath sessiondata.SearchPath, name *tree.UnresolvedObjectName,
+) (*tree.FunctionDefinition, error) {
+	// First, consult builtins.
+	fn, err := name.ResolveFunction(searchPath)
+	if err == nil {
+		return fn, nil
+	} else if pgerror.GetPGCode(err) != pgcode.UndefinedFunction {
+		return nil, err
+	}
+
+	// No such builtin. Fallback to user-defined functions.
+
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: true, RequireMutable: false},
+		DesiredObjectKind: tree.FuncObject,
+	}
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
+	if err != nil {
+		return nil, err
+	}
+	fnName := tree.MakeNewQualifiedFuncName(prefix.Catalog(), prefix.Schema(), name.Object())
+	fdesc := desc.(*funcdesc.Immutable)
+
+	// Disallow cross-database func resolution.
+	if p.contextDatabaseID != descpb.InvalidID && fdesc.ParentID != descpb.InvalidID && fdesc.ParentID != p.contextDatabaseID {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported, "cross database function references are not supported: %s", fnName.String())
+	}
+
+	// Ensure that the user can access the target schema.
+	if err := p.canResolveDescUnderSchema(ctx, fdesc.GetParentSchemaID(), fdesc); err != nil {
+		return nil, err
+	}
+
+	return fdesc.MakeFuncDef()
 }
 
 // ObjectLookupFlags is part of the resolver.SchemaResolver interface.
@@ -648,6 +688,8 @@ type internalLookupCtx struct {
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
+	funcDescs   map[descpb.ID]*funcdesc.Immutable
+	funcIDs     []descpb.ID
 
 	// fallback is utilized in GetDesc
 	fallback catalog.DescGetter
@@ -661,6 +703,9 @@ func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.
 		return desc, nil
 	}
 	if desc, ok := l.typDescs[id]; ok {
+		return desc, nil
+	}
+	if desc, ok := l.funcDescs[id]; ok {
 		return desc, nil
 	}
 	if desc, ok := l.tbDescs[id]; ok {
@@ -705,6 +750,8 @@ func newInternalLookupCtxFromDescriptors(
 			descriptors[i] = dbdesc.NewImmutable(*t.Database)
 		case *descpb.Descriptor_Table:
 			descriptors[i] = tabledesc.NewImmutable(*t.Table)
+		case *descpb.Descriptor_Func:
+			descriptors[i] = funcdesc.NewImmutable(*t.Func)
 		case *descpb.Descriptor_Type:
 			descriptors[i] = typedesc.NewImmutable(*t.Type)
 		case *descpb.Descriptor_Schema:
@@ -734,7 +781,8 @@ func newInternalLookupCtx(
 	}
 	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
-	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
+	funcDescs := make(map[descpb.ID]*funcdesc.Immutable)
+	var tbIDs, typIDs, dbIDs, schemaIDs, funcIDs []descpb.ID
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
@@ -764,6 +812,12 @@ func newInternalLookupCtx(
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
 			}
+		case *funcdesc.Immutable:
+			funcDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
+				// Only make the schema visible for iteration if the prefix was included.
+				funcIDs = append(funcIDs, desc.GetID())
+			}
 		}
 	}
 
@@ -775,9 +829,11 @@ func newInternalLookupCtx(
 		schemaIDs:   schemaIDs,
 		tbDescs:     tbDescs,
 		typDescs:    typDescs,
+		funcDescs:   funcDescs,
 		tbIDs:       tbIDs,
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
+		funcIDs:     funcIDs,
 		fallback:    fallback,
 	}
 }
@@ -908,6 +964,26 @@ func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
 ) (*typedesc.Mutable, error) {
 	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
+	if err != nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+
+	if desc != nil {
+		// Ensure that the user can access the target schema.
+		if err := p.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+			return nil, err
+		}
+	}
+
+	return desc, nil
+}
+
+// ResolveMutableTypeDescriptor resolves a func descriptor for mutable access.
+func (p *planner) ResolveMutableFuncDescriptor(
+	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
+) (*funcdesc.Mutable, error) {
+	tn, desc, err := resolver.ResolveMutableFunc(ctx, p, name, required)
 	if err != nil {
 		return nil, err
 	}

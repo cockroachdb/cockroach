@@ -142,6 +142,12 @@ func getTableCreateParams(
 		}
 	}
 
+	if strings.HasPrefix(tableName.Object(), tree.FuncPrefix) {
+		return nil, 0,
+			pgerror.Newf(pgcode.ReservedName, "objects with the prefix %s cannot be used to create this type of object",
+				tree.FuncPrefix)
+	}
+
 	if persistence.IsTemporary() {
 		if !params.SessionData().TempTablesEnabled {
 			return nil, 0, errors.WithTelemetry(
@@ -2209,9 +2215,9 @@ func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescript
 func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
-			FunctionReference: &tree.UnresolvedName{
+			FunctionReference: &tree.UnresolvedObjectName{
 				NumParts: 1,
-				Parts:    tree.NameParts{funcName},
+				Parts:    [3]string{funcName},
 			},
 		}
 	}

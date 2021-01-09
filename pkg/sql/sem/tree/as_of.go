@@ -45,7 +45,7 @@ func IsFollowerReadTimestampFunction(asOf AsOfClause, searchPath sessiondata.Sea
 	if !ok {
 		return false
 	}
-	def, err := fe.Func.Resolve(searchPath)
+	def, err := fe.Func.Resolve(nil, nil, searchPath)
 	if err != nil {
 		return false
 	}

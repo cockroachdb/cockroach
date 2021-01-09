@@ -36,6 +36,8 @@ func GetDescriptorID(desc *Descriptor) ID {
 		return t.Table.ID
 	case *Descriptor_Database:
 		return t.Database.ID
+	case *Descriptor_Func:
+		return t.Func.ID
 	case *Descriptor_Type:
 		return t.Type.ID
 	case *Descriptor_Schema:
@@ -52,6 +54,8 @@ func GetDescriptorName(desc *Descriptor) string {
 		return t.Table.Name
 	case *Descriptor_Database:
 		return t.Database.Name
+	case *Descriptor_Func:
+		return t.Func.Name
 	case *Descriptor_Type:
 		return t.Type.Name
 	case *Descriptor_Schema:
@@ -68,6 +72,8 @@ func GetDescriptorVersion(desc *Descriptor) DescriptorVersion {
 		return t.Table.Version
 	case *Descriptor_Database:
 		return t.Database.Version
+	case *Descriptor_Func:
+		return t.Func.Version
 	case *Descriptor_Type:
 		return t.Type.Version
 	case *Descriptor_Schema:
@@ -84,6 +90,8 @@ func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
 		return t.Table.ModificationTime
 	case *Descriptor_Database:
 		return t.Database.ModificationTime
+	case *Descriptor_Func:
+		return t.Func.ModificationTime
 	case *Descriptor_Type:
 		return t.Type.ModificationTime
 	case *Descriptor_Schema:
@@ -101,6 +109,8 @@ func GetDescriptorState(desc *Descriptor) DescriptorState {
 		return t.Table.State
 	case *Descriptor_Database:
 		return t.Database.State
+	case *Descriptor_Func:
+		return t.Func.State
 	case *Descriptor_Type:
 		return t.Type.State
 	case *Descriptor_Schema:
@@ -118,6 +128,8 @@ func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 		t.Table.ModificationTime = ts
 	case *Descriptor_Database:
 		t.Database.ModificationTime = ts
+	case *Descriptor_Func:
+		t.Func.ModificationTime = ts
 	case *Descriptor_Type:
 		t.Type.ModificationTime = ts
 	case *Descriptor_Schema:

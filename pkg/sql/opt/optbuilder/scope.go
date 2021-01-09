@@ -930,7 +930,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
-		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
+		def, err := t.Func.Resolve(s.builder.ctx, s.builder.catalog, s.builder.semaCtx.SearchPath)
 		if err != nil {
 			panic(err)
 		}
@@ -952,6 +952,11 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 		if isSQLFn(def) {
 			expr = s.replaceSQLFn(t, def)
+			break
+		}
+
+		if isUserDefinedFunc(def) {
+			expr = s.replaceUserDefinedFunc(t)
 			break
 		}
 
@@ -1312,6 +1317,64 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tre
 	return &info
 }
 
+// replaceSQLFn replaces a tree.SQLClass function with a sqlFnInfo struct. See
+// comments above tree.SQLClass and sqlFnInfo for details.
+func (s *scope) replaceUserDefinedFunc(f *tree.FuncExpr) tree.Expr {
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
+
+	s.builder.semaCtx.Properties.Require("user-defined function", tree.RejectSpecial)
+
+	expr := f.Walk(s)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
+	if err != nil {
+		panic(err)
+	}
+	if typedFunc == tree.DNull {
+		return tree.DNull
+	}
+
+	f = typedFunc.(*tree.FuncExpr)
+	overload := f.ResolvedOverload()
+	typs := overload.Types.(tree.ArgTypes)
+	paramNames := make(tree.NameList, typs.Length())
+	for i := range typs {
+		paramNames[i] = tree.Name(typs[i].Name)
+	}
+
+	return s.replaceSubquery(&tree.Subquery{
+		Select: &tree.ParenSelect{
+			Select: &tree.Select{
+				Select: &tree.SelectClause{
+					Exprs: tree.SelectExprs{
+						tree.SelectExpr{Expr: overload.UserDef},
+					},
+					From: tree.From{
+						Tables: tree.TableExprs{
+							&tree.AliasedTableExpr{
+								Expr: &tree.Subquery{
+									Select: &tree.ValuesClause{
+										Rows: []tree.Exprs{
+											f.Exprs,
+										},
+									},
+								},
+								As: tree.AliasClause{
+									// TODO(jordan): this should have a unique id?
+									Alias: "func_scope",
+									Cols:  paramNames,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, false, 1, false)
+}
+
 var (
 	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
 )
@@ -1406,7 +1469,7 @@ func (s *scope) replaceCount(
 				e := &cpy
 				e.Exprs = tree.Exprs{tree.DBoolTrue}
 
-				newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+				newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.catalog, s.builder.semaCtx.SearchPath)
 				if err != nil {
 					panic(err)
 				}
@@ -1421,8 +1484,8 @@ func (s *scope) replaceCount(
 			// take any arguments).
 			e := &tree.FuncExpr{
 				Func: tree.ResolvableFunctionReference{
-					FunctionReference: &tree.UnresolvedName{
-						NumParts: 1, Parts: tree.NameParts{"count_rows"},
+					FunctionReference: &tree.UnresolvedObjectName{
+						NumParts: 1, Parts: [3]string{"count_rows"},
 					},
 				},
 			}
@@ -1432,7 +1495,7 @@ func (s *scope) replaceCount(
 			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
-			newDef, err := e.Func.Resolve(s.builder.semaCtx.SearchPath)
+			newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.catalog, s.builder.semaCtx.SearchPath)
 			if err != nil {
 				panic(err)
 			}

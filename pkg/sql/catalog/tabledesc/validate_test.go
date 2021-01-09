@@ -216,6 +216,25 @@ var validationMap = []struct {
 			"RegionConfig":             {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
+	{
+		obj: descpb.FuncDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":               {status: iSolemnlySwearThisFieldIsValidated},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"ModificationTime": {status: thisFieldReferencesNoObjects},
+			"DrainingNames":    {status: thisFieldReferencesNoObjects},
+			"OfflineReason":    {status: thisFieldReferencesNoObjects},
+			"Privileges":       {status: iSolemnlySwearThisFieldIsValidated},
+			"Def":              {status: iSolemnlySwearThisFieldIsValidated},
+			"ParamNames":       {status: iSolemnlySwearThisFieldIsValidated},
+			"ParamTypes":       {status: iSolemnlySwearThisFieldIsValidated},
+			"ReturnType":       {status: thisFieldReferencesNoObjects},
+			"State":            {status: thisFieldReferencesNoObjects},
+			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
+			"ParentSchemaID":   {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
 }
 
 type validationStatusInfo struct {

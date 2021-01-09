@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -607,6 +608,144 @@ func (tc *Collection) getTypeByName(
 		return false, nil, err
 	}
 	return true, typ, nil
+}
+
+// GetMutableFuncByName returns a mutable func descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetMutableFuncByName(
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags,
+) (found bool, _ *funcdesc.Mutable, _ error) {
+	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, true /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*funcdesc.Mutable), nil
+}
+
+// GetImmutableFuncByName returns a mutable func descriptor with properties
+// according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) GetImmutableFuncByName(
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags,
+) (found bool, _ *funcdesc.Immutable, _ error) {
+	found, desc, err := tc.getFuncByName(ctx, txn, name, flags, false /* mutable */)
+	if err != nil || !found {
+		return false, nil, err
+	}
+	return true, desc.(*funcdesc.Immutable), nil
+}
+
+// getFuncByName returns a func descriptor with properties according to the
+// provided lookup flags.
+func (tc *Collection) getFuncByName(
+	ctx context.Context, txn *kv.Txn, name *tree.FuncName, flags tree.ObjectLookupFlags, mutable bool,
+) (found bool, _ funcdesc.Descriptor, err error) {
+	mangled := name.MangledName()
+	found, desc, err := tc.getObjectByName(ctx, txn, name.Catalog(), name.Schema(), mangled, flags, mutable)
+	if err != nil {
+		return false, nil, err
+	} else if !found {
+		if flags.Required {
+			return false, nil, sqlerrors.NewUndefinedFuncError(name)
+		}
+		return false, nil, nil
+	}
+	fn, ok := desc.(funcdesc.Descriptor)
+	if !ok {
+		if flags.Required {
+			return false, nil, sqlerrors.NewUndefinedFuncError(name)
+		}
+		return false, nil, nil
+	}
+	if err := catalog.FilterDescriptorState(fn, flags.CommonLookupFlags); err != nil {
+		if flags.Required {
+			return false, nil, err
+		}
+		return false, nil, nil
+	}
+	hydrated, err := tc.hydrateTypesInFuncDesc(ctx, txn, fn)
+	if err != nil {
+		return false, nil, err
+	}
+	return true, hydrated, nil
+}
+
+// hydrateTypesInFuncDesc installs user defined type metadata in all types.T
+// present in the input FuncDescriptor. It always returns the same type of
+// FuncDescriptor that was passed in. It ensures that ImmutableFuncDescriptors
+// are not modified during the process of metadata installation. Dropped funcs
+// do not get hydrated.
+//
+// TODO(ajwerner): This should accept flags to indicate whether we can resolve
+// offline descriptors.
+func (tc *Collection) hydrateTypesInFuncDesc(
+	ctx context.Context, txn *kv.Txn, desc funcdesc.Descriptor,
+) (funcdesc.Descriptor, error) {
+	if desc.Dropped() {
+		return desc, nil
+	}
+	switch t := desc.(type) {
+	case *funcdesc.Mutable:
+		// It is safe to hydrate directly into Mutable since it is
+		// not shared. When hydrating mutable descriptors, use the mutable access
+		// method to access types.
+		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			dbDesc, err := tc.GetMutableDescriptorByID(ctx, desc.ParentID, txn)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			sc, err := tc.resolveSchemaByID(ctx, txn, desc.ParentSchemaID,
+				true /* requireMutable */, true /* includeOffline */)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.Name)
+			return name, desc, nil
+		}
+
+		return desc, typedesc.HydrateTypesInFuncDescriptor(ctx, t.FuncDesc(), typedesc.TypeLookupFunc(getType))
+	case *funcdesc.Immutable:
+		// ImmutableFuncDescriptors need to be copied before hydration, because
+		// they are potentially read by multiple threads. If there aren't any user
+		// defined types in the descriptor, then return early.
+		if !t.ContainsUserDefinedTypes() {
+			return desc, nil
+		}
+
+		getType := typedesc.TypeLookupFunc(func(
+			ctx context.Context, id descpb.ID,
+		) (tree.TypeName, catalog.TypeDescriptor, error) {
+			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
+				tree.DatabaseLookupFlags{Required: true})
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			sc, err := tc.ResolveSchemaByID(ctx, txn, desc.ParentSchemaID)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
+			return name, desc, nil
+		})
+
+		// TODO(jordan): add a hydrated func cache to tc.hydratedTables.
+
+		// Make a copy of the underlying descriptor before hydration.
+		descBase := protoutil.Clone(t.FuncDesc()).(*descpb.FuncDescriptor)
+		if err := typedesc.HydrateTypesInFuncDescriptor(ctx, descBase, getType); err != nil {
+			return nil, err
+		}
+		return funcdesc.NewImmutableWithIsUncommittedVersion(*descBase, t.IsUncommittedVersion()), nil
+	default:
+		return desc, nil
+	}
 }
 
 // TODO (lucy): Should this just take a database name? We're separately

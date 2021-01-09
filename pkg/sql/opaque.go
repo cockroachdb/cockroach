@@ -87,6 +87,8 @@ func buildOpaque(
 		plan, err = p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		plan, err = p.CreateIndex(ctx, n)
+	case *tree.CreateFunction:
+		plan, err = p.CreateFunc(ctx, n)
 	case *tree.CreateSchema:
 		plan, err = p.CreateSchema(ctx, n)
 	case *tree.CreateType:
@@ -103,6 +105,8 @@ func buildOpaque(
 		plan, err = p.Discard(ctx, n)
 	case *tree.DropDatabase:
 		plan, err = p.DropDatabase(ctx, n)
+	case *tree.DropFunction:
+		plan, err = p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		plan, err = p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
@@ -216,6 +220,7 @@ func init() {
 		&tree.CreateDatabase{},
 		&tree.CreateExtension{},
 		&tree.CreateIndex{},
+		&tree.CreateFunction{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
 		&tree.CreateType{},
@@ -223,6 +228,7 @@ func init() {
 		&tree.Deallocate{},
 		&tree.Discard{},
 		&tree.DropDatabase{},
+		&tree.DropFunction{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
 		&tree.DropRole{},

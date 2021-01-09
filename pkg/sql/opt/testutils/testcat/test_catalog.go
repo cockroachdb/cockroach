@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -176,6 +177,14 @@ func (tc *Catalog) ResolveDataSourceByID(
 // ResolveTypeByOID is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
 	return nil, errors.Newf("test catalog cannot handle user defined types")
+}
+
+// ResolveFunc is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveFunc(
+	_ context.Context, searchPath sessiondata.SearchPath, name *tree.UnresolvedObjectName,
+) (*tree.FunctionDefinition, error) {
+	// The test catalog only supports builtin functions.
+	return name.ResolveFunction(searchPath)
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.

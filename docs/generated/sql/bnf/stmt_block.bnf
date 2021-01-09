@@ -431,6 +431,7 @@ create_ddl_stmt ::=
 	| create_schema_stmt
 	| create_table_stmt
 	| create_table_as_stmt
+	| create_function_stmt
 	| create_type_stmt
 	| create_view_stmt
 	| create_sequence_stmt
@@ -475,6 +476,7 @@ drop_ddl_stmt ::=
 	| drop_sequence_stmt
 	| drop_schema_stmt
 	| drop_type_stmt
+	| drop_function_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user string_or_placeholder_list
@@ -1016,6 +1018,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESUME'
 	| 'RETRY'
+	| 'RETURNS'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
@@ -1323,6 +1326,10 @@ create_table_as_stmt ::=
 	'CREATE' opt_persistence_temp_table 'TABLE' table_name create_as_opt_col_list opt_table_with 'AS' select_stmt opt_create_table_on_commit
 	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list opt_table_with 'AS' select_stmt opt_create_table_on_commit
 
+create_function_stmt ::=
+	'CREATE' 'FUNCTION' func_def_name '(' formal_param_list ')' 'RETURNS' typename 'AS' 'SCONST' 'LANGUAGE' name
+	| 'CREATE' 'OR' 'REPLACE' 'FUNCTION' func_def_name '(' formal_param_list ')' 'RETURNS' typename 'AS' 'SCONST' 'LANGUAGE' name
+
 create_type_stmt ::=
 	'CREATE' 'TYPE' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
 	| 'CREATE' 'TYPE' 'IF' 'NOT' 'EXISTS' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
@@ -1417,6 +1424,10 @@ drop_schema_stmt ::=
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
+
+drop_function_stmt ::=
+	'DROP' 'FUNCTION' func_def_name_list opt_drop_behavior
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_def_name_list opt_drop_behavior
 
 explain_option_name ::=
 	non_reserved_word
@@ -1860,6 +1871,12 @@ create_as_opt_col_list ::=
 	'(' create_as_table_defs ')'
 	| 
 
+func_def_name ::=
+	db_object_name
+
+formal_param_list ::=
+	( formal_param ) ( ( ',' formal_param ) )*
+
 opt_enum_val_list ::=
 	enum_val_list
 	| 
@@ -1920,6 +1937,9 @@ table_index_name_list ::=
 
 table_name_list ::=
 	( table_name ) ( ( ',' table_name ) )*
+
+func_def_name_list ::=
+	( func_def_name ) ( ( ',' func_def_name ) )*
 
 kv_option ::=
 	name '=' string_or_placeholder
@@ -2298,6 +2318,9 @@ storage_parameter_list ::=
 
 create_as_table_defs ::=
 	( column_name create_as_col_qual_list ) ( ( ',' column_name create_as_col_qual_list | ',' family_def | ',' create_as_constraint_def ) )*
+
+formal_param ::=
+	name typename
 
 enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*

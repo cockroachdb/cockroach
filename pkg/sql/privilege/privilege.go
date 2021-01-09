@@ -56,6 +56,8 @@ const (
 	Table ObjectType = "table"
 	// Type represents a type object.
 	Type ObjectType = "type"
+	// Func represents a function object.
+	Func ObjectType = "function"
 )
 
 // Predefined sets of privileges.
@@ -66,6 +68,7 @@ var (
 	DBTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges  = List{ALL, GRANT, CREATE, USAGE}
 	TypePrivileges    = List{ALL, GRANT, USAGE}
+	FuncPrivileges    = List{ALL, GRANT, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -226,6 +229,8 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 		return SchemaPrivileges
 	case Type:
 		return TypePrivileges
+	case Func:
+		return FuncPrivileges
 	case Any:
 		return AllPrivileges
 	default:

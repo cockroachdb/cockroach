@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -126,31 +127,50 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 	return node, nil
 }
 
+func (p *planner) checkReferencingObjects(
+	ctx context.Context, objType string, objName string, referencingDescriptorIDs []descpb.ID,
+) error {
+	var dependentNames []string
+	if len(referencingDescriptorIDs) == 0 {
+		return nil
+	}
+	for _, id := range referencingDescriptorIDs {
+		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+		if err != nil {
+			return errors.Wrapf(err, "type has dependent objects")
+		}
+		var fqString string
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			fqName, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return errors.Wrapf(err, "type %q has dependent objects", desc.GetName())
+			}
+			fqString = fqName.FQString()
+		case funcdesc.Descriptor:
+			fqString = t.Name()
+		}
+		dependentNames = append(dependentNames, fqString)
+	}
+	return pgerror.Newf(
+		pgcode.DependentObjectsStillExist,
+		"cannot drop %s %q because other objects (%v) still depend on it",
+		objType,
+		objName,
+		dependentNames,
+	)
+}
+
 func (p *planner) canDropTypeDesc(
 	ctx context.Context, desc *typedesc.Mutable, behavior tree.DropBehavior,
 ) error {
 	if err := p.canModifyType(ctx, desc); err != nil {
 		return err
 	}
-	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		var dependentNames []string
-		for _, id := range desc.ReferencingDescriptorIDs {
-			desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
-			if err != nil {
-				return errors.Wrapf(err, "type has dependent objects")
-			}
-			fqName, err := p.getQualifiedTableName(ctx, desc)
-			if err != nil {
-				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
-			}
-			dependentNames = append(dependentNames, fqName.FQString())
+	if behavior != tree.DropCascade {
+		if err := p.checkReferencingObjects(ctx, "type", desc.Name, desc.ReferencingDescriptorIDs); err != nil {
+			return err
 		}
-		return pgerror.Newf(
-			pgcode.DependentObjectsStillExist,
-			"cannot drop type %q because other objects (%v) still depend on it",
-			desc.Name,
-			dependentNames,
-		)
 	}
 	return nil
 }
@@ -237,6 +257,20 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 	for _, id := range typeIDs {
 		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, desc.ID)
 		if err := p.removeTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) addBackRefsFromAllTypesInFunc(ctx context.Context, desc *funcdesc.Mutable) error {
+	typeIDs, err := desc.GetAllReferencedTypeIDs()
+	if err != nil {
+		return err
+	}
+	for _, id := range typeIDs {
+		jobDesc := fmt.Sprintf("adding type back reference %d for func %d", id, desc.ID)
+		if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
 			return err
 		}
 	}

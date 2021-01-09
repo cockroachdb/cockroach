@@ -88,16 +88,16 @@ SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC:
 ----
 upper  upper  3615042040
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT ' blah ( ignored , ignored ) '::REGPROC
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT 'blah ()'::REGPROC
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT 'blah( )'::REGPROC
 
 query error invalid name: expected separator \.: blah\(, \)
@@ -142,10 +142,10 @@ SELECT 'foo.'::REGTYPE
 query error pgcode 42P01 relation "blah" does not exist
 SELECT 'blah'::REGCLASS
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT 'blah'::REGPROC
 
-query error unknown function: blah\(\)
+query error function blah\(\) does not exist
 SELECT 'blah'::REGPROCEDURE
 
 query error namespace 'blah' does not exist
@@ -382,7 +382,7 @@ SELECT 'pg_catalog."radians"("float4")'::regproc
 ----
 radians
 
-statement error unknown function: pg_catalog.radians"\(\)
+statement error function pg_catalog.radians"\(\) does not exist
 SELECT 'pg_catalog."radians"""'::regproc
 
 query TTTTT

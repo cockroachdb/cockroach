@@ -337,6 +337,25 @@ message FinishSchemaChangeRollback {
   CommonSchemaChangeEventDetails sc = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// CreateFunc is recorded when a user-defined function is created.
+message CreateFunc {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the new function.
+  string func_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the owner for the new function.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// DropFunc is recorded when a user-defined function is dropped.
+message DropFunc {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the new function.
+  string func_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the owner for the new function.
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
 
 // CreateType is recorded when a user-defined type is created.
 message CreateType {
