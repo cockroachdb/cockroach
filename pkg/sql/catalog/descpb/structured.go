@@ -257,6 +257,16 @@ func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
 }
 
+// IsPhysicalTable returns true if the TableDescriptor actually describes a
+// physical Table that needs to be stored in the kv layer, as opposed to a
+// different resource like a view or a virtual table. Physical tables have
+// primary keys, column families, and indexes (unlike virtual tables).
+// Sequences count as physical tables because their values are stored in
+// the KV layer.
+func (desc *TableDescriptor) IsPhysicalTable() bool {
+	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable()) || desc.MaterializedView()
+}
+
 // IsAs returns true if the TableDescriptor actually describes
 // a Table resource with an As source.
 func (desc *TableDescriptor) IsAs() bool {
