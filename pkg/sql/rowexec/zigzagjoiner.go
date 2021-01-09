@@ -647,8 +647,8 @@ func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.GetPrimaryIndex().ColumnIDs, colID); idx != -1 {
-			direction, err = zi.table.GetPrimaryIndex().ColumnDirections[idx].ToEncodingDirection()
+		} else if idx := findColumnID(zi.table.PrimaryIndexInterface().IndexDesc().ColumnIDs, colID); idx != -1 {
+			direction, err = zi.table.PrimaryIndexInterface().GetColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}

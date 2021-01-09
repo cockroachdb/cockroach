@@ -96,16 +96,16 @@ func ShowCreateTable(
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().ColumnIDs[0] == col.ID {
+		if desc.IsPhysicalTable() && desc.PrimaryIndexInterface().GetColumnID(0) == col.ID {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
 			primaryKeyIsOnVisibleColumn = true
 		}
 	}
 	if primaryKeyIsOnVisibleColumn ||
-		(desc.IsPhysicalTable() && desc.GetPrimaryIndex().IsSharded()) {
+		(desc.IsPhysicalTable() && desc.PrimaryIndexInterface().IsSharded()) {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().Name)
+		formatQuoteNames(&f.Buffer, desc.PrimaryIndexInterface().GetName())
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
@@ -189,11 +189,11 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.PrimaryIndexInterface().IndexDesc(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.PrimaryIndexInterface().IndexDesc(), &desc.PrimaryIndexInterface().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}
