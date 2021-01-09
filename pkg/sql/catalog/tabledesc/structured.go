@@ -2934,19 +2934,6 @@ func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDes
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
-// FindIndexByName finds the index with the specified name in the active
-// list or the mutations list. It returns true if the index is being dropped.
-// This method is deprecated, use FindIndexWithName instead.
-func (desc *wrapper) FindIndexByName(
-	name string,
-) (_ *descpb.IndexDescriptor, dropped bool, _ error) {
-	idx, err := desc.FindIndexWithName(name)
-	if err != nil {
-		return nil, false, err
-	}
-	return idx.IndexDesc(), idx.Dropped(), nil
-}
-
 // NamesForColumnIDs returns the names for the given column ids, or an error
 // if one or more column ids was missing. Note - this allocates! It's not for
 // hot path code.
