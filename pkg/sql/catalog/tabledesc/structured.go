@@ -454,15 +454,6 @@ func (desc *wrapper) ForeachNonDropColumn(f func(column *descpb.ColumnDescriptor
 	return nil
 }
 
-// ForeachNonDropIndex runs a function on all indexes, including those being
-// added in the mutations.
-// This method is deprecated, use ForEachNonDropIndex instead.
-func (desc *wrapper) ForeachNonDropIndex(f func(*descpb.IndexDescriptor) error) error {
-	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
-		return f(idx.IndexDesc())
-	})
-}
-
 // ForeachIndex runs a function on the set of indexes as specified by opts.
 // This method is deprecated, use ForEachIndex instead.
 func (desc *wrapper) ForeachIndex(
@@ -2532,7 +2523,8 @@ func (desc *wrapper) validatePartitioning() error {
 	partitionNames := make(map[string]string)
 
 	a := &rowenc.DatumAlloc{}
-	return desc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
+	return desc.ForEachNonDropIndex(func(idx catalog.Index) error {
+		idxDesc := idx.IndexDesc()
 		return desc.validatePartitioningDescriptor(
 			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
 		)
@@ -3924,12 +3916,8 @@ func (desc *wrapper) InvalidateFKConstraints() {
 // being added in the mutations.
 func (desc *wrapper) AllIndexSpans(codec keys.SQLCodec) roachpb.Spans {
 	var spans roachpb.Spans
-	err := desc.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
-		spans = append(spans, desc.IndexSpan(codec, index.ID))
-		return nil
-	})
-	if err != nil {
-		panic(err)
+	for _, index := range desc.NonDropIndexes() {
+		spans = append(spans, desc.IndexSpan(codec, index.GetID()))
 	}
 	return spans
 }
@@ -4075,16 +4063,13 @@ func (desc *wrapper) FindAllReferences() (map[descpb.ID]struct{}, error) {
 		fk := &desc.InboundFKs[i]
 		refs[fk.OriginTableID] = struct{}{}
 	}
-	if err := desc.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
-		for _, a := range index.Interleave.Ancestors {
-			refs[a.TableID] = struct{}{}
+	for _, index := range desc.NonDropIndexes() {
+		for i := 0; i < index.NumInterleaveAncestors(); i++ {
+			refs[index.GetInterleaveAncestor(i).TableID] = struct{}{}
 		}
-		for _, c := range index.InterleavedBy {
-			refs[c.Table] = struct{}{}
+		for i := 0; i < index.NumInterleavedBy(); i++ {
+			refs[index.GetInterleavedBy(i).Table] = struct{}{}
 		}
-		return nil
-	}); err != nil {
-		return nil, err
 	}
 
 	for _, c := range desc.AllNonDropColumns() {

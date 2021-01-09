@@ -1948,16 +1948,17 @@ func NewTableDesc(
 	}
 
 	// Record the types of indexes that the table has.
-	if err := desc.ForeachNonDropIndex(func(idx *descpb.IndexDescriptor) error {
+	if err := catalog.ForEachNonDropIndex(&desc, func(idx catalog.Index) error {
 		if idx.IsSharded() {
 			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 		}
-		if idx.Type == descpb.IndexDescriptor_INVERTED {
+		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
 			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
-			if !geoindex.IsEmptyConfig(&idx.GeoConfig) {
-				if geoindex.IsGeographyConfig(&idx.GeoConfig) {
+			geoConfig := idx.GetGeoConfig()
+			if !geoindex.IsEmptyConfig(&geoConfig) {
+				if geoindex.IsGeographyConfig(&geoConfig) {
 					telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
-				} else if geoindex.IsGeometryConfig(&idx.GeoConfig) {
+				} else if geoindex.IsGeometryConfig(&geoConfig) {
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
