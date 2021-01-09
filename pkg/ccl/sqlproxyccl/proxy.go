@@ -136,23 +136,26 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	defer func() { _ = conn.Close() }()
 
 	backendDialer := s.opts.BackendDialer
+	var backendConfig *BackendConfig
+	if s.opts.BackendConfigFromParams != nil {
+		var clientErr error
+		backendConfig, clientErr = s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
+		if clientErr != nil {
+			var codeErr *CodeError
+			if !errors.As(clientErr, &codeErr) {
+				codeErr = &CodeError{
+					code: CodeParamsRoutingFailed,
+					err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
+				}
+			}
+			return codeErr
+		}
+	}
 	if backendDialer == nil {
 		// This we need to keep until all the clients are switched to provide BackendDialer.
 		// It constructs a backend dialer from the information provided via
 		// BackendConfigFromParams function.
 		backendDialer = func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			backendConfig, clientErr := s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
-			if clientErr != nil {
-				var codeErr *CodeError
-				if !errors.As(clientErr, &codeErr) {
-					codeErr = &CodeError{
-						code: CodeParamsRoutingFailed,
-						err:  errors.Errorf("rejected by BackendConfigFromParams: %v", clientErr),
-					}
-				}
-				return nil, codeErr
-			}
-
 			// We should be able to remove this when the all clients switch to
 			// backend dialer.
 			if s.opts.ModifyRequestParams != nil {
@@ -197,12 +200,7 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if s.opts.BackendConfigFromParams != nil {
-		// Ignore the next error as we already did all checks in the BackendDialer
-		// so there shouldn't be any errors here.
-		// This is temporary until Spas moves processing of OnConnectionSuccess and
-		// KeepAliveLoop outside of the proxy.
-		backendConfig, _ := s.opts.BackendConfigFromParams(msg.Parameters, proxyConn)
+	if backendConfig != nil {
 		if backendConfig.OnConnectionSuccess != nil {
 			backendConfig.OnConnectionSuccess()
 		}
