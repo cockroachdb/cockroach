@@ -225,11 +225,11 @@ func getLogicallyMergedTableSpans(
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
 
-		lhsIndex, err := table.FindIndexByID(lhsIndexID)
+		lhsIndex, err := table.FindIndexWithID(lhsIndexID)
 		if err != nil {
 			return nil, err
 		}
-		rhsIndex, err := table.FindIndexByID(rhsIndexID)
+		rhsIndex, err := table.FindIndexWithID(rhsIndexID)
 		if err != nil {
 			return nil, err
 		}
