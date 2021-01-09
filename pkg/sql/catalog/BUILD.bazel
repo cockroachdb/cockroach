@@ -14,6 +14,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
