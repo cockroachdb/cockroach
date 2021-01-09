@@ -1021,7 +1021,8 @@ func RewriteTableDescs(
 			return err
 		}
 
-		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+		if err := catalog.ForEachNonDropIndex(table, func(indexI catalog.Index) error {
+			index := indexI.IndexDesc()
 			// Verify that for any interleaved index being restored, the interleave
 			// parent is also being restored. Otherwise, the interleave entries in the
 			// restored IndexDescriptors won't have anything to point to.

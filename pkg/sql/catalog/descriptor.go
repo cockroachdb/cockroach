@@ -118,7 +118,6 @@ type TableDescriptor interface {
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor                                             // deprecated
 	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error // deprecated
-	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error                          // deprecated
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)               // deprecated
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error) // deprecated
