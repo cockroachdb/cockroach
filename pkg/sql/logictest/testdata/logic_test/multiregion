@@ -147,6 +147,18 @@ DATABASE region_test_db  ALTER DATABASE region_test_db CONFIGURE ZONE USING
                          constraints = '{+region=ap-southeast-2: 1}',
                          lease_preferences = '[[+region=ap-southeast-2]]'
 
+# copy of the previous test but using FROM instead of FOR
+query TT
+SHOW ZONE CONFIGURATION FROM DATABASE region_test_db
+----
+DATABASE region_test_db  ALTER DATABASE region_test_db CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 90000,
+                         num_replicas = 3,
+                         constraints = '{+region=ap-southeast-2: 1}',
+                         lease_preferences = '[[+region=ap-southeast-2]]'
+
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE multi_region_test_db
 ----
