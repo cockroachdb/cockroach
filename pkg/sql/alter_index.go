@@ -72,7 +72,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
-			if n.tableDesc.PrimaryIndexInterface().GetPartitioning().NumImplicitColumns > 0 {
+			if n.tableDesc.GetPrimaryIndex().GetPartitioning().NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning",

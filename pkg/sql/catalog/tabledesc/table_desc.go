@@ -252,9 +252,9 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
-// PrimaryIndexInterface returns the primary index in the form of a
-// catalog.Index interface.
-func (desc *wrapper) PrimaryIndexInterface() catalog.Index {
+// GetPrimaryIndex returns the primary index in the form of a catalog.Index
+// interface.
+func (desc *wrapper) GetPrimaryIndex() catalog.Index {
 	return desc.getExistingOrNewIndexCache().primary
 }
 

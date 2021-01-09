@@ -454,7 +454,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.PrimaryIndexInterface().ContainsColumnID(colToDrop.ID) {
+			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.ID) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
@@ -477,7 +477,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if !containsThisColumn {
 					for j := 0; j < idx.NumExtraColumns(); j++ {
 						id := idx.GetExtraColumnID(j)
-						if n.tableDesc.PrimaryIndexInterface().ContainsColumnID(id) {
+						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -761,7 +761,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if t.All {
 				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
 			}
-			oldPartitioning := n.tableDesc.PrimaryIndexInterface().GetPartitioning()
+			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
 			if oldPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER TABLE PARTITION BY",
@@ -772,7 +772,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				n.tableDesc.PrimaryIndexInterface().IndexDesc(),
+				n.tableDesc.GetPrimaryIndex().IndexDesc(),
 				0, /* numImplicitColumns */
 				t.PartitionBy,
 			)
@@ -782,14 +782,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || !oldPartitioning.Equal(&newPartitioning)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, n.tableDesc.PrimaryIndexInterface().IndexDesc(), &oldPartitioning,
+				n.tableDesc, n.tableDesc.GetPrimaryIndex().IndexDesc(), &oldPartitioning,
 				&newPartitioning, params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
 				return err
 			}
 			{
-				newPrimaryIndex := *n.tableDesc.PrimaryIndexInterface().IndexDesc()
+				newPrimaryIndex := *n.tableDesc.GetPrimaryIndex().IndexDesc()
 				newPrimaryIndex.Partitioning = newPartitioning
 				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
 			}
@@ -1065,7 +1065,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.PrimaryIndexInterface().ContainsColumnID(col.ID) {
+		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.ID) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.Name)
 		}

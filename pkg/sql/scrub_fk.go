@@ -114,8 +114,8 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	// Get primary key columns not included in the FK.
 	var colIDs []descpb.ColumnID
 	colIDs = append(colIDs, o.constraint.FK.OriginColumnIDs...)
-	for i := 0; i < o.tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
-		pkColID := o.tableDesc.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		pkColID := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
 		found := false
 		for _, id := range o.constraint.FK.OriginColumnIDs {
 			if pkColID == id {
@@ -148,9 +148,9 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 
 	// Collect the primary index values for generating the primary key
 	// pretty string.
-	primaryKeyDatums := make(tree.Datums, 0, o.tableDesc.PrimaryIndexInterface().NumColumns())
-	for i := 0; i < o.tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
-		id := o.tableDesc.PrimaryIndexInterface().GetColumnID(i)
+	primaryKeyDatums := make(tree.Datums, 0, o.tableDesc.GetPrimaryIndex().NumColumns())
+	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		id := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
 		idx := o.colIDToRowIdx.GetDefault(id)
 		primaryKeyDatums = append(primaryKeyDatums, row[idx])
 	}
@@ -165,8 +165,8 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		}
 		rowDetails[col.Name] = row[idx].String()
 	}
-	for i := 0; i < o.tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
-		id := o.tableDesc.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		id := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
 		found := false
 		for _, fkID := range o.constraint.FK.OriginColumnIDs {
 			if id == fkID {

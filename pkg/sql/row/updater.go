@@ -98,8 +98,8 @@ func MakeUpdater(
 	updateColIDtoRowIndex := ColIDtoRowIndexFromCols(updateCols)
 
 	var primaryIndexCols catalog.TableColSet
-	for i := 0; i < tableDesc.PrimaryIndexInterface().NumColumns(); i++ {
-		colID := tableDesc.PrimaryIndexInterface().GetColumnID(i)
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
 		primaryIndexCols.Add(colID)
 	}
 
