@@ -344,11 +344,9 @@ func FindFKReferencedIndex(
 		return primaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
-	indexes := referencedTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
 		if idx.IsValidReferencedIndex(referencedColIDs) {
-			return idx, nil
+			return idx.IndexDesc(), nil
 		}
 	}
 	return nil, pgerror.Newf(
@@ -369,11 +367,9 @@ func FindFKOriginIndex(
 		return primaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	indexes := originTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range originTable.PublicNonPrimaryIndexes() {
 		if idx.IsValidOriginIndex(originColIDs) {
-			return idx, nil
+			return idx.IndexDesc(), nil
 		}
 	}
 	return nil, pgerror.Newf(
