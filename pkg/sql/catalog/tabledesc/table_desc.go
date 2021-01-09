@@ -182,13 +182,6 @@ func (desc *wrapper) GetPrimaryIndexID() descpb.IndexID {
 	return desc.PrimaryIndex.ID
 }
 
-// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the
-// descriptor.
-// This method is deprecated, use PublicNonPrimaryIndexes instead.
-func (desc *wrapper) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
-	return desc.Indexes
-}
-
 // IsTemporary returns true if this is a temporary table.
 func (desc *wrapper) IsTemporary() bool {
 	return desc.GetTemporary()

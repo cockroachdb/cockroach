@@ -1807,7 +1807,7 @@ CREATE TABLE crdb_internal.create_statements (
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.GetPublicNonPrimaryIndexes(), table, alterStmts,
+			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.PublicNonPrimaryIndexes(), table, alterStmts,
 				validateStmts, &p.semaCtx); err != nil {
 				return err
 			}
@@ -1847,7 +1847,7 @@ func showAlterStatementWithInterleave(
 	tn *tree.TableName,
 	contextName string,
 	lCtx simpleSchemaResolver,
-	allIdx []descpb.IndexDescriptor,
+	allIdx []catalog.Index,
 	table catalog.TableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
@@ -1888,14 +1888,12 @@ func showAlterStatementWithInterleave(
 		return err
 	}
 
-	for i := range allIdx {
-		idx := &allIdx[i]
+	for _, idx := range allIdx {
 		// Create CREATE INDEX commands for INTERLEAVE tables. These commands
 		// are included in the ALTER TABLE statements.
-		if len(idx.Interleave.Ancestors) > 0 {
+		if idx.NumInterleaveAncestors() > 0 {
 			f := tree.NewFmtCtx(tree.FmtSimple)
-			intl := idx.Interleave
-			parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
+			parentTableID := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1).TableID
 			var err error
 			var parentName tree.TableName
 			if lCtx != nil {
@@ -1921,11 +1919,11 @@ func showAlterStatementWithInterleave(
 				tableName.ExplicitSchema = false
 			}
 			var sharedPrefixLen int
-			for _, ancestor := range intl.Ancestors {
-				sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			for i := 0; i < idx.NumInterleaveAncestors(); i++ {
+				sharedPrefixLen += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
 			}
 			// Write the CREATE INDEX statements.
-			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
+			if err := showCreateIndexWithInterleave(ctx, f, table, idx.IndexDesc(), tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
 				return err
 			}
 			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -2511,8 +2509,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
-				for _, idx := range desc.GetPublicNonPrimaryIndexes() {
-					indexNames[id][uint32(idx.ID)] = idx.Name
+				for _, idx := range desc.PublicNonPrimaryIndexes() {
+					indexNames[id][uint32(idx.GetID())] = idx.GetName()
 				}
 			case *dbdesc.Immutable:
 				dbNames[id] = desc.GetName()

@@ -312,12 +312,11 @@ func (p *planner) dropIndexByName(
 	// Construct a list of all the remaining indexes, so that we can see if there
 	// is another index that could replace the one we are deleting for a given
 	// foreign key constraint.
-	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
+	remainingIndexes := make([]*descpb.IndexDescriptor, 0, len(tableDesc.ActiveIndexes()))
 	remainingIndexes = append(remainingIndexes, tableDesc.GetPrimaryIndex())
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		index := &tableDesc.GetPublicNonPrimaryIndexes()[i]
-		if index.ID != idx.ID {
-			remainingIndexes = append(remainingIndexes, index)
+	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
+		if index.GetID() != idx.ID {
+			remainingIndexes = append(remainingIndexes, index.IndexDesc())
 		}
 	}
 
@@ -457,57 +456,58 @@ func (p *planner) dropIndexByName(
 		)
 	}
 
-	found := false
-	for i, idxEntry := range tableDesc.GetPublicNonPrimaryIndexes() {
-		if idxEntry.ID == idx.ID {
-			// Unsplit all manually split ranges in the index so they can be
-			// automatically merged by the merge queue. Gate this on being the
-			// system tenant because secondary tenants aren't allowed to scan
-			// the meta ranges directly.
-			if p.ExecCfg().Codec.ForSystemTenant() {
-				span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-				ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
-				if err != nil {
-					return err
-				}
-				for _, r := range ranges {
-					var desc roachpb.RangeDescriptor
-					if err := r.ValueProto(&desc); err != nil {
-						return err
-					}
-					// We have to explicitly check that the range descriptor's start key
-					// lies within the span of the index since ScanMetaKVs returns all
-					// intersecting spans.
-					if !desc.GetStickyBit().IsEmpty() && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
-						// Swallow "key is not the start of a range" errors because it would
-						// mean that the sticky bit was removed and merged concurrently. DROP
-						// INDEX should not fail because of this.
-						if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
-							return err
-						}
-					}
-				}
-			}
+	foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idxEntry catalog.Index) bool {
+		return idxEntry.GetID() == idx.ID
+	})
 
-			// the idx we picked up with FindIndexByID at the top may not
-			// contain the same field any more due to other schema changes
-			// intervening since the initial lookup. So we send the recent
-			// copy idxEntry for drop instead.
-			if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
-				return err
-			}
-			tableDesc.RemovePublicNonPrimaryIndex(i + 1)
-			found = true
-			break
-		}
-	}
-	if !found {
+	if foundIndex == nil {
 		return pgerror.Newf(
 			pgcode.ObjectNotInPrerequisiteState,
 			"index %q in the middle of being added, try again later",
 			idxName,
 		)
 	}
+
+	idxEntry := *foundIndex.IndexDesc()
+	idxOrdinal := foundIndex.Ordinal()
+
+	// Unsplit all manually split ranges in the index so they can be
+	// automatically merged by the merge queue. Gate this on being the
+	// system tenant because secondary tenants aren't allowed to scan
+	// the meta ranges directly.
+	if p.ExecCfg().Codec.ForSystemTenant() {
+		span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
+		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, span)
+		if err != nil {
+			return err
+		}
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			// We have to explicitly check that the range descriptor's start key
+			// lies within the span of the index since ScanMetaKVs returns all
+			// intersecting spans.
+			if !desc.GetStickyBit().IsEmpty() && span.Key.Compare(desc.StartKey.AsRawKey()) <= 0 {
+				// Swallow "key is not the start of a range" errors because it would
+				// mean that the sticky bit was removed and merged concurrently. DROP
+				// INDEX should not fail because of this.
+				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
+					return err
+				}
+			}
+		}
+	}
+
+	// the idx we picked up with FindIndexByID at the top may not
+	// contain the same field any more due to other schema changes
+	// intervening since the initial lookup. So we send the recent
+	// copy idxEntry for drop instead.
+	if err := tableDesc.AddIndexMutation(&idxEntry, descpb.DescriptorMutation_DROP); err != nil {
+		return err
+	}
+	tableDesc.RemovePublicNonPrimaryIndex(idxOrdinal)
 
 	if err := p.removeIndexComment(ctx, tableDesc.ID, idx.ID); err != nil {
 		return err
