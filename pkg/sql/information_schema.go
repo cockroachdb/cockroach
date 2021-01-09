@@ -1297,7 +1297,7 @@ CREATE TABLE information_schema.statistics (
 					)
 				}
 
-				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					// Columns in the primary key that aren't in index.ColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
@@ -1305,10 +1305,10 @@ CREATE TABLE information_schema.statistics (
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > 0
+						hasImplicitCols = index.NumExtraColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
@@ -1318,18 +1318,20 @@ CREATE TABLE information_schema.statistics (
 					}
 
 					sequence := 1
-					for i, col := range index.ColumnNames {
+					for i := 0; i < index.NumColumns(); i++ {
+						col := index.GetColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.ColumnDirections[i])
-						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
+						dir := dStringForIndexDirection(index.GetColumnDirection(i))
+						if err := appendRow(index.IndexDesc(), col, sequence, dir, false, false); err != nil {
 							return err
 						}
 						sequence++
 						delete(implicitCols, col)
 					}
-					for _, col := range index.StoreColumnNames {
+					for i := 0; i < index.NumStoredColumns(); i++ {
+						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
-						if err := appendRow(index, col, sequence,
+						if err := appendRow(index.IndexDesc(), col, sequence,
 							indexDirectionNA, true, false); err != nil {
 							return err
 						}
@@ -1346,7 +1348,7 @@ CREATE TABLE information_schema.statistics (
 						for _, col := range table.GetPrimaryIndex().ColumnNames {
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
-								if err := appendRow(index, col, sequence,
+								if err := appendRow(index.IndexDesc(), col, sequence,
 									indexDirectionAsc, false, true); err != nil {
 									return err
 								}
