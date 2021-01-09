@@ -14,8 +14,8 @@ package tabledesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 var _ catalog.TableDescriptor = (*Immutable)(nil)
@@ -27,6 +27,12 @@ var _ catalog.TableDescriptor = (*wrapper)(nil)
 // interface, which is overloaded by Immutable and Mutable.
 type wrapper struct {
 	descpb.TableDescriptor
+
+	// indexCache, when not nil, points to a struct containing precomputed
+	// catalog.Index slices. This can therefore only be set when creating an
+	// Immutable.
+	indexCache *indexCache
+
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
 
@@ -42,18 +48,6 @@ func (*wrapper) IsUncommittedVersion() bool {
 // this descriptor post deserialization.
 func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {
 	return desc.postDeserializationChanges
-}
-
-// PartialIndexOrds returns a set containing the ordinal of each partial index
-// defined on the table.
-func (desc *wrapper) PartialIndexOrds() util.FastIntSet {
-	var partialIndexOrds util.FastIntSet
-	for i, idx := range desc.DeletableIndexes() {
-		if idx.IsPartial() {
-			partialIndexOrds.Add(i)
-		}
-	}
-	return partialIndexOrds
 }
 
 // mutationIndexes returns all non-public indexes in the specified state.
@@ -76,11 +70,13 @@ func (desc *wrapper) mutationIndexes(
 }
 
 // DeleteOnlyIndexes returns a list of delete-only mutation indexes.
+// This method is deprecated, use DeleteOnlyNonPrimaryIndexes instead.
 func (desc *wrapper) DeleteOnlyIndexes() []descpb.IndexDescriptor {
 	return desc.mutationIndexes(descpb.DescriptorMutation_DELETE_ONLY)
 }
 
 // WritableIndexes returns a list of public and write-only mutation indexes.
+// This method is deprecated, use WritableNonPrimaryIndexes instead.
 func (desc *wrapper) WritableIndexes() []descpb.IndexDescriptor {
 	if len(desc.Mutations) == 0 {
 		return desc.Indexes
@@ -93,7 +89,8 @@ func (desc *wrapper) WritableIndexes() []descpb.IndexDescriptor {
 	return indexes
 }
 
-// DeletableIndexes implements the catalog.Descriptor interface.
+// DeletableIndexes returns a list of deletable indexes.
+// This method is deprecated, use DeletableNonPrimaryIndexes instead.
 func (desc *wrapper) DeletableIndexes() []descpb.IndexDescriptor {
 	if len(desc.Mutations) == 0 {
 		return desc.Indexes
@@ -106,7 +103,8 @@ func (desc *wrapper) DeletableIndexes() []descpb.IndexDescriptor {
 	return indexes
 }
 
-// mutationColumns returns all non-public writable columns in the specified state.
+// mutationColumns returns all non-public writable columns in the specified
+// state.
 func (desc *wrapper) mutationColumns(
 	mutationState descpb.DescriptorMutation_State,
 ) []descpb.ColumnDescriptor {
@@ -197,17 +195,9 @@ type Immutable struct {
 	// It is partitioned by the state of the column: public, write-only, delete-only
 	publicAndNonPublicCols []descpb.ColumnDescriptor
 
-	// publicAndNonPublicCols is a list of public and non-public indexes.
-	// It is partitioned by the state of the index: public, write-only, delete-only
-	publicAndNonPublicIndexes []descpb.IndexDescriptor
-
-	writeOnlyColCount   int
-	writeOnlyIndexCount int
+	writeOnlyColCount int
 
 	allChecks []descpb.TableDescriptor_CheckConstraint
-
-	// partialIndexOrds contains the ordinal of each partial index.
-	partialIndexOrds util.FastIntSet
 
 	// readableColumns is a list of columns (including those undergoing a schema change)
 	// which can be scanned. Columns in the process of a schema change
@@ -245,7 +235,9 @@ func (desc *wrapper) GetPrimaryIndexID() descpb.IndexID {
 	return desc.PrimaryIndex.ID
 }
 
-// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
+// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the
+// descriptor.
+// This method is deprecated, use PublicNonPrimaryIndexes instead.
 func (desc *wrapper) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
 	return desc.Indexes
 }
@@ -265,7 +257,8 @@ func (desc *wrapper) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 	return &desc.Columns[idx]
 }
 
-// ReadableColumns implements the catalog.TableDescriptor interface
+// ReadableColumns returns a list of columns (including those undergoing a
+// schema change) which can be scanned.
 func (desc *Immutable) ReadableColumns() []descpb.ColumnDescriptor {
 	return desc.readableColumns
 }
@@ -317,4 +310,131 @@ func (desc *Mutable) SetPrimaryIndex(index descpb.IndexDescriptor) {
 // index.
 func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.IndexDescriptor) {
 	desc.Indexes[indexOrdinal-1] = index
+}
+
+// PrimaryIndexInterface returns the primary index in the form of a
+// catalog.Index interface.
+func (desc *wrapper) PrimaryIndexInterface() catalog.Index {
+	return desc.getExistingOrNewIndexCache().primary
+}
+
+// getExistingOrNewIndexCache should be the only place where the indexCache
+// field in wrapper is ever read.
+func (desc *wrapper) getExistingOrNewIndexCache() *indexCache {
+	c := desc.indexCache
+	if c == nil {
+		c = &indexCache{}
+	}
+	return c.initialized(desc)
+}
+
+// AllIndexes returns a slice with all indexes, public and non-public,
+// in the underlying proto, in their canonical order:
+// - the primary index,
+// - the public non-primary indexes in the Indexes array, in order,
+// - the non-public indexes present in the Mutations array, in order.
+//
+// See also catalog.Index.Ordinal().
+func (desc *wrapper) AllIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().all
+}
+
+// ActiveIndexes returns a slice with all public indexes in the underlying
+// proto, in their canonical order:
+// - the primary index,
+// - the public non-primary indexes in the Indexes array, in order.
+//
+// See also catalog.Index.Ordinal().
+func (desc *wrapper) ActiveIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().active
+}
+
+// NonDropIndexes returns a slice of all non-drop indexes in the underlying
+// proto, in their canonical order. This means:
+// - the primary index, if the table is a physical table,
+// - the public non-primary indexes in the Indexes array, in order,
+// - the non-public indexes present in the Mutations array, in order,
+//   if the mutation is not a drop.
+//
+// See also catalog.Index.Ordinal().
+func (desc *wrapper) NonDropIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().nonDrop
+}
+
+// NonDropIndexes returns a slice of all partial indexes in the underlying
+// proto, in their canonical order. This is equivalent to taking the slice
+// produced by AllIndexes and filtering indexes with non-empty expressions.
+func (desc *wrapper) PartialIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().partial
+}
+
+// PublicNonPrimaryIndexes returns a slice of all active secondary indexes,
+// in their canonical order. This is equivalent to the Indexes array in the
+// proto.
+func (desc *wrapper) PublicNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().publicNonPrimary
+}
+
+// WritableNonPrimaryIndexes returns a slice of all non-primary indexes which
+// allow being written to: public + delete-and-write-only, in their canonical
+// order. This is equivalent to taking the slice produced by
+// DeletableNonPrimaryIndexes and removing the indexes which are in mutations
+// in the delete-only state.
+func (desc *wrapper) WritableNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().writableNonPrimary
+}
+
+// DeletableNonPrimaryIndexes returns a slice of all non-primary indexes
+// which allow being deleted from: public + delete-and-write-only +
+// delete-only, in  their canonical order. This is equivalent to taking
+// the slice produced by AllIndexes and removing the primary index.
+func (desc *wrapper) DeletableNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().deletableNonPrimary
+}
+
+// DeleteOnlyNonPrimaryIndexes returns a slice of all non-primary indexes
+// which allow only being deleted from, in their canonical order. This is
+// equivalent to taking the slice produced by DeletableNonPrimaryIndexes and
+// removing the indexes which are not in mutations or not in the delete-only
+// state.
+func (desc *wrapper) DeleteOnlyNonPrimaryIndexes() []catalog.Index {
+	return desc.getExistingOrNewIndexCache().deleteOnlyNonPrimary
+}
+
+// FindIndexWithID returns the first catalog.Index that matches the id
+// in the set of all indexes, or an error if none was found. The order of
+// traversal is the canonical order, see catalog.Index.Ordinal().
+func (desc *wrapper) FindIndexWithID(id descpb.IndexID) (catalog.Index, error) {
+	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
+		NonPhysicalPrimaryIndex: true,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx catalog.Index) bool {
+		return idx.GetID() == id
+	}); idx != nil {
+		return idx, nil
+	}
+	for _, m := range desc.GCMutations {
+		if m.IndexID == id {
+			return nil, ErrIndexGCMutationsList
+		}
+	}
+	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
+}
+
+// FindIndexWithName returns the first catalog.Index that matches the name in
+// the set of all indexes, excluding the primary index of non-physical
+// tables, or an error if none was found. The order of traversal is the
+// canonical order, see catalog.Index.Ordinal().
+func (desc *wrapper) FindIndexWithName(name string) (catalog.Index, error) {
+	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
+		NonPhysicalPrimaryIndex: false,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx catalog.Index) bool {
+		return idx.GetName() == name
+	}); idx != nil {
+		return idx, nil
+	}
+	return nil, errors.Errorf("index %q does not exist", name)
 }
