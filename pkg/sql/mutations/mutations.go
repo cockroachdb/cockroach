@@ -554,8 +554,8 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 				stmt.Interleave = nil
 				changed = true
 			}
-			if stmt.PartitionBy != nil {
-				stmt.PartitionBy = nil
+			if stmt.PartitionByTable != nil {
+				stmt.PartitionByTable = nil
 				changed = true
 			}
 			for i := 0; i < len(stmt.Defs); i++ {
@@ -580,8 +580,8 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 						def.Interleave = nil
 						changed = true
 					}
-					if def.PartitionBy != nil {
-						def.PartitionBy = nil
+					if def.PartitionByIndex != nil {
+						def.PartitionByIndex = nil
 						changed = true
 					}
 					if def.WithoutIndex {

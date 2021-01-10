@@ -61,7 +61,7 @@ func main() {
 			switch stmt := stmt.(type) {
 			case *tree.CreateTable:
 				stmt.Interleave = nil
-				stmt.PartitionBy = nil
+				stmt.PartitionByTable = nil
 				var newdefs tree.TableDefs
 				for _, def := range stmt.Defs {
 					switch def := def.(type) {
