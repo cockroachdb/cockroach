@@ -1927,6 +1927,12 @@ func NewTableDesc(
 			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
 				RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
 			}
+			if n.Locality.RegionalByRowColumn != "" {
+				return nil, unimplemented.New(
+					"REGIONAL BY ROW ON name",
+					"REGIONAL BY ROW ON name is not yet supported",
+				)
+			}
 		default:
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
 		}

@@ -50,6 +50,11 @@ func (r *Replica) executeReadOnlyBatch(
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
 	// designed.
 	rw := r.store.Engine().NewReadOnly()
+	if !rw.ConsistentIterators() {
+		// This is not currently needed for correctness, but future optimizations
+		// may start relying on this, so we assert here.
+		panic("expected consistent iterators")
+	}
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}

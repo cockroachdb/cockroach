@@ -261,6 +261,9 @@ TABLE regional_test3_table  ALTER TABLE regional_test3_table CONFIGURE ZONE USIN
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: test1, test2, test3
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
+statement error REGIONAL BY ROW ON name is not yet supported
+CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW ON a
+
 statement ok
 CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
 

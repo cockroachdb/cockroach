@@ -7197,6 +7197,13 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
+| LOCALITY REGIONAL BY ROW ON name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($6),
+    }
+  }
 | REGIONAL AFFINITY TO NONE
   {
     $$.val = &tree.Locality{
@@ -7220,6 +7227,13 @@ locality:
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
+    }
+  }
+|  REGIONAL AFFINITY AT ROW LEVEL ON name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($7),
     }
   }
 | REGIONAL AFFINITY NONE
@@ -7247,6 +7261,13 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
+| REGIONAL AFFINITY ROW LEVEL ON name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($6),
+    }
+  }
 | NO REGIONAL AFFINITY
   {
     $$.val = &tree.Locality{
@@ -7270,6 +7291,13 @@ locality:
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
+    }
+  }
+| ROW LEVEL REGIONAL AFFINITY ON name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($6),
     }
   }
 
