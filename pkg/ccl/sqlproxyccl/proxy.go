@@ -191,6 +191,64 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	}
 	defer func() { _ = crdbConn.Close() }()
 
+	be := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
+	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
+
+loop:
+	for {
+		// Read the server response and forward it to the client.
+		// TODO(spaskob): in verbose mode, log these messages.
+		backendMsg, err := fe.Receive()
+		if err != nil {
+			return NewErrorf(
+				CodeBackendReadFailed, "unable to receive message from backend: %v", err,
+			)
+		}
+
+		err = be.Send(backendMsg)
+		if err != nil {
+			return NewErrorf(
+				CodeClientWriteFailed, "unable to send message %v to client: %v", backendMsg, err,
+			)
+		}
+
+		// Decide what to do based on the type of the server response.
+		switch tp := backendMsg.(type) {
+		case *pgproto3.ReadyForQuery:
+			// Connection has been successfully established.
+			break loop
+		case *pgproto3.AuthenticationOk:
+			// Server has authenticated the connection; keep reading messages until
+			// `pgproto3.ReadyForQuery` is encountered which signifies that server
+			// is ready to serve queries.
+		case *pgproto3.ParameterStatus:
+			// Server sent status message; keep reading messages until
+			// `pgproto3.ReadyForQuery` is encountered.
+		case *pgproto3.ErrorResponse:
+			// Just forward the error to the client let it handle it.
+		case
+			*pgproto3.AuthenticationCleartextPassword,
+			*pgproto3.AuthenticationMD5Password,
+			*pgproto3.AuthenticationSASL:
+			// The backend is requesting the user to authenticate.
+			// Read the client response and forward it to server.
+			fntMsg, err := be.Receive()
+			if err != nil {
+				return NewErrorf(
+					CodeClientReadFailed, "unable to receive message from client: %v", err,
+				)
+			}
+			err = fe.Send(fntMsg)
+			if err != nil {
+				return NewErrorf(
+					CodeBackendWriteFailed, "unable to send message %v to backend: %v", fntMsg, err,
+				)
+			}
+		default:
+			return NewErrorf(CodeBackendDisconnected, "received unexpected backend message type: %v", tp)
+		}
+	}
+
 	s.metrics.SuccessfulConnCount.Inc(1)
 
 	// These channels are buffered because we'll only consume one of them.

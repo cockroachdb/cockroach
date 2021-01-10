@@ -20,6 +20,12 @@ type ErrorCode int
 
 const (
 	_ ErrorCode = iota
+
+	// CodeBackendReadFailed indicates an error reading from backend connection.
+	CodeBackendReadFailed
+	// CodeBackendWriteFailed indicates an error writing to backend connection.
+	CodeBackendWriteFailed
+
 	// CodeClientReadFailed indicates an error reading from the client connection
 	CodeClientReadFailed
 	// CodeClientWriteFailed indicates an error writing to the client connection.

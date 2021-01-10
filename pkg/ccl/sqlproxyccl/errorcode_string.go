@@ -8,24 +8,26 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[CodeClientReadFailed-1]
-	_ = x[CodeClientWriteFailed-2]
-	_ = x[CodeUnexpectedInsecureStartupMessage-3]
-	_ = x[CodeSNIRoutingFailed-4]
-	_ = x[CodeUnexpectedStartupMessage-5]
-	_ = x[CodeParamsRoutingFailed-6]
-	_ = x[CodeBackendDown-7]
-	_ = x[CodeBackendRefusedTLS-8]
-	_ = x[CodeBackendDisconnected-9]
-	_ = x[CodeClientDisconnected-10]
-	_ = x[CodeProxyRefusedConnection-11]
-	_ = x[CodeExpiredClientConnection-12]
-	_ = x[CodeIdleDisconnect-13]
+	_ = x[CodeBackendReadFailed-1]
+	_ = x[CodeBackendWriteFailed-2]
+	_ = x[CodeClientReadFailed-3]
+	_ = x[CodeClientWriteFailed-4]
+	_ = x[CodeUnexpectedInsecureStartupMessage-5]
+	_ = x[CodeSNIRoutingFailed-6]
+	_ = x[CodeUnexpectedStartupMessage-7]
+	_ = x[CodeParamsRoutingFailed-8]
+	_ = x[CodeBackendDown-9]
+	_ = x[CodeBackendRefusedTLS-10]
+	_ = x[CodeBackendDisconnected-11]
+	_ = x[CodeClientDisconnected-12]
+	_ = x[CodeProxyRefusedConnection-13]
+	_ = x[CodeExpiredClientConnection-14]
+	_ = x[CodeIdleDisconnect-15]
 }
 
-const _ErrorCode_name = "CodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnectionCodeIdleDisconnect"
+const _ErrorCode_name = "CodeBackendReadFailedCodeBackendWriteFailedCodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnectionCodeIdleDisconnect"
 
-var _ErrorCode_index = [...]uint16{0, 20, 41, 77, 97, 125, 148, 163, 184, 207, 229, 255, 282, 300}
+var _ErrorCode_index = [...]uint16{0, 21, 43, 63, 84, 120, 140, 168, 191, 206, 227, 250, 272, 298, 325, 343}
 
 func (i ErrorCode) String() string {
 	i -= 1
