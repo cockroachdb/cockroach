@@ -1083,7 +1083,7 @@ message TableDescriptor {
     message RegionalByTable {
       option (gogoproto.equal) = true;
       // Region is set if the table has an affinity with a non-primary region.
-      optional string region = 1 [(gogoproto.casttype)="Region"];
+      optional string region = 1 [(gogoproto.casttype)="RegionName"];
     }
     message RegionalByRow {
       option (gogoproto.equal) = true;
@@ -1151,9 +1151,15 @@ message DatabaseDescriptor {
   message RegionConfig {
     option (gogoproto.equal) = true;
 
-    repeated string regions = 1 [(gogoproto.casttype)="Region"];
+    message Region {
+      option (gogoproto.equal) = true;
+
+      optional string name = 1 [(gogoproto.casttype)="RegionName",(gogoproto.nullable)=false];
+    }
+
+    repeated Region regions = 1 [(gogoproto.nullable)=false];
     optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
-    optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="Region"];
+    optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="RegionName"];
 
     // RegionEnumID represents ID of the type descriptor corresponding to the
     // region enum for a multi-region database. If the database is not a
@@ -1263,7 +1269,7 @@ message TypeDescriptor {
     option (gogoproto.equal) = true;
 
     // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
-    optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="Region"];
+    optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="RegionName"];
   }
 
   optional RegionConfig region_config = 16;

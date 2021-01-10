@@ -156,7 +156,10 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions:       descpb.Regions{"us-east-1", "us-east-1"},
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+						{Name: "us-east-1"},
+					},
 					PrimaryRegion: "us-east-1",
 				},
 				Privileges: &descpb.PrivilegeDescriptor{},
@@ -168,7 +171,9 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions: descpb.Regions{"us-east-1"},
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+					},
 				},
 				Privileges: &descpb.PrivilegeDescriptor{},
 			}),
@@ -179,7 +184,9 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions:       descpb.Regions{"us-east-1"},
+					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+						{Name: "us-east-1"},
+					},
 					PrimaryRegion: "us-east-2",
 				},
 				Privileges: &descpb.PrivilegeDescriptor{},

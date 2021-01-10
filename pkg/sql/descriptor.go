@@ -112,7 +112,7 @@ func (p *planner) createDatabase(
 	if desc.IsMultiRegion() {
 		regionLabels := make(tree.EnumValueList, 0, len(regionConfig.Regions))
 		for _, region := range regionConfig.Regions {
-			regionLabels = append(regionLabels, tree.EnumValue(region))
+			regionLabels = append(regionLabels, tree.EnumValue(region.Name))
 		}
 		// TODO(#multiregion): See github issue:
 		// https://github.com/cockroachdb/cockroach/issues/56877.
@@ -290,7 +290,7 @@ func (p *planner) createRegionConfig(
 	if err != nil {
 		return nil, err
 	}
-	regionConfig.PrimaryRegion = descpb.Region(primaryRegion)
+	regionConfig.PrimaryRegion = descpb.RegionName(primaryRegion)
 	if regionConfig.PrimaryRegion != "" {
 		if err := checkLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
 			return nil, err
@@ -303,10 +303,10 @@ func (p *planner) createRegionConfig(
 				"PRIMARY REGION must be specified if REGIONS are specified",
 			)
 		}
-		regionConfig.Regions = make([]descpb.Region, 0, len(regions)+1)
-		seenRegions := make(map[descpb.Region]struct{}, len(regions)+1)
+		regionConfig.Regions = make([]descpb.DatabaseDescriptor_RegionConfig_Region, 0, len(regions)+1)
+		seenRegions := make(map[descpb.RegionName]struct{}, len(regions)+1)
 		for _, r := range regions {
-			region := descpb.Region(r)
+			region := descpb.RegionName(r)
 			if err := checkLiveClusterRegion(liveRegions, region); err != nil {
 				return nil, err
 			}
@@ -319,20 +319,29 @@ func (p *planner) createRegionConfig(
 				)
 			}
 			seenRegions[region] = struct{}{}
-			regionConfig.Regions = append(regionConfig.Regions, region)
+			regionConfig.Regions = append(
+				regionConfig.Regions,
+				descpb.DatabaseDescriptor_RegionConfig_Region{
+					Name: region,
+				},
+			)
 		}
 		// If PRIMARY REGION is not in REGIONS, add it implicitly.
 		if _, ok := seenRegions[regionConfig.PrimaryRegion]; !ok {
 			regionConfig.Regions = append(
 				regionConfig.Regions,
-				regionConfig.PrimaryRegion,
+				descpb.DatabaseDescriptor_RegionConfig_Region{
+					Name: regionConfig.PrimaryRegion,
+				},
 			)
 		}
 		sort.SliceStable(regionConfig.Regions, func(i, j int) bool {
-			return regionConfig.Regions[i] < regionConfig.Regions[j]
+			return regionConfig.Regions[i].Name < regionConfig.Regions[j].Name
 		})
 	} else {
-		regionConfig.Regions = []descpb.Region{regionConfig.PrimaryRegion}
+		regionConfig.Regions = []descpb.DatabaseDescriptor_RegionConfig_Region{
+			{Name: regionConfig.PrimaryRegion},
+		}
 	}
 
 	// Generate a unique ID for the multi-region enum type descriptor here as

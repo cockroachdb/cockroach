@@ -14,7 +14,7 @@ go_library(
         "locking.go",
         "privilege.go",
         "privilegedescversion_string.go",
-        "region.go",
+        "region_name.go",
         "structured.go",
     ],
     embed = [":descpb_go_proto"],
