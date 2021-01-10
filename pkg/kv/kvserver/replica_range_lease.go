@@ -587,7 +587,7 @@ func (r *Replica) leaseStatus(
 			status.State = kvserverpb.LeaseState_PROSCRIBED
 		}
 	} else if timestamp.Less(expiration) {
-		status.State = kvserverpb.LeaseState_STASIS
+		status.State = kvserverpb.LeaseState_UNUSABLE
 	} else {
 		status.State = kvserverpb.LeaseState_EXPIRED
 	}
@@ -939,7 +939,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 					newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc,
 						"lease state couldn't be determined"))
 
-			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_STASIS:
+			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
 				if !status.Lease.OwnedBy(r.store.StoreID()) {
 					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
@@ -1006,7 +1006,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				// renewed the lease, so we return the handle to block on renewal.
 				// Otherwise, we don't need to wait for the extension and simply
 				// ignore the returned handle (whose channel is buffered) and continue.
-				if status.State == kvserverpb.LeaseState_STASIS {
+				if status.State == kvserverpb.LeaseState_UNUSABLE {
 					return r.requestLeaseLocked(ctx, status), nil
 				}
 
