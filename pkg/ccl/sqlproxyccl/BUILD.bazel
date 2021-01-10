@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sqlproxyccl",
     srcs = [
+        "authentication.go",
         "backend_dialer.go",
         "error.go",
         "errorcode_string.go",
@@ -29,6 +30,7 @@ go_library(
 go_test(
     name = "sqlproxyccl_test",
     srcs = [
+        "authentication_test.go",
         "frontend_admitter_test.go",
         "idle_disconnect_connection_test.go",
         "main_test.go",
@@ -42,7 +44,9 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

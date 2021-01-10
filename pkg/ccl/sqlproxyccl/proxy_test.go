@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -103,6 +105,17 @@ func testingTenantIDFromDatabaseForAddr(
 			InsecureSkipVerify: true,
 		})
 	}
+}
+
+func runTestQuery(conn *pgx.Conn) error {
+	var n int
+	if err := conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n); err != nil {
+		return err
+	}
+	if n != 1 {
+		return errors.Errorf("expected 1 got %d", n)
+	}
+	return nil
 }
 
 type assertCtx struct {
@@ -264,45 +277,41 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	// TODO(tbg): if I use the https (!) port of ./cockroach demo, the
-	// connection hangs instead of failing. Why? Probably both ends end up waiting
-	// for the other side due to protocol mismatch. Should set deadlines on all
-	// the read/write ops to avoid this failure mode.
-
-	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
-	require.NoError(t, err)
-	outgoingTLSConfig.InsecureSkipVerify = true
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	var connSuccess bool
 	opts := Options{
 		BackendConfigFromParams: func(params map[string]string, _ *Conn) (*BackendConfig, error) {
-			return &BackendConfig{
-				OnConnectionSuccess: func() { connSuccess = true },
-			}, nil
+			return &BackendConfig{OnConnectionSuccess: func() { connSuccess = true }}, nil
 		},
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			return BackendDial(
-				msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
-			)
+			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
 		},
 	}
 	s, addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
 
-	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=require", addr)
+	_, err := pgx.Connect(context.Background(), url)
+	require.True(t, testutils.IsError(err, "ERROR: password authentication failed for user bob"))
+
+	url = fmt.Sprintf("postgres://bob@%s?sslmode=require", addr)
+	_, err = pgx.Connect(context.Background(), url)
+	require.True(t, testutils.IsError(err, "ERROR: password authentication failed for user bob"))
+
+	url = fmt.Sprintf("postgres://bob:builder@%s?sslmode=require", addr)
 	conn, err := pgx.Connect(context.Background(), url)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 		require.True(t, connSuccess)
 		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(2), s.metrics.AuthFailedCount.Count())
 	}()
 
-	var n int
-	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
+	require.NoError(t, runTestQuery(conn))
 }
 
 func TestProxyTLSClose(t *testing.T) {
@@ -315,9 +324,8 @@ func TestProxyTLSClose(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
-	require.NoError(t, err)
-	outgoingTLSConfig.InsecureSkipVerify = true
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	var proxyIncomingConn atomic.Value // *Conn
 	var connSuccess bool
@@ -329,15 +337,13 @@ func TestProxyTLSClose(t *testing.T) {
 			}, nil
 		},
 		BackendDialer: func(msg *pgproto3.StartupMessage) (net.Conn, error) {
-			return BackendDial(
-				msg, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig,
-			)
+			return BackendDial(msg, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
 		},
 	}
 	s, addr, done := setupTestProxyWithCerts(t, &opts)
 	defer done()
 
-	url := fmt.Sprintf("postgres://root:admin@%s/defaultdb_29?sslmode=require", addr)
+	url := fmt.Sprintf("postgres://bob:builder@%s/defaultdb_29?sslmode=require", addr)
 	conn, err := pgx.Connect(context.Background(), url)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), s.metrics.CurConnCount.Value())
@@ -348,12 +354,10 @@ func TestProxyTLSClose(t *testing.T) {
 
 		require.True(t, connSuccess)
 		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+		require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 	}()
 
-	var n int
-	err = conn.QueryRow(context.Background(), "SELECT $1::int", 1).Scan(&n)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.NoError(t, runTestQuery(conn))
 }
 
 func TestProxyModifyRequestParams(t *testing.T) {
@@ -394,15 +398,12 @@ func TestProxyModifyRequestParams(t *testing.T) {
 		require.NoError(t, conn.Close(ctx))
 	}()
 
-	var n int
-	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.NoError(t, runTestQuery(conn))
 }
 
 func newInsecureProxyServer(
 	t *testing.T, outgoingAddr string, outgoingTLSConfig *tls.Config,
-) (addr string, cleanup func()) {
+) (server *Server, addr string, cleanup func()) {
 	s := NewServer(Options{
 		BackendDialer: func(message *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(message, outgoingAddr, outgoingTLSConfig)
@@ -417,7 +418,7 @@ func newInsecureProxyServer(
 		defer wg.Done()
 		_ = s.Serve(ln)
 	}()
-	return ln.Addr().String(), func() {
+	return s, ln.Addr().String(), func() {
 		_ = ln.Close()
 		wg.Wait()
 	}
@@ -430,24 +431,29 @@ func TestInsecureProxy(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	outgoingTLSConfig, err := tc.Server(0).RPCContext().GetClientTLSConfig()
-	require.NoError(t, err)
-	outgoingTLSConfig.InsecureSkipVerify = true
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
-	addr, cleanup := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(), outgoingTLSConfig)
+	s, addr, cleanup := newInsecureProxyServer(
+		t, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
 	defer cleanup()
 
-	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", addr)
+	u := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable", addr)
+	_, err := pgx.Connect(context.Background(), u)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, "ERROR: password authentication failed for user bob"))
+
+	u = fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable", addr)
 	conn, err := pgx.Connect(ctx, u)
 	require.NoError(t, err)
+
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
+		require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
+		require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
 	}()
 
-	var n int
-	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.NoError(t, runTestQuery(conn))
 }
 
 func TestInsecureDoubleProxy(t *testing.T) {
@@ -460,9 +466,10 @@ func TestInsecureDoubleProxy(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	// Test multiple proxies:  proxyB -> proxyA -> tc
-	proxyA, cleanupA := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(), nil /* tls config */)
+	_, proxyA, cleanupA := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(),
+		nil /* tls config */)
 	defer cleanupA()
-	proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */)
+	_, proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */)
 	defer cleanupB()
 
 	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", proxyB)
@@ -471,11 +478,7 @@ func TestInsecureDoubleProxy(t *testing.T) {
 	defer func() {
 		require.NoError(t, conn.Close(ctx))
 	}()
-
-	var n int
-	err = conn.QueryRow(ctx, "SELECT $1::int", 1).Scan(&n)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.NoError(t, runTestQuery(conn))
 }
 
 func TestProxyRefuseConn(t *testing.T) {
@@ -505,6 +508,7 @@ func TestProxyRefuseConn(t *testing.T) {
 	)
 	require.Equal(t, int64(1), s.metrics.RefusedConnCount.Count())
 	require.Equal(t, int64(0), s.metrics.SuccessfulConnCount.Count())
+	require.Equal(t, int64(0), s.metrics.AuthFailedCount.Count())
 }
 
 func TestProxyKeepAlive(t *testing.T) {
