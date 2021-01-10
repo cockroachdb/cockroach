@@ -25,9 +25,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-type liveClusterRegions map[descpb.Region]struct{}
+type liveClusterRegions map[descpb.RegionName]struct{}
 
-func (s *liveClusterRegions) isActive(region descpb.Region) bool {
+func (s *liveClusterRegions) isActive(region descpb.RegionName) bool {
 	_, ok := (*s)[region]
 	return ok
 }
@@ -51,11 +51,11 @@ func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ret liveClusterRegions = make(map[descpb.Region]struct{})
+	var ret liveClusterRegions = make(map[descpb.RegionName]struct{})
 	for _, node := range nodes {
 		for _, tier := range node.Locality.Tiers {
 			if tier.Key == "region" {
-				ret[descpb.Region(tier.Value)] = struct{}{}
+				ret[descpb.RegionName(tier.Value)] = struct{}{}
 				break
 			}
 		}
@@ -65,7 +65,7 @@ func (p *planner) getLiveClusterRegions() (liveClusterRegions, error) {
 
 // checkLiveClusterRegion checks whether a region can be added to a database
 // based on whether the cluster regions are alive.
-func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb.Region) error {
+func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb.RegionName) error {
 	if !liveClusterRegions.isActive(region) {
 		return errors.WithHintf(
 			pgerror.Newf(
@@ -80,7 +80,7 @@ func checkLiveClusterRegion(liveClusterRegions liveClusterRegions, region descpb
 	return nil
 }
 
-func makeRequiredZoneConstraintForRegion(r descpb.Region) zonepb.Constraint {
+func makeRequiredZoneConstraintForRegion(r descpb.RegionName) zonepb.Constraint {
 	return zonepb.Constraint{
 		Type:  zonepb.Constraint_REQUIRED,
 		Key:   "region",
@@ -102,7 +102,7 @@ func zoneConfigFromRegionConfigForDatabase(
 			conjunctions,
 			zonepb.ConstraintsConjunction{
 				NumReplicas: 1,
-				Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region)},
+				Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(region.Name)},
 			},
 		)
 	}
@@ -132,7 +132,7 @@ func zoneConfigNumReplicasFromRegionConfig(
 // TODO(#multiregion,aayushshah15): properly configure constraints and replicas for
 // region survivability and leaseholder preferences when new zone configuration parameters merge.
 func constraintsConjunctionForRegionalLocality(
-	region descpb.Region, regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	region descpb.RegionName, regionConfig descpb.DatabaseDescriptor_RegionConfig,
 ) ([]zonepb.ConstraintsConjunction, error) {
 	switch regionConfig.SurvivalGoal {
 	case descpb.SurvivalGoal_ZONE_FAILURE:

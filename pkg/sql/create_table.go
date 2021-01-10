@@ -1919,7 +1919,7 @@ func NewTableDesc(
 				RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
 			}
 			if n.Locality.TableRegion != "" {
-				region := descpb.Region(n.Locality.TableRegion)
+				region := descpb.RegionName(n.Locality.TableRegion)
 				l.RegionalByTable.Region = &region
 			}
 			desc.LocalityConfig.Locality = l

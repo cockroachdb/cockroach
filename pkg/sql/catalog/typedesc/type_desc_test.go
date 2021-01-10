@@ -364,7 +364,9 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-			Regions:       descpb.Regions{"us-east-1"},
+			Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+				{Name: "us-east-1"},
+			},
 			PrimaryRegion: "us-east-1",
 		},
 	})
