@@ -8,24 +8,27 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[CodeClientReadFailed-1]
-	_ = x[CodeClientWriteFailed-2]
-	_ = x[CodeUnexpectedInsecureStartupMessage-3]
-	_ = x[CodeSNIRoutingFailed-4]
-	_ = x[CodeUnexpectedStartupMessage-5]
-	_ = x[CodeParamsRoutingFailed-6]
-	_ = x[CodeBackendDown-7]
-	_ = x[CodeBackendRefusedTLS-8]
-	_ = x[CodeBackendDisconnected-9]
-	_ = x[CodeClientDisconnected-10]
-	_ = x[CodeProxyRefusedConnection-11]
-	_ = x[CodeExpiredClientConnection-12]
-	_ = x[CodeIdleDisconnect-13]
+	_ = x[CodeAuthFailed-1]
+	_ = x[CodeBackendReadFailed-2]
+	_ = x[CodeBackendWriteFailed-3]
+	_ = x[CodeClientReadFailed-4]
+	_ = x[CodeClientWriteFailed-5]
+	_ = x[CodeUnexpectedInsecureStartupMessage-6]
+	_ = x[CodeSNIRoutingFailed-7]
+	_ = x[CodeUnexpectedStartupMessage-8]
+	_ = x[CodeParamsRoutingFailed-9]
+	_ = x[CodeBackendDown-10]
+	_ = x[CodeBackendRefusedTLS-11]
+	_ = x[CodeBackendDisconnected-12]
+	_ = x[CodeClientDisconnected-13]
+	_ = x[CodeProxyRefusedConnection-14]
+	_ = x[CodeExpiredClientConnection-15]
+	_ = x[CodeIdleDisconnect-16]
 }
 
-const _ErrorCode_name = "CodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnectionCodeIdleDisconnect"
+const _ErrorCode_name = "CodeAuthFailedCodeBackendReadFailedCodeBackendWriteFailedCodeClientReadFailedCodeClientWriteFailedCodeUnexpectedInsecureStartupMessageCodeSNIRoutingFailedCodeUnexpectedStartupMessageCodeParamsRoutingFailedCodeBackendDownCodeBackendRefusedTLSCodeBackendDisconnectedCodeClientDisconnectedCodeProxyRefusedConnectionCodeExpiredClientConnectionCodeIdleDisconnect"
 
-var _ErrorCode_index = [...]uint16{0, 20, 41, 77, 97, 125, 148, 163, 184, 207, 229, 255, 282, 300}
+var _ErrorCode_index = [...]uint16{0, 14, 35, 57, 77, 98, 134, 154, 182, 205, 220, 241, 264, 286, 312, 339, 357}
 
 func (i ErrorCode) String() string {
 	i -= 1
