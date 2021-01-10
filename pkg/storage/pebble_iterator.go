@@ -70,17 +70,25 @@ var pebbleIterPool = sync.Pool{
 	},
 }
 
+type cloneableIter interface {
+	Clone() (*pebble.Iterator, error)
+}
+
 // Instantiates a new Pebble iterator, or gets one from the pool.
-func newPebbleIterator(handle pebble.Reader, opts IterOptions) *pebbleIterator {
+func newPebbleIterator(
+	handle pebble.Reader, iterToClone cloneableIter, opts IterOptions,
+) *pebbleIterator {
 	iter := pebbleIterPool.Get().(*pebbleIterator)
-	iter.init(handle, opts)
+	iter.init(handle, iterToClone, opts)
 	return iter
 }
 
 // init resets this pebbleIterator for use with the specified arguments. The
-// current instance could either be a cached iterator (eg. in pebbleBatch), or
-// a newly-instantiated one through newPebbleIterator.
-func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
+// current instance could either be a cached pebbleIterator (eg. in
+// pebbleBatch), or a newly-instantiated one through newPebbleIterator. The
+// underlying *pebble.Iterator is created using iterToClone, if non-nil and
+// there are no timestamp hints, else it is created using handle.
+func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, opts IterOptions) {
 	*p = pebbleIterator{
 		keyBuf:        p.keyBuf,
 		lowerBoundBuf: p.lowerBoundBuf,
@@ -111,7 +119,9 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		p.options.UpperBound = p.upperBoundBuf[0]
 	}
 
+	doClone := iterToClone != nil
 	if !opts.MaxTimestampHint.IsEmpty() {
+		doClone = false
 		encodedMinTS := string(encodeTimestamp(opts.MinTimestampHint))
 		encodedMaxTS := string(encodeTimestamp(opts.MaxTimestampHint))
 		p.options.TableFilter = func(userProps map[string]string) bool {
@@ -139,7 +149,18 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
-	p.iter = handle.NewIter(&p.options)
+	if doClone {
+		var err error
+		if p.iter, err = iterToClone.Clone(); err != nil {
+			panic(err)
+		}
+		p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
+	} else {
+		if handle == nil {
+			panic("handle is nil for non-cloning path")
+		}
+		p.iter = handle.NewIter(&p.options)
+	}
 	if p.iter == nil {
 		panic("unable to create iterator")
 	}
@@ -627,6 +648,11 @@ func (p *pebbleIterator) CheckForKeyCollisions(
 	sstData []byte, start, end roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	return checkForKeyCollisionsGo(p, sstData, start, end)
+}
+
+// GetRawIter is part of the EngineIterator interface.
+func (p *pebbleIterator) GetRawIter() *pebble.Iterator {
+	return p.iter
 }
 
 func (p *pebbleIterator) destroy() {

@@ -669,6 +669,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(spans *spanset.SpanSet) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.Engine().NewBatch()
+	if !batch.ConsistentIterators() {
+		// This is not currently needed for correctness, but future optimizations
+		// may start relying on this, so we assert here.
+		panic("expected consistent iterators")
+	}
 	var opLogger *storage.OpLoggerBatch
 	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
