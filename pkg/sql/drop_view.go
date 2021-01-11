@@ -234,7 +234,7 @@ func (p *planner) dropViewImpl(
 				return cascadeDroppedViews, err
 			}
 			cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
-			cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.String())
+			cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.FQString())
 		}
 	}
 

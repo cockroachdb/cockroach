@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterTableSetSchemaNode struct {
@@ -100,6 +101,12 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	schemaID := tableDesc.GetParentSchemaID()
 	databaseID := tableDesc.GetParentID()
 
+	kind := tree.GetTableType(tableDesc.IsSequence(), tableDesc.IsView(), tableDesc.GetIsMaterializedView())
+	oldName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
 	desiredSchemaID, err := p.prepareSetSchema(ctx, tableDesc, n.newSchema)
 	if err != nil {
 		return err
@@ -140,7 +147,25 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, tableDesc.Name)
 
-	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
+	if err := p.writeNameKey(ctx, newTbKey, tableDesc.ID); err != nil {
+		return err
+	}
+
+	newName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			DescriptorName:        oldName.FQString(),
+			NewDescriptorName:     newName.FQString(),
+			DescriptorType:        kind,
+		},
+	)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

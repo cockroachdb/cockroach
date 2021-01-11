@@ -297,6 +297,11 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	typeDesc := n.desc
 	schemaID := typeDesc.GetParentSchemaID()
 
+	oldName, err := p.getQualifiedTypeName(ctx, typeDesc)
+	if err != nil {
+		return err
+	}
+
 	desiredSchemaID, err := p.prepareSetSchema(ctx, typeDesc, schema)
 	if err != nil {
 		return err
@@ -321,8 +326,26 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return err
 	}
 
-	return p.performRenameTypeDesc(
+	if err := p.performRenameTypeDesc(
 		ctx, arrayDesc, arrayDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	newName, err := p.getQualifiedTypeName(ctx, typeDesc)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			DescriptorName:        oldName.FQString(),
+			NewDescriptorName:     newName.FQString(),
+			DescriptorType:        "type",
+		},
 	)
 }
 

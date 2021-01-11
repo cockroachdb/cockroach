@@ -448,6 +448,33 @@ func (p *planner) getQualifiedSchemaName(
 	}, nil
 }
 
+// getQualifiedTypeName returns the database-qualified name of the type
+// represented by the provided descriptor.
+func (p *planner) getQualifiedTypeName(
+	ctx context.Context, desc catalog.TypeDescriptor,
+) (*tree.TypeName, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	schemaID := desc.GetParentSchemaID()
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, tree.SchemaLookupFlags{})
+	if err != nil {
+		return nil, err
+	}
+
+	typeName := tree.MakeNewQualifiedTypeName(
+		dbDesc.GetName(),
+		resolvedSchema.Name,
+		desc.GetName(),
+	)
+
+	return &typeName, nil
+}
+
 // findTableContainingIndex returns the descriptor of a table
 // containing the index of the given name.
 // This is used by expandMutableIndexName().

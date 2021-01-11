@@ -353,7 +353,7 @@ func (p *planner) dropTableImpl(
 		}
 
 		droppedViews = append(droppedViews, cascadedViews...)
-		droppedViews = append(droppedViews, qualifiedView.String())
+		droppedViews = append(droppedViews, qualifiedView.FQString())
 	}
 
 	err := p.removeTableComments(ctx, tableDesc)
