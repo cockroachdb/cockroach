@@ -16,12 +16,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+)
+
+const (
+	tableKind    = "table"
+	viewKind     = "view"
+	sequenceKind = "sequence"
+	typeKind     = "type"
 )
 
 // prepareSetSchema verifies that a table/type can be set to the desired
@@ -30,8 +36,12 @@ func (p *planner) prepareSetSchema(
 	ctx context.Context, desc catalog.MutableDescriptor, schema string,
 ) (descpb.ID, error) {
 
+	var kind string
 	switch t := desc.(type) {
-	case *tabledesc.Mutable, *typedesc.Mutable:
+	case catalog.TableDescriptor:
+		kind = getKind(t)
+	case catalog.TypeDescriptor:
+		kind = typeKind
 	default:
 		return 0, pgerror.Newf(
 			pgcode.InvalidParameterValue,
@@ -43,6 +53,20 @@ func (p *planner) prepareSetSchema(
 
 	// Lookup the schema we want to set to.
 	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, databaseID, schema, true /* required */)
+	if err != nil {
+		return 0, err
+	}
+
+	// Get the qualified schema names.
+	newSchemaQualified, err := p.getQualifiedSchemaName(ctx, res)
+	if err != nil {
+		return 0, err
+	}
+	oldSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
+	if err != nil {
+		return 0, err
+	}
+	oldSchemaQualified, err := p.getQualifiedSchemaName(ctx, oldSchema)
 	if err != nil {
 		return 0, err
 	}
@@ -85,5 +109,25 @@ func (p *planner) prepareSetSchema(
 		return 0, sqlerrors.MakeObjectAlreadyExistsError(collidingDesc.DescriptorProto(), desc.GetName())
 	}
 
-	return desiredSchemaID, nil
+	return desiredSchemaID, p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			OldSchemaName:         oldSchemaQualified.String(),
+			NewSchemaName:         newSchemaQualified.String(),
+			DescriptorType:        kind,
+		},
+	)
+}
+
+// getKind returns a string representation of the table descriptor.
+func getKind(td catalog.TableDescriptor) string {
+	if td.IsTable() {
+		return tableKind
+	} else if td.IsView() {
+		return viewKind
+	} else {
+		return sequenceKind
+	}
 }

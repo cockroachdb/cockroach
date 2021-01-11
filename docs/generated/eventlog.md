@@ -891,6 +891,29 @@ encounters a problem and is reversed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `MutationID` | The descriptor mutation that this schema change was processing. | no |
 
+### `set_schema`
+
+An event of type `set_schema` is recorded when a table, view, sequence or type's schema is changed.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `OldSchemaName` | The old name of the affected schema. | yes |
+| `NewSchemaName` | The new name of the affected schema. | yes |
+| `DescriptorType` | The descriptor type being changed (table, view, sequence, type). | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+
 ### `truncate_table`
 
 An event of type `truncate_table` is recorded when a table is truncated.
