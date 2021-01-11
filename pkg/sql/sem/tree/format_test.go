@@ -123,6 +123,8 @@ func TestFormatStatement(t *testing.T) {
 			`CREATE TYPE _ AS ENUM (_, _, _)`},
 		{`ALTER TYPE a ADD VALUE 'hi' BEFORE 'hello'`, tree.FmtAnonymize,
 			`ALTER TYPE _ ADD VALUE _ BEFORE _`},
+		{`ALTER TYPE a DROP VALUE 'hi'`, tree.FmtAnonymize,
+			`ALTER TYPE _ DROP VALUE _`},
 		{`ALTER TYPE a RENAME VALUE 'value1' TO 'value2'`, tree.FmtAnonymize,
 			`ALTER TYPE _ RENAME VALUE _ TO _`},
 	}
