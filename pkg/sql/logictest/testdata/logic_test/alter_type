@@ -265,3 +265,80 @@ DROP TYPE store
 
 statement error pq: type "store" does not exist
 SELECT 'lru'::store
+
+statement ok
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'hi'
+
+statement error pq: invalid input value for enum greetings: "hi"
+SELECT 'hi'::greetings
+
+statement ok
+CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings)
+
+statement ok
+INSERT INTO use_greetings VALUES(1, 'yo')
+
+statement ok
+SET sql_safe_updates = true;
+
+# ALTER TYPE DROP VALUE is gated behind sql_safe_updates
+statement error pq: rejected \(sql_safe_updates = true\)
+ALTER TYPE greetings DROP VALUE 'yo'
+
+statement ok
+SET sql_safe_updates = false
+
+statement error pq: could not remove enum value: "yo"
+ALTER TYPE greetings DROP VALUE 'yo'
+
+query T
+SELECT 'yo'::greetings
+----
+yo
+
+# As only 'yo' is used by the table above, we should still be able to drop 'howdy'
+statement ok
+ALTER TYPE greetings DROP VALUE 'howdy'
+
+statement error pq: invalid input value for enum greetings: "howdy"
+SELECT 'howdy'::greetings
+
+statement ok
+CREATE TABLE use_greetings2(k INT PRIMARY KEY, v greetings);
+INSERT INTO use_greetings2 VALUES (1, 'hello')
+
+statement error pq: could not remove enum value: "hello"
+ALTER TYPE greetings DROP VALUE 'hello'
+
+query T
+SELECT 'hello'::greetings
+----
+hello
+
+# Once the use of "yo" has been removed, we should be able to remove it from the
+# enum
+statement ok
+DELETE FROM use_greetings WHERE use_greetings.v = 'yo'
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'yo'
+
+statement error pq: invalid input value for enum greetings: "yo"
+SELECT 'yo'::greetings
+
+statement ok
+CREATE TYPE alphabets AS ENUM('a', 'b', 'c', 'd', 'e', 'f');
+CREATE TABLE uses_alphabets (k INT PRIMARY KEY, v1 alphabets, v2 alphabets);
+INSERT INTO uses_alphabets VALUES (1, 'a', 'a'), (2, 'b', 'c')
+
+statement error pq: could not remove enum value: "a"
+ALTER TYPE alphabets DROP VALUE 'a'
+
+statement error pq: could not remove enum value: "b"
+ALTER TYPE alphabets DROP VALUE 'b'
+
+statement error pq: could not remove enum value: "c"
+ALTER TYPE alphabets DROP VALUE 'c'

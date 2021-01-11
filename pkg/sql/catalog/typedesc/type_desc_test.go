@@ -401,7 +401,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`enum members are not sorted [{[2] a ALL} {[1] b ALL}]`,
+			`enum members are not sorted [{[2] a ALL NONE} {[1] b ALL NONE}]`,
 			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       typeDescID,

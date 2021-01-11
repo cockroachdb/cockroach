@@ -291,6 +291,21 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
+// DropEnumValue removes an enum member to the type.
+// DropEnumValue assumes that the type is an enum and that the value being
+// removed exists in the enum.
+func (desc *Mutable) DropEnumValue(value tree.EnumValue) error {
+	for i := range desc.EnumMembers {
+		member := &desc.EnumMembers[i]
+		if member.LogicalRepresentation == string(value) {
+			member.Capability = descpb.TypeDescriptor_EnumMember_READ_ONLY
+			member.Direction = descpb.TypeDescriptor_EnumMember_REMOVE
+			break
+		}
+	}
+	return nil
+}
+
 // AddEnumValue adds an enum member to the type.
 // AddEnumValue assumes that the type is an enum, and that the new value
 // doesn't exist already in the enum.
@@ -336,6 +351,7 @@ func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 		LogicalRepresentation:  string(node.NewVal),
 		PhysicalRepresentation: newPhysicalRep,
 		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
+		Direction:              descpb.TypeDescriptor_EnumMember_ADD,
 	}
 
 	// Now, insert the new member.
