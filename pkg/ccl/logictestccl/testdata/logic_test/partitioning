@@ -17,6 +17,11 @@ CREATE TABLE t (a INT, b INT, c INT) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (0)
 )
 
+statement error PARTITION ALL BY not yet implemented
+CREATE TABLE t (a INT, b INT) PARTITION ALL BY LIST (b) (
+  PARTITION p1 VALUES IN (0)
+)
+
 statement error declared partition columns \(a, b, c\) exceed the number of columns in index being partitioned \(a, b\)
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b, c) (
     PARTITION p1 VALUES IN (0)
