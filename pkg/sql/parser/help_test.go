@@ -49,6 +49,7 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER TYPE t ADD VALUE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t SET ??`, `ALTER TYPE`},
 		{`ALTER TYPE t RENAME ??`, `ALTER TYPE`},
+		{`ALTER TYPE t DROP VALUE ??`, `ALTER TYPE`},
 
 		{`ALTER INDEX foo@bar RENAME ??`, `ALTER INDEX`},
 		{`ALTER INDEX foo@bar RENAME TO blih ??`, `ALTER INDEX`},
