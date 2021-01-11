@@ -1057,7 +1057,7 @@ func (m *CommonConnectionDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1165,7 +1165,7 @@ func (m *CommonSessionDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1275,7 +1275,7 @@ func (m *ClientConnectionStart) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1404,7 +1404,7 @@ func (m *ClientConnectionEnd) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1563,7 +1563,7 @@ func (m *ClientSessionEnd) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1780,7 +1780,7 @@ func (m *ClientAuthenticationFailed) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1949,7 +1949,7 @@ func (m *ClientAuthenticationOk) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -2147,7 +2147,7 @@ func (m *ClientAuthenticationInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSessionEvents
 			}
 			if (iNdEx + skippy) > l {

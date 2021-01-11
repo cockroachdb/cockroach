@@ -763,7 +763,7 @@ func (m *SketchSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsTableStats
 			}
 			if (iNdEx + skippy) > l {
@@ -905,7 +905,7 @@ func (m *SamplerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsTableStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1166,7 +1166,7 @@ func (m *SampleAggregatorSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsTableStats
 			}
 			if (iNdEx + skippy) > l {

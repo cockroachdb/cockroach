@@ -1525,7 +1525,7 @@ func (m *BatchOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -1750,7 +1750,7 @@ func (m *ClosureTxnOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -1861,7 +1861,7 @@ func (m *GetOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2023,7 +2023,7 @@ func (m *ScanOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2165,7 +2165,7 @@ func (m *PutOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2276,7 +2276,7 @@ func (m *SplitOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2387,7 +2387,7 @@ func (m *MergeOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2529,7 +2529,7 @@ func (m *ChangeReplicasOperation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2843,7 +2843,7 @@ func (m *Operation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -2955,7 +2955,7 @@ func (m *KeyValue) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -3119,7 +3119,7 @@ func (m *Result) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {
@@ -3307,7 +3307,7 @@ func (m *Step) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthOperations
 			}
 			if (iNdEx + skippy) > l {

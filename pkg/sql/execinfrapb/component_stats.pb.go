@@ -1123,7 +1123,7 @@ func (m *ComponentID) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1414,7 +1414,7 @@ func (m *ComponentStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1524,7 +1524,7 @@ func (m *InputStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1754,7 +1754,7 @@ func (m *NetworkRxStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1894,7 +1894,7 @@ func (m *NetworkTxStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2064,7 +2064,7 @@ func (m *KVStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2204,7 +2204,7 @@ func (m *ExecStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2314,7 +2314,7 @@ func (m *OutputStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2394,7 +2394,7 @@ func (m *FlowStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthComponentStats
 			}
 			if (iNdEx + skippy) > l {

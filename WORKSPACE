@@ -43,8 +43,8 @@ go_repository(
         "@cockroach//build/patches:com_github_gogo_protobuf.patch",
     ],
     replace = "github.com/cockroachdb/gogoproto",
-    sum = "h1:UoEUWRRZjeOfGenewnmzRCA0kWWRtZogNdidaXjZ/+c=",
-    version = "v1.2.1-0.20190102194534-ca10b809dba0",
+    sum = "h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=",
+    version = "v1.2.1-0.20210111172841-8b6737fea948",
 )
 
 go_repository(

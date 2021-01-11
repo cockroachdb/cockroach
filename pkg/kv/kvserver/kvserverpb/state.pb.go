@@ -1173,7 +1173,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthState
 			}
 			if (iNdEx + skippy) > l {
@@ -1606,7 +1606,7 @@ func (m *RangeInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthState
 			}
 			if (iNdEx + skippy) > l {
@@ -1743,7 +1743,7 @@ func (m *RangeInfo_CTEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthState
 			}
 			if (iNdEx + skippy) > l {
@@ -1831,7 +1831,7 @@ func (m *LatchManagerInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthState
 			}
 			if (iNdEx + skippy) > l {
