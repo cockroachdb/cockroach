@@ -1142,7 +1142,7 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1311,7 +1311,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1480,7 +1480,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1649,7 +1649,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1818,7 +1818,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1986,7 +1986,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -2154,7 +2154,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -2322,7 +2322,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -2490,7 +2490,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			if (iNdEx + skippy) > l {

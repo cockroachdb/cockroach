@@ -1378,7 +1378,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -1517,7 +1517,7 @@ func (m *TimeSeriesData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -1685,7 +1685,7 @@ func (m *Query) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -1823,7 +1823,7 @@ func (m *TimeSeriesQueryRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -1904,7 +1904,7 @@ func (m *TimeSeriesQueryResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -2015,7 +2015,7 @@ func (m *TimeSeriesQueryResponse_Result) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {
@@ -2198,7 +2198,7 @@ func (m *DumpRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthTimeseries
 			}
 			if (iNdEx + skippy) > l {

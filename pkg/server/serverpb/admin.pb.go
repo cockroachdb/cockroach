@@ -7489,7 +7489,7 @@ func (m *DatabasesRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7568,7 +7568,7 @@ func (m *DatabasesResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7647,7 +7647,7 @@ func (m *DatabaseDetailsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7825,7 +7825,7 @@ func (m *DatabaseDetailsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -7933,7 +7933,7 @@ func (m *DatabaseDetailsResponse_Grant) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8041,7 +8041,7 @@ func (m *TableDetailsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8300,7 +8300,7 @@ func (m *TableDetailsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8408,7 +8408,7 @@ func (m *TableDetailsResponse_Grant) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8614,7 +8614,7 @@ func (m *TableDetailsResponse_Column) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8830,7 +8830,7 @@ func (m *TableDetailsResponse_Index) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -8938,7 +8938,7 @@ func (m *TableStatsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9125,7 +9125,7 @@ func (m *TableStatsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9233,7 +9233,7 @@ func (m *TableStatsResponse_MissingNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9283,7 +9283,7 @@ func (m *NonTableStatsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9399,7 +9399,7 @@ func (m *NonTableStatsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9449,7 +9449,7 @@ func (m *UsersRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9530,7 +9530,7 @@ func (m *UsersResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9609,7 +9609,7 @@ func (m *UsersResponse_User) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9746,7 +9746,7 @@ func (m *EventsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -9827,7 +9827,7 @@ func (m *EventsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10034,7 +10034,7 @@ func (m *EventsResponse_Event) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10186,7 +10186,7 @@ func (m *SetUIDataRequest) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -10203,7 +10203,7 @@ func (m *SetUIDataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10253,7 +10253,7 @@ func (m *SetUIDataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10332,7 +10332,7 @@ func (m *GetUIDataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10488,7 +10488,7 @@ func (m *GetUIDataResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -10505,7 +10505,7 @@ func (m *GetUIDataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10616,7 +10616,7 @@ func (m *GetUIDataResponse_Value) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10666,7 +10666,7 @@ func (m *ClusterRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10785,7 +10785,7 @@ func (m *ClusterResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -10948,7 +10948,7 @@ func (m *DrainRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11066,7 +11066,7 @@ func (m *DrainResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11189,7 +11189,7 @@ func (m *DecommissionStatusRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11331,7 +11331,7 @@ func (m *DecommissionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11412,7 +11412,7 @@ func (m *DecommissionStatusResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11559,7 +11559,7 @@ func (m *DecommissionStatusResponse_Status) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11658,7 +11658,7 @@ func (m *SettingsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11814,7 +11814,7 @@ func (m *SettingsResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -11831,7 +11831,7 @@ func (m *SettingsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -11988,7 +11988,7 @@ func (m *SettingsResponse_Value) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12058,7 +12058,7 @@ func (m *HealthRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12108,7 +12108,7 @@ func (m *HealthResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12158,7 +12158,7 @@ func (m *LivenessRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12318,7 +12318,7 @@ func (m *LivenessResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -12335,7 +12335,7 @@ func (m *LivenessResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12452,7 +12452,7 @@ func (m *JobsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -12533,7 +12533,7 @@ func (m *JobsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13083,7 +13083,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13133,7 +13133,7 @@ func (m *LocationsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13214,7 +13214,7 @@ func (m *LocationsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13344,7 +13344,7 @@ func (m *LocationsResponse_Location) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13432,7 +13432,7 @@ func (m *RangeLogRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13513,7 +13513,7 @@ func (m *RangeLogResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13737,7 +13737,7 @@ func (m *RangeLogResponse_PrettyInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13847,7 +13847,7 @@ func (m *RangeLogResponse_Event) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -13926,7 +13926,7 @@ func (m *QueryPlanRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14005,7 +14005,7 @@ func (m *QueryPlanResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14055,7 +14055,7 @@ func (m *DataDistributionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14211,7 +14211,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14334,7 +14334,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14351,7 +14351,7 @@ func (m *DataDistributionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14489,7 +14489,7 @@ func (m *DataDistributionResponse_ZoneConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14618,7 +14618,7 @@ func (m *DataDistributionResponse_TableInfo) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14687,7 +14687,7 @@ func (m *DataDistributionResponse_TableInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14843,7 +14843,7 @@ func (m *DataDistributionResponse_DatabaseInfo) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14860,7 +14860,7 @@ func (m *DataDistributionResponse_DatabaseInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -14910,7 +14910,7 @@ func (m *MetricMetadataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15066,7 +15066,7 @@ func (m *MetricMetadataResponse) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthAdmin
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -15083,7 +15083,7 @@ func (m *MetricMetadataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15220,7 +15220,7 @@ func (m *EnqueueRangeRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15301,7 +15301,7 @@ func (m *EnqueueRangeResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15430,7 +15430,7 @@ func (m *EnqueueRangeResponse_Details) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15480,7 +15480,7 @@ func (m *ChartCatalogRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
@@ -15561,7 +15561,7 @@ func (m *ChartCatalogResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAdmin
 			}
 			if (iNdEx + skippy) > l {
