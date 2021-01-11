@@ -16,7 +16,7 @@ import cn from "classnames";
 import "antd/es/table/style/css";
 import "./table.styl";
 
-export interface ColumnsConfig<T> extends Array<ColumnProps<T>> {}
+export type ColumnsConfig<T> = Array<ColumnProps<T>>;
 
 export interface TableProps<T> {
   columns: Array<ColumnProps<T>>;
