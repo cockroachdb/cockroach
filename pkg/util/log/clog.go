@@ -17,11 +17,14 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -62,10 +65,6 @@ type loggingT struct {
 			hideStack bool                   // hides stack trace; only in effect when f is not nil
 		}
 
-		// the Cluster ID is reported on every new log file so as to ease the correlation
-		// of panic reports with self-reported log files.
-		clusterID string
-
 		// fatalCh is closed on fatal errors.
 		fatalCh chan struct{}
 
@@ -74,6 +73,18 @@ type loggingT struct {
 		active        bool
 		firstUseStack string
 	}
+
+	// the Cluster ID is reported on every new log file so as to ease the correlation
+	// of panic reports with self-reported log files.
+	//
+	// It is also set conditionally by an env var. See the doc string
+	// for 'alwaysAddClusterID'. (Feature deprecated in v20.2)
+	clusterID syncutil.AtomicString
+
+	// The following identifiers are reported when enabled.
+	// Note: sqlInstanceID must be accessed atomically.
+	tenantID      syncutil.AtomicString
+	sqlInstanceID int32
 }
 
 type loggerT struct {
@@ -194,27 +205,48 @@ func (l *loggingT) signalFatalCh() {
 	}
 }
 
-// SetClusterID stores the Cluster ID for further reference.
-//
-// TODO(knz): This should not be configured per-logger.
-// See: https://github.com/cockroachdb/cockroach/issues/40983
+// SetClusterID stores the cluster ID for further reference.
 func SetClusterID(clusterID string) {
-	// Ensure that the clusterID is logged with the same format as for
+	// Ensure that the ID gets logged with the same format as for
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
 	addStructured(ctx, Severity_INFO, 1, "clusterID: %s", []interface{}{clusterID})
 
 	// Perform the change proper.
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-
-	if logging.mu.clusterID != "" {
+	if logging.clusterID.Get() != "" {
 		panic("clusterID already set")
 	}
 
-	logging.mu.clusterID = clusterID
+	logging.clusterID.Set(clusterID)
 }
+
+// SetTenantIDs stores the tenant ID and instance ID for further reference.
+func SetTenantIDs(tenantID string, sqlInstanceID int32) {
+	// Ensure that the IDs are logged with the same format as for
+	// new log files, even on the first log file. This ensures that grep
+	// will always find it.
+	ctx := logtags.AddTag(context.Background(), "config", nil)
+	addStructured(ctx, Severity_INFO, 1, "tenantID: %s", []interface{}{tenantID})
+	addStructured(ctx, Severity_INFO, 1, "instanceID: %d", []interface{}{sqlInstanceID})
+
+	// Perform the change proper.
+	if logging.tenantID.Get() != "" {
+		panic("tenantID already set")
+	}
+
+	logging.tenantID.Set(tenantID)
+	atomic.StoreInt32(&logging.sqlInstanceID, sqlInstanceID)
+}
+
+// alwaysAddServerIDs, when set, indicates that the cluster and other
+// server IDs must be reported in the log tags on every log line.
+//
+// We use an env var here because we need this feature in SQL pod
+// logs, and in v20.2 SQL pods don't have access to cluster settings.
+// Note: This feature is immediately obsolete, as v21.1 has JSON
+// logging and includes the cluster ID in log events already.
+var alwaysAddServerIDs = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_SERVER_IDS", false)
 
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
@@ -227,6 +259,38 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
+
+	if alwaysAddServerIDs {
+		// Only emit the cluster ID in tags if requested, and after the
+		// cluster ID is known already. (It may not be known for
+		// uninitialized clusters.)
+		// NB: This code is superseded in CockroachDB v21.1 by JSON
+		// logging which includes these details unconditionally.
+		var buf strings.Builder
+		buf.WriteString(entry.Tags)
+		if clusterID := logging.clusterID.Get(); len(clusterID) > 0 {
+			if buf.Len() > 0 {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("clusterID=")
+			buf.WriteString(clusterID)
+		}
+		if tenantID := logging.tenantID.Get(); len(tenantID) > 0 {
+			if buf.Len() > 0 {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("tenantID=")
+			buf.WriteString(tenantID)
+		}
+		if sqlInstanceID := atomic.LoadInt32(&logging.sqlInstanceID); sqlInstanceID != 0 {
+			if buf.Len() > 0 {
+				buf.WriteByte(',')
+			}
+			buf.WriteString("instanceID=")
+			buf.WriteString(strconv.Itoa(int(sqlInstanceID)))
+		}
+		entry.Tags = buf.String()
+	}
 
 	// Mark the logger as active, so that further configuration changes
 	// are disabled. See IsActive() and its callers for details.

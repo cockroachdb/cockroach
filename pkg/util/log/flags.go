@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 	"flag"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -34,6 +35,15 @@ func init() {
 		logflags.LogToStderrName, "logs at or above this threshold go to stderr")
 	flag.Var(&mainLog.fileThreshold,
 		logflags.LogFileVerbosityThresholdName, "minimum verbosity of messages written to the log file")
+}
+
+// TestingClearServerIdentifiers clears the server identity from the
+// logging system. This is for use in tests that start multiple
+// servers with conflicting identities subsequently.
+func TestingClearServerIdentifiers() {
+	logging.clusterID.Set("")
+	logging.tenantID.Set("")
+	atomic.StoreInt32(&logging.sqlInstanceID, 0)
 }
 
 // IsActive returns true iff the main logger already has some events
