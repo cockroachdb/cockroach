@@ -710,7 +710,7 @@ func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`
 		  f, err := %[3]s.Float64()
 		  if err != nil {
-		    colexecerror.InternalError(err)
+		    colexecerror.ExpectedError(err)
 		  }
 		  %[1]s = %[2]s.MulFloat(f)`,
 				targetElem, leftElem, rightElem)
@@ -728,7 +728,7 @@ func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf(`
 		  f, err := %[2]s.Float64()
 		  if err != nil {
-		    colexecerror.InternalError(err)
+		    colexecerror.ExpectedError(err)
 		  }
 		  %[1]s = %[3]s.MulFloat(f)`,
 				targetElem, leftElem, rightElem)
