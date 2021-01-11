@@ -147,6 +147,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			txn,
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
+			execCfg.ContentionRegistry,
 		)
 
 		// We need to re-plan every time, since close() below makes
@@ -207,6 +208,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		txn,
 		nil, /* clockUpdater */
 		&SessionTracing{},
+		nil, /* contentionRegistry */
 	)
 
 	retryErr := roachpb.NewErrorWithTxn(
