@@ -413,7 +413,21 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 	}
 
 	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// In the case of the multi-region enum, we also keep the logical descriptors
+		// sorted. Validate that's the case.
+		for i := 0; i < len(desc.EnumMembers)-1; i++ {
+			if desc.EnumMembers[i].LogicalRepresentation > desc.EnumMembers[i+1].LogicalRepresentation {
+				return errors.AssertionFailedf(
+					"multi-region enum is out of order %q > %q",
+					desc.EnumMembers[i].LogicalRepresentation,
+					desc.EnumMembers[i+1].LogicalRepresentation,
+				)
+			}
+		}
+		// Now do all of the checking for ordinary enums, which also apply to multi-region enums.
+		fallthrough
+	case descpb.TypeDescriptor_ENUM:
 		// All of the enum members should be in sorted order.
 		if !sort.IsSorted(EnumMembers(desc.EnumMembers)) {
 			return errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers)

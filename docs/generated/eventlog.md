@@ -164,6 +164,28 @@ in each tenant's own system.eventlog table.
 Events in this category are logged to channel SQL_SCHEMA.
 
 
+### `alter_database_add_region`
+
+An event of type `alter_database_add_region` is recorded when a region is added to a database.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the database. | yes |
+| `RegionName` | The region being added. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+
 ### `alter_index`
 
 An event of type `alter_index` is recorded when an index is altered.

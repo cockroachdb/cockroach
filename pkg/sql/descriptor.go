@@ -273,6 +273,55 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 	return nil
 }
 
+// addRegionToRegionConfig adds the supplied region to the RegionConfig in the
+// supplied database descriptor.
+func (p *planner) addRegionToRegionConfig(
+	desc *dbdesc.Mutable, regionToAdd *tree.AlterDatabaseAddRegion,
+) error {
+	liveRegions, err := p.getLiveClusterRegions()
+	if err != nil {
+		return err
+	}
+
+	regionConfig := desc.RegionConfig
+
+	// Ensure that the region we're adding is currently active.
+	region := descpb.RegionName(regionToAdd.Region)
+	if err := checkLiveClusterRegion(liveRegions, region); err != nil {
+		return err
+	}
+
+	// Ensure that the region doesn't already exist in the database.
+	for _, r := range regionConfig.Regions {
+		if r.Name == region {
+			return pgerror.Newf(
+				pgcode.InvalidName,
+				"region %q already added to database",
+				region,
+			)
+		}
+	}
+
+	regionConfig.Regions = append(
+		regionConfig.Regions,
+		descpb.DatabaseDescriptor_RegionConfig_Region{
+			Name: region,
+		},
+	)
+
+	// We store the regions sorted in the regionConfig. Perform the sort now.
+	sort.SliceStable(regionConfig.Regions, func(i, j int) bool {
+		return regionConfig.Regions[i].Name < regionConfig.Regions[j].Name
+	})
+
+	// Validate that the region config is sane.
+	if err := validateDatabaseRegionConfig(*regionConfig); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // createRegionConfig creates a new region config from the given parameters.
 func (p *planner) createRegionConfig(
 	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
