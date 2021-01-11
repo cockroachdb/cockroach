@@ -1,17 +1,17 @@
 table_constraint ::=
 	'CONSTRAINT' constraint_name 'CHECK' '(' a_expr ')'
-	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')'  opt_interleave opt_partition_by opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index '(' index_params ')'  opt_interleave opt_partition_by_index opt_where_clause
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets opt_interleave
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')'  opt_interleave
 	| 'CONSTRAINT' constraint_name 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 	| 'CHECK' '(' a_expr ')'
-	| 'UNIQUE' opt_without_index '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'UNIQUE' opt_without_index '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'UNIQUE' opt_without_index '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_interleave opt_partition_by opt_where_clause
-	| 'UNIQUE' opt_without_index '(' index_params ')'  opt_interleave opt_partition_by opt_where_clause
+	| 'UNIQUE' opt_without_index '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' opt_without_index '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' opt_without_index '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' opt_without_index '(' index_params ')'  opt_interleave opt_partition_by_index opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets opt_interleave
 	| 'PRIMARY' 'KEY' '(' index_params ')'  opt_interleave
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions

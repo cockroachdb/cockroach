@@ -1,17 +1,17 @@
 create_index_stmt ::=
-	'CREATE' 'UNIQUE' 'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INDEX'  '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INDEX'  '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INDEX'  '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INDEX'  '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'CONCURRENTLY' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'CONCURRENTLY' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX'  '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX'  '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INVERTED' 'INDEX' 'CONCURRENTLY' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INVERTED' 'INDEX' 'CONCURRENTLY' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INVERTED' 'INDEX'  '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
-	| 'CREATE'  'INVERTED' 'INDEX'  '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')' opt_with_storage_parameter_list opt_where_clause
+	'CREATE' 'UNIQUE' 'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INDEX'  '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INDEX'  '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INDEX' 'CONCURRENTLY' '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INDEX'  '...' opt_hash_sharded 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INDEX'  '...' opt_hash_sharded  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'CONCURRENTLY' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX' 'CONCURRENTLY' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX'  '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE' 'UNIQUE' 'INVERTED' 'INDEX'  '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX' 'CONCURRENTLY' '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX' 'CONCURRENTLY' '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX'  '...' 'STORING' '(' stored_columns ')' 'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause
+	| 'CREATE'  'INVERTED' 'INDEX'  '...'  'INTERLEAVE' 'IN' 'PARENT' parent_table '(' interleave_prefix ')'_index opt_with_storage_parameter_list opt_where_clause

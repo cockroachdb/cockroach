@@ -171,8 +171,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	} else {
 		tab.addPrimaryColumnIndex("rowid")
 	}
-	if stmt.PartitionBy != nil {
-		tab.Indexes[0].partitionBy = stmt.PartitionBy
+	if stmt.PartitionByTable != nil {
+		tab.Indexes[0].partitionBy = stmt.PartitionByTable.PartitionBy
 	}
 
 	// Add check constraints.
@@ -553,13 +553,16 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	idx := &Index{
-		IdxName:     tt.makeIndexName(def.Name, typ),
-		Unique:      typ != nonUniqueIndex,
-		Inverted:    def.Inverted,
-		IdxZone:     &zonepb.ZoneConfig{},
-		table:       tt,
-		partitionBy: def.PartitionBy,
-		version:     version,
+		IdxName:  tt.makeIndexName(def.Name, typ),
+		Unique:   typ != nonUniqueIndex,
+		Inverted: def.Inverted,
+		IdxZone:  &zonepb.ZoneConfig{},
+		table:    tt,
+		version:  version,
+	}
+
+	if def.PartitionByIndex != nil {
+		idx.partitionBy = def.PartitionByIndex.PartitionBy
 	}
 
 	// Look for name suffixes indicating this is a mutation index.
