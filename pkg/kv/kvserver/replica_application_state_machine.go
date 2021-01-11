@@ -891,13 +891,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	now := timeutil.Now()
 	if needsSplitBySize && r.splitQueueThrottle.ShouldProcess(now) {
-		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 	if needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(now) {
-		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 	if needsTruncationByLogSize {
-		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
 	b.recordStatsOnCommit()

@@ -96,7 +96,7 @@ func TestClosedTimestampWorksWhenRequestsAreSentToNonLeaseHolders(t *testing.T) 
 		target := tc.Target(serverIdx)
 		transferLease(repl.Desc(), target)
 		testutils.SucceedsSoon(t, func() error {
-			if !repl.OwnsValidLease(ctx, db1.Clock().Now()) {
+			if !repl.OwnsValidLease(ctx, db1.Clock().NowAsClockTimestamp()) {
 				return errors.Errorf("don't yet have the lease")
 			}
 			return nil
