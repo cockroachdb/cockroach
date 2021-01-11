@@ -31,16 +31,9 @@ import (
 // outputs all the ordinary columns in the table, we avoid constructing a new
 // scan. A scan and its logical properties are required in order to fully
 // normalize the partial index predicates.
-func (b *Builder) addPartialIndexPredicatesForTable(
-	tabMeta *opt.TableMeta, scan memo.RelExpr, includeDeletable bool,
-) {
+func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
 	tab := tabMeta.Table
-	var numIndexes int
-	if includeDeletable {
-		numIndexes = tab.DeletableIndexCount()
-	} else {
-		numIndexes = tab.IndexCount()
-	}
+	numIndexes := tab.DeletableIndexCount()
 
 	// Find the first partial index.
 	indexOrd := 0
