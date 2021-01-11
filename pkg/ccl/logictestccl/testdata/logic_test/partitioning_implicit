@@ -53,11 +53,11 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c INT8 NULL,
   d INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (a ASC, pk ASC),
-  INDEX t_a_b_idx (a ASC, b ASC) PARTITION BY LIST (a) (
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_a_b_idx (b ASC) PARTITION BY LIST (a) (
     PARTITION b_implicit VALUES IN ((2))
   ),
-  UNIQUE INDEX t_a_c_key (a ASC, c ASC) PARTITION BY LIST (a) (
+  UNIQUE INDEX t_a_c_key (c ASC) PARTITION BY LIST (a) (
     PARTITION c_implicit VALUES IN ((3))
   ),
   FAMILY fam_0_pk_a_b_c_d (pk, a, b, c, d)
@@ -80,14 +80,14 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c INT8 NULL,
   d INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (a ASC, pk ASC),
-  INDEX t_a_b_idx (a ASC, b ASC) PARTITION BY LIST (a) (
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_a_b_idx (b ASC) PARTITION BY LIST (a) (
     PARTITION b_implicit VALUES IN ((2))
   ),
-  UNIQUE INDEX t_a_c_key (a ASC, c ASC) PARTITION BY LIST (a) (
+  UNIQUE INDEX t_a_c_key (c ASC) PARTITION BY LIST (a) (
     PARTITION c_implicit VALUES IN ((3))
   ),
-  INDEX new_idx (a ASC, d ASC) PARTITION BY LIST (a) (
+  INDEX new_idx (d ASC) PARTITION BY LIST (a) (
     PARTITION d_implicit VALUES IN ((1))
   ),
   FAMILY fam_0_pk_a_b_c_d (pk, a, b, c, d)
