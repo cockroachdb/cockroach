@@ -54,7 +54,10 @@ func (b *Builder) AlterTable(
 	tn := n.Table.ToTableName()
 	table, err := resolver.ResolveExistingTableObject(ctx, b.res, &tn,
 		tree.ObjectLookupFlagsWithRequired())
-	if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+	if err != nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+			return ts, nil
+		}
 		return nil, err
 	}
 	for _, cmd := range n.Cmds {

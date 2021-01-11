@@ -143,21 +143,41 @@ SELECT * FROM foo
 statement ok
 DROP TABLE foo
 
-subtest drop_column
+subtest multi_table
 
 statement ok
-CREATE TABLE foo (i INT PRIMARY KEY, j INT)
+CREATE TABLE foo (i INT PRIMARY KEY);
+CREATE TABLE bar (j INT PRIMARY KEY);
 
 statement ok
-ALTER TABLE foo DROP COLUMN j
+BEGIN
 
 statement ok
-INSERT INTO foo VALUES (1)
+ALTER TABLE foo ADD COLUMN a INT
 
-query I
+statement ok
+ALTER TABLE bar ADD COLUMN b INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2)
+
+query II colnames
 SELECT * FROM foo
 ----
-1
+i  a
+1  2
 
 statement ok
-DROP TABLE foo
+INSERT INTO bar VALUES (3, 4)
+
+query II colnames
+SELECT * FROM bar
+----
+j  b
+3  4
+
+statement ok
+DROP TABLE foo, bar

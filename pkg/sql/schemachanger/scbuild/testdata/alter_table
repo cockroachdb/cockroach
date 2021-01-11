@@ -1,0 +1,1142 @@
+create-table
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: j
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    storecolumnnames:
+    - j
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: j
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: 123:::INT8
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    storecolumnnames:
+    - j
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
+ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: j
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: 123:::INT8
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    - 3
+    storecolumnnames:
+    - j
+    - k
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: k
+      id: 3
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: 456:::INT8
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: a
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: i + 1:::INT8
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    storecolumnnames:
+    - a
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT;
+ALTER TABLE defaultdb.foo ADD COLUMN b INT AS (a+1) STORED;
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: a
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    - 3
+    storecolumnnames:
+    - a
+    - b
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: b
+      id: 3
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: a + 1:::INT8
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+
+create-table
+CREATE TABLE defaultdb.bar (j INT);
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT;
+ALTER TABLE defaultdb.bar ADD COLUMN b INT;
+----
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.foo
+    columnfamily: 0
+    column:
+      name: a
+      id: 2
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 2
+    storecolumnnames:
+    - a
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.foo
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 2
+      columnnames:
+      - i
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 1
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids: []
+    storecolumnnames: []
+  state: PUBLIC
+- type: '*scpb.AddColumn'
+  target:
+    tableid: $defaultdb.bar
+    columnfamily: 0
+    column:
+      name: b
+      id: 3
+      type:
+        internaltype:
+          family: 1
+          width: 64
+          precision: 0
+          arraydimensions: []
+          locale: ""
+          visibletype: 0
+          arrayelemtype: null
+          tuplecontents: []
+          tuplelabels: []
+          oid: 20
+          arraycontents: null
+          timeprecisionisset: false
+          intervaldurationfield: null
+          geometadata: null
+          udtmetadata: null
+        typemeta:
+          name: null
+          version: 0
+          enumdata: null
+      nullable: true
+      defaultexpr: null
+      hidden: false
+      usessequenceids: []
+      ownssequenceids: []
+      computeexpr: null
+      virtual: false
+      pgattributenum: 0
+      altercolumntypeinprogress: false
+      systemcolumnkind: 0
+  state: ABSENT
+- type: '*scpb.AddPrimaryIndex'
+  target:
+    tableid: $defaultdb.bar
+    index:
+      name: new_primary_key
+      id: 2
+      unique: true
+      version: 0
+      columnnames:
+      - rowid
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 2
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    primaryindex: 1
+    replacementfor: 1
+    storecolumnids:
+    - 1
+    - 3
+    storecolumnnames:
+    - j
+    - b
+  state: ABSENT
+- type: '*scpb.DropPrimaryIndex'
+  target:
+    tableid: $defaultdb.bar
+    index:
+      name: primary
+      id: 1
+      unique: true
+      version: 0
+      columnnames:
+      - rowid
+      columndirections:
+      - 0
+      storecolumnnames: []
+      columnids:
+      - 2
+      extracolumnids: []
+      storecolumnids: []
+      compositecolumnids: []
+      foreignkey:
+        table: 0
+        index: 0
+        name: ""
+        validity: 0
+        sharedprefixlen: 0
+        ondelete: 0
+        onupdate: 0
+        match: 0
+      referencedby: []
+      interleave:
+        ancestors: []
+      interleavedby: []
+      partitioning:
+        numcolumns: 0
+        list: []
+        range: []
+      type: 0
+      createdexplicitly: false
+      encodingtype: 0
+      sharded:
+        issharded: false
+        name: ""
+        shardbuckets: 0
+        columnnames: []
+      disabled: false
+      geoconfig:
+        s2geography: null
+        s2geometry: null
+      predicate: ""
+    replacedby: 2
+    storecolumnids:
+    - 1
+    storecolumnnames:
+    - j
+  state: PUBLIC
