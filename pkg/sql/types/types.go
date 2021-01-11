@@ -2388,8 +2388,9 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 		}
 	}
 	err := errors.Newf(
-		"could not find %v in enum representation %s",
+		"could not find %v in enum %q representation %s",
 		phys,
+		t.TypeMeta.Name.FQName(),
 		t.TypeMeta.EnumData.debugString(),
 	)
 	return 0, err

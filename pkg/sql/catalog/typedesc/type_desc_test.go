@@ -401,7 +401,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			`enum members are not sorted [{[2] a ALL} {[1] b ALL}]`,
+			`enum members are not sorted [{[2] a ALL NONE} {[1] b ALL NONE}]`,
 			descpb.TypeDescriptor{
 				Name:     "t",
 				ID:       typeDescID,
@@ -495,6 +495,60 @@ func TestValidateTypeDesc(t *testing.T) {
 					{
 						LogicalRepresentation:  "us-east-1",
 						PhysicalRepresentation: []byte{2},
+					},
+				},
+				Privileges: defaultPrivileges,
+			},
+		},
+		{
+			`read only capability member must have transition direction set`,
+			descpb.TypeDescriptor{
+				Name:     "t",
+				ID:       typeDescID,
+				ParentID: 1,
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{1},
+						Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
+						Direction:              descpb.TypeDescriptor_EnumMember_NONE,
+					},
+				},
+				Privileges: defaultPrivileges,
+			},
+		},
+		{
+			`public enum member can not have transition direction set`,
+			descpb.TypeDescriptor{
+				Name:     "t",
+				ID:       typeDescID,
+				ParentID: 1,
+				Kind:     descpb.TypeDescriptor_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "a",
+						PhysicalRepresentation: []byte{1},
+						Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+						Direction:              descpb.TypeDescriptor_EnumMember_ADD,
+					},
+				},
+				Privileges: defaultPrivileges,
+			},
+		},
+		{
+			`public enum member can not have transition direction set`,
+			descpb.TypeDescriptor{
+				Name:     "t",
+				ID:       typeDescID,
+				ParentID: 1,
+				Kind:     descpb.TypeDescriptor_MULTIREGION_ENUM,
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east1",
+						PhysicalRepresentation: []byte{1},
+						Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+						Direction:              descpb.TypeDescriptor_EnumMember_REMOVE,
 					},
 				},
 				Privileges: defaultPrivileges,

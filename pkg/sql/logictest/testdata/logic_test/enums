@@ -365,7 +365,7 @@ SELECT b'\x80'::as_bytes, b'\x80':::as_bytes
 ----
 bytes bytes
 
-query error pq: could not find \[255\] in enum representation
+query error pq: could not find \[255\] in enum "public.as_bytes" representation
 SELECT b'\xFF'::as_bytes
 
 # Regression for #49300. Ensure that virtual tables have access to hydrated
