@@ -455,6 +455,8 @@ type DistSQLReceiver struct {
 	// contendedQueryMetric is a Counter that is incremented at most once if the
 	// query produces at least one contention event.
 	contendedQueryMetric *metric.Counter
+	// contentionRegistry is a Registry that contention events are added to.
+	contentionRegistry *contention.Registry
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -554,14 +556,15 @@ func MakeDistSQLReceiver(
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
 	*r = DistSQLReceiver{
-		ctx:          consumeCtx,
-		cleanup:      cleanup,
-		resultWriter: resultWriter,
-		rangeCache:   rangeCache,
-		txn:          txn,
-		clockUpdater: clockUpdater,
-		stmtType:     stmtType,
-		tracing:      tracing,
+		ctx:                consumeCtx,
+		cleanup:            cleanup,
+		resultWriter:       resultWriter,
+		rangeCache:         rangeCache,
+		txn:                txn,
+		clockUpdater:       clockUpdater,
+		stmtType:           stmtType,
+		tracing:            tracing,
+		contentionRegistry: contentionRegistry,
 	}
 	return r
 }
@@ -572,18 +575,19 @@ func (r *DistSQLReceiver) Release() {
 	receiverSyncPool.Put(r)
 }
 
-// clone clones the receiver for running subqueries. Not all fields are cloned,
-// only those required for running subqueries.
+// clone clones the receiver for running sub- and post-queries. Not all fields
+// are cloned, only those required for running sub- and post-queries.
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
-		ctx:          r.ctx,
-		cleanup:      func() {},
-		rangeCache:   r.rangeCache,
-		txn:          r.txn,
-		clockUpdater: r.clockUpdater,
-		stmtType:     tree.Rows,
-		tracing:      r.tracing,
+		ctx:                r.ctx,
+		cleanup:            func() {},
+		rangeCache:         r.rangeCache,
+		txn:                r.txn,
+		clockUpdater:       r.clockUpdater,
+		stmtType:           tree.Rows,
+		tracing:            r.tracing,
+		contentionRegistry: r.contentionRegistry,
 	}
 	return ret
 }
@@ -659,11 +663,18 @@ func (r *DistSQLReceiver) Push(
 			}
 			meta.Metrics.Release()
 		}
-		if r.contendedQueryMetric != nil && len(meta.ContentionEvents) > 0 {
-			// Increment the contended query metric at most once if the query sees at
-			// least one contention event.
-			r.contendedQueryMetric.Inc(1)
-			r.contendedQueryMetric = nil
+		if len(meta.ContentionEvents) > 0 {
+			if r.contendedQueryMetric != nil {
+				// Increment the contended query metric at most once if the
+				// query sees at least one contention event.
+				r.contendedQueryMetric.Inc(1)
+				r.contendedQueryMetric = nil
+			}
+			for i := range meta.ContentionEvents {
+				if err := r.contentionRegistry.AddContentionEvent(meta.ContentionEvents[i]); err != nil {
+					r.resultWriter.SetError(errors.Wrap(err, "unable to add contention event to registry"))
+				}
+			}
 		}
 		// Release the meta object. It is unsafe for use after this call.
 		meta.Release()
