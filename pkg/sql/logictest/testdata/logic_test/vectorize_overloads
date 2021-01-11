@@ -709,3 +709,7 @@ SELECT _int, _int2, _int // _int2 FROM many_types WHERE _int2 <> 0
 312  1  312
 789  4  197
 2    2  1
+
+# Regression test for incorrectly propagating an error as internal (#57773).
+statement error .* value out of range
+SELECT ((-1.234E+401)::DECIMAL * '-53 years -10 mons -377 days -08:33:40.519057'::INTERVAL::INTERVAL)::INTERVAL FROM many_types
