@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -21,6 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+)
+
+const (
+	tableKind    = "table"
+	viewKind     = "view"
+	sequenceKind = "sequence"
 )
 
 type alterTableSetSchemaNode struct {
@@ -100,6 +108,12 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	schemaID := tableDesc.GetParentSchemaID()
 	databaseID := tableDesc.GetParentID()
 
+	kind := getKind(tableDesc)
+	oldName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
 	desiredSchemaID, err := p.prepareSetSchema(ctx, tableDesc, n.newSchema)
 	if err != nil {
 		return err
@@ -140,7 +154,25 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, tableDesc.Name)
 
-	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
+	if err := p.writeNameKey(ctx, newTbKey, tableDesc.ID); err != nil {
+		return err
+	}
+
+	newName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			DescriptorName:        oldName.String(),
+			NewDescriptorName:     newName.String(),
+			DescriptorType:        kind,
+		},
+	)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -151,3 +183,14 @@ func (n *alterTableSetSchemaNode) ReadingOwnWrites() {}
 func (n *alterTableSetSchemaNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableSetSchemaNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableSetSchemaNode) Close(context.Context)        {}
+
+// getKind returns a string representation of the table descriptor.
+func getKind(td catalog.TableDescriptor) string {
+	if td.IsTable() {
+		return tableKind
+	} else if td.IsView() {
+		return viewKind
+	} else {
+		return sequenceKind
+	}
+}
