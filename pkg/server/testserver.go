@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -616,6 +617,7 @@ func StartTenant(
 	if err != nil {
 		return "", "", err
 	}
+
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", "", err
@@ -712,6 +714,11 @@ func StartTenant(
 	); err != nil {
 		return "", "", err
 	}
+
+	// Inform the logging package of the cluster identifiers.
+	clusterID := args.rpcContext.ClusterID.Get().String()
+	log.SetClusterID(clusterID)
+	log.SetTenantIDs(args.TenantID.String(), int32(args.sqlServerOptionalKVArgs.nodeIDContainer.SQLInstanceID()))
 
 	return pgLAddr, httpLAddr, nil
 }
