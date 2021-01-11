@@ -398,12 +398,12 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 	return descs, nil
 }
 
-// getQualifiedTableName returns the database-qualified name of the table
-// or view represented by the provided descriptor. It is a sort of
+// getQualifiedObjectName returns the database-qualified name of the object
+// represented by the provided descriptor. It is a sort of
 // reverse of the Resolve() functions.
-func (p *planner) getQualifiedTableName(
-	ctx context.Context, desc catalog.TableDescriptor,
-) (*tree.TableName, error) {
+func (p *planner) getQualifiedObjectName(
+	ctx context.Context, desc catalog.Descriptor,
+) (tree.ObjectName, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
 		tree.DatabaseLookupFlags{
 			IncludeOffline: true,
@@ -421,12 +421,23 @@ func (p *planner) getQualifiedTableName(
 	if err != nil {
 		return nil, err
 	}
-	tbName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.GetName()),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(desc.GetName()),
-	)
-	return &tbName, nil
+
+	switch desc.(type) {
+	case catalog.TypeDescriptor:
+		typeName := tree.MakeNewQualifiedTypeName(
+			dbDesc.GetName(),
+			resolvedSchema.Name,
+			desc.GetName(),
+		)
+		return &typeName, err
+	default:
+		tbName := tree.MakeTableNameWithSchema(
+			tree.Name(dbDesc.GetName()),
+			tree.Name(resolvedSchema.Name),
+			tree.Name(desc.GetName()),
+		)
+		return &tbName, err
+	}
 }
 
 // getQualifiedSchemaName returns the database-qualified name of the

@@ -94,7 +94,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+	tn, err := params.p.getQualifiedObjectName(params.ctx, n.tableDesc)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.CommentOnColumn{
-			TableName:   tn.String(),
+			TableName:   tn.FQString(),
 			ColumnName:  string(n.n.ColumnItem.ColumnName),
 			Comment:     comment,
 			NullComment: n.n.Comment == nil,

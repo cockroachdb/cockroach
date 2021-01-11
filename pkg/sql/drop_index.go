@@ -425,12 +425,12 @@ func (p *planner) dropIndexByName(
 				return err
 			}
 
-			qualifiedView, err := p.getQualifiedTableName(ctx, viewDesc)
+			qualifiedView, err := p.getQualifiedObjectName(ctx, viewDesc)
 			if err != nil {
 				return err
 			}
 
-			droppedViews = append(droppedViews, qualifiedView.String())
+			droppedViews = append(droppedViews, qualifiedView.FQString())
 			droppedViews = append(droppedViews, cascadedViews...)
 		}
 	}

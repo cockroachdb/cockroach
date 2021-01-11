@@ -113,7 +113,7 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	tn, err := p.getQualifiedTableName(ctx, desc)
+	tn, err := p.getQualifiedObjectName(ctx, desc)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 	return p.logEvent(ctx,
 		desc.ID,
 		&eventpb.AlterTableOwner{
-			TableName: tn.String(),
+			TableName: tn.FQString(),
 			Owner:     newOwner.Normalized(),
 		})
 }

@@ -275,7 +275,7 @@ func (p *planner) maybeLogStatementInternal(
 				// only audit tables. If/when the mechanisms are extended to
 				// audit databases and schema, we need more logic here to
 				// extract a name to include in the logging events.
-				tn, err := p.getQualifiedTableName(ctx, t)
+				tn, err := p.getQualifiedObjectName(ctx, t)
 				if err != nil {
 					log.Warningf(ctx, "name for audited table ID %d not found: %v", ev.desc.GetID(), err)
 				} else {

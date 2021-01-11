@@ -184,25 +184,25 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			if len(tbl.GetDependedOnBy()) > 0 {
 				var names []string
 				const errStr = "cannot convert database %q into schema because %q has dependent objects"
-				tblName, err := p.getQualifiedTableName(ctx, tbl)
+				tblName, err := p.getQualifiedObjectName(ctx, tbl)
 				if err != nil {
 					return errors.Wrapf(err, errStr, n.db.Name, tbl.Name)
 				}
 				for _, ref := range tbl.GetDependedOnBy() {
 					dep, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
 					if err != nil {
-						return errors.Wrapf(err, errStr, n.db.Name, tblName.String())
+						return errors.Wrapf(err, errStr, n.db.Name, tblName.FQString())
 					}
-					fqName, err := p.getQualifiedTableName(ctx, dep)
+					fqName, err := p.getQualifiedObjectName(ctx, dep)
 					if err != nil {
 						return errors.Wrapf(err, errStr, n.db.Name, dep.Name)
 					}
-					names = append(names, fqName.String())
+					names = append(names, fqName.FQString())
 				}
 				return sqlerrors.NewDependentObjectErrorf(
 					"could not convert database %q into schema because %q has dependent objects %v",
 					n.db.Name,
-					tblName.String(),
+					tblName.FQString(),
 					names,
 				)
 			}

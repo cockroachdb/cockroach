@@ -63,7 +63,17 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 				if err != nil {
 					return nil, err
 				}
-				return p.getQualifiedTableName(ctx, seq)
+
+				name, err := p.getQualifiedObjectName(ctx, seq)
+				if err != nil {
+					return nil, err
+				}
+
+				tbName, ok := name.(*tree.TableName)
+				if !ok {
+					return nil, err
+				}
+				return tbName, nil
 			}
 			return nil, nil
 		}

@@ -441,13 +441,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				qualifiedView, err := params.p.getQualifiedTableName(params.ctx, viewDesc)
+				qualifiedView, err := params.p.getQualifiedObjectName(params.ctx, viewDesc)
 				if err != nil {
 					return err
 				}
 
 				droppedViews = append(droppedViews, cascadedViews...)
-				droppedViews = append(droppedViews, qualifiedView.String())
+				droppedViews = append(droppedViews, qualifiedView.FQString())
 			}
 
 			// We cannot remove this column if there are computed columns that use it.

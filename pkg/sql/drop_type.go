@@ -139,7 +139,7 @@ func (p *planner) canDropTypeDesc(
 			if err != nil {
 				return errors.Wrapf(err, "type has dependent objects")
 			}
-			fqName, err := p.getQualifiedTableName(ctx, desc)
+			fqName, err := p.getQualifiedObjectName(ctx, desc)
 			if err != nil {
 				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
 			}
