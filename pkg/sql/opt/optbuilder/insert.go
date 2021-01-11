@@ -1064,7 +1064,7 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
 	// normalization.
-	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */, true /* includeDeletable */)
+	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
 
 	// Project partial index PUT and DEL boolean columns.
 	//
