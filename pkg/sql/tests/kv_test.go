@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -148,9 +149,23 @@ type kvSQL struct {
 }
 
 func newKVSQL(b *testing.B) kvInterface {
+	return newKVSQLWithTracing(b, false)
+}
+
+func newKVSQLWithTracing(b *testing.B, enabled bool) kvInterface {
 	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
+		b.Fatal(err)
+	}
+
+	var tracingMode string
+	if enabled {
+		tracingMode = "background"
+	} else {
+		tracingMode = "legacy"
+	}
+	if _, err := db.Exec(fmt.Sprintf("SET CLUSTER SETTING trace.mode = %s", tracingMode)); err != nil {
 		b.Fatal(err)
 	}
 
@@ -295,5 +310,47 @@ func BenchmarkKV(b *testing.B) {
 				})
 			}
 		})
+	}
+}
+
+func BenchmarkTracing(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	for i, opFn := range []func(kvInterface, int, int) error{
+		kvInterface.Insert,
+		kvInterface.Update,
+		kvInterface.Delete,
+		kvInterface.Scan,
+	} {
+		opName := runtime.FuncForPC(reflect.ValueOf(opFn).Pointer()).Name()
+		opName = strings.TrimPrefix(opName, "github.com/cockroachdb/cockroach/pkg/sql/tests_test.kvInterface.")
+		for _, tracingEnabled := range []bool{true, false} {
+			var trace = "f"
+			if tracingEnabled {
+				trace = "t"
+			}
+
+			for _, rows := range []int{1, 10, 100, 1000, 10000} {
+				b.Run(fmt.Sprintf("tracing=%s/%s/rows=%d", trace, opName, rows), func(b *testing.B) {
+
+					b.ReportAllocs()
+
+					kv := newKVSQLWithTracing(b, tracingEnabled)
+					defer kv.done()
+
+					if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */); err != nil {
+						b.Fatal(err)
+					}
+
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if err := opFn(kv, rows, i); err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.StopTimer()
+				})
+			}
+		}
 	}
 }

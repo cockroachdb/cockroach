@@ -636,7 +636,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !alreadyRecording && stmtTraceThreshold > 0 {
 		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer)
 		stmtThresholdSpan.SetVerbose(true)
-		// TODO(irfansharif): How come this span is never Finish()-ed? #58721.
 	}
 
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
@@ -644,6 +643,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if stmtThresholdSpan != nil {
+		stmtThresholdSpan.Finish()
 		logTraceAboveThreshold(
 			ctx,
 			stmtThresholdSpan.GetRecording(),
