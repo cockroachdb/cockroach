@@ -36,18 +36,22 @@ type backgroundStepper struct {
 	//  }
 	//  return err
 	run backgroundFn
+	// When not nil, called with the error within `.stop()`. The interceptor
+	// gets a chance to ignore the error or produce a different one (via t.Fatal).
+	onStop func(context.Context, *test, *versionUpgradeTest, error)
+	nodes  nodeListOption // nodes to monitor, defaults to c.All()
 
 	// Internal.
 	m *monitor
 }
 
-func makeBackgroundStepper(run backgroundFn) backgroundStepper {
-	return backgroundStepper{run: run}
-}
-
 // launch spawns the function the background step was initialized with.
 func (s *backgroundStepper) launch(ctx context.Context, _ *test, u *versionUpgradeTest) {
-	s.m = newMonitor(ctx, u.c)
+	nodes := s.nodes
+	if nodes == nil {
+		nodes = u.c.All()
+	}
+	s.m = newMonitor(ctx, u.c, nodes)
 	_, s.m.cancel = context.WithCancel(ctx)
 	s.m.Go(func(ctx context.Context) error {
 		return s.run(ctx, u)
@@ -59,7 +63,15 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	// We don't care about the workload failing since we only use it to produce a
 	// few `RESTORE` jobs. And indeed workload will fail because it does not
 	// tolerate pausing of its jobs.
-	_ = s.m.WaitE()
+	err := s.m.WaitE()
+	if s.onStop != nil {
+		s.onStop(ctx, t, u, err)
+	} else if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func overrideErrorFromJobsTable(ctx context.Context, t *test, u *versionUpgradeTest, _ error) {
 	db := u.conn(ctx, t, 1)
 	t.l.Printf("Resuming any paused jobs left")
 	for {
@@ -104,22 +116,20 @@ func (s *backgroundStepper) stop(ctx context.Context, t *test, u *versionUpgrade
 	}
 }
 
-func backgroundTPCCWorkload(t *test, warehouses int) backgroundStepper {
-	return makeBackgroundStepper(func(ctx context.Context, u *versionUpgradeTest) error {
+func backgroundJobsTestTPCCImport(t *test, warehouses int) backgroundStepper {
+	return backgroundStepper{run: func(ctx context.Context, u *versionUpgradeTest) error {
 		// The workload has to run on one of the nodes of the cluster.
 		err := u.c.RunE(ctx, u.c.Node(1), tpccImportCmd(warehouses))
 		if ctx.Err() != nil {
 			// If the context is canceled, that's probably why the workload returned
 			// so swallow error. (This is how the harness tells us to shut down the
 			// workload).
-			t.l.Printf("Restore failed with %s", err.Error())
 			return nil
 		}
-		if err != nil {
-			t.l.Printf("Restore failed with %s", err.Error())
-		}
 		return err
-	})
+	},
+		onStop: overrideErrorFromJobsTable,
+	}
 }
 
 func pauseAllJobsStep() versionStep {
@@ -218,7 +228,7 @@ func runJobsMixedVersions(
 	// `cockroach` will be used.
 	const mainVersion = ""
 	roachNodes := c.All()
-	backgroundTPCC := backgroundTPCCWorkload(t, warehouses)
+	backgroundTPCC := backgroundJobsTestTPCCImport(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
 	c.Put(ctx, workload, "./workload", c.Node(1))
 
