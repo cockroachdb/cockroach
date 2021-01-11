@@ -33,7 +33,7 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	return trigger
 }
 
-// checkCanReceiveLease checks whether `newLeaseholder` can receive a lease.
+// CheckCanReceiveLease checks whether `newLeaseholder` can receive a lease.
 //
 // For now, don't allow replicas of type LEARNER to be leaseholders. There's
 // no reason this wouldn't work in principle, but it seems inadvisable. In
@@ -43,7 +43,7 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 // only used for a short time in replica addition, so it's not worth working
 // out the edge cases. If we decide to start using long-lived learners at some
 // point, that math may change.
-func checkCanReceiveLease(
+func CheckCanReceiveLease(
 	newLeaseholer roachpb.ReplicaDescriptor, rngDesc roachpb.RangeDescriptor,
 ) error {
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(newLeaseholer.ReplicaID)

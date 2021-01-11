@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -154,12 +155,27 @@ type propBuf struct {
 	}
 }
 
+type leaderInfo struct {
+	// leaderKnown is set if the local Raft machinery knows who the leader is. If
+	// not set, all other fields are empty.
+	leaderKnown bool
+
+	leader roachpb.ReplicaID
+	// iAmTheLeader is set if the local replica is the leader.
+	iAmTheLeader bool
+	// leaderIneligibleForLease is set if the leader is known, but its type of
+	// replica prevents it from acquiring a lease.
+	leaderIneligibleForLease bool
+}
+
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
 type proposer interface {
 	locker() sync.Locker
 	rlocker() sync.Locker
 	// The following require the proposer to hold (at least) a shared lock.
 	replicaID() roachpb.ReplicaID
+	leaderStatusRLocked(raftGroup proposerRaft) leaderInfo
+
 	destroyed() destroyStatus
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
@@ -427,22 +443,17 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// and apply them.
 	buf := b.arr.asSlice()[:used]
 	ents := make([]raftpb.Entry, 0, used)
+	var leaderInfo leaderInfo
 
 	// Figure out leadership info. We'll use it to conditionally drop some
 	// requests.
-	var leaderKnown, iAmTheLeader bool
-	var leader roachpb.ReplicaID
 	if raftGroup != nil {
-		status := raftGroup.BasicStatus()
-		iAmTheLeader = status.RaftState == raft.StateLeader
-		leaderKnown = status.Lead != raft.None
-		if leaderKnown {
-			leader = roachpb.ReplicaID(status.Lead)
-			if !iAmTheLeader && leader == b.p.replicaID() {
-				log.Fatalf(ctx,
-					"inconsistent Raft state: state %s while the current replica is also the lead: %d",
-					status.RaftState, leader)
-			}
+		leaderInfo = b.p.leaderStatusRLocked(raftGroup)
+		// Sanity check.
+		if leaderInfo.leaderKnown && leaderInfo.leader == b.p.replicaID() && !leaderInfo.iAmTheLeader {
+			log.Fatalf(ctx,
+				"inconsistent Raft state: state %s while the current replica is also the lead: %d",
+				raftGroup.BasicStatus().RaftState, leaderInfo.leader)
 		}
 	}
 
@@ -484,14 +495,24 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// ErrProposalDropped. We'll eventually re-propose it once a leader is
 		// known, at which point it will either go through or be rejected based on
 		// whether or not it is this replica that became the leader.
-		if !iAmTheLeader && p.Request.IsLeaseRequest() {
-			if leaderKnown && !b.testing.allowLeaseProposalWhenNotLeader {
+		//
+		// A special case is when the leader is known, but is ineligible to get the
+		// lease. In that case, we have no choice but to continue with the proposal.
+		if !leaderInfo.iAmTheLeader && p.Request.IsLeaseRequest() {
+			proposeAnyway := leaderInfo.leaderIneligibleForLease || b.testing.allowLeaseProposalWhenNotLeader
+			if leaderInfo.leaderKnown && !proposeAnyway {
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
-					leader)
-				b.p.rejectProposalWithRedirectLocked(ctx, p, leader)
+					leaderInfo.leader)
+				b.p.rejectProposalWithRedirectLocked(ctx, p, leaderInfo.leader)
 				continue
 			}
-			// If the leader is not known, continue with the proposal as explained above.
+			// If the leader is not known, or if it is known but it's ineligible for
+			// the lease, continue with the proposal as explained above.
+			if leaderInfo.leaderIneligibleForLease {
+				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
+			} else {
+				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
+			}
 		}
 
 		// Raft processing bookkeeping.
@@ -728,14 +749,47 @@ func (rp *replicaProposer) rejectProposalWithRedirectLocked(
 	r := (*Replica)(rp)
 	rangeDesc := r.descRLocked()
 	storeID := r.store.StoreID()
-	leaderRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
+	redirectRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
 	speculativeLease := &roachpb.Lease{
-		Replica: leaderRep,
+		Replica: redirectRep,
 	}
-	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", leaderRep.NodeID, prop.Request)
+	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", redirectRep.NodeID, prop.Request)
 	r.cleanupFailedProposalLocked(prop)
 	prop.finishApplication(ctx, proposalResult{
 		Err: roachpb.NewError(newNotLeaseHolderError(
 			speculativeLease, storeID, rangeDesc, "refusing to acquire lease on follower")),
 	})
+}
+
+func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) leaderInfo {
+	r := (*Replica)(rp)
+
+	status := raftGroup.BasicStatus()
+	iAmTheLeader := status.RaftState == raft.StateLeader
+	leader := status.Lead
+	leaderKnown := leader != raft.None
+	leaderIneligibleForLease := false
+	rangeDesc := r.descRLocked()
+	if leaderKnown {
+		// Figure out if the leader is eligible for getting a lease. Only VOTER_FULL
+		// replicas are eligible.
+		leaderRep, ok := rangeDesc.GetReplicaDescriptorByID(roachpb.ReplicaID(leader))
+		if !ok {
+			// There is a leader, but it's not part of our descriptor. The descriptor
+			// must be stale, so we are behind in applying the log. We don't want the
+			// lease ourselves (as we're behind), so let's assume that the leader is
+			// eligible. If it proves that it isn't, we might be asked to get the
+			// lease again, and by then hopefully we will have caught up.
+			leaderIneligibleForLease = false
+		} else {
+			err := batcheval.CheckCanReceiveLease(leaderRep, *rangeDesc)
+			leaderIneligibleForLease = err != nil
+		}
+	}
+	return leaderInfo{
+		leaderKnown:              leaderKnown,
+		leader:                   roachpb.ReplicaID(leader),
+		iAmTheLeader:             iAmTheLeader,
+		leaderIneligibleForLease: leaderIneligibleForLease,
+	}
 }
