@@ -1263,7 +1263,17 @@ message TypeDescriptor {
       // representation is disallowed, which prevents writes of the member.
       READ_ONLY = 1;
     }
+
+    enum Direction {
+      // Not used. Corresponds to the ALL capability.
+      NONE = 0;
+      // Enum value is being added.
+      ADD = 1;
+      // Enum value is being removed.
+      REMOVE= 2;
+    }
     optional Capability capability = 3 [(gogoproto.nullable) = false];
+    optional Direction direction = 4 [(gogoproto.nullable) = false];
   }
   // enum_members is the set of values in an enum.
   repeated EnumMember enum_members = 6 [(gogoproto.nullable) = false];

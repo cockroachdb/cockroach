@@ -2127,6 +2127,15 @@ alter_type_stmt:
       },
     }
   }
+| ALTER TYPE type_name DROP VALUE SCONST
+ {
+   $$.val = &tree.AlterType{
+     Type: $3.unresolvedObjectName(),
+     Cmd: &tree.AlterTypeDropValue{
+       Val: tree.EnumValue($6),
+     },
+   }
+ }
 | ALTER TYPE type_name RENAME VALUE SCONST TO SCONST
   {
     $$.val = &tree.AlterType{
