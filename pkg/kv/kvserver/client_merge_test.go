@@ -459,7 +459,7 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 			if err != nil {
 				return err
 			}
-			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().Now()) {
+			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 				return errors.New("rhs store does not own valid lease for rhs range")
 			}
 			return nil
@@ -675,7 +675,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().Now()) {
+		if !lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 			return errors.New("s2 does not own valid lease for lhs range")
 		}
 		return nil
@@ -2163,7 +2163,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !rhsRepl.OwnsValidLease(ctx, mtc.clock().Now()) {
+		if !rhsRepl.OwnsValidLease(ctx, mtc.clock().NowAsClockTimestamp()) {
 			return errors.New("rhs store does not own valid lease for rhs range")
 		}
 		return nil
@@ -2395,7 +2395,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		if err != nil {
 			return err
 		}
-		if !rhsRepl.OwnsValidLease(ctx, mtc.clock().Now()) {
+		if !rhsRepl.OwnsValidLease(ctx, mtc.clock().NowAsClockTimestamp()) {
 			return errors.New("store2 does not own valid lease for rhs range")
 		}
 		return nil

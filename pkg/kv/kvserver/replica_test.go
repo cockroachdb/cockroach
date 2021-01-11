@@ -673,10 +673,10 @@ func TestReplicaReadConsistency(t *testing.T) {
 	// Lose the lease and verify CONSISTENT reads receive NotLeaseHolderError
 	// and INCONSISTENT reads work as expected.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	start := tc.Clock().Now()
+	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      start,
-		Expiration: start.Add(10, 0).Clone(),
+		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
 	}); err != nil {
 		t.Fatal(err)
@@ -823,7 +823,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	minLeaseProposedTS := tc.repl.mu.minLeaseProposedTS
 	leaseStartTS := tc.repl.mu.state.Lease.Start
 	tc.repl.mu.Unlock()
-	if minLeaseProposedTS.ToTimestamp().LessEq(leaseStartTS) {
+	if minLeaseProposedTS.LessEq(leaseStartTS) {
 		t.Fatalf("expected minLeaseProposedTS > lease start. minLeaseProposedTS: %s, "+
 			"leas start: %s", minLeaseProposedTS, leaseStartTS)
 	}
@@ -874,10 +874,10 @@ func TestApplyCmdLeaseError(t *testing.T) {
 
 	// Lose the lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	start := tc.Clock().Now()
+	start := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      start,
-		Expiration: start.Add(10, 0).Clone(),
+		Expiration: start.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
 	}); err != nil {
 		t.Fatal(err)
@@ -963,10 +963,10 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 
 // hasLease returns whether the most recent range lease was held by the given
 // range replica and whether it's expired for the given timestamp.
-func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool) {
+func hasLease(repl *Replica, now hlc.ClockTimestamp) (owned bool, expired bool) {
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	status := repl.leaseStatus(context.Background(), *repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
+	status := repl.leaseStatus(context.Background(), *repl.mu.state.Lease, now, repl.mu.minLeaseProposedTS)
 	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != kvserverpb.LeaseState_VALID
 }
 
@@ -998,7 +998,7 @@ func TestReplicaLease(t *testing.T) {
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
 	leaseDuration := tc.store.cfg.RangeLeaseActiveDuration()
-	start := hlc.Timestamp{WallTime: (time.Second + leaseDuration).Nanoseconds(), Logical: 0}
+	start := hlc.ClockTimestamp{WallTime: (time.Second + leaseDuration).Nanoseconds(), Logical: 0}
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
@@ -1013,19 +1013,19 @@ func TestReplicaLease(t *testing.T) {
 		}
 	}
 
-	if held, _ := hasLease(tc.repl, tc.Clock().Now()); !held {
+	if held, _ := hasLease(tc.repl, tc.Clock().NowAsClockTimestamp()); !held {
 		t.Errorf("expected lease on range start")
 	}
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	now := tc.Clock().Now()
+	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		Start:      now.Add(10, 0),
-		Expiration: now.Add(20, 0).Clone(),
+		Start:      now.ToTimestamp().Add(10, 0).UnsafeToClockTimestamp(),
+		Expiration: now.ToTimestamp().Add(20, 0).Clone(),
 		Replica:    secondReplica,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if held, expired := hasLease(tc.repl, tc.Clock().Now().Add(15, 0)); held || expired {
+	if held, expired := hasLease(tc.repl, tc.Clock().Now().Add(15, 0).UnsafeToClockTimestamp()); held || expired {
 		t.Errorf("expected second replica to have range lease")
 	}
 
@@ -1038,7 +1038,7 @@ func TestReplicaLease(t *testing.T) {
 	// Advance clock past expiration and verify that another has
 	// range lease will not be true.
 	tc.manualClock.Increment(21) // 21ns have passed
-	if held, expired := hasLease(tc.repl, tc.Clock().Now()); held || !expired {
+	if held, expired := hasLease(tc.repl, tc.Clock().NowAsClockTimestamp()); held || !expired {
 		t.Errorf("expected another replica to have expired lease; %t, %t", held, expired)
 	}
 
@@ -1071,10 +1071,10 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	}
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	now := tc.Clock().Now()
+	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now,
-		Expiration: now.Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
 	}); err != nil {
 		t.Fatal(err)
@@ -1101,7 +1101,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: now}, test)
+		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: now.ToTimestamp()}, test)
 
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Errorf("%d: expected not lease holder error: %s", i, pErr)
@@ -1154,10 +1154,10 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		t.Fatalf("expected lease history count to be %d, got %d", e, a)
 	}
 
-	now := tc.Clock().Now()
+	now := tc.Clock().NowAsClockTimestamp()
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now,
-		Expiration: now.Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 1,
 			NodeID:    1,
@@ -1187,7 +1187,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	// Make lease request fail by requesting overlapping lease from bogus Replica.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now,
-		Expiration: now.Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    99,
@@ -1247,12 +1247,12 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	// Expire our own lease which we automagically acquired due to being
 	// first range and config holder.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	now := tc.Clock().Now()
+	now := tc.Clock().NowAsClockTimestamp()
 
 	// Give lease to someone else.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		Start:      now,
-		Expiration: now.Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica:    secondReplica,
 	}); err != nil {
 		t.Fatal(err)
@@ -1260,12 +1260,12 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// Expire that lease.
 	tc.manualClock.Increment(11 + int64(tc.Clock().MaxOffset())) // advance time
-	now = tc.Clock().Now()
+	now = tc.Clock().NowAsClockTimestamp()
 
 	// Give lease to this range.
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-		Start:      now.Add(11, 0),
-		Expiration: now.Add(20, 0).Clone(),
+		Start:      now.ToTimestamp().Add(11, 0).UnsafeToClockTimestamp(),
+		Expiration: now.ToTimestamp().Add(20, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 1,
 			NodeID:    1,
@@ -1357,7 +1357,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 
 	for i, test := range testCases {
 		if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
-			Start:      test.start,
+			Start:      test.start.UnsafeToClockTimestamp(),
 			Expiration: test.expiration.Clone(),
 			Replica: roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(test.storeID),
@@ -1396,10 +1396,10 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	now := tc.Clock().Now()
+	now := tc.Clock().NowAsClockTimestamp()
 	lease := &roachpb.Lease{
 		Start:      now,
-		Expiration: now.Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 2,
 			NodeID:    2,
@@ -1653,7 +1653,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
 	if tc.repl.leaseStatus(context.Background(),
-		lease, tc.Clock().Now(), hlc.ClockTimestamp{}).State != kvserverpb.LeaseState_EXPIRED {
+		lease, tc.Clock().NowAsClockTimestamp(), hlc.ClockTimestamp{}).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -2157,14 +2157,14 @@ func TestAcquireLease(t *testing.T) {
 				// from then on. That is, unless the minLeaseProposedTS which gets set
 				// automatically at server start forces us to get a new lease. We
 				// simulate both cases.
-				var expStart hlc.Timestamp
+				var expStart hlc.ClockTimestamp
 
 				tc.repl.mu.Lock()
 				if !withMinLeaseProposedTS {
 					tc.repl.mu.minLeaseProposedTS = hlc.ClockTimestamp{}
 					expStart = lease.Start
 				} else {
-					expStart = tc.repl.mu.minLeaseProposedTS.ToTimestamp()
+					expStart = tc.repl.mu.minLeaseProposedTS
 				}
 				tc.repl.mu.Unlock()
 
@@ -2174,7 +2174,7 @@ func TestAcquireLease(t *testing.T) {
 				if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
 					t.Error(pErr)
 				}
-				if held, expired := hasLease(tc.repl, ts); !held || expired {
+				if held, expired := hasLease(tc.repl, ts.UnsafeToClockTimestamp()); !held || expired {
 					t.Errorf("expected lease acquisition")
 				}
 				lease, _ = tc.repl.GetLease()
@@ -2256,12 +2256,12 @@ func TestLeaseConcurrent(t *testing.T) {
 
 		atomic.StoreInt32(&active, 1)
 		tc.manualClock.Increment(leaseExpiry(tc.repl))
-		ts := tc.Clock().Now()
+		now := tc.Clock().NowAsClockTimestamp()
 		pErrCh := make(chan *roachpb.Error, num)
 		for i := 0; i < num; i++ {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
-				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, ts, hlc.ClockTimestamp{})
+				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, now, hlc.ClockTimestamp{})
 				llHandle := tc.repl.requestLeaseLocked(ctx, status)
 				tc.repl.mu.Unlock()
 				wg.Done()
@@ -9539,7 +9539,7 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.Timestamp) bool {
+func (q *testQuiescer) ownsValidLeaseRLocked(context.Context, hlc.ClockTimestamp) bool {
 	return q.ownsValidLease
 }
 
@@ -9601,7 +9601,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				},
 			}
 			q = transform(q)
-			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.livenessMap)
+			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, hlc.ClockTimestamp{}, q.livenessMap)
 			require.Equal(t, expected, ok)
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.

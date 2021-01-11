@@ -30,6 +30,8 @@ var (
 	MinTimestamp = Timestamp{WallTime: 0, Logical: 1}
 	// MaxClockTimestamp is the max value allowed for ClockTimestamp.
 	MaxClockTimestamp = ClockTimestamp{WallTime: math.MaxInt64, Logical: math.MaxInt32}
+	// MinClockTimestamp is the min value allowed for ClockTimestamp.
+	MinClockTimestamp = ClockTimestamp{WallTime: 0, Logical: 1}
 )
 
 // EqOrdering returns whether the receiver sorts equally to the parameter.
@@ -369,6 +371,9 @@ func (t ClockTimestamp) ToTimestamp() Timestamp {
 // Less returns whether the receiver is less than the parameter.
 func (t ClockTimestamp) Less(s ClockTimestamp) bool { return Timestamp(t).Less(Timestamp(s)) }
 
+// LessEq returns whether the receiver is less than or equal to the parameter.
+func (t ClockTimestamp) LessEq(s ClockTimestamp) bool { return Timestamp(t).LessEq(Timestamp(s)) }
+
 // String implements the fmt.Stringer interface.
 func (t ClockTimestamp) String() string { return t.ToTimestamp().String() }
 
@@ -380,6 +385,12 @@ func (t ClockTimestamp) IsEmpty() bool { return Timestamp(t).IsEmpty() }
 
 // Forward is like Timestamp.Forward, but for ClockTimestamps.
 func (t *ClockTimestamp) Forward(s ClockTimestamp) bool { return (*Timestamp)(t).Forward(Timestamp(s)) }
+
+// Backward is like Timestamp.Backward, but for ClockTimestamps.
+func (t *ClockTimestamp) Backward(s ClockTimestamp) { (*Timestamp)(t).Backward(Timestamp(s)) }
+
+// BackwardWithTimestamp is like Backward, but with a Timestamp parameter.
+func (t *ClockTimestamp) BackwardWithTimestamp(s Timestamp) { (*Timestamp)(t).Backward(s) }
 
 // Reset implements the protoutil.Message interface.
 func (t *ClockTimestamp) Reset() { (*Timestamp)(t).Reset() }

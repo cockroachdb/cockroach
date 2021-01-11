@@ -830,11 +830,11 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
+	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start.ToTimestamp()) {
 		return threshold
 	}
 
-	impliedThreshold := gc.CalculateThreshold(st.Timestamp, *r.mu.zone.GC)
+	impliedThreshold := gc.CalculateThreshold(st.Now.ToTimestamp(), *r.mu.zone.GC)
 	threshold.Forward(impliedThreshold)
 
 	// If we have a protected timestamp record which precedes the implied
@@ -1164,7 +1164,7 @@ func (r *Replica) checkExecutionCanProceed(
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
-	now := r.Clock().Now()
+	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
@@ -1603,7 +1603,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Con
 		return
 	}
 	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().Now()) {
+	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().NowAsClockTimestamp()) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()

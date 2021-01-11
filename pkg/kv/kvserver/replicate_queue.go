@@ -211,7 +211,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	desc, zone := repl.DescAndZone()
 	action, priority := rq.allocator.ComputeAction(ctx, zone, desc)

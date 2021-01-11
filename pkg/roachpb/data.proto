@@ -512,7 +512,8 @@ message Lease {
   // The start is a timestamp at which the lease begins. This value
   // must be greater than the last lease expiration or the lease request
   // is considered invalid.
-  util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   // The expiration is a timestamp at which the lease expires. This means that a
   // new lease can be granted for a later timestamp. This field is only set for

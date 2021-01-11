@@ -50,7 +50,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.Timestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -70,7 +70,7 @@ func (r *Replica) Metrics(
 
 	return calcReplicaMetrics(
 		ctx,
-		now,
+		now.ToTimestamp(),
 		&r.store.cfg.RaftConfig,
 		zone,
 		livenessMap,

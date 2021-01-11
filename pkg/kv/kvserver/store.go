@@ -1116,7 +1116,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					// leader, so only consider the `Voters` replicas.
 					needsLeaseTransfer := len(r.Desc().Replicas().VoterDescriptors()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
-						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
+						r.IsLeaseValid(ctx, drainingLease, s.Clock().NowAsClockTimestamp())
 
 					// Note that this code doesn't deal with transferring the Raft
 					// leadership. Leadership tries to follow the lease, so when leases
@@ -1862,7 +1862,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
-	now := s.cfg.Clock.Now()
+	now := s.cfg.Clock.NowAsClockTimestamp()
 	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
@@ -2370,7 +2370,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		return capacity, err
 	}
 
-	now := s.cfg.Clock.Now()
+	now := s.cfg.Clock.NowAsClockTimestamp()
 	var leaseCount int32
 	var rangeCount int32
 	var logicalBytes int64
@@ -2526,7 +2526,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount               int64
 	)
 
-	timestamp := s.cfg.Clock.Now()
+	now := s.cfg.Clock.NowAsClockTimestamp()
 	var livenessMap liveness.IsLiveMap
 	if s.cfg.NodeLiveness != nil {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
@@ -2535,7 +2535,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 
 	var minMaxClosedTS hlc.Timestamp
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.Metrics(ctx, timestamp, livenessMap, clusterNodes)
+		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
@@ -2780,7 +2780,7 @@ func (s *Store) ManuallyEnqueue(
 
 	if !skipShouldQueue {
 		log.Eventf(ctx, "running %s.shouldQueue", queueName)
-		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.Now(), repl, sysCfg)
+		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.NowAsClockTimestamp(), repl, sysCfg)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
 			return collect(), nil, nil

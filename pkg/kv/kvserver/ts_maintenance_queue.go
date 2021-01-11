@@ -124,14 +124,14 @@ func newTimeSeriesMaintenanceQueue(
 }
 
 func (q *timeSeriesMaintenanceQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
 			return false, 0
 		}
-		shouldQ, priority = shouldQueueAgain(now, lpTS, TimeSeriesMaintenanceInterval)
+		shouldQ, priority = shouldQueueAgain(now.ToTimestamp(), lpTS, TimeSeriesMaintenanceInterval)
 		if !shouldQ {
 			return
 		}

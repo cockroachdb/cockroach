@@ -554,7 +554,7 @@ func makeSQLServerArgs(
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
 			grpcServer:        dummyRPCServer,
-			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
+			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
 			nodeIDContainer:        idContainer,
@@ -1245,7 +1245,7 @@ func (ts *TestServer) SplitRange(
 // The lease is returned regardless of its status.
 func (ts *TestServer) GetRangeLease(
 	ctx context.Context, key roachpb.Key,
-) (_ roachpb.Lease, now hlc.Timestamp, _ error) {
+) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
 	leaseReq := roachpb.LeaseInfoRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -1263,9 +1263,9 @@ func (ts *TestServer) GetRangeLease(
 		&leaseReq,
 	)
 	if pErr != nil {
-		return roachpb.Lease{}, hlc.Timestamp{}, pErr.GoError()
+		return roachpb.Lease{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
-	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().Now(), nil
+	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().NowAsClockTimestamp(), nil
 
 }
 

@@ -673,7 +673,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 				// Expiration based leases, by contrast, will expire quickly if the
 				// leader of the range stops sending this replica heartbeats.
 				lease, pendingLease := r.GetLease()
-				now := s.Clock().Now()
+				now := s.Clock().NowAsClockTimestamp()
 				return !r.IsLeaseValid(ctx, lease, now) &&
 					(pendingLease.Empty() || !r.IsLeaseValid(ctx, pendingLease, now))
 			}
