@@ -401,6 +401,19 @@ func waitForUpgradeStep(nodes nodeListOption) versionStep {
 	}
 }
 
+func setClusterSettingVersionStep(ctx context.Context, t *test, u *versionUpgradeTest) {
+	db := u.conn(ctx, t, 1)
+	u.c.l.Printf("bumping cluster version")
+	// TODO(tbg): once this is using a job, poll and periodically print the job status
+	// instead of blocking.
+	if _, err := db.ExecContext(
+		ctx, `SET CLUSTER SETTING version = crdb_internal.node_executable_version()`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	u.c.l.Printf("cluster version bumped")
+}
+
 type versionFeatureTest struct {
 	name string
 	fn   func(context.Context, *test, *versionUpgradeTest, nodeListOption) (skipped bool)
@@ -520,4 +533,32 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
+}
+
+// importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
+// crashes during the import). If oldV is nil, this runs the import using the specified
+// version (for example "19.2.1", as provided by PredecessorVersion()) using the location
+// used by c.Stage(). An empty oldV uses the main cockroach binary.
+func importTPCCStep(oldV string, headroomWarehouses int, crdbNodes nodeListOption) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		// We need to use the predecessor binary to load into the
+		// predecessor cluster to avoid random breakage. For example, you
+		// can't use 21.1 to import into 20.2 due to some flag changes.
+		//
+		// TODO(tbg): also import a large dataset (for example 2TB bank)
+		// that will provide cold data that may need to be migrated.
+		var cmd string
+		if oldV == "" {
+			cmd = tpccImportCmd(headroomWarehouses)
+		} else {
+			cmd = tpccImportCmdWithCockroachBinary(filepath.Join("v"+oldV, "cockroach"), headroomWarehouses, "--checks=false")
+		}
+		// Use a monitor so that we fail cleanly if the cluster crashes
+		// during import.
+		m := newMonitor(ctx, u.c, crdbNodes)
+		m.Go(func(ctx context.Context) error {
+			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
+		})
+		m.Wait()
+	}
 }
