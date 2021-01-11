@@ -736,7 +736,7 @@ func forceLeaseTransferOnSubsumedRange(
 		if newLease.Sequence == oldLease.Sequence {
 			return errors.New("RHS lease not updated")
 		}
-		leaseStart = newLease.Start
+		leaseStart = newLease.Start.ToTimestamp()
 		return nil
 	})
 	if err != nil {

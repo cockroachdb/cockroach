@@ -75,7 +75,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	}
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.Now(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
 		false, interval); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
@@ -83,7 +83,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	live = false
 
 	if shouldQ, priority := kvserver.ConsistencyQueueShouldQueue(
-		context.Background(), clock.Now(), desc, getQueueLastProcessed, isNodeLive,
+		context.Background(), clock.NowAsClockTimestamp(), desc, getQueueLastProcessed, isNodeLive,
 		false, interval); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}

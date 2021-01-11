@@ -912,7 +912,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	// low water mark, we make sure that the high water mark is equal to or
 	// greater than the new lease start time, which is less than the
 	// previous lease's expiration time.
-	if highWater := l.replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start) {
+	if highWater := l.replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start.ToTimestamp()) {
 		t.Fatalf("expected timestamp cache high water %s, but found %s",
 			replica1Lease.Start, highWater)
 	}
@@ -1420,7 +1420,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 			Lease: roachpb.Lease{
-				Start:      s.Clock().Now(),
+				Start:      s.Clock().NowAsClockTimestamp(),
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    replDesc,
 			},
@@ -3135,7 +3135,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptp := tc.Server(i).ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 				_, r := getFirstStoreReplica(t, tc.Server(i), tableKey)
 				l, _ := r.GetLease()
-				require.NoError(t, ptp.Refresh(ctx, l.Start.Next()))
+				require.NoError(t, ptp.Refresh(ctx, l.Start.ToTimestamp().Next()))
 				r.ReadProtectedTimestamps(ctx)
 			}
 		}

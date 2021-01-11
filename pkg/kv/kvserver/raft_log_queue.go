@@ -526,7 +526,7 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
+	ctx context.Context, now hlc.ClockTimestamp, r *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {

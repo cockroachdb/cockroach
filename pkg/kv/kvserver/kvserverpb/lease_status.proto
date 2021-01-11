@@ -77,14 +77,15 @@ enum LeaseState {
 }
 
 // LeaseStatus holds the lease state, the timestamp at which the state
-// is accurate, the lease and optionally the liveness if the lease is
+// is accurate, the lease, and optionally the liveness if the lease is
 // epoch-based.
 message LeaseStatus {
   // Lease which this status describes.
   roachpb.Lease lease = 1 [(gogoproto.nullable) = false];
   // Timestamp that the lease was evaluated at.
-  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  // State of the lease at timestamp.
+  util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  // State of the lease at now.
   LeaseState state = 3;
   // Liveness if this is an epoch-based lease.
   kv.kvserver.liveness.livenesspb.Liveness liveness = 4 [(gogoproto.nullable) = false];

@@ -526,7 +526,7 @@ func (s *statusServer) Allocator(
 						}
 						return err
 					}
-					if !rep.OwnsValidLease(ctx, store.Clock().Now()) {
+					if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 						return nil
 					}
 					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
@@ -549,7 +549,7 @@ func (s *statusServer) Allocator(
 				// Not found: continue.
 				continue
 			}
-			if !rep.OwnsValidLease(ctx, store.Clock().Now()) {
+			if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 				continue
 			}
 			allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
@@ -1599,7 +1599,7 @@ func (s *statusServer) Ranges(
 	clusterNodes := s.storePool.ClusterNodeCount()
 
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		timestamp := store.Clock().Now()
+		now := store.Clock().NowAsClockTimestamp()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
 
@@ -1619,7 +1619,7 @@ func (s *statusServer) Ranges(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
+							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
 						))
 					return nil
 				})
@@ -1639,7 +1639,7 @@ func (s *statusServer) Ranges(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
+					rep.Metrics(ctx, now, isLiveMap, clusterNodes),
 				))
 		}
 		return nil

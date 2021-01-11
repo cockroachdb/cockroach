@@ -61,7 +61,7 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 
 // IsMeta1Leaseholder returns whether the specified stores owns
 // the meta1 lease. Returns an error if any.
-func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
+func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
 	repl, _, err := ls.GetReplicaForRangeID(1)
 	if roachpb.IsRangeNotFoundError(err) {
 		return false, nil

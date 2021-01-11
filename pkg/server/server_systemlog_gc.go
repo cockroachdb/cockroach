@@ -78,7 +78,7 @@ func (s *Server) gcSystemLog(
 		return timestampLowerBound, 0, err
 	}
 
-	if !repl.IsFirstRange() || !repl.OwnsValidLease(ctx, s.clock.Now()) {
+	if !repl.IsFirstRange() || !repl.OwnsValidLease(ctx, s.clock.NowAsClockTimestamp()) {
 		return timestampLowerBound, 0, nil
 	}
 

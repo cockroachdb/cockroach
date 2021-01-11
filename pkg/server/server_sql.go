@@ -137,7 +137,7 @@ type sqlServerOptionalKVArgs struct {
 	// To register blob and DistSQL servers.
 	grpcServer *grpc.Server
 	// For the temporaryObjectCleaner.
-	isMeta1Leaseholder func(context.Context, hlc.Timestamp) (bool, error)
+	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
 	nodeIDContainer *base.SQLIDContainer
 

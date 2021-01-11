@@ -151,7 +151,7 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
 func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap liveness.IsLiveMap) bool {
-	status, lagging, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), livenessMap)
+	status, lagging, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().NowAsClockTimestamp(), livenessMap)
 	if !ok {
 		return false
 	}
@@ -166,7 +166,7 @@ type quiescer interface {
 	hasRaftReadyRLocked() bool
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
-	ownsValidLeaseRLocked(ctx context.Context, ts hlc.Timestamp) bool
+	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -236,7 +236,7 @@ func (s laggingReplicaSet) Less(i, j int) bool { return s[i].NodeID < s[j].NodeI
 //
 // NOTE: The last 3 conditions are fairly, but not completely, overlapping.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.Timestamp, livenessMap liveness.IsLiveMap,
+	ctx context.Context, q quiescer, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap,
 ) (*raft.Status, laggingReplicaSet, bool) {
 	if testingDisableQuiescence {
 		return nil, nil, false
