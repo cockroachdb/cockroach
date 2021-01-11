@@ -515,14 +515,6 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			return &hookFnNode{f: fn, header: header, subplans: subplans}, nil
 		}
 	}
-	for _, planHook := range wrappedPlanHooks {
-		if node, err := planHook(ctx, stmt, p); err != nil {
-			return nil, err
-		} else if node != nil {
-			return node, err
-		}
-	}
-
 	return nil, nil
 }
 
