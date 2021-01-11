@@ -938,25 +938,23 @@ func TestMakePriorityLimits(t *testing.T) {
 func TestLeaseEquivalence(t *testing.T) {
 	r1 := ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	r2 := ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
-	ts1 := makeTS(1, 1)
-	ts2 := makeTS(2, 1)
-	ts3 := makeTS(3, 1)
-	clockTS1 := makeClockTS(1, 1)
-	clockTS2 := makeClockTS(2, 1)
+	ts1 := makeClockTS(1, 1)
+	ts2 := makeClockTS(2, 1)
+	ts3 := makeClockTS(3, 1)
 
 	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
 	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
-	expire1 := Lease{Replica: r1, Start: ts1, Expiration: &ts2}
-	expire2 := Lease{Replica: r1, Start: ts1, Expiration: &ts3}
+	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.ToTimestamp().Clone()}
+	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.ToTimestamp().Clone()}
 	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
-	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: &ts3}
+	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.ToTimestamp().Clone()}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &clockTS1}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &clockTS1}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &clockTS2}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts1}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: &ts1}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: &ts2}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: &ts1}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: &ts2}
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.ToTimestamp().Clone()}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.ToTimestamp().Clone()}
 
 	r1Voter, r1Learner := r1, r1
 	r1Voter.Type = ReplicaTypeVoterFull()
@@ -996,7 +994,7 @@ func TestLeaseEquivalence(t *testing.T) {
 	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
 	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
 	prePRLease := Lease{
-		Start: hlc.Timestamp{WallTime: 10},
+		Start: hlc.ClockTimestamp{WallTime: 10},
 		Epoch: 123,
 
 		// The bug-trigger.
@@ -1017,7 +1015,7 @@ func TestLeaseEquivalence(t *testing.T) {
 
 func TestLeaseEqual(t *testing.T) {
 	type expectedLease struct {
-		Start                 hlc.Timestamp
+		Start                 hlc.ClockTimestamp
 		Expiration            *hlc.Timestamp
 		Replica               ReplicaDescriptor
 		DeprecatedStartStasis *hlc.Timestamp
@@ -1063,7 +1061,7 @@ func TestLeaseEqual(t *testing.T) {
 	clockTS := hlc.ClockTimestamp{Logical: 1}
 	ts := clockTS.ToTimestamp()
 	testCases := []Lease{
-		{Start: ts},
+		{Start: clockTS},
 		{Expiration: &ts},
 		{Replica: ReplicaDescriptor{NodeID: 1}},
 		{DeprecatedStartStasis: &ts},

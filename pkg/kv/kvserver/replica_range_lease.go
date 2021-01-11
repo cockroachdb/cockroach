@@ -201,14 +201,6 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	reqHeader := roachpb.RequestHeader{
 		Key: startKey,
 	}
-	var leaseReq roachpb.Request
-	now := p.repl.store.Clock().NowAsClockTimestamp()
-	// TODO(nvanbenschoten): what if status.Timestamp > now? Is that ok?
-	// Probably not, because the existing lease may end in the future,
-	// but we may be trying to evaluate a request even further into the
-	// future.
-	// Currently, this is the interaction that prevents us from making
-	// Lease.Start a ClockTimestamp.
 	reqLease := roachpb.Lease{
 		// It's up to us to ensure that Lease.Start is greater than the
 		// end time of the previous lease. This means that if status
@@ -221,14 +213,14 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// increase it (and a start timestamp that is too low is unsafe
 		// because it results in incorrect initialization of the timestamp
 		// cache on the new leaseholder).
-		Start:      status.Timestamp,
+		Start:      status.Now,
 		Replica:    nextLeaseHolder,
-		ProposedTS: &now,
+		ProposedTS: &status.Now,
 	}
 
 	if p.repl.requiresExpiringLeaseRLocked() {
 		reqLease.Expiration = &hlc.Timestamp{}
-		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
+		*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		l, ok := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
@@ -243,6 +235,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		reqLease.Epoch = l.Epoch
 	}
 
+	var leaseReq roachpb.Request
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
 			RequestHeader: reqHeader,
@@ -546,10 +539,10 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 func (r *Replica) leaseStatus(
 	ctx context.Context,
 	lease roachpb.Lease,
-	timestamp hlc.Timestamp,
+	now hlc.ClockTimestamp,
 	minProposedTS hlc.ClockTimestamp,
 ) kvserverpb.LeaseStatus {
-	status := kvserverpb.LeaseStatus{Timestamp: timestamp, Lease: lease}
+	status := kvserverpb.LeaseStatus{Now: now, Lease: lease}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()
@@ -578,7 +571,7 @@ func (r *Replica) leaseStatus(
 	}
 	maxOffset := r.store.Clock().MaxOffset()
 	stasis := expiration.Add(-int64(maxOffset), 0)
-	if timestamp.Less(stasis) {
+	if now.ToTimestamp().Less(stasis) {
 		status.State = kvserverpb.LeaseState_VALID
 		// If the replica owns the lease, additional verify that the lease's
 		// proposed timestamp is not earlier than the min proposed timestamp.
@@ -586,7 +579,7 @@ func (r *Replica) leaseStatus(
 			lease.ProposedTS != nil && lease.ProposedTS.Less(minProposedTS) {
 			status.State = kvserverpb.LeaseState_PROSCRIBED
 		}
-	} else if timestamp.Less(expiration) {
+	} else if now.ToTimestamp().Less(expiration) {
 		status.State = kvserverpb.LeaseState_UNUSABLE
 	} else {
 		status.State = kvserverpb.LeaseState_EXPIRED
@@ -597,10 +590,10 @@ func (r *Replica) leaseStatus(
 // CurrentLeaseStatus returns the status of the current lease for a current
 // timestamp.
 func (r *Replica) CurrentLeaseStatus(ctx context.Context) kvserverpb.LeaseStatus {
-	timestamp := r.store.Clock().Now()
+	now := r.store.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	return r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 }
 
 // requiresExpiringLeaseRLocked returns whether this range uses an
@@ -623,7 +616,7 @@ func (r *Replica) requestLeaseLocked(
 	ctx context.Context, status kvserverpb.LeaseStatus,
 ) *leaseRequestHandle {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
-		if err := r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp, r.StoreID(), r.GetRangeID()); err != nil {
+		if err := r.store.TestingKnobs().LeaseRequestEvent(status.Now.ToTimestamp(), r.StoreID(), r.GetRangeID()); err != nil {
 			return r.mu.pendingLeaseRequest.newResolvedHandle(err)
 		}
 	}
@@ -681,7 +674,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		defer r.mu.Unlock()
 
 		now := r.store.Clock().NowAsClockTimestamp()
-		status := r.leaseStatus(ctx, *r.mu.state.Lease, now.ToTimestamp(), r.mu.minLeaseProposedTS)
+		status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 		if status.Lease.OwnedBy(target) {
 			// The target is already the lease holder. Nothing to do.
 			return nil, nil, nil
@@ -810,29 +803,29 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 // leaseholder. Note that this method does not check to see if a transfer is
 // pending, but returns the status of the current lease and ownership at the
 // specified point in time.
-func (r *Replica) OwnsValidLease(ctx context.Context, ts hlc.Timestamp) bool {
+func (r *Replica) OwnsValidLease(ctx context.Context, now hlc.ClockTimestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.ownsValidLeaseRLocked(ctx, ts)
+	return r.ownsValidLeaseRLocked(ctx, now)
 }
 
-func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, ts hlc.Timestamp) bool {
+func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
-		r.leaseStatus(ctx, *r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
+		r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
 }
 
 // IsLeaseValid returns true if the replica's lease is owned by this
 // replica and is valid (not expired, not in stasis).
-func (r *Replica) IsLeaseValid(ctx context.Context, lease roachpb.Lease, ts hlc.Timestamp) bool {
+func (r *Replica) IsLeaseValid(ctx context.Context, lease roachpb.Lease, now hlc.ClockTimestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.isLeaseValidRLocked(ctx, lease, ts)
+	return r.isLeaseValidRLocked(ctx, lease, now)
 }
 
 func (r *Replica) isLeaseValidRLocked(
-	ctx context.Context, lease roachpb.Lease, ts hlc.Timestamp,
+	ctx context.Context, lease roachpb.Lease, now hlc.ClockTimestamp,
 ) bool {
-	return r.leaseStatus(ctx, lease, ts, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
+	return r.leaseStatus(ctx, lease, now, r.mu.minLeaseProposedTS).State == kvserverpb.LeaseState_VALID
 }
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
@@ -873,7 +866,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 	// TODO(nvanbenschoten): this should take the request timestamp and forward
 	// now by that timestamp. Should we limit how far in the future this timestamp
 	// can lead clock.Now()? Something to do with < now + RangeLeaseRenewalDuration()?
-	timestamp := r.store.Clock().Now()
+	now := r.store.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -882,7 +875,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 		return kvserverpb.LeaseStatus{}, false
 	}
 
-	status := r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	if status.State == kvserverpb.LeaseState_VALID && status.Lease.OwnedBy(r.store.StoreID()) {
 		// We own the lease...
 		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
@@ -925,12 +918,12 @@ func (r *Replica) redirectOnOrAcquireLease(
 	for attempt := 1; ; attempt++ {
 		// TODO(nvanbenschoten): this should take the request timestamp and
 		// forward now by that timestamp. See TODO in leaseGoodToGo.
-		timestamp := r.store.Clock().Now()
+		now := r.store.Clock().NowAsClockTimestamp()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			status = r.leaseStatus(ctx, *r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
+			status = r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
@@ -1016,9 +1009,9 @@ func (r *Replica) redirectOnOrAcquireLease(
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
 				if !requestPending && r.requiresExpiringLeaseRLocked() {
 					renewal := status.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-					if renewal.LessEq(timestamp) {
+					if renewal.LessEq(now.ToTimestamp()) {
 						if log.V(2) {
-							log.Infof(ctx, "extending lease %s at %s", status.Lease, timestamp)
+							log.Infof(ctx, "extending lease %s at %s", status.Lease, now)
 						}
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension. We explicitly ignore the returned handle
@@ -1090,7 +1083,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(ctx, lease, r.store.Clock().Now()) {
+							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(ctx, lease, r.store.Clock().NowAsClockTimestamp()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
 									"lease acquisition attempt lost to another lease, which has expired in the meantime")
 							} else {

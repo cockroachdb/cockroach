@@ -755,7 +755,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// queue. We might have been handed leadership by a remote node which wanted
 	// to remove itself from the range.
 	if becameLeader && r.store.replicateQueue != nil {
-		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
+		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
 	// Update raft log entry cache. We clear any older, uncommitted log entries
@@ -1476,7 +1476,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		return
 	}
 
-	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().NowAsClockTimestamp(), r.mu.minLeaseProposedTS)
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")

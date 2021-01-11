@@ -182,7 +182,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
 		return false, false, nil
 	}
-	if args.RecordAliveAt.Less(ls.Lease.Start) {
+	if args.RecordAliveAt.Less(ls.Lease.Start.ToTimestamp()) {
 		return true, false, nil
 	}
 
@@ -263,7 +263,7 @@ func (r *Replica) checkProtectedTimestampsForGC(
 		}
 	}
 
-	if gcTimestamp.Less(lease.Start) {
+	if gcTimestamp.Less(lease.Start.ToTimestamp()) {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to new lease %v started after %v",
 			r, lease, gcTimestamp)
 		return false, hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}

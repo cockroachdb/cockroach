@@ -102,7 +102,7 @@ func evalNewLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 
 	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start)) ||
+	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
 		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
