@@ -14,9 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 type streamIngestionResumer struct {
@@ -52,6 +55,8 @@ func ingest(
 	}
 
 	// Plan and run the DistSQL flow.
+	// TODO: Updates from this flow need to feed back into the job to update the
+	// progress.
 	err = distStreamIngest(ctx, execCtx, nodes, planCtx, dsp, streamIngestionSpecs)
 	if err != nil {
 		return err
@@ -81,7 +86,30 @@ func (s *streamIngestionResumer) Resume(
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
-	return nil
+	p := execCtx.(sql.JobExecContext)
+	db := p.ExecCfg().DB
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
+	resolvedTime := details.StartTime
+	prog := s.job.Progress()
+	if highWatermark := prog.GetHighWater(); highWatermark != nil {
+		if highWatermark.Less(resolvedTime) {
+			return errors.Newf("progress timestamp %+v cannot be older than start time %+v",
+				highWatermark, resolvedTime)
+		}
+		resolvedTime = *highWatermark
+	}
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.RevertRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    details.Span.Key,
+			EndKey: details.Span.EndKey,
+		},
+		TargetTime:                          resolvedTime,
+		EnableTimeBoundIteratorOptimization: true,
+	})
+	b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
+	return db.Run(ctx, &b)
 }
 
 var _ jobs.Resumer = &streamIngestionResumer{}
