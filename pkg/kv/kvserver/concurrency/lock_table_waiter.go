@@ -704,12 +704,10 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 
 	var finalize bool
 	switch s.kind {
-	case waitFor, waitForDistinguished:
+	case waitFor, waitForDistinguished, waitSelf:
 		finalize = h.ev != nil &&
 			(!h.ev.TxnMeta.ID.Equal(s.txn.ID) || !bytes.Equal(h.ev.Key, s.key))
-	case waitSelf, waitElsewhere, doneWaiting:
-		// TODO(tbg): fix waitSelf to come with an attached txn (ours) and
-		// handle it like waitFor above.
+	case waitElsewhere, doneWaiting:
 		finalize = true
 	default:
 		panic("unhandled waitingState.kind")
