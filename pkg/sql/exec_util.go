@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -766,6 +767,10 @@ type ExecutorConfig struct {
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
+
+	// ContentionRegistry is a node-level registry of contention events used for
+	// contention observability.
+	ContentionRegistry *contention.Registry
 }
 
 // Organization returns the value of cluster.organization.

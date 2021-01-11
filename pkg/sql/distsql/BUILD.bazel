@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/colflow",
+        "//pkg/sql/contention",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/faketreeeval",
