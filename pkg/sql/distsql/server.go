@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -62,10 +63,11 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
-	flowRegistry  *flowinfra.FlowRegistry
-	flowScheduler *flowinfra.FlowScheduler
-	memMonitor    *mon.BytesMonitor
-	regexpCache   *tree.RegexpCache
+	flowRegistry       *flowinfra.FlowRegistry
+	flowScheduler      *flowinfra.FlowScheduler
+	memMonitor         *mon.BytesMonitor
+	regexpCache        *tree.RegexpCache
+	contentionRegistry *contention.Registry
 }
 
 var _ execinfrapb.DistSQLServer = &ServerImpl{}

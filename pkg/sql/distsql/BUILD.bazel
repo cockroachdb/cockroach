@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/catalog/lease",
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
+        "//pkg/sql/contention",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/faketreeeval",
