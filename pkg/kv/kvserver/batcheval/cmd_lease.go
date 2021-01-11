@@ -33,7 +33,7 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	return trigger
 }
 
-// checkCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
+// CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
 // An error is also returned is the replica is not part of `rngDesc`.
@@ -45,7 +45,7 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 // latencies. Additionally, as of the time of writing, learner replicas are
 // only used for a short time in replica addition, so it's not worth working
 // out the edge cases.
-func checkCanReceiveLease(
+func CheckCanReceiveLease(
 	wouldbeLeaseholder roachpb.ReplicaDescriptor, rngDesc *roachpb.RangeDescriptor,
 ) error {
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,6 +45,15 @@ type testProposer struct {
 	// If not nil, this is called by RejectProposalWithRedirectLocked(). If nil,
 	// RejectProposalWithRedirectLocked() panics.
 	onRejectProposalWithRedirectLocked func(prop *ProposalData, redirectTo roachpb.ReplicaID)
+
+	// leaderReplicaInDescriptor is set if the leader (as indicated by raftGroup)
+	// is known, and that leader is part of the range's descriptor (as seen by the
+	// current replica). This can be used to simulate the local replica being so
+	// far behind that it doesn't have an up to date descriptor.
+	leaderReplicaInDescriptor bool
+	// If leaderReplicaInDescriptor is set, this specifies what type of replica it
+	// is. Some types of replicas are not eligible to get a lease.
+	leaderReplicaType roachpb.ReplicaType
 }
 
 type testProposerRaft struct {
@@ -97,6 +107,39 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 
 func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
+}
+
+func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {
+	leaderKnown := raftGroup.BasicStatus().Lead != raft.None
+	var leaderRep roachpb.ReplicaID
+	var iAmTheLeader, leaderEligibleForLease bool
+	if leaderKnown {
+		leaderRep = roachpb.ReplicaID(raftGroup.BasicStatus().Lead)
+		iAmTheLeader = leaderRep == t.replicaID()
+		repDesc := roachpb.ReplicaDescriptor{
+			ReplicaID: leaderRep,
+			Type:      &t.leaderReplicaType,
+		}
+
+		if t.leaderReplicaInDescriptor {
+			// Fill in a RangeDescriptor just enough for the CheckCanReceiveLease()
+			// call.
+			rngDesc := roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
+			}
+			err := batcheval.CheckCanReceiveLease(repDesc, &rngDesc)
+			leaderEligibleForLease = err == nil
+		} else {
+			// This matches replicaProposed.leaderStatusRLocked().
+			leaderEligibleForLease = true
+		}
+	}
+	return rangeLeaderInfo{
+		leaderKnown:            leaderKnown,
+		leader:                 leaderRep,
+		iAmTheLeader:           iAmTheLeader,
+		leaderEligibleForLease: leaderEligibleForLease,
+	}
 }
 
 func (t *testProposer) rejectProposalWithRedirectLocked(
@@ -391,9 +434,16 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	// Each subtest will try to propose a lease acquisition in a different Raft
 	// scenario. Some proposals should be allowed, some should be rejected.
 	for _, tc := range []struct {
-		name         string
-		state        raft.StateType
-		leader       uint64
+		name  string
+		state raft.StateType
+		// raft.None means there's no leader, or the leader is unknown.
+		leader uint64
+		// Empty means VOTER_FULL.
+		leaderRepType roachpb.ReplicaType
+		// Set to simulate situations where the local replica is so behind that the
+		// leader is not even part of the range descriptor.
+		leaderNotInRngDesc bool
+
 		expRejection bool
 	}{
 		{
@@ -404,7 +454,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			expRejection: false,
 		},
 		{
-			name:  "follower known leader",
+			name:  "follower, known eligible leader",
 			state: raft.StateFollower,
 			// Someone else is leader.
 			leader: self + 1,
@@ -412,7 +462,28 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			expRejection: true,
 		},
 		{
-			name:  "follower unknown leader",
+			name:  "follower, known ineligible leader",
+			state: raft.StateFollower,
+			// Someone else is leader.
+			leader: self + 1,
+			// The leader type makes it ineligible to get the lease. Thus, the local
+			// proposal will not be rejected.
+			leaderRepType: roachpb.VOTER_DEMOTING,
+			expRejection:  false,
+		},
+		{
+			// Here we simulate the leader being known by Raft, but the local replica
+			// is so far behind that it doesn't contain the leader replica.
+			name:  "follower, known leader not in range descriptor",
+			state: raft.StateFollower,
+			// Someone else is leader.
+			leader:             self + 1,
+			leaderNotInRngDesc: true,
+			// We assume that the leader is eligible, and redirect.
+			expRejection: true,
+		},
+		{
+			name:  "follower, unknown leader",
 			state: raft.StateFollower,
 			// Unknown leader.
 			leader: raft.None,
@@ -448,8 +519,13 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 					Lead:      tc.leader,
 				},
 			}
-			r := testProposerRaft{status: raftStatus}
+			r := testProposerRaft{
+				status: raftStatus,
+			}
 			p.raftGroup = r
+			p.leaderReplicaInDescriptor = !tc.leaderNotInRngDesc
+			p.leaderReplicaType = tc.leaderRepType
+
 			var b propBuf
 			b.Init(&p)
 

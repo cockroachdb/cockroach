@@ -61,7 +61,7 @@ func RequestLease(
 
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := checkCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
+	if err := CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		rErr.Message = err.Error()
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
