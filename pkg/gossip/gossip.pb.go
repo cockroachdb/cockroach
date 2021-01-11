@@ -1602,7 +1602,7 @@ func (m *BootstrapInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -1780,7 +1780,7 @@ func (m *Request) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthGossip
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1903,7 +1903,7 @@ func (m *Request) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthGossip
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1950,7 +1950,7 @@ func (m *Request) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2207,7 +2207,7 @@ func (m *Response) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthGossip
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2303,7 +2303,7 @@ func (m *Response) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthGossip
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2320,7 +2320,7 @@ func (m *Response) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2437,7 +2437,7 @@ func (m *ConnStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2582,7 +2582,7 @@ func (m *MetricSnap) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2692,7 +2692,7 @@ func (m *OutgoingConnStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2792,7 +2792,7 @@ func (m *ClientStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -2922,7 +2922,7 @@ func (m *ServerStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -3022,7 +3022,7 @@ func (m *Connectivity) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -3110,7 +3110,7 @@ func (m *Connectivity_Conn) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -3266,7 +3266,7 @@ func (m *InfoStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthGossip
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -3373,7 +3373,7 @@ func (m *InfoStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {
@@ -3548,7 +3548,7 @@ func (m *Info) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthGossip
 			}
 			if (iNdEx + skippy) > l {

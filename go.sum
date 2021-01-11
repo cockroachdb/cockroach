@@ -154,8 +154,8 @@ github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955 h1:1ELogBFqZl2C
 github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955/go.mod h1:Vshs83p1UXI6fjU8eWVgqXeewFxRDP1fNVF5PHiSBm0=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
-github.com/cockroachdb/gogoproto v1.2.1-0.20190102194534-ca10b809dba0 h1:UoEUWRRZjeOfGenewnmzRCA0kWWRtZogNdidaXjZ/+c=
-github.com/cockroachdb/gogoproto v1.2.1-0.20190102194534-ca10b809dba0/go.mod h1:iEEnNJHQ499vc8YlB9zMzx81dfYQXSTukEEGG2EnUHE=
+github.com/cockroachdb/gogoproto v1.2.1-0.20210111172841-8b6737fea948 h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=
+github.com/cockroachdb/gogoproto v1.2.1-0.20210111172841-8b6737fea948/go.mod h1:iEEnNJHQ499vc8YlB9zMzx81dfYQXSTukEEGG2EnUHE=
 github.com/cockroachdb/gostdlib v1.13.0 h1:TzSEPYgkKDNei3gbLc0rrHu4iHyBp7/+NxPOFmcXGaw=
 github.com/cockroachdb/gostdlib v1.13.0/go.mod h1:eXX95p9QDrYwJfJ6AgeN9QnRa/lqqid9LAzWz/l5OgA=
 github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249 h1:pZuUpNtmLArGU2vCW+mNetvruw6jRcxDxwOnMT+XLWI=
