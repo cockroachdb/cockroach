@@ -28,6 +28,7 @@ var _ Details = SchemaChangeDetails{}
 var _ Details = ChangefeedDetails{}
 var _ Details = CreateStatsDetails{}
 var _ Details = SchemaChangeGCDetails{}
+var _ Details = StreamIngestionDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -38,6 +39,7 @@ var _ ProgressDetails = SchemaChangeProgress{}
 var _ ProgressDetails = ChangefeedProgress{}
 var _ ProgressDetails = CreateStatsProgress{}
 var _ ProgressDetails = SchemaChangeGCProgress{}
+var _ ProgressDetails = StreamIngestionProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -67,6 +69,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeSchemaChangeGC
 	case *Payload_TypeSchemaChange:
 		return TypeTypeSchemaChange
+	case *Payload_StreamIngestion:
+		return TypeStreamIngestion
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -97,6 +101,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_SchemaChangeGC{SchemaChangeGC: &d}
 	case TypeSchemaChangeProgress:
 		return &Progress_TypeSchemaChange{TypeSchemaChange: &d}
+	case StreamIngestionProgress:
+		return &Progress_StreamIngest{StreamIngest: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -122,6 +128,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.SchemaChangeGC
 	case *Payload_TypeSchemaChange:
 		return *d.TypeSchemaChange
+	case *Payload_StreamIngestion:
+		return *d.StreamIngestion
 	default:
 		return nil
 	}
@@ -147,6 +155,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.SchemaChangeGC
 	case *Progress_TypeSchemaChange:
 		return *d.TypeSchemaChange
+	case *Progress_StreamIngest:
+		return *d.StreamIngest
 	default:
 		return nil
 	}
@@ -185,6 +195,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_SchemaChangeGC{SchemaChangeGC: &d}
 	case TypeSchemaChangeDetails:
 		return &Payload_TypeSchemaChange{TypeSchemaChange: &d}
+	case StreamIngestionDetails:
+		return &Payload_StreamIngestion{StreamIngestion: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
