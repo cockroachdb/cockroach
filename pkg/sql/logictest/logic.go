@@ -1335,6 +1335,10 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 			TenantID:                    roachpb.MakeTenantID(10),
 			AllowSettingClusterSettings: true,
 		}
+
+		// Prevent a logging assertion that the server ID is initialized multiple times.
+		log.TestingClearServerIdentifiers()
+
 		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)

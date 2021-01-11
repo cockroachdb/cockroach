@@ -151,6 +151,10 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// they only go to files.
 	mainLog.stderrThreshold.set(Severity_NONE)
 
+	// Clear the server identifiers to prevent double initialization
+	// panics.
+	TestingClearServerIdentifiers()
+
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
 }

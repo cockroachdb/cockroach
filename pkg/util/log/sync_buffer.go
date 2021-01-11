@@ -253,11 +253,9 @@ func (l *loggerT) initializeNewOutputFile(
 		l.makeStartLine("arguments: %s", os.Args),
 	)
 
-	logging.mu.Lock()
-	if logging.mu.clusterID != "" {
-		messages = append(messages, l.makeStartLine("clusterID: %s", logging.mu.clusterID))
+	if clusterID := logging.clusterID.Get(); len(clusterID) > 0 {
+		messages = append(messages, l.makeStartLine("clusterID: %s", clusterID))
 	}
-	logging.mu.Unlock()
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps
 	// viewers that attempt to guess the character encoding.
