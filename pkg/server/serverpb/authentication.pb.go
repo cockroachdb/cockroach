@@ -725,7 +725,7 @@ func (m *UserLoginRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {
@@ -775,7 +775,7 @@ func (m *UserLoginResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {
@@ -825,7 +825,7 @@ func (m *UserLogoutRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {
@@ -875,7 +875,7 @@ func (m *UserLogoutResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {
@@ -975,7 +975,7 @@ func (m *SessionCookie) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {
@@ -1087,7 +1087,7 @@ func (m *OIDCState) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAuthentication
 			}
 			if (iNdEx + skippy) > l {

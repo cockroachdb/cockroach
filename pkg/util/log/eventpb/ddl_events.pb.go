@@ -4443,7 +4443,7 @@ func (m *CreateDatabase) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -4611,7 +4611,7 @@ func (m *DropDatabase) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -4779,7 +4779,7 @@ func (m *AlterDatabaseAddRegion) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -4947,7 +4947,7 @@ func (m *RenameDatabase) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5115,7 +5115,7 @@ func (m *ConvertToSchema) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5283,7 +5283,7 @@ func (m *CreateSchema) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5422,7 +5422,7 @@ func (m *DropSchema) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5590,7 +5590,7 @@ func (m *RenameSchema) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5758,7 +5758,7 @@ func (m *CreateTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -5926,7 +5926,7 @@ func (m *DropTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -6094,7 +6094,7 @@ func (m *RenameTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -6233,7 +6233,7 @@ func (m *TruncateTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -6420,7 +6420,7 @@ func (m *AlterTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -6637,7 +6637,7 @@ func (m *CommentOnColumn) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -6825,7 +6825,7 @@ func (m *CommentOnDatabase) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -7013,7 +7013,7 @@ func (m *CommentOnTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -7230,7 +7230,7 @@ func (m *CommentOnIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -7417,7 +7417,7 @@ func (m *CreateIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -7633,7 +7633,7 @@ func (m *DropIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -7820,7 +7820,7 @@ func (m *AlterIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8017,7 +8017,7 @@ func (m *CreateView) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8185,7 +8185,7 @@ func (m *DropView) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8353,7 +8353,7 @@ func (m *CreateSequence) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8492,7 +8492,7 @@ func (m *DropSequence) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8631,7 +8631,7 @@ func (m *AlterSequence) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8738,7 +8738,7 @@ func (m *CommonSchemaChangeEventDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -8906,7 +8906,7 @@ func (m *ReverseSchemaChange) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9016,7 +9016,7 @@ func (m *FinishSchemaChange) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9126,7 +9126,7 @@ func (m *FinishSchemaChangeRollback) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9294,7 +9294,7 @@ func (m *CreateType) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9433,7 +9433,7 @@ func (m *DropType) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9572,7 +9572,7 @@ func (m *AlterType) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9740,7 +9740,7 @@ func (m *RenameType) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -9879,7 +9879,7 @@ func (m *CreateStatistics) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -10096,7 +10096,7 @@ func (m *UnsafeUpsertDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -10322,7 +10322,7 @@ func (m *UnsafeDeleteDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -10587,7 +10587,7 @@ func (m *UnsafeUpsertNamespaceEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -10813,7 +10813,7 @@ func (m *UnsafeDeleteNamespaceEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDdlEvents
 			}
 			if (iNdEx + skippy) > l {

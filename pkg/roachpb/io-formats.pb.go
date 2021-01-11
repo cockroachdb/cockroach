@@ -1202,7 +1202,7 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1378,7 +1378,7 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1611,7 +1611,7 @@ func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1728,7 +1728,7 @@ func (m *PgCopyOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1816,7 +1816,7 @@ func (m *PgDumpOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -1885,7 +1885,7 @@ func (m *MysqldumpOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
@@ -2060,7 +2060,7 @@ func (m *AvroOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthIoFormats
 			}
 			if (iNdEx + skippy) > l {
