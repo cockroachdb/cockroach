@@ -330,8 +330,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// has completed.
 	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartSpan("server start")
-	ctx = tracing.ContextWithSpan(ctx, sp)
+	startupSpan := tracer.StartSpan("server start")
+	ctx = tracing.ContextWithSpan(ctx, startupSpan)
 
 	// Set up the logging and profiling output.
 	//
@@ -543,7 +543,7 @@ If problems persist, please see %s.`
 		}()
 		// When the start up goroutine completes, so can the start up span
 		// defined above.
-		defer sp.Finish()
+		defer startupSpan.Finish()
 
 		// Any error beyond this point should be reported through the
 		// errChan defined above. However, in Go the code pattern "if err

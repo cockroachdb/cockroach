@@ -947,6 +947,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
+						// TODO(irfansharif): How come this span is never Finish()-ed? #58721.
 						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) {
 							// At the last outbox, we can accurately retrieve stats for the
 							// whole flow from parent monitors. These stats are added to a
