@@ -38,6 +38,7 @@ type tpccSetupType int
 const (
 	usingImport tpccSetupType = iota
 	usingInit
+	usingExistingData // skips import
 )
 
 type tpccOptions struct {
@@ -46,19 +47,16 @@ type tpccOptions struct {
 	ExtraSetupArgs string
 	Chaos          func() Chaos                // for late binding of stopper
 	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration
+	Duration       time.Duration               // if zero, TPCC is not invoked
 	SetupType      tpccSetupType
-
-	// The CockroachDB versions to deploy. The first one indicates the first node,
-	// etc. To use the main binary, specify "". When Versions is nil, it defaults
-	// to "" for all nodes. When it is specified, len(Versions) needs to match the
-	// number of CRDB nodes in the cluster.
+	// If specified, called to stage+start cockroach. If not
+	// specified, defaults to uploading the default binary to
+	// all nodes, and starting it on all but the last node.
 	//
-	// TODO(tbg): for better coverage at scale of the migration process, we
-	// should also be doing a rolling-restart into the new binary while the
-	// cluster is running, but that feels like jamming too much into the tpcc
-	// setup.
-	Versions []string
+	// TODO(tbg): for better coverage at scale of the migration process, we should
+	// also be doing a rolling-restart into the new binary while the cluster
+	// is running, but that feels like jamming too much into the tpcc setup.
+	Start func(context.Context, *test, *cluster)
 }
 
 // tpccImportCmd generates the command string to load tpcc data for the
@@ -85,36 +83,26 @@ func setupTPCC(
 		opts.Warehouses = 1
 	}
 
-	if n := len(opts.Versions); n == 0 {
-		opts.Versions = make([]string, c.spec.NodeCount-1)
-	} else if n != c.spec.NodeCount-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
-	}
-
-	{
-		var regularNodes []option
-		for i, v := range opts.Versions {
-			if v == "" {
-				regularNodes = append(regularNodes, c.Node(i+1))
-			} else {
-				if err := c.Stage(ctx, c.l, "release", v, "", c.Node(i+1)); err != nil {
-					t.Fatal(err)
-				}
-			}
+	if opts.Start == nil {
+		opts.Start = func(ctx context.Context, t *test, c *cluster) {
+			// NB: workloadNode also needs ./cockroach because
+			// of `./cockroach workload` for usingImport.
+			c.Put(ctx, cockroach, "./cockroach", c.All())
+			// We still use bare workload, though we could likely replace
+			// those with ./cockroach workload as well.
+			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Start(ctx, t, crdbNodes)
 		}
-		c.Put(ctx, cockroach, "./cockroach", regularNodes...)
 	}
-
-	// Fixture import needs ./cockroach workload on workloadNode.
-	c.Put(ctx, cockroach, "./cockroach", workloadNode)
-	c.Put(ctx, workload, "./workload", workloadNode)
 
 	func() {
+		opts.Start(ctx, t, c)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		c.Start(ctx, t, crdbNodes)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
+		case usingExistingData:
+			// Do nothing.
 		case usingImport:
 			t.Status("loading fixture")
 			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
@@ -141,7 +129,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
-		opts.Duration = time.Minute
+		if opts.Duration > time.Minute {
+			opts.Duration = time.Minute
+		}
 		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
@@ -261,8 +251,20 @@ func registerTPCC(r *testRegistry) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
-				Versions:   []string{oldV, "", oldV, ""},
-				SetupType:  usingImport,
+				Stage: func(ctx context.Context, t *test, c *cluster) {
+					var regularNodes []option
+					for i, v := range []string{oldV, "", oldV, ""} {
+						if v == "" {
+							regularNodes = append(regularNodes, c.Node(i+1))
+						} else {
+							if err := c.Stage(ctx, c.l, "release", v, "", c.Node(i+1)); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					c.Put(ctx, cockroach, "./cockroach", regularNodes...)
+				},
+				SetupType: usingImport,
 			})
 			// TODO(tbg): run another TPCC with the final binaries here and
 			// teach TPCC to re-use the dataset (seems easy enough) to at least
