@@ -46,6 +46,26 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                  FAMILY "primary" (crdb_internal_a_shard_10, a)
 )
 
+query TTTTTT colnames
+SELECT
+  indexrelid, indrelid, indkey, indclass, indoption, indcollation
+FROM pg_index
+WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 'sharded_primary')
+ORDER BY 1,2,3
+----
+indexrelid  indrelid  indkey  indclass  indoption  indcollation
+710236230   58        1       0         2          0
+
+query TTT colnames
+SELECT
+  tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'sharded_primary'
+ORDER BY 1, 2, 3
+----
+tablename        indexname  indexdef
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC)
+
 statement ok
 INSERT INTO sharded_primary values (1), (2), (3)
 
