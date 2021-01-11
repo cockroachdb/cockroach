@@ -169,7 +169,7 @@ func MakeIndexDescriptor(
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support interleaved tables")
 		}
 
-		if n.PartitionBy != nil {
+		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support partitioning")
 		}
 
@@ -209,7 +209,7 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Sharded != nil {
-		if n.PartitionBy != nil {
+		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
 		if n.Interleave != nil {
@@ -391,7 +391,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
-	if n.n.PartitionBy == nil && n.tableDesc.GetPrimaryIndex().Partitioning.NumColumns > 0 {
+	if n.n.PartitionByIndex == nil && n.tableDesc.GetPrimaryIndex().Partitioning.NumColumns > 0 {
 		params.p.BufferClientNotice(
 			params.ctx,
 			errors.WithHint(
@@ -427,9 +427,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 	indexDesc.Version = encodingVersion
 
-	if n.n.PartitionBy != nil {
+	if n.n.PartitionByIndex.ContainsPartitions() {
 		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-			params.EvalContext(), n.tableDesc, indexDesc, n.n.PartitionBy)
+			params.EvalContext(), n.tableDesc, indexDesc, n.n.PartitionByIndex.PartitionBy)
 		if err != nil {
 			return err
 		}

@@ -185,12 +185,12 @@ type CreateIndex struct {
 	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing       NameList
-	Interleave    *InterleaveDef
-	PartitionBy   *PartitionBy
-	StorageParams StorageParams
-	Predicate     Expr
-	Concurrently  bool
+	Storing          NameList
+	Interleave       *InterleaveDef
+	PartitionByIndex *PartitionByIndex
+	StorageParams    StorageParams
+	Predicate        Expr
+	Concurrently     bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -237,8 +237,8 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
 	}
-	if node.PartitionBy != nil {
-		ctx.FormatNode(node.PartitionBy)
+	if node.PartitionByIndex != nil {
+		ctx.FormatNode(node.PartitionByIndex)
 	}
 	if node.StorageParams != nil {
 		ctx.WriteString(" WITH (")
@@ -778,15 +778,15 @@ type ColumnFamilyConstraint struct {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name          Name
-	Columns       IndexElemList
-	Sharded       *ShardedIndexDef
-	Storing       NameList
-	Interleave    *InterleaveDef
-	Inverted      bool
-	PartitionBy   *PartitionBy
-	StorageParams StorageParams
-	Predicate     Expr
+	Name             Name
+	Columns          IndexElemList
+	Sharded          *ShardedIndexDef
+	Storing          NameList
+	Interleave       *InterleaveDef
+	Inverted         bool
+	PartitionByIndex *PartitionByIndex
+	StorageParams    StorageParams
+	Predicate        Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -813,8 +813,8 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
 	}
-	if node.PartitionBy != nil {
-		ctx.FormatNode(node.PartitionBy)
+	if node.PartitionByIndex != nil {
+		ctx.FormatNode(node.PartitionByIndex)
 	}
 	if node.StorageParams != nil {
 		ctx.WriteString(" WITH (")
@@ -885,8 +885,8 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
 	}
-	if node.PartitionBy != nil {
-		ctx.FormatNode(node.PartitionBy)
+	if node.PartitionByIndex != nil {
+		ctx.FormatNode(node.PartitionByIndex)
 	}
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
@@ -1095,8 +1095,51 @@ const (
 	PartitionByRange PartitionByType = "RANGE"
 )
 
+// PartitionByIndex represents a PARTITION BY definition within
+// a CREATE/ALTER INDEX statement.
+type PartitionByIndex struct {
+	*PartitionBy
+}
+
+// ContainsPartitions determines if the partition by table contains
+// a partition clause which is not PARTITION BY NOTHING.
+func (node *PartitionByIndex) ContainsPartitions() bool {
+	return node != nil && node.PartitionBy != nil
+}
+
+// PartitionByTable represents a PARTITION [ALL] BY definition within
+// a CREATE/ALTER TABLE statement.
+type PartitionByTable struct {
+	// All denotes PARTITION ALL BY.
+	All bool
+
+	*PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node *PartitionByTable) Format(ctx *FmtCtx) {
+	if node == nil {
+		ctx.WriteString(` PARTITION BY NOTHING`)
+		return
+	}
+	ctx.WriteString(` PARTITION `)
+	if node.All {
+		ctx.WriteString(`ALL `)
+	}
+	ctx.WriteString(`BY `)
+	node.PartitionBy.formatListOrRange(ctx)
+}
+
+// ContainsPartitions determines if the partition by table contains
+// a partition clause which is not PARTITION BY NOTHING.
+func (node *PartitionByTable) ContainsPartitions() bool {
+	return node != nil && node.PartitionBy != nil
+}
+
 // PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
-// TABLE/INDEX statement.
+// TABLE/INDEX statement or within a subpartition statement.
+// This is wrapped by top level PartitionByTable/PartitionByIndex
+// structs for table and index definitions respectively.
 type PartitionBy struct {
 	Fields NameList
 	// Exactly one of List or Range is required to be non-empty.
@@ -1106,14 +1149,19 @@ type PartitionBy struct {
 
 // Format implements the NodeFormatter interface.
 func (node *PartitionBy) Format(ctx *FmtCtx) {
+	ctx.WriteString(` PARTITION BY `)
+	node.formatListOrRange(ctx)
+}
+
+func (node *PartitionBy) formatListOrRange(ctx *FmtCtx) {
 	if node == nil {
-		ctx.WriteString(` PARTITION BY NOTHING`)
+		ctx.WriteString(`NOTHING`)
 		return
 	}
 	if len(node.List) > 0 {
-		ctx.WriteString(` PARTITION BY LIST (`)
+		ctx.WriteString(`LIST (`)
 	} else if len(node.Range) > 0 {
-		ctx.WriteString(` PARTITION BY RANGE (`)
+		ctx.WriteString(`RANGE (`)
 	}
 	ctx.FormatNode(&node.Fields)
 	ctx.WriteString(`) (`)
@@ -1210,13 +1258,13 @@ const (
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
-	IfNotExists   bool
-	Table         TableName
-	Interleave    *InterleaveDef
-	PartitionBy   *PartitionBy
-	Persistence   Persistence
-	StorageParams StorageParams
-	OnCommit      CreateTableOnCommitSetting
+	IfNotExists      bool
+	Table            TableName
+	Interleave       *InterleaveDef
+	PartitionByTable *PartitionByTable
+	Persistence      Persistence
+	StorageParams    StorageParams
+	OnCommit         CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
 	// each column, and a ConstraintTableDef for each constraint on a subset of
 	// these columns.
@@ -1281,8 +1329,8 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		if node.Interleave != nil {
 			ctx.FormatNode(node.Interleave)
 		}
-		if node.PartitionBy != nil {
-			ctx.FormatNode(node.PartitionBy)
+		if node.PartitionByTable != nil {
+			ctx.FormatNode(node.PartitionByTable)
 		}
 		// No storage parameters are implemented, so we never list the storage
 		// parameters in the output format.

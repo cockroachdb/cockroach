@@ -352,12 +352,12 @@ func readPostgresStmt(
 			break
 		}
 		var idx tree.TableDef = &tree.IndexTableDef{
-			Name:        stmt.Name,
-			Columns:     stmt.Columns,
-			Storing:     stmt.Storing,
-			Inverted:    stmt.Inverted,
-			Interleave:  stmt.Interleave,
-			PartitionBy: stmt.PartitionBy,
+			Name:             stmt.Name,
+			Columns:          stmt.Columns,
+			Storing:          stmt.Storing,
+			Inverted:         stmt.Inverted,
+			Interleave:       stmt.Interleave,
+			PartitionByIndex: stmt.PartitionByIndex,
 		}
 		if stmt.Unique {
 			idx = &tree.UniqueConstraintTableDef{IndexTableDef: *idx.(*tree.IndexTableDef)}
