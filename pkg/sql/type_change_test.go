@@ -156,3 +156,244 @@ CREATE TYPE d.t AS ENUM();
 		t.Fatal(err)
 	}
 }
+
+func TestAddDropValuesInTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer setTestJobsAdoptInterval()()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+USE d;
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
+CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings);
+INSERT INTO use_greetings VALUES(1, 'yo');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		query        string
+		errorRe      string
+		succeedAfter []string
+		failAfter    []string
+	}{
+		{
+			`BEGIN;
+ALTER TYPE greetings DROP VALUE 'hello'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'hello'::greetings`,
+				`SELECT 'yo'::greetings`,
+			},
+			[]string{
+				`SELECT 'howdy'::greetings`,
+			},
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings ADD VALUE 'sup'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'yo'::greetings`,
+			},
+			[]string{
+				`SELECT 'sup'::greetings`,
+				`SELECT 'howdy'::greetings`,
+			},
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings DROP VALUE 'hi'; 
+ALTER TYPE greetings DROP VALUE 'hello'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'hi'::greetings`,
+				`SELECT 'hello'::greetings`,
+				`SELECT 'yo'::greetings`,
+			},
+			nil,
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings ADD VALUE 'sup'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'hello'; 
+COMMIT`,
+			"",
+			[]string{
+				`SELECT 'sup'::greetings`,
+				`SELECT 'howdy'::greetings`,
+			},
+			[]string{
+				`SELECT 'hello'::greetings`,
+			},
+		},
+		{
+			// This test works on a type created in the same txn that modifies it.
+			`BEGIN;
+CREATE TYPE abc AS ENUM ('a', 'b', 'c');
+ALTER TYPE abc ADD VALUE 'd';
+ALTER TYPE abc DROP VALUE 'c';
+COMMIT`,
+			"",
+			[]string{
+				`SELECT 'a'::abc`,
+				`SELECT 'b'::abc`,
+				`SELECT 'd'::abc`,
+			},
+			[]string{
+				`SELECT 'c'::abc`,
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		_, err := sqlDB.Exec(tc.query)
+		if err != nil {
+			if tc.errorRe == "" {
+				t.Fatalf("#%d: unexpected error while executing query: %v", i, err)
+			}
+			if !testutils.IsError(err, tc.errorRe) {
+				t.Fatalf("#%d: expected error: %q, got error: %v", i, tc.errorRe, err)
+			}
+		}
+		if err == nil && tc.errorRe != "" {
+			t.Fatalf("#%d: unexpected success, expected error: %q", i, tc.errorRe)
+		}
+
+		for _, query := range tc.succeedAfter {
+			if _, err := sqlDB.Exec(query); err != nil {
+				t.Fatalf("#%d: expected %q to succeed, got error: %v", i, query, err)
+			}
+		}
+		for _, query := range tc.failAfter {
+			if _, err := sqlDB.Exec(query); err == nil {
+				t.Fatalf("#%d: expected %q to fail, did not get error:", i, query)
+			}
+		}
+	}
+}
+
+// Simulates the following scenario:
+// - We have an enum, which starts out with values 'a' and 'b'.
+// - We drop 'a' and add 'c' in job 1, which is slow, and finishes after job 2.
+// - We drop 'b' and add 'd' in job 2, which is fast, and finishes before job 1.
+// - job 2 fails due to an error, triggering a rollback.
+// This test ensures that roll back is isolated to just the enum labels the
+// job was responsible for acting upon. This is to say that 'a' should be
+// unaffected by job 2 failing and should be successfully removed.
+func TestEnumMemberTransitionIsolation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	// Protects blocker.
+	var mu syncutil.Mutex
+	blocker := make(chan struct{})
+	var unblocker chan struct{} = nil
+	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
+		RunBeforeExec: func() error {
+			// First entrant to the function blocks, second entrant returns an error.
+			mu.Lock()
+			if blocker != nil {
+				unblocker = blocker
+				blocker = nil
+				mu.Unlock()
+				<-unblocker
+				return nil
+			}
+			mu.Unlock()
+			return errors.New("boom")
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	droppingAFinished := make(chan struct{})
+	droppingBFinished := make(chan struct{})
+
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Create a database with a type.
+	if _, err := sqlDB.Exec(`CREATE TYPE ab AS ENUM ('a', 'b')`); err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		_, err := sqlDB.Exec(`BEGIN; ALTER TYPE ab DROP VALUE 'a'; ALTER TYPE ab ADD VALUE 'c'; COMMIT`)
+		if err != nil {
+			t.Error(err)
+		}
+		close(droppingAFinished)
+	}()
+
+	go func() {
+		// Only try dropping 'b' once the previous function (dropping 'a') is
+		// blocking.
+		for {
+			mu.Lock()
+			if blocker == nil {
+				mu.Unlock()
+				break
+			}
+			mu.Unlock()
+		}
+		_, err := sqlDB.Exec(`BEGIN; ALTER TYPE ab DROP VALUE 'b'; ALTER TYPE ab ADD VALUE 'd'; COMMIT`)
+		if err == nil {
+			t.Error("expected error, found nil")
+		}
+		if !testutils.IsError(err, "boom") {
+			t.Errorf("expected boom, found %v", err)
+		}
+		// Unblock the job to drop 'a'.
+		close(unblocker)
+		close(droppingBFinished)
+	}()
+
+	// Ensure both the functions above have finished running before proceeding to
+	// check the effects.
+	<-droppingAFinished
+	<-droppingBFinished
+
+	// 'b' should not have been dropped, as this job was forced to roll back.
+	if _, err := sqlDB.Exec(`SELECT 'b'::ab `); err != nil {
+		t.Fatal(err)
+	}
+	// 'd' should not have been added, as the job was forced to roll back.
+	_, err := sqlDB.Exec(`SELECT 'd'::ab`)
+	if err == nil {
+		t.Fatal("expected error, found nil")
+	}
+	if !testutils.IsError(err, `invalid input value for enum ab: "d"`) {
+		t.Fatalf(`expected invalid input value for enum ab: "a", found %v`, err)
+	}
+
+	// 'a' was dropped in independent to and in a separate job to 'b', so we expect
+	// the effects to be isolated.
+	_, err = sqlDB.Exec(`SELECT 'a'::ab`)
+	if err == nil {
+		t.Fatal("expected error, found nil")
+	}
+	if !testutils.IsError(err, `invalid input value for enum ab: "a"`) {
+		t.Fatalf(`expected invalid input value for enum ab: "a", found %v`, err)
+	}
+	if _, err := sqlDB.Exec(`SELECT 'c'::ab`); err != nil {
+		t.Fatal(err)
+	}
+}

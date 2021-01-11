@@ -1602,6 +1602,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TYPE db.s.t ADD VALUE 'hi'`},
 		{`ALTER TYPE s.t ADD VALUE 'hi' BEFORE 'hello'`},
 		{`ALTER TYPE t ADD VALUE 'hi' AFTER 'howdy'`},
+		{`ALTER TYPE t DROP VALUE 'hi'`},
 		{`ALTER TYPE s.t ADD VALUE IF NOT EXISTS 'hi' BEFORE 'hello'`},
 		{`ALTER TYPE t RENAME VALUE 'value1' TO 'value2'`},
 		{`ALTER TYPE t RENAME TO t2`},

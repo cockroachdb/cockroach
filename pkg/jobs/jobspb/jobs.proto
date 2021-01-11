@@ -296,6 +296,15 @@ message ImportProgress {
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
 message TypeSchemaChangeDetails {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  // TransitioningMembers is a list of enum members, represented by their
+  // physical representation, that are transitioning in the current job. This
+  // is used to group transitions together and ensure that rollback is limited
+  // to this list in the face of job failure. It is also worth noting that we
+  // cannot use the logical representation or index of the member to identify
+  // a member, as both of these may change due to a concurrent rename or
+  // addition with a specified placement. Physical representations are
+  // guaranteed to be stable.
+  repeated bytes transitioning_members = 2;
 }
 
 // TypeSchemaChangeProgress is the persisted progress for a type schema change job.

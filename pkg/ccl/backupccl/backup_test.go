@@ -2672,68 +2672,144 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Protects typeChangeStarted.
-	var mu syncutil.Mutex
-	typeChangeStarted := make(chan struct{})
-	waitForBackup := make(chan struct{})
-	typeChangeFinished := make(chan struct{})
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() {
-						mu.Lock()
-						defer mu.Unlock()
-						if typeChangeStarted != nil {
-							close(typeChangeStarted)
-							<-waitForBackup
-							typeChangeStarted = nil
-						}
-					},
-				},
+	testCases := []struct {
+		name            string
+		queries         []string
+		succeedAfter    []string
+		expectedSuccess []string
+		errorAfter      []string
+		expectedError   []string
+	}{
+		{
+			"AddInStatement",
+			[]string{"ALTER TYPE d.greeting ADD VALUE 'cheers'"},
+			[]string{"SELECT 'cheers'::d.greeting"},
+			[]string{"cheers"},
+			nil,
+			nil,
+		},
+		{
+			"AddDropInSeparateStatements",
+			[]string{
+				"ALTER TYPE d.greeting DROP VALUE 'hi';",
+				"ALTER TYPE d.greeting ADD VALUE 'cheers'",
+			},
+			[]string{"SELECT 'cheers'::d.greeting"},
+			[]string{"cheers"},
+			[]string{"SELECT 'hi'::d.greeting"},
+			[]string{`invalid input value for enum greeting: "hi"`},
+		},
+		{
+			"AddDropInStatementsAndTransaction",
+			[]string{
+				"BEGIN; ALTER TYPE d.greeting DROP VALUE 'hi'; ALTER TYPE d.greeting ADD VALUE 'cheers'; COMMIT;",
+				"ALTER TYPE d.greeting ADD VALUE 'sup'",
+				"ALTER TYPE d.greeting DROP VALUE 'hello'",
+			},
+			[]string{"SELECT 'cheers'::d.greeting", "SELECT 'sup'::d.greeting"},
+			[]string{"cheers", "sup"},
+			[]string{"SELECT 'hi'::d.greeting", "SELECT 'hello'::d.greeting"},
+			[]string{
+				`invalid input value for enum greeting: "hi"`,
+				`invalid input value for enum greeting: "hello"`,
 			},
 		},
-	})
-	defer cleanupFn()
+	}
 
-	// Create a database with a type.
-	sqlDB.Exec(t, `
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Protects numTypeChangesStarted and numTypeChangesFinished.
+			var mu syncutil.Mutex
+			numTypeChangesStarted := 0
+			numTypeChangesFinished := 0
+			typeChangesStarted := make(chan struct{})
+			waitForBackup := make(chan struct{})
+			typeChangesFinished := make(chan struct{})
+			_, _, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+							RunBeforeEnumMemberPromotion: func() {
+								mu.Lock()
+								if numTypeChangesStarted < len(tc.queries) {
+									numTypeChangesStarted++
+									if numTypeChangesStarted == len(tc.queries) {
+										close(typeChangesStarted)
+									}
+									mu.Unlock()
+									<-waitForBackup
+								} else {
+									mu.Unlock()
+								}
+							},
+						},
+					},
+				},
+			})
+			defer cleanupFn()
+
+			// Create a database with a type.
+			sqlDB.Exec(t, `
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 `)
 
-	// Start an ALTER TYPE statement that will block.
-	go func() {
-		// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
-		if _, err := sqlDB.DB.ExecContext(context.Background(), `ALTER TYPE d.greeting ADD VALUE 'cheers'`); err != nil {
-			t.Error(err)
-		}
-		close(typeChangeFinished)
-	}()
+			// Start ALTER TYPE statement(s) that will block.
+			for _, query := range tc.queries {
+				go func(query string) {
+					// Note we don't use sqlDB.Exec here because we can't Fatal from within a goroutine.
+					if _, err := sqlDB.DB.ExecContext(context.Background(), query); err != nil {
+						t.Error(err)
+					}
+					mu.Lock()
+					numTypeChangesFinished++
+					if numTypeChangesFinished == len(tc.queries) {
+						close(typeChangesFinished)
+					}
+					mu.Unlock()
+				}(query)
+			}
 
-	// Wait on the type change to start.
-	<-typeChangeStarted
+			// Wait on the type changes to start.
+			<-typeChangesStarted
 
-	// Now create a backup while the type change job is blocked so that greeting
-	// is backed up with 'cheers' in the READ_ONLY state.
-	sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+			// Now create a backup while the type change job is blocked so that
+			// greeting is backed up with some enum members in READ_ONLY state.
+			sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
 
-	// Let the type change finish.
-	close(waitForBackup)
-	<-typeChangeFinished
+			// Let the type change finish.
+			close(waitForBackup)
+			<-typeChangesFinished
 
-	// Now drop the database and restore.
-	sqlDB.Exec(t, `DROP DATABASE d`)
-	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+			// Now drop the database and restore.
+			sqlDB.Exec(t, `DROP DATABASE d`)
+			sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
 
-	// The type change job should be scheduled and succeed. Note that we can't use
-	// sqlDB.CheckQueryResultsRetry as it Fatal's upon an error. The case below
-	// will error until the job completes.
-	testutils.SucceedsSoon(t, func() error {
-		_, err := sqlDB.DB.ExecContext(context.Background(), `SELECT 'cheers'::d.greeting`)
-		return err
-	})
-	sqlDB.CheckQueryResults(t, `SELECT 'cheers'::d.greeting`, [][]string{{"cheers"}})
+			// The type change job should be scheduled and finish. Note that we can't use
+			// sqlDB.CheckQueryResultsRetry as it Fatal's upon an error. The case below
+			// will error until the job completes.
+			for i, query := range tc.succeedAfter {
+				testutils.SucceedsSoon(t, func() error {
+					_, err := sqlDB.DB.ExecContext(context.Background(), query)
+					return err
+				})
+				sqlDB.CheckQueryResults(t, query, [][]string{{tc.expectedSuccess[i]}})
+			}
+
+			for i, query := range tc.errorAfter {
+				testutils.SucceedsSoon(t, func() error {
+					_, err := sqlDB.DB.ExecContext(context.Background(), query)
+					if err == nil {
+						return errors.New("expected error, found none")
+					}
+					if !testutils.IsError(err, tc.expectedError[i]) {
+						return errors.Newf("expected error %v, found %v", tc.expectedError[i], err)
+					}
+					return nil
+				})
+			}
+		})
+	}
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
