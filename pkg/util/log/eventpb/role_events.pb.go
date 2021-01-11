@@ -476,7 +476,7 @@ func (m *CreateRole) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRoleEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -615,7 +615,7 @@ func (m *DropRole) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRoleEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -783,7 +783,7 @@ func (m *AlterRole) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRoleEvents
 			}
 			if (iNdEx + skippy) > l {

@@ -862,7 +862,7 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -912,7 +912,7 @@ func (m *ValidateTargetClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -995,7 +995,7 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -1045,7 +1045,7 @@ func (m *BumpClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -1128,7 +1128,7 @@ func (m *PurgeOutdatedReplicasRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -1178,7 +1178,7 @@ func (m *PurgeOutdatedReplicasResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -1228,7 +1228,7 @@ func (m *SyncAllEnginesRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {
@@ -1278,7 +1278,7 @@ func (m *SyncAllEnginesResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMigration
 			}
 			if (iNdEx + skippy) > l {

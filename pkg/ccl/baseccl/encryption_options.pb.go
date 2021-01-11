@@ -339,7 +339,7 @@ func (m *EncryptionKeyFiles) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthEncryptionOptions
 			}
 			if (iNdEx + skippy) > l {
@@ -460,7 +460,7 @@ func (m *EncryptionOptions) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthEncryptionOptions
 			}
 			if (iNdEx + skippy) > l {

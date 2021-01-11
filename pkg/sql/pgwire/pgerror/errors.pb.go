@@ -524,7 +524,7 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthErrors
 			}
 			if (iNdEx + skippy) > l {
@@ -651,7 +651,7 @@ func (m *Error_Source) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthErrors
 			}
 			if (iNdEx + skippy) > l {

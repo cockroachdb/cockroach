@@ -170,7 +170,7 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
-replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.2.1-0.20190102194534-ca10b809dba0
+replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.2.1-0.20210111172841-8b6737fea948
 
 replace github.com/grpc-ecosystem/grpc-gateway => github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249
 

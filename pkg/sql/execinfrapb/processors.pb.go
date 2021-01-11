@@ -1487,7 +1487,7 @@ func (m *ProcessorSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {
@@ -2560,7 +2560,7 @@ func (m *ProcessorCoreUnion) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {
@@ -2610,7 +2610,7 @@ func (m *NoopCoreSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {
@@ -2727,7 +2727,7 @@ func (m *LocalPlanNodeSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {
@@ -2806,7 +2806,7 @@ func (m *MetadataTestSenderSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {
@@ -2885,7 +2885,7 @@ func (m *MetadataTestReceiverSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessors
 			}
 			if (iNdEx + skippy) > l {

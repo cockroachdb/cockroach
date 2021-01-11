@@ -684,7 +684,7 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -810,7 +810,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -893,7 +893,7 @@ func (m *S2GeographyConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {
@@ -1020,7 +1020,7 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthConfig
 			}
 			if (iNdEx + skippy) > l {

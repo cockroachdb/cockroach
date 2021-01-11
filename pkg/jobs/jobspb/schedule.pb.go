@@ -485,7 +485,7 @@ func (m *ScheduleDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSchedule
 			}
 			if (iNdEx + skippy) > l {
@@ -568,7 +568,7 @@ func (m *ExecutionArguments) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSchedule
 			}
 			if (iNdEx + skippy) > l {
@@ -647,7 +647,7 @@ func (m *SqlStatementExecutionArg) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSchedule
 			}
 			if (iNdEx + skippy) > l {
@@ -726,7 +726,7 @@ func (m *ScheduleState) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthSchedule
 			}
 			if (iNdEx + skippy) > l {

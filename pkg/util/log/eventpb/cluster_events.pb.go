@@ -734,7 +734,7 @@ func (m *CommonNodeEventDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -844,7 +844,7 @@ func (m *NodeJoin) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -954,7 +954,7 @@ func (m *NodeRestart) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1042,7 +1042,7 @@ func (m *CommonNodeDecommissionDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1152,7 +1152,7 @@ func (m *NodeDecommissioning) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1262,7 +1262,7 @@ func (m *NodeDecommissioned) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
@@ -1372,7 +1372,7 @@ func (m *NodeRecommissioned) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthClusterEvents
 			}
 			if (iNdEx + skippy) > l {
