@@ -235,7 +235,7 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 	}
 	semiJoinFilters = append(semiJoinFilters, f.ConstructFiltersItem(pkFilter))
 
-	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, &memo.JoinPrivate{})
+	semiJoin := f.ConstructSemiJoin(checkInput, scanScope.expr, semiJoinFilters, memo.EmptyJoinPrivate)
 
 	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
