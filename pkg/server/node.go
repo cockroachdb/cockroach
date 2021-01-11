@@ -959,7 +959,6 @@ func (n *Node) setupSpanForIncomingRPC(
 		if br == nil {
 			return
 		}
-		// TODO(irfansharif): How come this span is never Finish()-ed? #58721.
 		if grpcSpan != nil {
 			// If our local span descends from a parent on the other
 			// end of the RPC (i.e. the !isLocalRequest) case,
