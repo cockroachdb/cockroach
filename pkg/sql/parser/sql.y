@@ -5091,15 +5091,15 @@ show_roles_stmt:
 | SHOW ROLES error // SHOW HELP: SHOW ROLES
 
 show_zone_stmt:
-  SHOW ZONE CONFIGURATION FOR RANGE zone_name
+  SHOW ZONE CONFIGURATION for_or_from RANGE zone_name
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($6)}}
   }
-| SHOW ZONE CONFIGURATION FOR DATABASE database_name
+| SHOW ZONE CONFIGURATION for_or_from DATABASE database_name
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($6)}}
   }
-| SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
+| SHOW ZONE CONFIGURATION for_or_from TABLE table_name opt_partition
   {
     name := $6.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
@@ -5107,7 +5107,7 @@ show_zone_stmt:
         Partition: tree.Name($7),
     }}
   }
-| SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
+| SHOW ZONE CONFIGURATION for_or_from PARTITION partition_name OF TABLE table_name
   {
     name := $9.unresolvedObjectName().ToTableName()
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
@@ -5115,14 +5115,14 @@ show_zone_stmt:
       Partition: tree.Name($6),
     }}
   }
-| SHOW ZONE CONFIGURATION FOR INDEX table_index_name opt_partition
+| SHOW ZONE CONFIGURATION for_or_from INDEX table_index_name opt_partition
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: $6.tableIndexName(),
       Partition: tree.Name($7),
     }}
   }
-| SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF INDEX table_index_name
+| SHOW ZONE CONFIGURATION for_or_from PARTITION partition_name OF INDEX table_index_name
   {
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: $9.tableIndexName(),
@@ -5137,6 +5137,10 @@ show_zone_stmt:
   {
     $$.val = &tree.ShowZoneConfig{}
   }
+
+for_or_from:
+  FOR
+| FROM
 
 // %Help: SHOW RANGE - show range information for a row
 // %Category: Misc
