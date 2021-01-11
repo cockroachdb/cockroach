@@ -57,7 +57,7 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     const { validate } = this.props;
     const validationMessage = validate(value);
     this.setState({
-      isValid: !Boolean(validationMessage),
+      isValid: !validationMessage,
       validationMessage,
     });
   };
