@@ -1237,13 +1237,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 		EmitDefaults: true,
 		Indent:       "  ",
 	}
-	protopb := new(protoutil.ProtoPb)
 	gwMux := gwruntime.NewServeMux(
 		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
 		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
 		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
 		gwruntime.WithMetadata(forwardAuthenticationMetadata),
 	)
