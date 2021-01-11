@@ -44,9 +44,8 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 // co-locate the leaseholder + raft leader, which is going to affect tail
 // latencies. Additionally, as of the time of writing, learner replicas are
 // only used for a short time in replica addition, so it's not worth working
-// out the edge cases. If we decide to start using long-lived learners at some
-// point, that math may change.
-func checkCanReceiveLease(
+// out the edge cases.
+func CheckCanReceiveLease(
 	wouldbeLeaseholer roachpb.ReplicaID, rngDesc *roachpb.RangeDescriptor,
 ) error {
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholer)

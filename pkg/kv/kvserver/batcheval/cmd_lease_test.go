@@ -156,3 +156,36 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		`replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
+
+func TestCheckCanReceiveLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		leaseholderType roachpb.ReplicaType
+		eligible        bool
+	}{
+		{leaseholderType: roachpb.VOTER_FULL, eligible: true},
+		{leaseholderType: roachpb.VOTER_INCOMING, eligible: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, eligible: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING, eligible: false},
+		{leaseholderType: roachpb.LEARNER, eligible: false},
+		{leaseholderType: roachpb.NON_VOTER, eligible: false},
+	} {
+		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
+			rngDesc := roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{{
+					ReplicaID: 1,
+					Type:      &tc.leaseholderType,
+				}},
+			}
+			err := CheckCanReceiveLease(1, &rngDesc)
+			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
+		})
+	}
+
+	t.Run("replica not in range desc", func(t *testing.T) {
+		rngDesc := roachpb.RangeDescriptor{}
+		require.Regexp(t, "replica.*not found", CheckCanReceiveLease(1, &rngDesc))
+	})
+}
