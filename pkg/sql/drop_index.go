@@ -430,7 +430,7 @@ func (p *planner) dropIndexByName(
 				return err
 			}
 
-			droppedViews = append(droppedViews, qualifiedView.String())
+			droppedViews = append(droppedViews, qualifiedView.FQString())
 			droppedViews = append(droppedViews, cascadedViews...)
 		}
 	}

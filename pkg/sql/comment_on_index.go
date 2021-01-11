@@ -78,7 +78,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.CommentOnIndex{
-			TableName:   tn.String(),
+			TableName:   tn.FQString(),
 			IndexName:   string(n.n.Index.Index),
 			Comment:     comment,
 			NullComment: n.n.Comment == nil,
