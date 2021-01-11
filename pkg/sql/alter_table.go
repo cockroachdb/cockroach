@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -219,10 +220,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				if d.PartitionBy != nil {
+				if d.PartitionByIndex.ContainsPartitions() {
 					partitioning, err := CreatePartitioning(
 						params.ctx, params.p.ExecCfg().Settings,
-						params.EvalContext(), n.tableDesc, &idx, d.PartitionBy)
+						params.EvalContext(), n.tableDesc, &idx, d.PartitionByIndex.PartitionBy)
 					if err != nil {
 						return err
 					}
@@ -738,7 +739,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 
-		case *tree.AlterTablePartitionBy:
+		case *tree.AlterTablePartitionByTable:
+			if t.All {
+				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
+			}
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),

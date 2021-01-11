@@ -1238,8 +1238,8 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
-	if node.PartitionBy != nil {
-		clauses = append(clauses, p.Doc(node.PartitionBy))
+	if node.PartitionByTable != nil {
+		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
@@ -1404,6 +1404,24 @@ func (node *NullIfExpr) doc(p *PrettyCfg) pretty.Doc {
 		), ")", "")
 }
 
+func (node *PartitionByTable) doc(p *PrettyCfg) pretty.Doc {
+	// Final layout:
+	//
+	// PARTITION [ALL] BY NOTHING
+	//
+	// PARTITION [ALL] BY LIST (...)
+	//    ( ..values.. )
+	//
+	// PARTITION [ALL] BY RANGE (...)
+	//    ( ..values.. )
+	var kw string
+	kw = `PARTITION `
+	if node.All {
+		kw += `ALL `
+	}
+	return node.PartitionBy.docInner(p, kw+`BY `)
+}
+
 func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
@@ -1412,15 +1430,19 @@ func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 	// PARTITION BY LIST (...)
 	//    ( ..values.. )
 	//
-	if node == nil {
-		return pretty.Keyword("PARTITION BY NOTHING")
-	}
+	// PARTITION BY RANGE (...)
+	//    ( ..values.. )
+	return node.docInner(p, `PARTITION BY `)
+}
 
-	var kw string
+func (node *PartitionBy) docInner(p *PrettyCfg, kw string) pretty.Doc {
+	if node == nil {
+		return pretty.Keyword(kw + `NOTHING`)
+	}
 	if len(node.List) > 0 {
-		kw = `PARTITION BY LIST`
+		kw += `LIST`
 	} else if len(node.Range) > 0 {
-		kw = `PARTITION BY RANGE`
+		kw += `RANGE`
 	}
 	title := pretty.ConcatSpace(pretty.Keyword(kw),
 		p.bracket("(", p.Doc(&node.Fields), ")"))
@@ -1587,8 +1609,8 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
-	if node.PartitionBy != nil {
-		clauses = append(clauses, p.Doc(node.PartitionBy))
+	if node.PartitionByIndex != nil {
+		clauses = append(clauses, p.Doc(node.PartitionByIndex))
 	}
 	if node.StorageParams != nil {
 		clauses = append(clauses, p.bracketKeyword(
@@ -1660,8 +1682,8 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
-	if node.PartitionBy != nil {
-		clauses = append(clauses, p.Doc(node.PartitionBy))
+	if node.PartitionByIndex != nil {
+		clauses = append(clauses, p.Doc(node.PartitionByIndex))
 	}
 	if node.StorageParams != nil {
 		clauses = append(
@@ -1723,8 +1745,8 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Interleave != nil {
 		clauses = append(clauses, p.Doc(node.Interleave))
 	}
-	if node.PartitionBy != nil {
-		clauses = append(clauses, p.Doc(node.PartitionBy))
+	if node.PartitionByIndex != nil {
+		clauses = append(clauses, p.Doc(node.PartitionByIndex))
 	}
 	if node.Predicate != nil {
 		clauses = append(clauses, p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Predicate)))

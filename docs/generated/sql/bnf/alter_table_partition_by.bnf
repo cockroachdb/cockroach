@@ -1,7 +1,1 @@
 alter_onetable_stmt ::=
-	'ALTER' 'TABLE' table_name 'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
-	| 'ALTER' 'TABLE' table_name 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
-	| 'ALTER' 'TABLE' table_name 'PARTITION' 'BY' 'NOTHING'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'PARTITION' 'BY' 'NOTHING'
