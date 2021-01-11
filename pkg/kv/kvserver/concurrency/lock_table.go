@@ -970,7 +970,12 @@ func (l *lockState) informActiveWaiters() {
 		g := qg.guard
 		var state waitingState
 		if g.isSameTxnAsReservation(waitForState) {
-			state = waitingState{kind: waitSelf}
+			state = waitingState{
+				kind: waitSelf,
+				key:  waitForState.key,
+				txn:  waitForState.txn,
+				held: waitForState.held, // false
+			}
 		} else {
 			state = waitForState
 			state.guardAccess = spanset.SpanReadWrite
@@ -1341,7 +1346,12 @@ func (l *lockState) tryActiveWait(
 	g.key = l.key
 	g.mu.startWait = true
 	if g.isSameTxnAsReservation(waitForState) {
-		g.mu.state = waitingState{kind: waitSelf}
+		g.mu.state = waitingState{
+			kind: waitSelf,
+			key:  waitForState.key,
+			txn:  waitForState.txn,
+			held: waitForState.held, // false
+		}
 	} else {
 		state := waitForState
 		state.guardAccess = sa
