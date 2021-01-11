@@ -1,6 +1,7 @@
 required = [
  "github.com/client9/misspell/cmd/misspell",
  "github.com/cockroachdb/errors",
+ "github.com/cockroachdb/go-test-teamcity",
  "github.com/cockroachdb/crlfmt",
  "github.com/cockroachdb/gostdlib/cmd/gofmt",
  "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
@@ -92,6 +93,10 @@ ignored = [
 [[constraint]]
   name = "github.com/abourget/teamcity"
   source = "https://github.com/cockroachdb/teamcity"
+
+[[constraint]]
+  name = "github.com/cockroachdb/go-test-teamcity"
+  revision = "cff980ad0a551793f08eff3483a24ee816ed92e6"
 
 # https://github.com/golang/dep/pull/2003
 [[constraint]]

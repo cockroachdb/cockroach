@@ -3,6 +3,12 @@
 # root is the absolute path to the root directory of the repository.
 root=$(cd "$(dirname "$0")/.." && pwd)
 
+build/builder.sh go install ./vendor/github.com/cockroachdb/go-test-teamcity
+
+go-test-teamcity() {
+  $root/build/builder.sh go-test-teamcity "$@"
+}
+
 # maybe_ccache turns on ccache to speed up compilation, but only for PR builds.
 # This speeds up the CI cycle for developers while preventing ccache from
 # corrupting a release build.

@@ -403,6 +403,13 @@
   revision = "ad1964b7f01491050a580f32fa2566ea66518cbd"
 
 [[projects]]
+  digest = "1:9591243f8cd3a2622bfb715cb3bbab73e94526f059b00973fa621ec4f5928963"
+  name = "github.com/cockroachdb/go-test-teamcity"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "cff980ad0a551793f08eff3483a24ee816ed92e6"
+
+[[projects]]
   digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
   name = "github.com/cockroachdb/gostdlib"
   packages = [
@@ -1957,6 +1964,7 @@
     "github.com/cockroachdb/errors",
     "github.com/cockroachdb/errors/errorspb",
     "github.com/cockroachdb/errors/testutils",
+    "github.com/cockroachdb/go-test-teamcity",
     "github.com/cockroachdb/gostdlib/cmd/gofmt",
     "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/logtags",
