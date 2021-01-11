@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -146,7 +148,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
-	// If there are any read only enum members, promote them to writeable.
+	// If there are any read only enum members, either promote them to writeable
+	// or remove them from the descriptor entirely, as dictated by the direction.
 	if (typeDesc.Kind == descpb.TypeDescriptor_ENUM ||
 		typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		enumHasNonPublic(typeDesc) {
@@ -161,13 +164,40 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				return err
 			}
 			didModify := false
+			// First, deal with all members that need to be promoted to writable.
 			for i := range typeDesc.EnumMembers {
 				member := &typeDesc.EnumMembers[i]
-				if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+				if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+					member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
 					member.Capability = descpb.TypeDescriptor_EnumMember_ALL
+					member.Direction = descpb.TypeDescriptor_EnumMember_NONE
 					didModify = true
 				}
 			}
+			// Next, deal with all the members that need to be removed from the slice
+			// if they are unused.
+			idx := 0
+			for _, member := range typeDesc.EnumMembers {
+				if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+					member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE {
+					didModify = true
+					canRemove, err := t.canRemoveEnumLabel(ctx, typeDesc, txn, &member, descsCol)
+					if err != nil {
+						return err
+					}
+					if !canRemove {
+						return errors.Newf("could not remove enum value: %q", member.LogicalRepresentation)
+					}
+					// Now that we've ascertained that the enum label can be removed, we
+					// don't increment idx and let the truncation logic below remove it
+					// from the list of EnumMembers.
+				} else {
+					typeDesc.EnumMembers[idx] = member
+					idx++
+				}
+			}
+			typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
+
 			if !didModify {
 				return nil
 			}
@@ -183,7 +213,59 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
 			t.execCfg.InternalExecutor, t.execCfg.DB, run,
 		); err != nil {
-			return err
+			// Cleanup:
+			// 1. If an enum label was being added as part of this txn, we remove it
+			// from the descriptor.
+			// 2. If an enum label was being removed as part of this txn, we promote
+			// it back to writable.
+			cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+				if err != nil {
+					return err
+				}
+				didModify := false
+				// First, deal with all members that we initially hoped to remove but
+				// now need to be promoted back to writable.
+				for i := range typeDesc.EnumMembers {
+					member := &typeDesc.EnumMembers[i]
+					if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+						member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE {
+						member.Capability = descpb.TypeDescriptor_EnumMember_ALL
+						member.Direction = descpb.TypeDescriptor_EnumMember_NONE
+						didModify = true
+					}
+				}
+				// Now deal with all members that we initially hoped to add but now need
+				// to be removed from the descriptor.
+				idx := 0
+				for _, member := range typeDesc.EnumMembers {
+					if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+						member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
+						didModify = true
+					} else {
+						typeDesc.EnumMembers[idx] = member
+						idx++
+					}
+				}
+				typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
+
+				if !didModify {
+					return nil
+				}
+
+				b := txn.NewBatch()
+				if err := descsCol.WriteDescToBatch(
+					ctx, true /* kvTrace */, typeDesc, b,
+				); err != nil {
+					return err
+				}
+				return txn.Run(ctx, b)
+			}
+			return errors.CombineErrors(
+				err,
+				descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
+					t.execCfg.DB, cleanup),
+			)
 		}
 	}
 
@@ -205,8 +287,61 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return err
 		}
 	}
-
 	return nil
+}
+
+func (t *typeSchemaChanger) canRemoveEnumLabel(
+	ctx context.Context,
+	typeDesc *typedesc.Mutable,
+	txn *kv.Txn,
+	member *descpb.TypeDescriptor_EnumMember,
+	descsCol *descs.Collection,
+) (bool, error) {
+	// convertToSQLStringRepresentation takes an array of bytes (the physical
+	// representation of an enum) and converts it into a string that can be used
+	// in a SQL predicate.
+	convertToSQLStringRepresentation := func(bytes []byte) string {
+		var byteRep strings.Builder
+		byteRep.WriteString("b'")
+		for _, b := range bytes {
+			byteRep.WriteByte(b)
+		}
+		byteRep.WriteString("'")
+		return byteRep.String()
+	}
+
+	for _, ID := range typeDesc.ReferencingDescriptorIDs {
+		desc, err := descsCol.GetTableVersionByID(ctx, txn, ID, tree.ObjectLookupFlags{})
+		if err != nil {
+			return false, err
+		}
+		var query strings.Builder
+		query.WriteString(fmt.Sprintf("SELECT * FROM [%d as t]", ID))
+		firstClause := true
+		for _, col := range desc.Columns {
+			if typeDesc.ID == typedesc.GetTypeDescID(col.Type) {
+				if !firstClause {
+					query.WriteString(" AND")
+				}
+				query.WriteString(fmt.Sprintf(" WHERE t.%s = %s", col.Name,
+					convertToSQLStringRepresentation(member.PhysicalRepresentation)))
+				firstClause = false
+			}
+		}
+		query.WriteString(" LIMIT 1")
+		res, err := t.execCfg.InternalExecutor.QueryRow(ctx, "count-value-usage", txn, query.String())
+		if err != nil {
+			return false, err
+		}
+		// Check if the above query returned a result. If it did, then the
+		// enum value is being used by some place.
+		if res != nil {
+			return false, nil
+		}
+	}
+	// We have ascertained that the value is not in use, and can therefore be
+	// safely removed.
+	return true, nil
 }
 
 func enumHasNonPublic(typeDesc *typedesc.Immutable) bool {

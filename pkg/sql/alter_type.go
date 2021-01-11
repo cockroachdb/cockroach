@@ -111,6 +111,12 @@ func (n *alterTypeNode) startExec(params runParams) error {
 			return err
 		}
 		eventLogDone = true // done inside alterTypeOwner().
+	case *tree.AlterTypeDropValue:
+		if params.p.SessionData().SafeUpdates {
+			err = pgerror.DangerousStatementf("DROP VALUE is susceptible to table expr usage")
+		} else {
+			err = params.p.dropEnumValue(params.ctx, n, t)
+		}
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -137,6 +143,15 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	return nil
 }
 
+func enumValueExists(desc *typedesc.Mutable, val tree.EnumValue) bool {
+	for _, member := range desc.EnumMembers {
+		if member.LogicalRepresentation == string(val) {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *planner) addEnumValue(
 	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeAddValue,
 ) error {
@@ -144,27 +159,38 @@ func (p *planner) addEnumValue(
 		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
 	}
 	// See if the value already exists in the enum or not.
-	for _, member := range n.desc.EnumMembers {
-		if member.LogicalRepresentation == string(node.NewVal) {
-			if node.IfNotExists {
-				p.BufferClientNotice(
-					ctx,
-					pgnotice.Newf("enum label %q already exists, skipping", node.NewVal),
-				)
-				return nil
-			}
-			return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+	if enumValueExists(n.desc, node.NewVal) {
+		if node.IfNotExists {
+			p.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("enum label %q already exists, skipping", node.NewVal),
+			)
+			return nil
 		}
+		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
 	}
 
 	if err := n.desc.AddEnumValue(node); err != nil {
 		return err
 	}
-	return p.writeTypeSchemaChange(
-		ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, p.Ann()),
-	)
+	return p.writeTypeSchemaChange(ctx, n.desc, tree.AsStringWithFQNames(n.n, p.Ann()))
+}
+
+func (p *planner) dropEnumValue(
+	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeDropValue,
+) error {
+	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	}
+
+	if !enumValueExists(n.desc, node.Val) {
+		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", node.Val)
+	}
+
+	if err := n.desc.DropEnumValue(node.Val); err != nil {
+		return err
+	}
+	return p.writeTypeSchemaChange(ctx, n.desc, tree.AsStringWithFQNames(n.n, p.Ann()))
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {

@@ -265,3 +265,56 @@ DROP TYPE store
 
 statement error pq: type "store" does not exist
 SELECT 'lru'::store
+
+statement ok
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'hi'
+
+statement error pq: invalid input value for enum greetings: "hi"
+SELECT 'hi'::greetings
+
+statement ok
+CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings)
+
+statement ok
+INSERT INTO use_greetings VALUES(1, 'yo')
+
+statement error pq: could not remove enum value: "yo"
+ALTER TYPE greetings DROP VALUE 'yo'
+
+query T
+SELECT 'yo'::greetings
+----
+yo
+
+# As only 'yo' is used by the table above, we should still be able to drop 'howdy'
+statement ok
+ALTER TYPE greetings DROP VALUE 'howdy'
+
+statement error pq: invalid input value for enum greetings: "howdy"
+SELECT 'howdy'::greetings
+
+statement ok
+CREATE TABLE use_greetings2(k INT PRIMARY KEY, v greetings);
+INSERT INTO use_greetings2 VALUES (1, 'hello')
+
+statement error pq: could not remove enum value: "hello"
+ALTER TYPE greetings DROP VALUE 'hello'
+
+query T
+SELECT 'hello'::greetings
+----
+hello
+
+# Once the use of "yo" has been removed, we should be able to remove it from the
+# enum
+statement ok
+DELETE FROM use_greetings WHERE use_greetings.v = 'yo'
+
+statement ok
+ALTER TYPE greetings DROP VALUE 'yo'
+
+statement error pq: invalid input value for enum greetings: "yo"
+SELECT 'yo'::greetings
