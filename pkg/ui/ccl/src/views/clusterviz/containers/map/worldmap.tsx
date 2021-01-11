@@ -6,8 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-/// <reference path="./typings.d.ts" />
-
 import React from "react";
 import * as d3 from "d3";
 
