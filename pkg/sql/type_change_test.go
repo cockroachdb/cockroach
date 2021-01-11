@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -154,5 +155,122 @@ CREATE TYPE d.t AS ENUM();
 	// The retry should happen within the job and succeed.
 	if _, err := sqlDB.Exec(`ALTER TYPE d.t RENAME TO t2`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAddDropValuesInTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer lease.TestingDisableTableLeases()()
+
+	ctx := context.Background()
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer setTestJobsAdoptInterval()()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE d;
+USE d;
+CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
+CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings);
+INSERT INTO use_greetings VALUES(1, 'yo');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		query        string
+		errorRe      string
+		succeedAfter []string
+		failAfter    []string
+	}{
+		{
+			`BEGIN;
+ALTER TYPE greetings DROP VALUE 'hello'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'hello'::greetings`,
+				`SELECT 'yo'::greetings`,
+			},
+			[]string{
+				`SELECT 'howdy'::greetings`,
+			},
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings ADD VALUE 'sup'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'yo'::greetings`,
+			},
+			[]string{
+				`SELECT 'sup'::greetings`,
+				`SELECT 'howdy'::greetings`,
+			},
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings DROP VALUE 'hi'; 
+ALTER TYPE greetings DROP VALUE 'hello'; 
+ALTER TYPE greetings DROP VALUE 'yo'; 
+COMMIT`,
+			"transaction committed but schema change aborted with error",
+			[]string{
+				`SELECT 'hi'::greetings`,
+				`SELECT 'hello'::greetings`,
+				`SELECT 'yo'::greetings`,
+			},
+			nil,
+		},
+		{
+			`BEGIN;
+ALTER TYPE greetings ADD VALUE 'sup'; 
+ALTER TYPE greetings ADD VALUE 'howdy'; 
+ALTER TYPE greetings DROP VALUE 'hello'; 
+COMMIT`,
+			"",
+			[]string{
+				`SELECT 'sup'::greetings`,
+				`SELECT 'howdy'::greetings`,
+			},
+			[]string{
+				`SELECT 'hello'::greetings`,
+			},
+		},
+	}
+
+	for i, tc := range testCases {
+		_, err := sqlDB.Exec(tc.query)
+		if err != nil {
+			if tc.errorRe == "" {
+				t.Fatalf("#%d: unexpected error while executing query: %v", i, err)
+			}
+			if !testutils.IsError(err, tc.errorRe) {
+				t.Fatalf("#%d: expected error: %q, got error: %v", i, tc.errorRe, err)
+			}
+		}
+		if err == nil && tc.errorRe != "" {
+			t.Fatalf("#%d: unexpected success, expected error: %q", i, tc.errorRe)
+		}
+
+		for _, query := range tc.succeedAfter {
+			if _, err := sqlDB.Exec(query); err != nil {
+				t.Fatalf("#%d: expected %q to succeed, got error: %v", i, query, err)
+			}
+		}
+		for _, query := range tc.failAfter {
+			if _, err := sqlDB.Exec(query); err == nil {
+				t.Fatalf("#%d: expected %q to fail, did not get error:", i, query)
+			}
+		}
 	}
 }
