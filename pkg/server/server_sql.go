@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -66,12 +67,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
 )
 
-type sqlServer struct {
+// SQLServer encapsulates the part of a CRDB server that is dedicated to SQL
+// processing. All SQL commands are reduced to primitive operations on the
+// lower-level KV layer. Multi-tenant installations of CRDB run zero or more
+// standalone SQLServer instances per tenant (the KV layer is shared across all
+// tenants).
+type SQLServer struct {
+	stopper          *stop.Stopper
+	sqlIDContainer   *base.SQLIDContainer
 	pgServer         *pgwire.Server
 	distSQLServer    *distsql.ServerImpl
 	execCfg          *sql.ExecutorConfig
@@ -92,6 +101,7 @@ type sqlServer struct {
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
 	metricsRegistry         *metric.Registry
+	diagnosticsReporter     *diagnostics.Reporter
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -196,15 +206,18 @@ type sqlServerArgs struct {
 	sqlStatusServer serverpb.SQLStatusServer
 }
 
-func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
+func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
 	}
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.SQLConfig.TenantID)
-	if override := cfg.SQLConfig.TenantIDCodecOverride; override != (roachpb.TenantID{}) {
-		codec = keys.MakeSQLCodec(override)
+	if knobs := cfg.TestingKnobs.TenantTestingKnobs; knobs != nil {
+		override := knobs.(*sql.TenantTestingKnobs).TenantIDCodecOverride
+		if override != (roachpb.TenantID{}) {
+			codec = keys.MakeSQLCodec(override)
+		}
 	}
 
 	// Create blob service for inter-node file sharing.
@@ -629,7 +642,30 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		sqlExecutorTestingKnobs,
 	)
 
-	return &sqlServer{
+	var reporter *diagnostics.Reporter
+	if cfg.tenantConnect != nil {
+		reporter = &diagnostics.Reporter{
+			StartTime:     timeutil.Now(),
+			AmbientCtx:    &cfg.AmbientCtx,
+			Config:        cfg.BaseConfig.Config,
+			Settings:      cfg.Settings,
+			ClusterID:     cfg.rpcContext.ClusterID.Get,
+			TenantID:      cfg.rpcContext.TenantID,
+			SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
+			SQLServer:     pgServer.SQLServer,
+			InternalExec:  cfg.circularInternalExecutor,
+			DB:            cfg.db,
+			Recorder:      cfg.recorder,
+			Locality:      cfg.Locality,
+		}
+		if cfg.TestingKnobs.Server != nil {
+			reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		}
+	}
+
+	return &SQLServer{
+		stopper:                 cfg.stopper,
+		sqlIDContainer:          cfg.nodeIDContainer,
 		pgServer:                pgServer,
 		distSQLServer:           distSQLServer,
 		execCfg:                 execCfg,
@@ -646,10 +682,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
 		metricsRegistry:         cfg.registry,
+		diagnosticsReporter:     reporter,
 	}, nil
 }
 
-func (s *sqlServer) start(
+func (s *SQLServer) start(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
@@ -789,4 +826,18 @@ func (s *sqlServer) start(
 	)
 
 	return nil
+}
+
+// SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID
+// is guaranteed to be unique across all currently running instances, but may be
+// reused once an instance is stopped.
+func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
+	return s.sqlIDContainer.SQLInstanceID()
+}
+
+// StartDiagnostics starts periodic diagnostics reporting.
+// NOTE: This is not called in start so that it's disabled by default for
+// testing.
+func (s *SQLServer) StartDiagnostics(ctx context.Context) {
+	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
 }

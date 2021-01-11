@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -567,25 +568,56 @@ func makeSQLServerArgs(
 	}, nil
 }
 
+// TestTenant is an in-memory instantiation of the SQL-only process created for
+// each active Cockroach tenant. TestTenant provides tests with access to
+// internal methods and state on SQLServer. It is typically started in tests by
+// calling the TestServerInterface.StartTenant method or by calling the wrapper
+// serverutils.StartTenant method.
+type TestTenant struct {
+	*SQLServer
+	sqlAddr  string
+	httpAddr string
+}
+
+// SQLAddr is part of the TestTenantInterface interface.
+func (t *TestTenant) SQLAddr() string {
+	return t.sqlAddr
+}
+
+// HTTPAddr is part of the TestTenantInterface interface.
+func (t *TestTenant) HTTPAddr() string {
+	return t.httpAddr
+}
+
+// PGServer is part of the TestTenantInterface interface.
+func (t *TestTenant) PGServer() interface{} {
+	return t.pgServer
+}
+
+// DiagnosticsReporter is part of the TestTenantInterface interface.
+func (t *TestTenant) DiagnosticsReporter() interface{} {
+	return t.diagnosticsReporter
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	params base.TestTenantArgs,
-) (pgAddr string, httpAddr string, _ error) {
+) (serverutils.TestTenantInterface, error) {
 	ctx := context.Background()
 
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
 		); err != nil {
-			return "", "", err
+			return nil, err
 		}
 	}
 
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
-	sqlCfg.TenantIDCodecOverride = params.TenantIDCodecOverride
 	baseCfg := makeTestBaseConfig(st)
+	baseCfg.TestingKnobs = params.TestingKnobs
 	if params.AllowSettingClusterSettings {
 		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: st.MakeUpdater(),
@@ -595,13 +627,14 @@ func (ts *TestServer) StartTenant(
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
-	return StartTenant(
+	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)
+	return &TestTenant{SQLServer: sqlServer, sqlAddr: addr, httpAddr: httpAddr}, err
 }
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -611,14 +644,14 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (pgAddr string, httpAddr string, _ error) {
+) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
 	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
@@ -635,7 +668,7 @@ func StartTenant(
 
 	pgL, err := listen(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -649,7 +682,7 @@ func StartTenant(
 
 	httpL, err := listen(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -699,7 +732,7 @@ func StartTenant(
 		heapProfileDirName:   args.HeapProfileDirName,
 		runtime:              args.runtime,
 	}); err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 
 	if err := s.start(ctx,
@@ -710,10 +743,10 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return "", "", err
+		return nil, "", "", err
 	}
 
-	return pgLAddr, httpLAddr, nil
+	return s, pgLAddr, httpLAddr, nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -1240,6 +1273,11 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 		return nil, err
 	}
 	return scratchKey, nil
+}
+
+// MetricsRecorder is part of TestServerInterface.
+func (ts *TestServer) MetricsRecorder() interface{} {
+	return ts.node.recorder
 }
 
 type testServerFactoryImpl struct{}

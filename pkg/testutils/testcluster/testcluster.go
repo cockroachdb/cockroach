@@ -394,7 +394,8 @@ func (tc *TestCluster) StartServer(
 		t.Fatalf("%+v", err)
 	}
 
-	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
+	dbConn := serverutils.OpenDBConn(
+		t, server.ServingSQLAddr(), serverArgs.UseDatabase, serverArgs.Insecure, server.Stopper())
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
