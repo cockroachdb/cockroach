@@ -672,6 +672,7 @@ show_regions_stmt ::=
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE'
 	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
 	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'REGIONS'
 
 show_survival_goal_stmt ::=
 	'SHOW' 'SURVIVAL' 'GOAL' 'FROM' 'DATABASE'
