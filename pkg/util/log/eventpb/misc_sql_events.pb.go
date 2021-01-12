@@ -34,7 +34,7 @@ func (m *SetClusterSetting) Reset()         { *m = SetClusterSetting{} }
 func (m *SetClusterSetting) String() string { return proto.CompactTextString(m) }
 func (*SetClusterSetting) ProtoMessage()    {}
 func (*SetClusterSetting) Descriptor() ([]byte, []int) {
-	return fileDescriptor_misc_sql_events_a7ef825afe3b6935, []int{0}
+	return fileDescriptor_misc_sql_events_6ec127076976da30, []int{0}
 }
 func (m *SetClusterSetting) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -425,10 +425,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/misc_sql_events.proto", fileDescriptor_misc_sql_events_a7ef825afe3b6935)
+	proto.RegisterFile("util/log/eventpb/misc_sql_events.proto", fileDescriptor_misc_sql_events_6ec127076976da30)
 }
 
-var fileDescriptor_misc_sql_events_a7ef825afe3b6935 = []byte{
+var fileDescriptor_misc_sql_events_6ec127076976da30 = []byte{
 	// 327 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0xd0, 0x4d, 0x4b, 0x3a, 0x41,
 	0x1c, 0x07, 0xf0, 0x1d, 0xfd, 0xff, 0x8d, 0x46, 0x09, 0x5a, 0x0a, 0x16, 0xa1, 0x59, 0x91, 0x28,

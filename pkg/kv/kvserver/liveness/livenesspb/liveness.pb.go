@@ -81,7 +81,7 @@ var MembershipStatus_value = map[string]int32{
 }
 
 func (MembershipStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_19520db8d41703e0, []int{0}
+	return fileDescriptor_liveness_be522def84a925e5, []int{0}
 }
 
 // NodeLivenessStatus describes the status of a node from the perspective of the
@@ -140,7 +140,7 @@ func (x NodeLivenessStatus) String() string {
 	return proto.EnumName(NodeLivenessStatus_name, int32(x))
 }
 func (NodeLivenessStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_19520db8d41703e0, []int{1}
+	return fileDescriptor_liveness_be522def84a925e5, []int{1}
 }
 
 // Liveness holds information about a node's latest heartbeat and epoch.
@@ -182,7 +182,7 @@ type Liveness struct {
 func (m *Liveness) Reset()      { *m = Liveness{} }
 func (*Liveness) ProtoMessage() {}
 func (*Liveness) Descriptor() ([]byte, []int) {
-	return fileDescriptor_liveness_19520db8d41703e0, []int{0}
+	return fileDescriptor_liveness_be522def84a925e5, []int{0}
 }
 func (m *Liveness) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -698,10 +698,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/liveness/livenesspb/liveness.proto", fileDescriptor_liveness_19520db8d41703e0)
+	proto.RegisterFile("kv/kvserver/liveness/livenesspb/liveness.proto", fileDescriptor_liveness_be522def84a925e5)
 }
 
-var fileDescriptor_liveness_19520db8d41703e0 = []byte{
+var fileDescriptor_liveness_be522def84a925e5 = []byte{
 	// 554 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4b, 0x8b, 0xd3, 0x50,
 	0x14, 0xc7, 0x73, 0xfb, 0x9a, 0x72, 0x2b, 0x33, 0xe1, 0x76, 0xc0, 0x12, 0x21, 0x09, 0xea, 0xa2,

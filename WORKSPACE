@@ -93,8 +93,8 @@ gazelle_dependencies()
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
 git_repository(
     name = "com_google_protobuf",
-    commit = "09745575a923640154bcf307fba8aedff47f240a",
-    remote = "https://github.com/protocolbuffers/protobuf",
+    commit = "9b23a34c7275aa0ceb2fc69ed1ae6737b34656a3",
+    remote = "https://github.com/cockroachdb/protobuf",
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")

@@ -45,7 +45,7 @@ func (x License_Type) String() string {
 	return proto.EnumName(License_Type_name, int32(x))
 }
 func (License_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_license_9dc270caeb56da02, []int{0, 0}
+	return fileDescriptor_license_ab5207e359a48f57, []int{0, 0}
 }
 
 type License struct {
@@ -59,7 +59,7 @@ func (m *License) Reset()         { *m = License{} }
 func (m *License) String() string { return proto.CompactTextString(m) }
 func (*License) ProtoMessage()    {}
 func (*License) Descriptor() ([]byte, []int) {
-	return fileDescriptor_license_9dc270caeb56da02, []int{0}
+	return fileDescriptor_license_ab5207e359a48f57, []int{0}
 }
 func (m *License) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -436,10 +436,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ccl/utilccl/licenseccl/license.proto", fileDescriptor_license_9dc270caeb56da02)
+	proto.RegisterFile("ccl/utilccl/licenseccl/license.proto", fileDescriptor_license_ab5207e359a48f57)
 }
 
-var fileDescriptor_license_9dc270caeb56da02 = []byte{
+var fileDescriptor_license_ab5207e359a48f57 = []byte{
 	// 362 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x91, 0x31, 0x8f, 0xda, 0x30,
 	0x1c, 0xc5, 0x63, 0x40, 0xad, 0xb0, 0x5a, 0x14, 0x22, 0x86, 0xa8, 0x83, 0x89, 0x50, 0x87, 0x48,

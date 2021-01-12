@@ -60,7 +60,7 @@ func (x *DatumEncoding) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DatumEncoding) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_encoded_datum_a9a9da979c7d72d0, []int{0}
+	return fileDescriptor_encoded_datum_0472e76a601f5c7c, []int{0}
 }
 
 func init() {
@@ -68,10 +68,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/encoded_datum.proto", fileDescriptor_encoded_datum_a9a9da979c7d72d0)
+	proto.RegisterFile("sql/catalog/descpb/encoded_datum.proto", fileDescriptor_encoded_datum_0472e76a601f5c7c)
 }
 
-var fileDescriptor_encoded_datum_a9a9da979c7d72d0 = []byte{
+var fileDescriptor_encoded_datum_0472e76a601f5c7c = []byte{
 	// 190 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2b, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0x4f,

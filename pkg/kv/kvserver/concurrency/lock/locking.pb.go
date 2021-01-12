@@ -155,7 +155,7 @@ func (x Strength) String() string {
 	return proto.EnumName(Strength_name, int32(x))
 }
 func (Strength) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_4b2d63c7788afc75, []int{0}
+	return fileDescriptor_locking_eecdbf5930525074, []int{0}
 }
 
 // Durability represents the different durability properties of a lock acquired
@@ -195,7 +195,7 @@ func (x Durability) String() string {
 	return proto.EnumName(Durability_name, int32(x))
 }
 func (Durability) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_4b2d63c7788afc75, []int{1}
+	return fileDescriptor_locking_eecdbf5930525074, []int{1}
 }
 
 // WaitPolicy specifies the behavior of a request when it encounters conflicting
@@ -230,7 +230,7 @@ func (x WaitPolicy) String() string {
 	return proto.EnumName(WaitPolicy_name, int32(x))
 }
 func (WaitPolicy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_4b2d63c7788afc75, []int{2}
+	return fileDescriptor_locking_eecdbf5930525074, []int{2}
 }
 
 func init() {
@@ -240,10 +240,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("kv/kvserver/concurrency/lock/locking.proto", fileDescriptor_locking_4b2d63c7788afc75)
+	proto.RegisterFile("kv/kvserver/concurrency/lock/locking.proto", fileDescriptor_locking_eecdbf5930525074)
 }
 
-var fileDescriptor_locking_4b2d63c7788afc75 = []byte{
+var fileDescriptor_locking_eecdbf5930525074 = []byte{
 	// 275 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x4c, 0xcf, 0xbd, 0x4e, 0xc3, 0x30,
 	0x10, 0xc0, 0x71, 0x1b, 0x42, 0x69, 0x8f, 0x0f, 0x59, 0x16, 0x53, 0x07, 0x0f, 0x0c, 0x1d, 0x32,

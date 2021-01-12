@@ -46,7 +46,7 @@ func (m *BootstrapInfo) Reset()         { *m = BootstrapInfo{} }
 func (m *BootstrapInfo) String() string { return proto.CompactTextString(m) }
 func (*BootstrapInfo) ProtoMessage()    {}
 func (*BootstrapInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{0}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{0}
 }
 func (m *BootstrapInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -90,7 +90,7 @@ func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
 func (*Request) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{1}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{1}
 }
 func (m *Request) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -138,7 +138,7 @@ func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 func (*Response) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{2}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{2}
 }
 func (m *Response) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -172,7 +172,7 @@ type ConnStatus struct {
 func (m *ConnStatus) Reset()      { *m = ConnStatus{} }
 func (*ConnStatus) ProtoMessage() {}
 func (*ConnStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{3}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{3}
 }
 func (m *ConnStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -208,7 +208,7 @@ type MetricSnap struct {
 func (m *MetricSnap) Reset()      { *m = MetricSnap{} }
 func (*MetricSnap) ProtoMessage() {}
 func (*MetricSnap) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{4}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{4}
 }
 func (m *MetricSnap) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -241,7 +241,7 @@ type OutgoingConnStatus struct {
 func (m *OutgoingConnStatus) Reset()      { *m = OutgoingConnStatus{} }
 func (*OutgoingConnStatus) ProtoMessage() {}
 func (*OutgoingConnStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{5}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{5}
 }
 func (m *OutgoingConnStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -274,7 +274,7 @@ type ClientStatus struct {
 func (m *ClientStatus) Reset()      { *m = ClientStatus{} }
 func (*ClientStatus) ProtoMessage() {}
 func (*ClientStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{6}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{6}
 }
 func (m *ClientStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -308,7 +308,7 @@ type ServerStatus struct {
 func (m *ServerStatus) Reset()      { *m = ServerStatus{} }
 func (*ServerStatus) ProtoMessage() {}
 func (*ServerStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{7}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{7}
 }
 func (m *ServerStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +341,7 @@ type Connectivity struct {
 func (m *Connectivity) Reset()      { *m = Connectivity{} }
 func (*Connectivity) ProtoMessage() {}
 func (*Connectivity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{8}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{8}
 }
 func (m *Connectivity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -375,7 +375,7 @@ func (m *Connectivity_Conn) Reset()         { *m = Connectivity_Conn{} }
 func (m *Connectivity_Conn) String() string { return proto.CompactTextString(m) }
 func (*Connectivity_Conn) ProtoMessage()    {}
 func (*Connectivity_Conn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{8, 0}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{8, 0}
 }
 func (m *Connectivity_Conn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -412,7 +412,7 @@ func (m *InfoStatus) Reset()         { *m = InfoStatus{} }
 func (m *InfoStatus) String() string { return proto.CompactTextString(m) }
 func (*InfoStatus) ProtoMessage()    {}
 func (*InfoStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{9}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{9}
 }
 func (m *InfoStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -457,7 +457,7 @@ func (m *Info) Reset()         { *m = Info{} }
 func (m *Info) String() string { return proto.CompactTextString(m) }
 func (*Info) ProtoMessage()    {}
 func (*Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_gossip_af8c9a20540e5252, []int{10}
+	return fileDescriptor_gossip_a2029af5abd89691, []int{10}
 }
 func (m *Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3668,9 +3668,9 @@ var (
 	ErrIntOverflowGossip   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("gossip/gossip.proto", fileDescriptor_gossip_af8c9a20540e5252) }
+func init() { proto.RegisterFile("gossip/gossip.proto", fileDescriptor_gossip_a2029af5abd89691) }
 
-var fileDescriptor_gossip_af8c9a20540e5252 = []byte{
+var fileDescriptor_gossip_a2029af5abd89691 = []byte{
 	// 1220 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0xcf, 0x6f, 0x1b, 0x45,
 	0x14, 0xf6, 0xc6, 0x3f, 0xe2, 0x7d, 0x76, 0xd2, 0x76, 0xa8, 0x90, 0x71, 0xa9, 0x1d, 0xb9, 0x54,

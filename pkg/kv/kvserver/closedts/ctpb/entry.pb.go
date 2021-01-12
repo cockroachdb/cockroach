@@ -55,7 +55,7 @@ type Entry struct {
 func (m *Entry) Reset()      { *m = Entry{} }
 func (*Entry) ProtoMessage() {}
 func (*Entry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_entry_cedfda89c463dabb, []int{0}
+	return fileDescriptor_entry_d2113849c095b590, []int{0}
 }
 func (m *Entry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -92,7 +92,7 @@ type Reaction struct {
 func (m *Reaction) Reset()      { *m = Reaction{} }
 func (*Reaction) ProtoMessage() {}
 func (*Reaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_entry_cedfda89c463dabb, []int{1}
+	return fileDescriptor_entry_d2113849c095b590, []int{1}
 }
 func (m *Reaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -726,10 +726,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/closedts/ctpb/entry.proto", fileDescriptor_entry_cedfda89c463dabb)
+	proto.RegisterFile("kv/kvserver/closedts/ctpb/entry.proto", fileDescriptor_entry_d2113849c095b590)
 }
 
-var fileDescriptor_entry_cedfda89c463dabb = []byte{
+var fileDescriptor_entry_d2113849c095b590 = []byte{
 	// 442 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0x3f, 0x6f, 0xd4, 0x30,
 	0x18, 0xc6, 0xe3, 0x4b, 0x82, 0x7a, 0xee, 0x40, 0x15, 0x75, 0x88, 0x4e, 0xe0, 0x44, 0x95, 0x40,

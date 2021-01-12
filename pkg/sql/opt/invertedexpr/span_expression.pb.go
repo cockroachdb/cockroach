@@ -47,7 +47,7 @@ func (x SetOperator) String() string {
 	return proto.EnumName(SetOperator_name, int32(x))
 }
 func (SetOperator) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_efa3f73e1604a2bd, []int{0}
+	return fileDescriptor_span_expression_11c64f7cb57c77cd, []int{0}
 }
 
 // SpanExpressionProto is a proto representation of an InvertedExpression
@@ -62,7 +62,7 @@ func (m *SpanExpressionProto) Reset()         { *m = SpanExpressionProto{} }
 func (m *SpanExpressionProto) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto) ProtoMessage()    {}
 func (*SpanExpressionProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_efa3f73e1604a2bd, []int{0}
+	return fileDescriptor_span_expression_11c64f7cb57c77cd, []int{0}
 }
 func (m *SpanExpressionProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -97,7 +97,7 @@ func (m *SpanExpressionProto_Span) Reset()         { *m = SpanExpressionProto_Sp
 func (m *SpanExpressionProto_Span) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto_Span) ProtoMessage()    {}
 func (*SpanExpressionProto_Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_efa3f73e1604a2bd, []int{0, 0}
+	return fileDescriptor_span_expression_11c64f7cb57c77cd, []int{0, 0}
 }
 func (m *SpanExpressionProto_Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -133,7 +133,7 @@ func (m *SpanExpressionProto_Node) Reset()         { *m = SpanExpressionProto_No
 func (m *SpanExpressionProto_Node) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto_Node) ProtoMessage()    {}
 func (*SpanExpressionProto_Node) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_efa3f73e1604a2bd, []int{0, 1}
+	return fileDescriptor_span_expression_11c64f7cb57c77cd, []int{0, 1}
 }
 func (m *SpanExpressionProto_Node) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -864,10 +864,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/opt/invertedexpr/span_expression.proto", fileDescriptor_span_expression_efa3f73e1604a2bd)
+	proto.RegisterFile("sql/opt/invertedexpr/span_expression.proto", fileDescriptor_span_expression_11c64f7cb57c77cd)
 }
 
-var fileDescriptor_span_expression_efa3f73e1604a2bd = []byte{
+var fileDescriptor_span_expression_11c64f7cb57c77cd = []byte{
 	// 399 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x92, 0xc1, 0x6e, 0x13, 0x31,
 	0x10, 0x86, 0xd7, 0x89, 0x8b, 0x22, 0x27, 0x40, 0xe4, 0xe6, 0xb0, 0xca, 0xc1, 0x44, 0x9c, 0xaa,
