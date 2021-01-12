@@ -33,7 +33,7 @@ func (m *LeaseVal) Reset()         { *m = LeaseVal{} }
 func (m *LeaseVal) String() string { return proto.CompactTextString(m) }
 func (*LeaseVal) ProtoMessage()    {}
 func (*LeaseVal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_fab267a03cfd3cca, []int{0}
+	return fileDescriptor_lease_575d60f487f2d6f7, []int{0}
 }
 func (m *LeaseVal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,10 +341,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sqlmigrations/leasemanager/lease.proto", fileDescriptor_lease_fab267a03cfd3cca)
+	proto.RegisterFile("sqlmigrations/leasemanager/lease.proto", fileDescriptor_lease_575d60f487f2d6f7)
 }
 
-var fileDescriptor_lease_fab267a03cfd3cca = []byte{
+var fileDescriptor_lease_575d60f487f2d6f7 = []byte{
 	// 223 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2b, 0x2e, 0xcc, 0xc9,
 	0xcd, 0x4c, 0x2f, 0x4a, 0x2c, 0xc9, 0xcc, 0xcf, 0x2b, 0xd6, 0xcf, 0x49, 0x4d, 0x2c, 0x4e, 0xcd,

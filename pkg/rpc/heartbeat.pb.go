@@ -49,7 +49,7 @@ type RemoteOffset struct {
 func (m *RemoteOffset) Reset()      { *m = RemoteOffset{} }
 func (*RemoteOffset) ProtoMessage() {}
 func (*RemoteOffset) Descriptor() ([]byte, []int) {
-	return fileDescriptor_heartbeat_565332a8a713c8ea, []int{0}
+	return fileDescriptor_heartbeat_dd667cf2a7d6ec57, []int{0}
 }
 func (m *RemoteOffset) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -99,7 +99,7 @@ func (m *PingRequest) Reset()         { *m = PingRequest{} }
 func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_heartbeat_565332a8a713c8ea, []int{1}
+	return fileDescriptor_heartbeat_dd667cf2a7d6ec57, []int{1}
 }
 func (m *PingRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -140,7 +140,7 @@ func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_heartbeat_565332a8a713c8ea, []int{2}
+	return fileDescriptor_heartbeat_dd667cf2a7d6ec57, []int{2}
 }
 func (m *PingResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1193,9 +1193,9 @@ var (
 	ErrIntOverflowHeartbeat   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("rpc/heartbeat.proto", fileDescriptor_heartbeat_565332a8a713c8ea) }
+func init() { proto.RegisterFile("rpc/heartbeat.proto", fileDescriptor_heartbeat_dd667cf2a7d6ec57) }
 
-var fileDescriptor_heartbeat_565332a8a713c8ea = []byte{
+var fileDescriptor_heartbeat_dd667cf2a7d6ec57 = []byte{
 	// 635 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0x41, 0x4f, 0xd4, 0x40,
 	0x14, 0x6e, 0xd9, 0x05, 0x61, 0x76, 0xc1, 0x38, 0x12, 0x6c, 0x16, 0xd3, 0xc5, 0x4d, 0xd0, 0x3d,

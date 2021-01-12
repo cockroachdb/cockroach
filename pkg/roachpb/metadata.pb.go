@@ -130,7 +130,7 @@ func (x *ReplicaType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ReplicaType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{0}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{0}
 }
 
 // Attributes specifies a list of arbitrary strings describing
@@ -142,7 +142,7 @@ type Attributes struct {
 func (m *Attributes) Reset()      { *m = Attributes{} }
 func (*Attributes) ProtoMessage() {}
 func (*Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{0}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{0}
 }
 func (m *Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -176,7 +176,7 @@ type ReplicationTarget struct {
 func (m *ReplicationTarget) Reset()      { *m = ReplicationTarget{} }
 func (*ReplicationTarget) ProtoMessage() {}
 func (*ReplicationTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{1}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{1}
 }
 func (m *ReplicationTarget) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,7 +221,7 @@ type ReplicaDescriptor struct {
 func (m *ReplicaDescriptor) Reset()      { *m = ReplicaDescriptor{} }
 func (*ReplicaDescriptor) ProtoMessage() {}
 func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{2}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{2}
 }
 func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -256,7 +256,7 @@ func (m *ReplicaIdent) Reset()         { *m = ReplicaIdent{} }
 func (m *ReplicaIdent) String() string { return proto.CompactTextString(m) }
 func (*ReplicaIdent) ProtoMessage()    {}
 func (*ReplicaIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{3}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{3}
 }
 func (m *ReplicaIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -400,7 +400,7 @@ type RangeDescriptor struct {
 func (m *RangeDescriptor) Reset()      { *m = RangeDescriptor{} }
 func (*RangeDescriptor) ProtoMessage() {}
 func (*RangeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{4}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{4}
 }
 func (m *RangeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -439,7 +439,7 @@ type Percentiles struct {
 func (m *Percentiles) Reset()      { *m = Percentiles{} }
 func (*Percentiles) ProtoMessage() {}
 func (*Percentiles) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{5}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{5}
 }
 func (m *Percentiles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -501,7 +501,7 @@ type StoreCapacity struct {
 func (m *StoreCapacity) Reset()      { *m = StoreCapacity{} }
 func (*StoreCapacity) ProtoMessage() {}
 func (*StoreCapacity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{6}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{6}
 }
 func (m *StoreCapacity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -546,7 +546,7 @@ func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 func (*NodeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{7}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{7}
 }
 func (m *NodeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -582,7 +582,7 @@ func (m *LocalityAddress) Reset()         { *m = LocalityAddress{} }
 func (m *LocalityAddress) String() string { return proto.CompactTextString(m) }
 func (*LocalityAddress) ProtoMessage()    {}
 func (*LocalityAddress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{8}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{8}
 }
 func (m *LocalityAddress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -620,7 +620,7 @@ func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
 func (*StoreDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{9}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{9}
 }
 func (m *StoreDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -657,7 +657,7 @@ func (m *StoreDeadReplicas) Reset()         { *m = StoreDeadReplicas{} }
 func (m *StoreDeadReplicas) String() string { return proto.CompactTextString(m) }
 func (*StoreDeadReplicas) ProtoMessage()    {}
 func (*StoreDeadReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{10}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{10}
 }
 func (m *StoreDeadReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -691,7 +691,7 @@ type Locality struct {
 func (m *Locality) Reset()      { *m = Locality{} }
 func (*Locality) ProtoMessage() {}
 func (*Locality) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{11}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{11}
 }
 func (m *Locality) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -727,7 +727,7 @@ type Tier struct {
 func (m *Tier) Reset()      { *m = Tier{} }
 func (*Tier) ProtoMessage() {}
 func (*Tier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{12}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{12}
 }
 func (m *Tier) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -767,7 +767,7 @@ type Version struct {
 func (m *Version) Reset()      { *m = Version{} }
 func (*Version) ProtoMessage() {}
 func (*Version) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_cb046cbdcf254331, []int{13}
+	return fileDescriptor_metadata_9a1fd6dfbd7934b7, []int{13}
 }
 func (m *Version) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -4178,9 +4178,9 @@ var (
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_cb046cbdcf254331) }
+func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_9a1fd6dfbd7934b7) }
 
-var fileDescriptor_metadata_cb046cbdcf254331 = []byte{
+var fileDescriptor_metadata_9a1fd6dfbd7934b7 = []byte{
 	// 1440 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xcf, 0x6f, 0x1b, 0x45,
 	0x1b, 0xf6, 0xc6, 0xeb, 0xd8, 0x7e, 0x1d, 0x27, 0xf6, 0xe8, 0xfb, 0x5a, 0xcb, 0x9f, 0x3e, 0xdb,

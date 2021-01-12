@@ -37,7 +37,7 @@ func (m *ValidateTargetClusterVersionRequest) Reset()         { *m = ValidateTar
 func (m *ValidateTargetClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionRequest) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{0}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{0}
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -71,7 +71,7 @@ func (m *ValidateTargetClusterVersionResponse) Reset()         { *m = ValidateTa
 func (m *ValidateTargetClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionResponse) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{1}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{1}
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,7 @@ func (m *BumpClusterVersionRequest) Reset()         { *m = BumpClusterVersionReq
 func (m *BumpClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionRequest) ProtoMessage()    {}
 func (*BumpClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{2}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{2}
 }
 func (m *BumpClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -139,7 +139,7 @@ func (m *BumpClusterVersionResponse) Reset()         { *m = BumpClusterVersionRe
 func (m *BumpClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionResponse) ProtoMessage()    {}
 func (*BumpClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{3}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{3}
 }
 func (m *BumpClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,7 +174,7 @@ func (m *PurgeOutdatedReplicasRequest) Reset()         { *m = PurgeOutdatedRepli
 func (m *PurgeOutdatedReplicasRequest) String() string { return proto.CompactTextString(m) }
 func (*PurgeOutdatedReplicasRequest) ProtoMessage()    {}
 func (*PurgeOutdatedReplicasRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{4}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{4}
 }
 func (m *PurgeOutdatedReplicasRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -208,7 +208,7 @@ func (m *PurgeOutdatedReplicasResponse) Reset()         { *m = PurgeOutdatedRepl
 func (m *PurgeOutdatedReplicasResponse) String() string { return proto.CompactTextString(m) }
 func (*PurgeOutdatedReplicasResponse) ProtoMessage()    {}
 func (*PurgeOutdatedReplicasResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{5}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{5}
 }
 func (m *PurgeOutdatedReplicasResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -242,7 +242,7 @@ func (m *SyncAllEnginesRequest) Reset()         { *m = SyncAllEnginesRequest{} }
 func (m *SyncAllEnginesRequest) String() string { return proto.CompactTextString(m) }
 func (*SyncAllEnginesRequest) ProtoMessage()    {}
 func (*SyncAllEnginesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{6}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{6}
 }
 func (m *SyncAllEnginesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -275,7 +275,7 @@ func (m *SyncAllEnginesResponse) Reset()         { *m = SyncAllEnginesResponse{}
 func (m *SyncAllEnginesResponse) String() string { return proto.CompactTextString(m) }
 func (*SyncAllEnginesResponse) ProtoMessage()    {}
 func (*SyncAllEnginesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_878be5ae941b79ed, []int{7}
+	return fileDescriptor_migration_e2a428f370588fbd, []int{7}
 }
 func (m *SyncAllEnginesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1399,10 +1399,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_878be5ae941b79ed)
+	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_e2a428f370588fbd)
 }
 
-var fileDescriptor_migration_878be5ae941b79ed = []byte{
+var fileDescriptor_migration_e2a428f370588fbd = []byte{
 	// 409 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
 	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,

@@ -61,7 +61,7 @@ func (x *InitMode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (InitMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_testconfig_a82c0aa336d029cb, []int{0}
+	return fileDescriptor_testconfig_1105934915520239, []int{0}
 }
 
 // StoreConfig holds the configuration of a collection of similar stores.
@@ -73,7 +73,7 @@ func (m *StoreConfig) Reset()         { *m = StoreConfig{} }
 func (m *StoreConfig) String() string { return proto.CompactTextString(m) }
 func (*StoreConfig) ProtoMessage()    {}
 func (*StoreConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_testconfig_a82c0aa336d029cb, []int{0}
+	return fileDescriptor_testconfig_1105934915520239, []int{0}
 }
 func (m *StoreConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,7 +108,7 @@ func (m *NodeConfig) Reset()         { *m = NodeConfig{} }
 func (m *NodeConfig) String() string { return proto.CompactTextString(m) }
 func (*NodeConfig) ProtoMessage()    {}
 func (*NodeConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_testconfig_a82c0aa336d029cb, []int{1}
+	return fileDescriptor_testconfig_1105934915520239, []int{1}
 }
 func (m *NodeConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *TestConfig) Reset()         { *m = TestConfig{} }
 func (m *TestConfig) String() string { return proto.CompactTextString(m) }
 func (*TestConfig) ProtoMessage()    {}
 func (*TestConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_testconfig_a82c0aa336d029cb, []int{2}
+	return fileDescriptor_testconfig_1105934915520239, []int{2}
 }
 func (m *TestConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -805,10 +805,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("acceptance/cluster/testconfig.proto", fileDescriptor_testconfig_a82c0aa336d029cb)
+	proto.RegisterFile("acceptance/cluster/testconfig.proto", fileDescriptor_testconfig_1105934915520239)
 }
 
-var fileDescriptor_testconfig_a82c0aa336d029cb = []byte{
+var fileDescriptor_testconfig_1105934915520239 = []byte{
 	// 405 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x90, 0xc1, 0x6e, 0xd3, 0x40,
 	0x14, 0x45, 0x3d, 0x89, 0x43, 0xec, 0x57, 0x8a, 0xac, 0x11, 0x48, 0x56, 0x05, 0x53, 0xcb, 0x95,

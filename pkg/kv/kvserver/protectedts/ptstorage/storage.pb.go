@@ -32,7 +32,7 @@ func (m *Spans) Reset()         { *m = Spans{} }
 func (m *Spans) String() string { return proto.CompactTextString(m) }
 func (*Spans) ProtoMessage()    {}
 func (*Spans) Descriptor() ([]byte, []int) {
-	return fileDescriptor_storage_af582c1bcb16afac, []int{0}
+	return fileDescriptor_storage_3178c9ebe1d1fac9, []int{0}
 }
 func (m *Spans) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -314,10 +314,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/protectedts/ptstorage/storage.proto", fileDescriptor_storage_af582c1bcb16afac)
+	proto.RegisterFile("kv/kvserver/protectedts/ptstorage/storage.proto", fileDescriptor_storage_3178c9ebe1d1fac9)
 }
 
-var fileDescriptor_storage_af582c1bcb16afac = []byte{
+var fileDescriptor_storage_3178c9ebe1d1fac9 = []byte{
 	// 217 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0xcf, 0x2e, 0xd3, 0xcf,
 	0x2e, 0x2b, 0x4e, 0x2d, 0x2a, 0x4b, 0x2d, 0xd2, 0x2f, 0x28, 0xca, 0x2f, 0x49, 0x4d, 0x2e, 0x49,

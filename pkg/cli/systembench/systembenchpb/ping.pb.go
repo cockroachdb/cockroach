@@ -33,7 +33,7 @@ func (m *PingRequest) Reset()         { *m = PingRequest{} }
 func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ping_72d92a0e7b9988d9, []int{0}
+	return fileDescriptor_ping_3cfa0224b0cfaca1, []int{0}
 }
 func (m *PingRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -66,7 +66,7 @@ func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ping_72d92a0e7b9988d9, []int{1}
+	return fileDescriptor_ping_3cfa0224b0cfaca1, []int{1}
 }
 func (m *PingResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -532,10 +532,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("cli/systembench/systembenchpb/ping.proto", fileDescriptor_ping_72d92a0e7b9988d9)
+	proto.RegisterFile("cli/systembench/systembenchpb/ping.proto", fileDescriptor_ping_3cfa0224b0cfaca1)
 }
 
-var fileDescriptor_ping_72d92a0e7b9988d9 = []byte{
+var fileDescriptor_ping_3cfa0224b0cfaca1 = []byte{
 	// 175 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x48, 0xce, 0xc9, 0xd4,
 	0x2f, 0xae, 0x2c, 0x2e, 0x49, 0xcd, 0x4d, 0x4a, 0xcd, 0x4b, 0xce, 0x40, 0x66, 0x17, 0x24, 0xe9,

@@ -58,7 +58,7 @@ func (m *PostProcessSpec) Reset()         { *m = PostProcessSpec{} }
 func (m *PostProcessSpec) String() string { return proto.CompactTextString(m) }
 func (*PostProcessSpec) ProtoMessage()    {}
 func (*PostProcessSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_2f9dd97fffc5def6, []int{0}
+	return fileDescriptor_processors_base_cb303d6d7cfab358, []int{0}
 }
 func (m *PostProcessSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -91,7 +91,7 @@ func (m *Columns) Reset()         { *m = Columns{} }
 func (m *Columns) String() string { return proto.CompactTextString(m) }
 func (*Columns) ProtoMessage()    {}
 func (*Columns) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_2f9dd97fffc5def6, []int{1}
+	return fileDescriptor_processors_base_cb303d6d7cfab358, []int{1}
 }
 func (m *Columns) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -127,7 +127,7 @@ func (m *TableReaderSpan) Reset()         { *m = TableReaderSpan{} }
 func (m *TableReaderSpan) String() string { return proto.CompactTextString(m) }
 func (*TableReaderSpan) ProtoMessage()    {}
 func (*TableReaderSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_base_2f9dd97fffc5def6, []int{2}
+	return fileDescriptor_processors_base_cb303d6d7cfab358, []int{2}
 }
 func (m *TableReaderSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -874,10 +874,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_base.proto", fileDescriptor_processors_base_2f9dd97fffc5def6)
+	proto.RegisterFile("sql/execinfrapb/processors_base.proto", fileDescriptor_processors_base_cb303d6d7cfab358)
 }
 
-var fileDescriptor_processors_base_2f9dd97fffc5def6 = []byte{
+var fileDescriptor_processors_base_cb303d6d7cfab358 = []byte{
 	// 370 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xcf, 0xce, 0xd2, 0x40,
 	0x14, 0xc5, 0x3b, 0x50, 0xfe, 0x64, 0x2a, 0x42, 0x26, 0x26, 0x36, 0x0d, 0x19, 0x1b, 0x82, 0xb1,

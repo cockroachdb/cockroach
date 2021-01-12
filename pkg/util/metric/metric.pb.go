@@ -88,7 +88,7 @@ func (x *Unit) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Unit) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_metric_b503c306ceb5c7a7, []int{0}
+	return fileDescriptor_metric_8c37a0980d6f0be7, []int{0}
 }
 
 // metric.LabelPair is a proxy for io.prometheus.client.LabelPair.
@@ -106,7 +106,7 @@ func (m *LabelPair) Reset()         { *m = LabelPair{} }
 func (m *LabelPair) String() string { return proto.CompactTextString(m) }
 func (*LabelPair) ProtoMessage()    {}
 func (*LabelPair) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metric_b503c306ceb5c7a7, []int{0}
+	return fileDescriptor_metric_8c37a0980d6f0be7, []int{0}
 }
 func (m *LabelPair) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -147,7 +147,7 @@ func (m *Metadata) Reset()         { *m = Metadata{} }
 func (m *Metadata) String() string { return proto.CompactTextString(m) }
 func (*Metadata) ProtoMessage()    {}
 func (*Metadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metric_b503c306ceb5c7a7, []int{1}
+	return fileDescriptor_metric_8c37a0980d6f0be7, []int{1}
 }
 func (m *Metadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -755,9 +755,9 @@ var (
 	ErrIntOverflowMetric   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("util/metric/metric.proto", fileDescriptor_metric_b503c306ceb5c7a7) }
+func init() { proto.RegisterFile("util/metric/metric.proto", fileDescriptor_metric_8c37a0980d6f0be7) }
 
-var fileDescriptor_metric_b503c306ceb5c7a7 = []byte{
+var fileDescriptor_metric_8c37a0980d6f0be7 = []byte{
 	// 429 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x90, 0x41, 0x8b, 0xd3, 0x40,
 	0x14, 0xc7, 0x33, 0x69, 0xda, 0xdd, 0xbe, 0xea, 0x3a, 0x0e, 0x2b, 0x0c, 0x2b, 0xc4, 0xb0, 0xa0,

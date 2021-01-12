@@ -38,7 +38,7 @@ func (m *GetRequest) Reset()         { *m = GetRequest{} }
 func (m *GetRequest) String() string { return proto.CompactTextString(m) }
 func (*GetRequest) ProtoMessage()    {}
 func (*GetRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{0}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{0}
 }
 func (m *GetRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -72,7 +72,7 @@ func (m *GetResponse) Reset()         { *m = GetResponse{} }
 func (m *GetResponse) String() string { return proto.CompactTextString(m) }
 func (*GetResponse) ProtoMessage()    {}
 func (*GetResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{1}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{1}
 }
 func (m *GetResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,7 +108,7 @@ func (m *PutRequest) Reset()         { *m = PutRequest{} }
 func (m *PutRequest) String() string { return proto.CompactTextString(m) }
 func (*PutRequest) ProtoMessage()    {}
 func (*PutRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{2}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{2}
 }
 func (m *PutRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -141,7 +141,7 @@ func (m *PutResponse) Reset()         { *m = PutResponse{} }
 func (m *PutResponse) String() string { return proto.CompactTextString(m) }
 func (*PutResponse) ProtoMessage()    {}
 func (*PutResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{3}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{3}
 }
 func (m *PutResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -175,7 +175,7 @@ func (m *GlobRequest) Reset()         { *m = GlobRequest{} }
 func (m *GlobRequest) String() string { return proto.CompactTextString(m) }
 func (*GlobRequest) ProtoMessage()    {}
 func (*GlobRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{4}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{4}
 }
 func (m *GlobRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -209,7 +209,7 @@ func (m *GlobResponse) Reset()         { *m = GlobResponse{} }
 func (m *GlobResponse) String() string { return proto.CompactTextString(m) }
 func (*GlobResponse) ProtoMessage()    {}
 func (*GlobResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{5}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{5}
 }
 func (m *GlobResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -244,7 +244,7 @@ func (m *DeleteRequest) Reset()         { *m = DeleteRequest{} }
 func (m *DeleteRequest) String() string { return proto.CompactTextString(m) }
 func (*DeleteRequest) ProtoMessage()    {}
 func (*DeleteRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{6}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{6}
 }
 func (m *DeleteRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -277,7 +277,7 @@ func (m *DeleteResponse) Reset()         { *m = DeleteResponse{} }
 func (m *DeleteResponse) String() string { return proto.CompactTextString(m) }
 func (*DeleteResponse) ProtoMessage()    {}
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{7}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{7}
 }
 func (m *DeleteResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -312,7 +312,7 @@ func (m *StatRequest) Reset()         { *m = StatRequest{} }
 func (m *StatRequest) String() string { return proto.CompactTextString(m) }
 func (*StatRequest) ProtoMessage()    {}
 func (*StatRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{8}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{8}
 }
 func (m *StatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -346,7 +346,7 @@ func (m *BlobStat) Reset()         { *m = BlobStat{} }
 func (m *BlobStat) String() string { return proto.CompactTextString(m) }
 func (*BlobStat) ProtoMessage()    {}
 func (*BlobStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{9}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{9}
 }
 func (m *BlobStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -380,7 +380,7 @@ func (m *StreamChunk) Reset()         { *m = StreamChunk{} }
 func (m *StreamChunk) String() string { return proto.CompactTextString(m) }
 func (*StreamChunk) ProtoMessage()    {}
 func (*StreamChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{10}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{10}
 }
 func (m *StreamChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -413,7 +413,7 @@ func (m *StreamResponse) Reset()         { *m = StreamResponse{} }
 func (m *StreamResponse) String() string { return proto.CompactTextString(m) }
 func (*StreamResponse) ProtoMessage()    {}
 func (*StreamResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_blobs_5a88788af93dff11, []int{11}
+	return fileDescriptor_blobs_1ec98e9f736ff3b2, []int{11}
 }
 func (m *StreamResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2192,9 +2192,9 @@ var (
 	ErrIntOverflowBlobs   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_blobs_5a88788af93dff11) }
+func init() { proto.RegisterFile("blobs/blobspb/blobs.proto", fileDescriptor_blobs_1ec98e9f736ff3b2) }
 
-var fileDescriptor_blobs_5a88788af93dff11 = []byte{
+var fileDescriptor_blobs_1ec98e9f736ff3b2 = []byte{
 	// 433 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0xcf, 0x6e, 0xd3, 0x30,
 	0x18, 0xb7, 0xdb, 0xd2, 0x2d, 0x5f, 0xb7, 0x31, 0x59, 0x13, 0xca, 0x02, 0x98, 0xca, 0x42, 0x90,

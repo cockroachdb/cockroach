@@ -38,7 +38,7 @@ var EngineType_value = map[string]int32{
 }
 
 func (EngineType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_engine_147ff271f8291d07, []int{0}
+	return fileDescriptor_engine_c3997d9635965b2b, []int{0}
 }
 
 func init() {
@@ -46,10 +46,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("storage/enginepb/engine.proto", fileDescriptor_engine_147ff271f8291d07)
+	proto.RegisterFile("storage/enginepb/engine.proto", fileDescriptor_engine_c3997d9635965b2b)
 }
 
-var fileDescriptor_engine_147ff271f8291d07 = []byte{
+var fileDescriptor_engine_c3997d9635965b2b = []byte{
 	// 187 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2d, 0x2e, 0xc9, 0x2f,
 	0x4a, 0x4c, 0x4f, 0xd5, 0x4f, 0xcd, 0x4b, 0xcf, 0xcc, 0x4b, 0x2d, 0x48, 0x82, 0x32, 0xf4, 0x0a,

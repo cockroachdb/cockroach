@@ -56,7 +56,7 @@ func (m *TableStatisticProto) Reset()         { *m = TableStatisticProto{} }
 func (m *TableStatisticProto) String() string { return proto.CompactTextString(m) }
 func (*TableStatisticProto) ProtoMessage()    {}
 func (*TableStatisticProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_table_statistic_b6c721e9fa79350f, []int{0}
+	return fileDescriptor_table_statistic_eb8693ae54e3d2f4, []int{0}
 }
 func (m *TableStatisticProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -647,10 +647,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/stats/table_statistic.proto", fileDescriptor_table_statistic_b6c721e9fa79350f)
+	proto.RegisterFile("sql/stats/table_statistic.proto", fileDescriptor_table_statistic_eb8693ae54e3d2f4)
 }
 
-var fileDescriptor_table_statistic_b6c721e9fa79350f = []byte{
+var fileDescriptor_table_statistic_eb8693ae54e3d2f4 = []byte{
 	// 463 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0x3f, 0x6f, 0x9c, 0x30,
 	0x18, 0xc6, 0x71, 0x73, 0xc9, 0x1d, 0xbe, 0x5e, 0x2a, 0x91, 0x0e, 0xf4, 0xaa, 0x02, 0x8a, 0x54,

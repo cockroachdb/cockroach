@@ -152,7 +152,7 @@ func (x *ScanLockingStrength) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ScanLockingStrength) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_2399db643a0152e9, []int{0}
+	return fileDescriptor_locking_ea30425e3ab7b450, []int{0}
 }
 
 // LockingWaitPolicy controls the policy used for handling conflicting locks
@@ -200,7 +200,7 @@ func (x *ScanLockingWaitPolicy) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ScanLockingWaitPolicy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_2399db643a0152e9, []int{1}
+	return fileDescriptor_locking_ea30425e3ab7b450, []int{1}
 }
 
 func init() {
@@ -209,10 +209,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/locking.proto", fileDescriptor_locking_2399db643a0152e9)
+	proto.RegisterFile("sql/catalog/descpb/locking.proto", fileDescriptor_locking_ea30425e3ab7b450)
 }
 
-var fileDescriptor_locking_2399db643a0152e9 = []byte{
+var fileDescriptor_locking_ea30425e3ab7b450 = []byte{
 	// 248 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x28, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0xcf,

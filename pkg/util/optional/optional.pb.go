@@ -37,7 +37,7 @@ type Uint struct {
 func (m *Uint) Reset()      { *m = Uint{} }
 func (*Uint) ProtoMessage() {}
 func (*Uint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_optional_f4a12db9d9a11104, []int{0}
+	return fileDescriptor_optional_54aad6c1a90b0a1e, []int{0}
 }
 func (m *Uint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -75,7 +75,7 @@ type Duration struct {
 func (m *Duration) Reset()      { *m = Duration{} }
 func (*Duration) ProtoMessage() {}
 func (*Duration) Descriptor() ([]byte, []int) {
-	return fileDescriptor_optional_f4a12db9d9a11104, []int{1}
+	return fileDescriptor_optional_54aad6c1a90b0a1e, []int{1}
 }
 func (m *Duration) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -453,10 +453,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/optional/optional.proto", fileDescriptor_optional_f4a12db9d9a11104)
+	proto.RegisterFile("util/optional/optional.proto", fileDescriptor_optional_54aad6c1a90b0a1e)
 }
 
-var fileDescriptor_optional_f4a12db9d9a11104 = []byte{
+var fileDescriptor_optional_54aad6c1a90b0a1e = []byte{
 	// 229 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x29, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0x2f, 0x28, 0xc9, 0xcc, 0xcf, 0x4b, 0x44, 0x30, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2,

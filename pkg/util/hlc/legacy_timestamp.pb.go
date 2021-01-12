@@ -47,7 +47,7 @@ type LegacyTimestamp struct {
 func (m *LegacyTimestamp) Reset()      { *m = LegacyTimestamp{} }
 func (*LegacyTimestamp) ProtoMessage() {}
 func (*LegacyTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_legacy_timestamp_7e009b38ac9b864a, []int{0}
+	return fileDescriptor_legacy_timestamp_7c5b7692f4330421, []int{0}
 }
 func (m *LegacyTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -487,10 +487,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/hlc/legacy_timestamp.proto", fileDescriptor_legacy_timestamp_7e009b38ac9b864a)
+	proto.RegisterFile("util/hlc/legacy_timestamp.proto", fileDescriptor_legacy_timestamp_7c5b7692f4330421)
 }
 
-var fileDescriptor_legacy_timestamp_7e009b38ac9b864a = []byte{
+var fileDescriptor_legacy_timestamp_7c5b7692f4330421 = []byte{
 	// 226 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0xcf, 0x49, 0x4d, 0x4f, 0x4c, 0xae, 0x8c, 0x2f, 0xc9, 0xcc, 0x4d,

@@ -70,7 +70,7 @@ func (x *AxisUnits) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AxisUnits) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{0}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{0}
 }
 
 // DescribeAggregator works as a proxy for cockroach.ts.tspb.TimeSeriesQueryAggregator
@@ -123,7 +123,7 @@ func (x *DescribeAggregator) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescribeAggregator) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{1}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{1}
 }
 
 // DescribeDerivative works as a proxy for cockroach.ts.tspb.TimeSeriesQueryDerivative
@@ -175,7 +175,7 @@ func (x *DescribeDerivative) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DescribeDerivative) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{2}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{2}
 }
 
 // ChartMetric converts cockroach.util.metric.Metadata
@@ -200,7 +200,7 @@ func (m *ChartMetric) Reset()         { *m = ChartMetric{} }
 func (m *ChartMetric) String() string { return proto.CompactTextString(m) }
 func (*ChartMetric) ProtoMessage()    {}
 func (*ChartMetric) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{0}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{0}
 }
 func (m *ChartMetric) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -256,7 +256,7 @@ func (m *IndividualChart) Reset()         { *m = IndividualChart{} }
 func (m *IndividualChart) String() string { return proto.CompactTextString(m) }
 func (*IndividualChart) ProtoMessage()    {}
 func (*IndividualChart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{1}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{1}
 }
 func (m *IndividualChart) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +306,7 @@ func (m *ChartSection) Reset()         { *m = ChartSection{} }
 func (m *ChartSection) String() string { return proto.CompactTextString(m) }
 func (*ChartSection) ProtoMessage()    {}
 func (*ChartSection) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_38c5478e18a7ed60, []int{2}
+	return fileDescriptor_chart_catalog_cee66ed43a96ddd0, []int{2}
 }
 func (m *ChartSection) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1516,10 +1516,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ts/catalog/chart_catalog.proto", fileDescriptor_chart_catalog_38c5478e18a7ed60)
+	proto.RegisterFile("ts/catalog/chart_catalog.proto", fileDescriptor_chart_catalog_cee66ed43a96ddd0)
 }
 
-var fileDescriptor_chart_catalog_38c5478e18a7ed60 = []byte{
+var fileDescriptor_chart_catalog_cee66ed43a96ddd0 = []byte{
 	// 726 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x54, 0xc1, 0x6e, 0xda, 0x58,
 	0x14, 0xb5, 0x0d, 0x04, 0xb8, 0x64, 0x88, 0xf5, 0x14, 0x69, 0xac, 0x8c, 0xe4, 0x30, 0x48, 0x89,

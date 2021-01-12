@@ -51,7 +51,7 @@ func (x ScheduleDetails_WaitBehavior) String() string {
 	return proto.EnumName(ScheduleDetails_WaitBehavior_name, int32(x))
 }
 func (ScheduleDetails_WaitBehavior) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{0, 0}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{0, 0}
 }
 
 // ErrorHandlingBehavior describes how to handle failed job runs.
@@ -81,7 +81,7 @@ func (x ScheduleDetails_ErrorHandlingBehavior) String() string {
 	return proto.EnumName(ScheduleDetails_ErrorHandlingBehavior_name, int32(x))
 }
 func (ScheduleDetails_ErrorHandlingBehavior) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{0, 1}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{0, 1}
 }
 
 // ScheduleDetails describes how to schedule and execute the job.
@@ -96,7 +96,7 @@ func (m *ScheduleDetails) Reset()         { *m = ScheduleDetails{} }
 func (m *ScheduleDetails) String() string { return proto.CompactTextString(m) }
 func (*ScheduleDetails) ProtoMessage()    {}
 func (*ScheduleDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{0}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{0}
 }
 func (m *ScheduleDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -130,7 +130,7 @@ func (m *ExecutionArguments) Reset()         { *m = ExecutionArguments{} }
 func (m *ExecutionArguments) String() string { return proto.CompactTextString(m) }
 func (*ExecutionArguments) ProtoMessage()    {}
 func (*ExecutionArguments) Descriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{1}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{1}
 }
 func (m *ExecutionArguments) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -164,7 +164,7 @@ func (m *SqlStatementExecutionArg) Reset()         { *m = SqlStatementExecutionA
 func (m *SqlStatementExecutionArg) String() string { return proto.CompactTextString(m) }
 func (*SqlStatementExecutionArg) ProtoMessage()    {}
 func (*SqlStatementExecutionArg) Descriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{2}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{2}
 }
 func (m *SqlStatementExecutionArg) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -199,7 +199,7 @@ func (m *ScheduleState) Reset()         { *m = ScheduleState{} }
 func (m *ScheduleState) String() string { return proto.CompactTextString(m) }
 func (*ScheduleState) ProtoMessage()    {}
 func (*ScheduleState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_schedule_f9148e808af91a6b, []int{3}
+	return fileDescriptor_schedule_2c4135f09ebfe46a, []int{3}
 }
 func (m *ScheduleState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -847,10 +847,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("jobs/jobspb/schedule.proto", fileDescriptor_schedule_f9148e808af91a6b)
+	proto.RegisterFile("jobs/jobspb/schedule.proto", fileDescriptor_schedule_2c4135f09ebfe46a)
 }
 
-var fileDescriptor_schedule_f9148e808af91a6b = []byte{
+var fileDescriptor_schedule_2c4135f09ebfe46a = []byte{
 	// 404 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x90, 0x41, 0x6f, 0xd3, 0x30,
 	0x14, 0xc7, 0xe3, 0xa8, 0xea, 0xb6, 0x57, 0xd8, 0x22, 0x6b, 0x43, 0xa5, 0x42, 0x16, 0xca, 0x85,

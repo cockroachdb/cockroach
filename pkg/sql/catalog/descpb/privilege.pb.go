@@ -33,7 +33,7 @@ func (m *UserPrivileges) Reset()         { *m = UserPrivileges{} }
 func (m *UserPrivileges) String() string { return proto.CompactTextString(m) }
 func (*UserPrivileges) ProtoMessage()    {}
 func (*UserPrivileges) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_f48077236b0cbe6a, []int{0}
+	return fileDescriptor_privilege_4b33ab26af3a9290, []int{0}
 }
 func (m *UserPrivileges) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +70,7 @@ func (m *PrivilegeDescriptor) Reset()         { *m = PrivilegeDescriptor{} }
 func (m *PrivilegeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*PrivilegeDescriptor) ProtoMessage()    {}
 func (*PrivilegeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_f48077236b0cbe6a, []int{1}
+	return fileDescriptor_privilege_4b33ab26af3a9290, []int{1}
 }
 func (m *PrivilegeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -608,10 +608,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/privilege.proto", fileDescriptor_privilege_f48077236b0cbe6a)
+	proto.RegisterFile("sql/catalog/descpb/privilege.proto", fileDescriptor_privilege_4b33ab26af3a9290)
 }
 
-var fileDescriptor_privilege_f48077236b0cbe6a = []byte{
+var fileDescriptor_privilege_4b33ab26af3a9290 = []byte{
 	// 342 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2a, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0x2f,

@@ -52,7 +52,7 @@ func (x MVCCFilter) String() string {
 	return proto.EnumName(MVCCFilter_name, int32(x))
 }
 func (MVCCFilter) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{0}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{0}
 }
 
 type ScheduledBackupExecutionArgs_BackupType int32
@@ -75,7 +75,7 @@ func (x ScheduledBackupExecutionArgs_BackupType) String() string {
 	return proto.EnumName(ScheduledBackupExecutionArgs_BackupType_name, int32(x))
 }
 func (ScheduledBackupExecutionArgs_BackupType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{4, 0}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{4, 0}
 }
 
 // RowCount tracks the size and row/index entry counts.
@@ -89,7 +89,7 @@ func (m *RowCount) Reset()         { *m = RowCount{} }
 func (m *RowCount) String() string { return proto.CompactTextString(m) }
 func (*RowCount) ProtoMessage()    {}
 func (*RowCount) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{0}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{0}
 }
 func (m *RowCount) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -167,7 +167,7 @@ func (m *BackupManifest) Reset()         { *m = BackupManifest{} }
 func (m *BackupManifest) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest) ProtoMessage()    {}
 func (*BackupManifest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{1}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{1}
 }
 func (m *BackupManifest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -210,7 +210,7 @@ func (m *BackupManifest_File) Reset()         { *m = BackupManifest_File{} }
 func (m *BackupManifest_File) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest_File) ProtoMessage()    {}
 func (*BackupManifest_File) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{1, 0}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{1, 0}
 }
 func (m *BackupManifest_File) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -245,7 +245,7 @@ func (m *BackupManifest_DescriptorRevision) Reset()         { *m = BackupManifes
 func (m *BackupManifest_DescriptorRevision) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest_DescriptorRevision) ProtoMessage()    {}
 func (*BackupManifest_DescriptorRevision) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{1, 1}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{1, 1}
 }
 func (m *BackupManifest_DescriptorRevision) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -279,7 +279,7 @@ func (m *BackupManifest_Progress) Reset()         { *m = BackupManifest_Progress
 func (m *BackupManifest_Progress) String() string { return proto.CompactTextString(m) }
 func (*BackupManifest_Progress) ProtoMessage()    {}
 func (*BackupManifest_Progress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{1, 2}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{1, 2}
 }
 func (m *BackupManifest_Progress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -314,7 +314,7 @@ func (m *BackupPartitionDescriptor) Reset()         { *m = BackupPartitionDescri
 func (m *BackupPartitionDescriptor) String() string { return proto.CompactTextString(m) }
 func (*BackupPartitionDescriptor) ProtoMessage()    {}
 func (*BackupPartitionDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{2}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{2}
 }
 func (m *BackupPartitionDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -350,7 +350,7 @@ func (m *StatsTable) Reset()         { *m = StatsTable{} }
 func (m *StatsTable) String() string { return proto.CompactTextString(m) }
 func (*StatsTable) ProtoMessage()    {}
 func (*StatsTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{3}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{3}
 }
 func (m *StatsTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -387,7 +387,7 @@ func (m *ScheduledBackupExecutionArgs) Reset()         { *m = ScheduledBackupExe
 func (m *ScheduledBackupExecutionArgs) String() string { return proto.CompactTextString(m) }
 func (*ScheduledBackupExecutionArgs) ProtoMessage()    {}
 func (*ScheduledBackupExecutionArgs) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{4}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{4}
 }
 func (m *ScheduledBackupExecutionArgs) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -424,7 +424,7 @@ func (m *RestoreProgress) Reset()         { *m = RestoreProgress{} }
 func (m *RestoreProgress) String() string { return proto.CompactTextString(m) }
 func (*RestoreProgress) ProtoMessage()    {}
 func (*RestoreProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_backup_58760e41a5796fb8, []int{5}
+	return fileDescriptor_backup_6c7bca054e22c1ca, []int{5}
 }
 func (m *RestoreProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3378,9 +3378,9 @@ var (
 	ErrIntOverflowBackup   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("ccl/backupccl/backup.proto", fileDescriptor_backup_58760e41a5796fb8) }
+func init() { proto.RegisterFile("ccl/backupccl/backup.proto", fileDescriptor_backup_6c7bca054e22c1ca) }
 
-var fileDescriptor_backup_58760e41a5796fb8 = []byte{
+var fileDescriptor_backup_6c7bca054e22c1ca = []byte{
 	// 1549 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x57, 0xcd, 0x6e, 0xdb, 0xc0,
 	0x11, 0x36, 0x25, 0x59, 0x3f, 0x23, 0xff, 0xc8, 0x6b, 0x3b, 0x66, 0xd5, 0x54, 0x52, 0x14, 0x14,

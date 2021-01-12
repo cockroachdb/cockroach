@@ -32,7 +32,7 @@ func (m *EncryptionStatus) Reset()         { *m = EncryptionStatus{} }
 func (m *EncryptionStatus) String() string { return proto.CompactTextString(m) }
 func (*EncryptionStatus) ProtoMessage()    {}
 func (*EncryptionStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_stats_7873e8ad9241be3d, []int{0}
+	return fileDescriptor_stats_8a7eddef5c8c7733, []int{0}
 }
 func (m *EncryptionStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -359,10 +359,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/stats.proto", fileDescriptor_stats_7873e8ad9241be3d)
+	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/stats.proto", fileDescriptor_stats_8a7eddef5c8c7733)
 }
 
-var fileDescriptor_stats_7873e8ad9241be3d = []byte{
+var fileDescriptor_stats_8a7eddef5c8c7733 = []byte{
 	// 252 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x90, 0xb1, 0x4e, 0xc3, 0x30,
 	0x10, 0x86, 0x63, 0x06, 0x86, 0x54, 0x40, 0x55, 0x31, 0xa0, 0x0e, 0x16, 0x62, 0x62, 0xc1, 0x45,
