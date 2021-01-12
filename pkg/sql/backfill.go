@@ -537,7 +537,7 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = tabledesc.FindFKReferencedIndex(backrefTable, constraint.ForeignKey.ReferencedColumnIDs)
+					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, constraint.ForeignKey.ReferencedColumnIDs)
 					if err != nil {
 						return err
 					}
