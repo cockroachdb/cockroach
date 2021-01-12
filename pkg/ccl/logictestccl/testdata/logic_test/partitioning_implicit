@@ -1,5 +1,25 @@
 # LogicTest: local
 
+statement error  declared partition columns \(partition_by\) do not match first 1 columns in index being partitioned \(a\)
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  partition_by int,
+  a INT,
+  INDEX (a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+  )
+)
+
+statement error PARTITION ALL BY LIST/RANGE is currently experimental
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
 statement ok
 SET experimental_enable_implicit_column_partitioning = true
 
@@ -105,3 +125,80 @@ statement error cannot ALTER TABLE PARTITION BY on table which already has impli
 ALTER TABLE t PARTITION BY LIST (a) (
   PARTITION pk_implicit VALUES IN (1)
 )
+
+statement error PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION ALL BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement ok
+DROP TABLE t
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  INDEX(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+statement error cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  UNIQUE(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+
+statement ok
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  b int,
+  c int,
+  d int,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, partition_by, a, b, c, d)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  partition_by INT8 NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (partition_by ASC, pk ASC),
+  INDEX t_partition_by_a_idx (partition_by ASC, a ASC) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN ((1)),
+    PARTITION two VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_partition_by_b_key (partition_by ASC, b ASC) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN ((1)),
+    PARTITION two VALUES IN ((2))
+  ),
+  FAMILY fam_0_pk_partition_by_a_b_c_d (pk, partition_by, a, b, c, d)
+) PARTITION BY LIST (partition_by) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+)
+-- Warning: Partitioned table with no zone configurations.
