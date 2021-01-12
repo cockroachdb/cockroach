@@ -802,7 +802,7 @@ ORDER BY "timestamp", info
 ----
 1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "User": "root"}
 1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "t", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "ty", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "_ty", "User": "root"}
 
@@ -841,9 +841,9 @@ ORDER BY "timestamp", info
 ----
 1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
 1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "sc", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "t", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "v", "User": "root"}
-1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "s", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.t", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.v", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.s", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "ty", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TypeName": "_ty", "User": "root"}
 

@@ -27,6 +27,7 @@ type PartitionedQueue interface {
 	// partition at that index does not exist, a new one is created. Existing
 	// partitions may not be Enqueued to after calling
 	// CloseAllOpenWriteFileDescriptors.
+	// WARNING: Selection vectors are ignored.
 	Enqueue(ctx context.Context, partitionIdx int, batch coldata.Batch) error
 	// Dequeue removes and returns the batch from the front of the
 	// partitionIdx'th partition. If the partition is empty, or no partition at
