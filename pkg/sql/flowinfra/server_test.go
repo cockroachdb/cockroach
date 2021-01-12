@@ -108,6 +108,7 @@ func TestServer(t *testing.T) {
 	}
 	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
+	metas = ignoreTraceData(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}
