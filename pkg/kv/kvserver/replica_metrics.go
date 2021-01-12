@@ -54,7 +54,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	zone := r.mu.zone
@@ -110,7 +110,7 @@ func calcReplicaMetrics(
 
 	var leaseOwner bool
 	m.LeaseStatus = leaseStatus
-	if leaseStatus.State == kvserverpb.LeaseState_VALID {
+	if leaseStatus.IsValid() {
 		m.LeaseValid = true
 		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
 		m.LeaseType = leaseStatus.Lease.Type()
