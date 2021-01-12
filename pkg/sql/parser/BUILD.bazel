@@ -81,13 +81,13 @@ genrule(
     outs = ["sql.go"],
     cmd = """
       $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
-          $(location sql.go) $(location @com_github_cockroachdb_tools//cmd/goyacc) \
+          $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
     """,
     tools = [
         ":sql-gen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
-        "@com_github_cockroachdb_tools//cmd/goyacc",
+        "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
 )
