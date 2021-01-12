@@ -3507,8 +3507,14 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 			// an error message in this case, if necessary, so just skip the
 			// annotation and continue.
 			if typ.TupleContents()[i].Family() != types.UnknownFamily {
-				ctx.WriteString("::")
-				ctx.WriteString(typ.TupleContents()[i].SQLString())
+				nullType := typ.TupleContents()[i]
+				if ctx.HasFlags(fmtDisambiguateDatumTypes) {
+					ctx.WriteString(":::")
+					ctx.FormatTypeReference(nullType)
+				} else {
+					ctx.WriteString("::")
+					ctx.WriteString(nullType.SQLString())
+				}
 			}
 		}
 		comma = ", "

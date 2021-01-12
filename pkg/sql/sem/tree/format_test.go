@@ -343,7 +343,7 @@ func TestFormatExpr2(t *testing.T) {
 			types.MakeTuple([]*types.T{types.Int, types.String}),
 			tree.DNull, tree.NewDString("foo")),
 			tree.FmtParsable,
-			`(NULL::INT8, 'foo':::STRING)`,
+			`(NULL:::INT8, 'foo':::STRING)`,
 		},
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{types.Unknown, types.String}),
