@@ -138,15 +138,12 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/runtime-config-compatible.html#GUC-ESCAPE-STRING-WARNING
 	`escape_string_warning`: {
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
-			/*s = strings.ToLower(s)
-			parts := strings.Split(s, ",")
-			if strings.TrimSpace(parts[0]) != "iso" ||
-				(len(parts) == 2 && strings.TrimSpace(parts[1]) != "mdy") ||
-				len(parts) > 2 {
-				err := newVarValueError("DateStyle", s, "ISO", "ISO, MDY")
+			s = strings.ToLower(s)
+			if strings.TrimSpace(s) != "on" || strings.TrimSpace(s) != "off") {
+				err := newVarValueError("escape_string_warning", s, "ON", "OFF")
 				err = errors.WithDetail(err, compatErrMsg)
 				return err
-			}*/
+			}
 			return nil
 		},
 		Get:           func(evalCtx *extendedEvalContext) string { return "ON" },
