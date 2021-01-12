@@ -44,6 +44,14 @@ const PgTempSchemaName = "pg_temp"
 // when installing an extension, but must be stored as a separate schema in CRDB.
 const PgExtensionSchemaName = "pg_extension"
 
+// VirtualSchemaNames is a set of all virtual schema names.
+var VirtualSchemaNames = map[string]struct{}{
+	PgCatalogName:          {},
+	InformationSchemaName:  {},
+	CRDBInternalSchemaName: {},
+	PgExtensionSchemaName:  {},
+}
+
 // DefaultSearchPath is the search path used by virgin sessions.
 var DefaultSearchPath = MakeSearchPath(
 	[]string{UserSchemaName, PublicSchemaName},
