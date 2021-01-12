@@ -135,7 +135,7 @@ func (o *randomOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *randomOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -165,7 +165,9 @@ func (o *closestOracle) Oracle(_ *kv.Txn) Oracle {
 func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, _ *roachpb.ReplicaDescriptor, _ QueryState,
 ) (roachpb.ReplicaDescriptor, error) {
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	// We know we're serving a follower read request, so consider all non-outgoing
+	// replicas.
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.AllExtantReplicas)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -223,7 +225,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 		return *leaseholder, nil
 	}
 
-	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc)
+	replicas, err := replicaSliceOrErr(ctx, o.nodeDescs, desc, kvcoord.OnlyPotentialLeaseholders)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, err
 	}
@@ -253,9 +255,12 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 // is available in the provided NodeDescStore. If no nodes are available, a
 // RangeUnavailableError is returned.
 func replicaSliceOrErr(
-	ctx context.Context, nodeDescs kvcoord.NodeDescStore, desc *roachpb.RangeDescriptor,
+	ctx context.Context,
+	nodeDescs kvcoord.NodeDescStore,
+	desc *roachpb.RangeDescriptor,
+	filter kvcoord.ReplicaSliceFilter,
 ) (kvcoord.ReplicaSlice, error) {
-	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc, nil /* leaseholder */)
+	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc, nil, filter)
 	if err != nil {
 		return kvcoord.ReplicaSlice{}, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
 	}

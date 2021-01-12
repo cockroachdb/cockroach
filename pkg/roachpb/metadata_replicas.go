@@ -116,6 +116,10 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFullOrIncoming(rDesc) || predNonVoter(rDesc)
+}
+
+func predVoterFullOrNonVoter(rDesc ReplicaDescriptor) bool {
 	return predVoterFull(rDesc) || predNonVoter(rDesc)
 }
 
@@ -260,12 +264,13 @@ func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predNonVoter)
 }
 
-// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
-// replicas in the set. This set will not contain learners or, during an atomic
-// replication change, incoming or outgoing voters. Notably, this set must
-// encapsulate all replicas of a range for a range merge to proceed.
-func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
-	return d.FilterToDescriptors(predVoterOrNonVoter)
+// VoterFullAndNonVoterDescriptors returns the descriptors of
+// VOTER_FULL/NON_VOTER replicas in the set. This set will not contain learners
+// or, during an atomic replication change, incoming or outgoing voters.
+// Notably, this set must encapsulate all replicas of a range for a range merge
+// to proceed.
+func (d ReplicaSet) VoterFullAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterFullOrNonVoter)
 }
 
 // Filter returns a ReplicaSet corresponding to the replicas for which the
@@ -482,6 +487,9 @@ func (c ReplicaChangeType) IsRemoval() bool {
 	}
 }
 
+var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
+var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
+
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.
 //
@@ -497,7 +505,7 @@ func (c ReplicaChangeType) IsRemoval() bool {
 func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDescriptor) error {
 	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
-		return errors.Errorf(`replica %s not found in %s`, wouldbeLeaseholder, rngDesc)
+		return errReplicaNotFound
 	} else if t := repDesc.GetType(); t != VOTER_FULL {
 		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
 		// but we disallow it anyway. On the other hand, transferring to
@@ -517,7 +525,7 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDe
 		// of minProposedTS needs to be "reversible" (tricky) or we make the
 		// lease evaluation succeed, though with a lease that's "invalid" so that
 		// a new lease can be requested right after.
-		return errors.Errorf(`replica %s of type %s cannot hold lease`, repDesc, t)
+		return errReplicaCannotHoldLease
 	}
 	return nil
 }
