@@ -51,31 +51,31 @@ descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
 59             test_v1          0         ·                primary     false      false
 60             test_v2          0         ·                primary     false      false
 
-query ITITTITT colnames
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
 ----
-descriptor_id  descriptor_name  index_id  index_name       column_type  column_id  column_name  column_direction
-53             test_kv          1         primary          key          1          k            ASC
-53             test_kv          2         test_v_idx       extra        1          NULL         NULL
-53             test_kv          2         test_v_idx       key          2          v            ASC
-53             test_kv          3         test_v_idx2      extra        1          NULL         NULL
-53             test_kv          3         test_v_idx2      key          2          v            DESC
-53             test_kv          3         test_v_idx2      storing      3          NULL         NULL
-53             test_kv          4         test_v_idx3      composite    3          NULL         NULL
-53             test_kv          4         test_v_idx3      extra        1          NULL         NULL
-53             test_kv          4         test_v_idx3      key          3          w            ASC
-53             test_kv          4         test_v_idx3      storing      2          NULL         NULL
-54             test_kvr1        1         primary          key          1          k            ASC
-55             test_kvr2        1         primary          key          3          rowid        ASC
-55             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL
-55             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC
-56             test_kvr3        1         primary          key          3          rowid        ASC
-56             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL
-56             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC
-57             test_kvi1        1         primary          key          1          k            ASC
-58             test_kvi2        1         primary          key          1          k            ASC
-58             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL
-58             test_kvi2        2         test_kvi2_idx    key          2          v            ASC
+descriptor_id  descriptor_name  index_id  index_name       column_type  column_id  column_name  column_direction  implicit
+53             test_kv          1         primary          key          1          k            ASC               false
+53             test_kv          2         test_v_idx       extra        1          NULL         NULL              false
+53             test_kv          2         test_v_idx       key          2          v            ASC               false
+53             test_kv          3         test_v_idx2      extra        1          NULL         NULL              false
+53             test_kv          3         test_v_idx2      key          2          v            DESC              false
+53             test_kv          3         test_v_idx2      storing      3          NULL         NULL              false
+53             test_kv          4         test_v_idx3      composite    3          NULL         NULL              false
+53             test_kv          4         test_v_idx3      extra        1          NULL         NULL              false
+53             test_kv          4         test_v_idx3      key          3          w            ASC               false
+53             test_kv          4         test_v_idx3      storing      2          NULL         NULL              false
+54             test_kvr1        1         primary          key          1          k            ASC               false
+55             test_kvr2        1         primary          key          3          rowid        ASC               false
+55             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL              false
+55             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC               false
+56             test_kvr3        1         primary          key          3          rowid        ASC               false
+56             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL              false
+56             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC               false
+57             test_kvi1        1         primary          key          1          k            ASC               false
+58             test_kvi2        1         primary          key          1          k            ASC               false
+58             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL              false
+58             test_kvi2        2         test_kvi2_idx    key          2          v            ASC               false
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
