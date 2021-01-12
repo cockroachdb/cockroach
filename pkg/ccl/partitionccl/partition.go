@@ -153,6 +153,7 @@ func createPartitioningImpl(
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
+	numImplicitColumns int,
 	colOffset int,
 ) (descpb.PartitioningDescriptor, error) {
 	partDesc := descpb.PartitioningDescriptor{}
@@ -160,6 +161,7 @@ func createPartitioningImpl(
 		return partDesc, nil
 	}
 	partDesc.NumColumns = uint32(len(partBy.Fields))
+	partDesc.NumImplicitColumns = uint32(numImplicitColumns)
 
 	partitioningString := func() string {
 		// We don't have the fields for our parent partitions handy, but we can use
@@ -210,8 +212,14 @@ func createPartitioningImpl(
 		}
 		if l.Subpartition != nil {
 			newColOffset := colOffset + int(partDesc.NumColumns)
+			if numImplicitColumns > 0 {
+				return descpb.PartitioningDescriptor{}, unimplemented.New(
+					"PARTITION BY SUBPARTITION",
+					"implicit column partitioning on a subpartition is not yet supported",
+				)
+			}
 			subpartitioning, err := createPartitioningImpl(
-				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, newColOffset)
+				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, 0 /* implicitColumnNames */, newColOffset)
 			if err != nil {
 				return partDesc, err
 			}
@@ -252,6 +260,7 @@ func createPartitioning(
 	evalCtx *tree.EvalContext,
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
+	numImplicitColumns int,
 	partBy *tree.PartitionBy,
 ) (descpb.PartitioningDescriptor, error) {
 	org := sql.ClusterOrganization.Get(&st.SV)
@@ -260,7 +269,7 @@ func createPartitioning(
 	}
 
 	return createPartitioningImpl(
-		ctx, evalCtx, tableDesc, indexDesc, partBy, 0 /* colOffset */)
+		ctx, evalCtx, tableDesc, indexDesc, partBy, numImplicitColumns, 0 /* colOffset */)
 }
 
 // selectPartitionExprs constructs an expression for selecting all rows in the

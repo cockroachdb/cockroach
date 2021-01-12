@@ -221,9 +221,26 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionByIndex.ContainsPartitions() {
+					var numImplicitColumns int
+					var err error
+					idx, numImplicitColumns, err = detectImplicitPartitionColumns(
+						params.EvalContext(),
+						n.tableDesc,
+						idx,
+						d.PartitionByIndex.PartitionBy,
+					)
+					if err != nil {
+						return err
+					}
 					partitioning, err := CreatePartitioning(
-						params.ctx, params.p.ExecCfg().Settings,
-						params.EvalContext(), n.tableDesc, &idx, d.PartitionByIndex.PartitionBy)
+						params.ctx,
+						params.p.ExecCfg().Settings,
+						params.EvalContext(),
+						n.tableDesc,
+						&idx,
+						numImplicitColumns,
+						d.PartitionByIndex.PartitionBy,
+					)
 					if err != nil {
 						return err
 					}
@@ -743,10 +760,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if t.All {
 				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
 			}
+			if n.tableDesc.GetPrimaryIndex().Partitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER TABLE PARTITION BY",
+					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
+				)
+			}
 			partitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
-				n.tableDesc, n.tableDesc.GetPrimaryIndex(), t.PartitionBy)
+				n.tableDesc,
+				n.tableDesc.GetPrimaryIndex(),
+				0, /* numImplicitColumns */
+				t.PartitionBy,
+			)
 			if err != nil {
 				return err
 			}
