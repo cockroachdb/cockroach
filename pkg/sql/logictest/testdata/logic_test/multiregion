@@ -1,5 +1,13 @@
 # LogicTest: multiregion-9node-3region-3azs
 
+query TTTT colnames
+SHOW REGIONS
+----
+region          zones                   database_names  primary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}              {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}              {}
+us-east-1       {us-az1,us-az2,us-az3}  {}              {}
+
 query TT colnames
 SHOW REGIONS FROM CLUSTER
 ----
@@ -119,6 +127,14 @@ database              region          primary  is_region_active  zones
 multi_region_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
 multi_region_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
 multi_region_test_db  us-east-1       false    true              {us-az1,us-az2,us-az3}
+
+query TTTT colnames
+SHOW REGIONS
+----
+region          zones                   database_names                                                                                                                primary_region_of
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db,region_test_db}  {multi_region_test_explicit_primary_region_db,region_test_db}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_db}
+us-east-1       {us-az1,us-az2,us-az3}  {multi_region_test_db,multi_region_test_explicit_primary_region_db,multi_region_test_survive_zone_failure_db}                 {multi_region_test_survive_zone_failure_db}
 
 query TT
 SHOW SURVIVAL GOAL FROM DATABASE
