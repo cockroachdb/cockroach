@@ -3477,6 +3477,7 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	}
 
 	typ := d.ResolvedType()
+	tupleContents := typ.TupleContents()
 	showLabels := len(typ.TupleLabels()) > 0
 	if showLabels {
 		ctx.WriteByte('(')
@@ -3487,14 +3488,20 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	for i, v := range d.D {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
-		if parsable && (v == DNull) && len(typ.TupleContents()) > i {
+		if parsable && (v == DNull) && len(tupleContents) > i {
 			// If Tuple has types.Unknown for this slot, then we can't determine
 			// the column type to write this annotation. Somebody else will provide
 			// an error message in this case, if necessary, so just skip the
 			// annotation and continue.
-			if typ.TupleContents()[i].Family() != types.UnknownFamily {
-				ctx.WriteString("::")
-				ctx.WriteString(typ.TupleContents()[i].SQLString())
+			if tupleContents[i].Family() != types.UnknownFamily {
+				nullType := tupleContents[i]
+				if ctx.HasFlags(fmtDisambiguateDatumTypes) {
+					ctx.WriteString(":::")
+					ctx.FormatTypeReference(nullType)
+				} else {
+					ctx.WriteString("::")
+					ctx.WriteString(nullType.SQLString())
+				}
 			}
 		}
 		comma = ", "
