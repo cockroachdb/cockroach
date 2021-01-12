@@ -400,6 +400,53 @@ func BenchmarkSQL(b *testing.B) {
 	})
 }
 
+// BenchmarkTracing measures the overhead of always-on tracing. It also reports
+// the memory utilization.
+//
+// TODO(irfansharif): This benchmark is only useful while we transition between
+// the legacy trace.mode, and the "always-on" mode introduced in 21.1. We can
+// remove it in 21.2.
+func BenchmarkTracing(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	for _, dbFn := range []func(*testing.B, BenchmarkFn){
+		benchmarkCockroach,
+		benchmarkMultinodeCockroach,
+	} {
+		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
+		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
+
+		b.Run(dbName, func(b *testing.B) {
+			dbFn(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+				for _, tracingEnabled := range []bool{true, false} {
+					var tracingMode string
+					if tracingEnabled {
+						tracingMode = "background"
+					} else {
+						tracingMode = "legacy"
+					}
+					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING trace.mode = %s", tracingMode))
+					b.Run(fmt.Sprintf("tracing=%s", tracingMode[:1]), func(b *testing.B) {
+						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
+							runBenchmarkScan1,
+							runBenchmarkInsert,
+						} {
+							fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
+							fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
+							b.Run(fnName, func(b *testing.B) {
+								b.ReportAllocs()
+
+								runFn(b, db, 1 /* count */)
+							})
+						}
+					})
+				}
+			})
+		})
+	}
+}
+
 // runBenchmarkUpdate benchmarks updating count random rows in a table.
 func runBenchmarkUpdate(b *testing.B, db *sqlutils.SQLRunner, count int) {
 	defer func() {
@@ -504,6 +551,10 @@ func runBenchmarkDelete(b *testing.B, db *sqlutils.SQLRunner, rows int) {
 		db.Exec(b, buf.String())
 	}
 	b.StopTimer()
+}
+
+func runBenchmarkScan1(b *testing.B, db *sqlutils.SQLRunner, count int) {
+	runBenchmarkScan(b, db, count, 1)
 }
 
 // runBenchmarkScan benchmarks scanning a table containing count rows.

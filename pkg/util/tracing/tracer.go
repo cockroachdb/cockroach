@@ -263,7 +263,7 @@ func (t *Tracer) AlwaysTrace() bool {
 
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
 // the latter case, ctx == noCtx and the returned Context is the supplied one;
-// otherwise the returned Context reflects the returned Span.
+// otherwise the returned Context embeds the returned Span.
 func (t *Tracer) startSpanGeneric(
 	ctx context.Context, opName string, opts spanOptions,
 ) (context.Context, *Span) {

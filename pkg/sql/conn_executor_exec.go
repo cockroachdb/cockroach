@@ -639,10 +639,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+		stmtThresholdSpan.Finish()
 		return nil, nil, err
 	}
 
 	if stmtThresholdSpan != nil {
+		stmtThresholdSpan.Finish()
 		logTraceAboveThreshold(
 			ctx,
 			stmtThresholdSpan.GetRecording(),

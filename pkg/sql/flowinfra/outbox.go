@@ -217,9 +217,9 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
 		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
 	}
-	// spanFinished specifies whether we called tracing.FinishSpan on the span.
-	// Some code paths (e.g. stats collection) need to prematurely call
-	// FinishSpan to get trace data.
+	// spanFinished specifies whether we've Finish()-ed the span. Some code
+	// paths (e.g. stats collection) need to prematurely call it to get trace
+	// data.
 	spanFinished := false
 	defer func() {
 		if !spanFinished {
