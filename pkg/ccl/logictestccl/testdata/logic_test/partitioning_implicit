@@ -1,0 +1,107 @@
+# LogicTest: local
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement error found multiple definitions in partition using column "a"
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT
+) PARTITION BY LIST (a, a) (
+  PARTITION a1 VALUES IN ((1, 1))
+)
+
+statement error implicit column partitioning on a subpartition is not yet supported
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX (c) PARTITION BY LIST (a) (
+    PARTITION a1 VALUES IN (1) PARTITION BY LIST (b) (
+      PARTITION a1b1 VALUES IN ((1))
+    )
+  )
+)
+
+statement ok
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b) PARTITION BY LIST(a) (
+    PARTITION b_implicit VALUES IN (2)
+  ),
+  UNIQUE INDEX (c) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN (3)
+  ),
+  FAMILY (pk, a, b, c, d)
+) PARTITION BY LIST(a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a ASC, pk ASC),
+  INDEX t_a_b_idx (a ASC, b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_a_c_key (a ASC, c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  FAMILY fam_0_pk_a_b_c_d (pk, a, b, c, d)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE INDEX new_idx ON t(d) PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a ASC, pk ASC),
+  INDEX t_a_b_idx (a ASC, b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_a_c_key (a ASC, c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  INDEX new_idx (a ASC, d ASC) PARTITION BY LIST (a) (
+    PARTITION d_implicit VALUES IN ((1))
+  ),
+  FAMILY fam_0_pk_a_b_c_d (pk, a, b, c, d)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+ALTER INDEX new_idx PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
