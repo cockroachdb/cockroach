@@ -332,21 +332,34 @@ func (desc *wrapper) collectConstraintInfo(
 	return info, nil
 }
 
-// FindFKReferencedIndex finds the first index in the supplied referencedTable
-// that can satisfy a foreign key of the supplied column ids.
-func FindFKReferencedIndex(
+// FindFKReferencedUniqueConstraint finds the first index in the supplied
+// referencedTable that can satisfy a foreign key of the supplied column ids.
+// If no such index exists, attempts to find a unique constraint on the supplied
+// column ids. If neither an index nor unique constraint is found, returns an
+// error.
+func FindFKReferencedUniqueConstraint(
 	referencedTable catalog.TableDescriptor, referencedColIDs descpb.ColumnIDs,
-) (*descpb.IndexDescriptor, error) {
+) (descpb.UniqueConstraint, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
 	primaryIndex := referencedTable.GetPrimaryIndex()
-	if primaryIndex.IsValidReferencedIndex(referencedColIDs) {
+	if primaryIndex.IsValidReferencedUniqueConstraint(referencedColIDs) {
 		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
 	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
-		if idx.IsValidReferencedIndex(referencedColIDs) {
+		if idx.IsValidReferencedUniqueConstraint(referencedColIDs) {
 			return idx.IndexDesc(), nil
+		}
+	}
+	// As a last resort, try to find a unique constraint with matching columns.
+	uniqueWithoutIndexConstraints := referencedTable.GetUniqueWithoutIndexConstraints()
+	for i := range uniqueWithoutIndexConstraints {
+		c := &uniqueWithoutIndexConstraints[i]
+		// TODO(rytaft): We should allow out-of-order unique constraints, as long
+		// as they have the same columns.
+		if descpb.ColumnIDs(c.ColumnIDs).Equals(referencedColIDs) {
+			return c, nil
 		}
 	}
 	return nil, pgerror.Newf(

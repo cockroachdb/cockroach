@@ -379,31 +379,18 @@ func (p *planner) dropIndexByName(
 		tableDesc.OutboundFKs = tableDesc.OutboundFKs[:sliceIdx]
 	}
 
-	// Index for updating the FK slices in place when removing FKs.
-	sliceIdx := 0
-	for i := range tableDesc.InboundFKs {
-		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
-		sliceIdx++
-		fk := &tableDesc.InboundFKs[i]
-		canReplace := func(idx *descpb.IndexDescriptor) bool {
-			return idx.IsValidReferencedIndex(fk.ReferencedColumnIDs)
-		}
-		// The index being deleted could potentially be the referenced index for this fk.
-		if idx.IsValidReferencedIndex(fk.ReferencedColumnIDs) &&
-			// If we haven't found a replacement candidate for this foreign key, then
-			// we need a cascade to delete this index.
-			!indexHasReplacementCandidate(canReplace) {
-			// If we found haven't found a replacement, then we check that the drop behavior is cascade.
-			if err := p.canRemoveFKBackreference(ctx, idx.Name, fk, behavior); err != nil {
-				return err
-			}
-			sliceIdx--
-			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
-				return err
-			}
-		}
+	// If this index is used on the referencing side of any FK constraints, try
+	// to remove the references or find an alternate index that will suffice.
+	candidateConstraints := make([]descpb.UniqueConstraint, len(remainingIndexes))
+	for i := range remainingIndexes {
+		// We can't copy directly because of the interface conversion.
+		candidateConstraints[i] = remainingIndexes[i]
 	}
-	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
+	if err := p.tryRemoveFKBackReferences(
+		ctx, tableDesc, idx, behavior, candidateConstraints,
+	); err != nil {
+		return err
+	}
 
 	if len(idx.Interleave.Ancestors) > 0 {
 		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {

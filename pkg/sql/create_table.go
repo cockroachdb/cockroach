@@ -907,8 +907,8 @@ func ResolveFK(
 		}
 	}
 
-	// Ensure that there is an index on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedIndex(target, targetColIDs)
+	// Ensure that there is a unique constraint on the referenced side to use.
+	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
 		return err
 	}

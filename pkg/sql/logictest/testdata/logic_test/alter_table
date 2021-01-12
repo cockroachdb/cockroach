@@ -1418,9 +1418,19 @@ CREATE TABLE unique_without_index (
   a INT,
   b INT UNIQUE WITHOUT INDEX,
   c INT UNIQUE,
+  d INT UNIQUE WITHOUT INDEX,
+  e INT,
   UNIQUE WITHOUT INDEX (b),
   UNIQUE WITHOUT INDEX (a, b),
-  UNIQUE WITHOUT INDEX (c)
+  UNIQUE WITHOUT INDEX (c),
+  UNIQUE WITHOUT INDEX (d, e)
+)
+
+statement ok
+CREATE TABLE uwi_child (
+  d INT REFERENCES unique_without_index (d),
+  e INT,
+  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e)
 )
 
 # We don't yet support adding unique constraints without an index after a table
@@ -1444,6 +1454,8 @@ unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (
 unique_without_index  unique_b                    UNIQUE  UNIQUE WITHOUT INDEX (b)     true
 unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)     true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
 
 statement ok
@@ -1465,6 +1477,8 @@ unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (
 unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
 unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)      true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)   true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
@@ -1483,8 +1497,34 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
+
+query TTTTB
+SHOW CONSTRAINTS FROM uwi_child
+----
+uwi_child  fk_d_e                         FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
+uwi_child  fk_d_ref_unique_without_index  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+
+# Attempting to drop a column with a foreign key reference fails.
+statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
+ALTER TABLE unique_without_index DROP COLUMN d
+
+# It succeeds if we use CASCADE, and also drops the fk reference.
+statement ok
+ALTER TABLE unique_without_index DROP COLUMN d CASCADE
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)  true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)            true
+
+query TTTTB
+SHOW CONSTRAINTS FROM uwi_child
+----
 
 # TODO(rytaft): Add test cases for dropping both a valid and not-valid
 # unique constraint once supported.

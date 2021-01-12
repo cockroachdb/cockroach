@@ -157,11 +157,11 @@ func (w index) IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool {
 	return w.desc.IsValidOriginIndex(originColIDs)
 }
 
-// IsValidReferencedIndex returns whether the index can serve as a referenced
-// index for a foreign  key constraint with the provided set of
+// IsValidReferencedUniqueConstraint returns whether the index can serve as a
+// referenced index for a foreign  key constraint with the provided set of
 // referencedColumnIDs.
-func (w index) IsValidReferencedIndex(referencedColIDs descpb.ColumnIDs) bool {
-	return w.desc.IsValidReferencedIndex(referencedColIDs)
+func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool {
+	return w.desc.IsValidReferencedUniqueConstraint(referencedColIDs)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old

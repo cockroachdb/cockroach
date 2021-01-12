@@ -2249,9 +2249,13 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				if err != nil {
 					return err
 				}
-				refIdx, err := tabledesc.FindFKReferencedIndex(refTbl, fk.ReferencedColumnIDs)
+				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(refTbl, fk.ReferencedColumnIDs)
 				if err != nil {
 					return err
+				}
+				var refIdxID descpb.IndexID
+				if refIdx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
+					refIdxID = refIdx.ID
 				}
 				return addRow(
 					tableID, tableName,
@@ -2259,7 +2263,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					tree.DNull,
 					tree.NewDInt(tree.DInt(fk.ReferencedTableID)),
 					fkDep,
-					tree.NewDInt(tree.DInt(refIdx.ID)),
+					tree.NewDInt(tree.DInt(refIdxID)),
 					tree.NewDString(fk.Name),
 					tree.DNull,
 				)
