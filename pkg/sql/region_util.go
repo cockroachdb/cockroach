@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -260,4 +261,41 @@ func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
 		zoneConfigFromRegionConfigForDatabase(regionConfig),
 		"database-multiregion-set-zone-config",
 	)
+}
+
+// initializeMultiRegionDatabase initializes a multi-region database by creating
+// the multi-region enum and the database-level zone configuration.
+func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdesc.Mutable) error {
+	// If the database is not a multi-region database, there's no work to be done.
+	if !desc.IsMultiRegion() {
+		return nil
+	}
+
+	// Create the multi-region enum.
+	regionLabels := make(tree.EnumValueList, 0, len(desc.RegionConfig.Regions))
+	for _, region := range desc.RegionConfig.Regions {
+		regionLabels = append(regionLabels, tree.EnumValue(region.Name))
+	}
+	// TODO(#multiregion): See github issue:
+	// https://github.com/cockroachdb/cockroach/issues/56877.
+	if err := p.createEnumWithID(
+		p.RunParams(ctx),
+		desc.RegionConfig.RegionEnumID,
+		regionLabels,
+		desc,
+		tree.NewQualifiedTypeName(desc.Name, tree.PublicSchema, tree.RegionEnum),
+		enumTypeMultiRegion,
+	); err != nil {
+		return err
+	}
+
+	// Create the database-level zone configuration.
+	if err := p.applyZoneConfigFromDatabaseRegionConfig(
+		ctx,
+		tree.Name(desc.Name),
+		*desc.RegionConfig); err != nil {
+		return err
+	}
+
+	return nil
 }

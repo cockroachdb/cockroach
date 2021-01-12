@@ -24,6 +24,8 @@ const (
 	_ ShowTelemetryType = iota
 	// Ranges represents the SHOW RANGES command.
 	Ranges
+	// Regions represents the SHOW REGIONS command.
+	Regions
 	// RegionsFromCluster represents the SHOW REGIONS FROM CLUSTER command.
 	RegionsFromCluster
 	// RegionsFromAllDatabases represents the SHOW REGIONS FROM ALL DATABASES command.
@@ -60,6 +62,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Locality:                "locality",
 	Create:                  "create",
 	RangeForRow:             "rangeforrow",
+	Regions:                 "regions",
 	RegionsFromCluster:      "regions_from_cluster",
 	RegionsFromDatabase:     "regions_from_database",
 	RegionsFromAllDatabases: "regions_from_all_databases",
