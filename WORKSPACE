@@ -74,6 +74,11 @@ go_rules_dependencies()
 
 go_register_toolchains(go_version = "1.15.6")
 
+# NB: @bazel_skylib comes from go_rules_dependencies().
+load("@bazel_skylib//lib:versions.bzl", "versions")
+
+versions.check(minimum_bazel_version = "3.5.0")
+
 # Load gazelle dependencies.
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
