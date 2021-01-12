@@ -1445,7 +1445,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					isMutation, isWriteOnly :=
 						table.GetIndexMutationCapabilities(index.ID)
 					isReady := isMutation && isWriteOnly
-					indkey, err := colIDArrayToVector(index.ColumnIDs)
+					colIDs := index.ColumnIDs[index.ExplicitColumnStartIdx():]
+
+					indkey, err := colIDArrayToVector(colIDs)
 					if err != nil {
 						return err
 					}
@@ -1455,7 +1457,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
-					for i, columnID := range index.ColumnIDs {
+
+					for i, columnID := range colIDs {
 						col, err := table.FindColumnByID(columnID)
 						if err != nil {
 							return err
@@ -1479,7 +1482,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
 					// TODO(bram): #27763 indclass still needs to be populated but it
 					// requires pg_catalog.pg_opclass first.
-					indclass, err := makeZeroedOidVector(len(index.ColumnIDs))
+					indclass, err := makeZeroedOidVector(len(colIDs))
 					if err != nil {
 						return err
 					}
@@ -1548,15 +1551,17 @@ func indexDefFromDescriptor(
 	index *descpb.IndexDescriptor,
 	tableLookup tableLookupFn,
 ) (string, error) {
+	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
+
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
 		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
 		Unique:   index.Unique,
-		Columns:  make(tree.IndexElemList, len(index.ColumnNames)),
+		Columns:  make(tree.IndexElemList, len(colNames)),
 		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
 		Inverted: index.Type == descpb.IndexDescriptor_INVERTED,
 	}
-	for i, name := range index.ColumnNames {
+	for i, name := range colNames {
 		elem := tree.IndexElem{
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
@@ -1583,7 +1588,7 @@ func indexDefFromDescriptor(
 		for _, ancestor := range intl.Ancestors {
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
 		}
-		fields := index.ColumnNames[:sharedPrefixLen]
+		fields := colNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
 			Parent: tree.MakeTableName(tree.Name(parentDb.GetName()),
 				tree.Name(parentTable.GetName())),

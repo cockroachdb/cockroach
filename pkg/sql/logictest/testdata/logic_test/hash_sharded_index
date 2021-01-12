@@ -46,6 +46,25 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                  FAMILY "primary" (crdb_internal_a_shard_10, a)
 )
 
+query TTT colnames
+SELECT
+  tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'sharded_primary'
+ORDER BY 1, 2, 3
+----
+tablename        indexname  indexdef
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC)
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 'sharded_primary' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name  column_name               implicit
+primary     a                         false
+primary     crdb_internal_a_shard_10  true
+
 statement ok
 INSERT INTO sharded_primary values (1), (2), (3)
 
