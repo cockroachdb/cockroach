@@ -547,7 +547,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		))
 	}
 	outScope.expr = b.factory.ConstructSemiJoin(
-		outScope.expr, mutationInput, on, &memo.JoinPrivate{},
+		outScope.expr, mutationInput, on, memo.EmptyJoinPrivate,
 	)
 	return outScope
 }
@@ -855,7 +855,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 	// inner join is equivalent.
 	// Note that this is very similar to the UPDATE ... FROM syntax.
 	outScope.expr = f.ConstructInnerJoin(
-		outScope.expr, mutationInput, on, &memo.JoinPrivate{},
+		outScope.expr, mutationInput, on, memo.EmptyJoinPrivate,
 	)
 	// Append the columns from the right-hand side to the scope.
 	for _, col := range outCols {
