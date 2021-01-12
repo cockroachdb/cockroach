@@ -1483,7 +1483,7 @@ func (m *RaftHeartbeat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -1806,7 +1806,7 @@ func (m *RaftMessageRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -1887,7 +1887,7 @@ func (m *RaftMessageRequestBatch) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -1970,7 +1970,7 @@ func (m *RaftMessageResponseUnion) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -2129,7 +2129,7 @@ func (m *RaftMessageResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -2292,7 +2292,7 @@ func (m *SnapshotRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -2518,7 +2518,7 @@ func (m *SnapshotRequest_Header) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -2616,7 +2616,7 @@ func (m *SnapshotResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {
@@ -2726,7 +2726,7 @@ func (m *ConfChangeContext) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRaft
 			}
 			if (iNdEx + skippy) > l {

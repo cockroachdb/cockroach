@@ -593,7 +593,7 @@ func (m *PostProcessSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBase
 			}
 			if (iNdEx + skippy) > l {
@@ -716,7 +716,7 @@ func (m *Columns) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBase
 			}
 			if (iNdEx + skippy) > l {
@@ -796,7 +796,7 @@ func (m *TableReaderSpan) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBase
 			}
 			if (iNdEx + skippy) > l {

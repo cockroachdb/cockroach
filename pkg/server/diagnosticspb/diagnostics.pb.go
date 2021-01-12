@@ -1662,7 +1662,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthDiagnostics
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1780,7 +1780,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthDiagnostics
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1887,7 +1887,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthDiagnostics
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1999,7 +1999,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthDiagnostics
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2106,7 +2106,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthDiagnostics
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2183,7 +2183,7 @@ func (m *DiagnosticReport) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -2507,7 +2507,7 @@ func (m *NodeInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -2728,7 +2728,7 @@ func (m *StoreInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -2816,7 +2816,7 @@ func (m *SQLInstanceInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3045,7 +3045,7 @@ func (m *Environment) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3221,7 +3221,7 @@ func (m *CPUInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3429,7 +3429,7 @@ func (m *HardwareInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3566,7 +3566,7 @@ func (m *OSInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3654,7 +3654,7 @@ func (m *MemInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {
@@ -3762,7 +3762,7 @@ func (m *TopologyInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthDiagnostics
 			}
 			if (iNdEx + skippy) > l {

@@ -3652,7 +3652,7 @@ func (m *ValuesCoreSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -3957,7 +3957,7 @@ func (m *TableReaderSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -4164,7 +4164,7 @@ func (m *IndexSkipTableReaderSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -4502,7 +4502,7 @@ func (m *JoinReaderSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -4601,7 +4601,7 @@ func (m *SorterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -4846,7 +4846,7 @@ func (m *DistinctSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -4896,7 +4896,7 @@ func (m *OrdinalitySpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -5161,7 +5161,7 @@ func (m *ZigzagJoinerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -5380,7 +5380,7 @@ func (m *MergeJoinerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -5685,7 +5685,7 @@ func (m *HashJoinerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -5883,7 +5883,7 @@ func (m *InvertedJoinerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -5982,7 +5982,7 @@ func (m *InvertedFiltererSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -6228,7 +6228,7 @@ func (m *AggregatorSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -6441,7 +6441,7 @@ func (m *AggregatorSpec_Aggregation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -6648,7 +6648,7 @@ func (m *InterleavedReaderJoinerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -6838,7 +6838,7 @@ func (m *InterleavedReaderJoinerSpec_Table) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7023,7 +7023,7 @@ func (m *ProjectSetSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7177,7 +7177,7 @@ func (m *WindowerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7267,7 +7267,7 @@ func (m *WindowerSpec_Func) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7385,7 +7385,7 @@ func (m *WindowerSpec_Frame) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7534,7 +7534,7 @@ func (m *WindowerSpec_Frame_Bound) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7647,7 +7647,7 @@ func (m *WindowerSpec_Frame_Bounds) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {
@@ -7901,7 +7901,7 @@ func (m *WindowerSpec_WindowFn) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsSql
 			}
 			if (iNdEx + skippy) > l {

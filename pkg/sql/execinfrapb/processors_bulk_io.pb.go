@@ -1706,7 +1706,7 @@ func (m *BackfillerSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1805,7 +1805,7 @@ func (m *JobProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -1994,7 +1994,7 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2147,7 +2147,7 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2301,7 +2301,7 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2347,7 +2347,7 @@ func (m *ReadImportDataSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2459,7 +2459,7 @@ func (m *ReadImportDataSpec_ImportTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -2701,7 +2701,7 @@ func (m *BackupDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2911,7 +2911,7 @@ func (m *BackupDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -2957,7 +2957,7 @@ func (m *BackupDataSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3087,7 +3087,7 @@ func (m *RestoreSpanEntry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3312,7 +3312,7 @@ func (m *RestoreDataSpec) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthProcessorsBulkIo
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -3329,7 +3329,7 @@ func (m *RestoreDataSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3441,7 +3441,7 @@ func (m *SplitAndScatterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3522,7 +3522,7 @@ func (m *SplitAndScatterSpec_RestoreEntryChunk) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3727,7 +3727,7 @@ func (m *CSVWriterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
@@ -3807,7 +3807,7 @@ func (m *BulkRowWriterSpec) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProcessorsBulkIo
 			}
 			if (iNdEx + skippy) > l {
