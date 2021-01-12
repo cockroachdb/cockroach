@@ -1088,6 +1088,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_enable_implicit_column_partitioning`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_implicit_column_partitioning`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("experimental_enable_implicit_column_partitioning", s)
+			if err != nil {
+				return err
+			}
+			m.SetImplicitColumnPartitioningEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ImplicitColumnPartitioningEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(implicitColumnPartitioningEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_hash_sharded_indexes`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

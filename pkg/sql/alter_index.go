@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -71,10 +72,21 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
+			if n.tableDesc.GetPrimaryIndex().Partitioning.NumImplicitColumns > 0 {
+				return unimplemented.New(
+					"ALTER INDEX PARTITION BY",
+					"cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning",
+				)
+			}
 			partitioning, err := CreatePartitioning(
-				params.ctx, params.extendedEvalCtx.Settings,
+				params.ctx,
+				params.extendedEvalCtx.Settings,
 				params.EvalContext(),
-				n.tableDesc, n.indexDesc, t.PartitionBy)
+				n.tableDesc,
+				n.indexDesc,
+				0, /* numImplicitColumns */
+				t.PartitionBy,
+			)
 			if err != nil {
 				return err
 			}
