@@ -1237,7 +1237,7 @@ func (m *GetRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1318,7 +1318,7 @@ func (m *GetResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1428,7 +1428,7 @@ func (m *PutRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1478,7 +1478,7 @@ func (m *PutResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1557,7 +1557,7 @@ func (m *GlobRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1636,7 +1636,7 @@ func (m *GlobResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1715,7 +1715,7 @@ func (m *DeleteRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1765,7 +1765,7 @@ func (m *DeleteResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1844,7 +1844,7 @@ func (m *StatRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1913,7 +1913,7 @@ func (m *BlobStat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -1994,7 +1994,7 @@ func (m *StreamChunk) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {
@@ -2044,7 +2044,7 @@ func (m *StreamResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBlobs
 			}
 			if (iNdEx + skippy) > l {

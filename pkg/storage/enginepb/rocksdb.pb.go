@@ -639,7 +639,7 @@ func (m *SSTUserProperties) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRocksdb
 			}
 			if (iNdEx + skippy) > l {
@@ -749,7 +749,7 @@ func (m *SSTUserPropertiesCollection) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRocksdb
 			}
 			if (iNdEx + skippy) > l {
@@ -892,7 +892,7 @@ func (m *HistogramData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRocksdb
 			}
 			if (iNdEx + skippy) > l {
@@ -1032,7 +1032,7 @@ func (m *TickersAndHistograms) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthRocksdb
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1155,7 +1155,7 @@ func (m *TickersAndHistograms) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthRocksdb
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1172,7 +1172,7 @@ func (m *TickersAndHistograms) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthRocksdb
 			}
 			if (iNdEx + skippy) > l {

@@ -540,7 +540,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLog
 			}
 			if (iNdEx + skippy) > l {
@@ -813,7 +813,7 @@ func (m *RangeLogEvent_Info) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthLog
 			}
 			if (iNdEx + skippy) > l {
