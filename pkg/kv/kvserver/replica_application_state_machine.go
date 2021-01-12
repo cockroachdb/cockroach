@@ -262,7 +262,7 @@ func checkForcedErr(
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
 		nlhe := newNotLeaseHolderError(
-			replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
+			*replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
 					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))

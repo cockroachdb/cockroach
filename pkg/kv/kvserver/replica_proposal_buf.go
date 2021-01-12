@@ -729,7 +729,7 @@ func (rp *replicaProposer) rejectProposalWithRedirectLocked(
 	rangeDesc := r.descRLocked()
 	storeID := r.store.StoreID()
 	leaderRep, _ /* ok */ := rangeDesc.GetReplicaDescriptorByID(redirectTo)
-	speculativeLease := &roachpb.Lease{
+	speculativeLease := roachpb.Lease{
 		Replica: leaderRep,
 	}
 	log.VEventf(ctx, 2, "redirecting proposal to node %s; request: %s", leaderRep.NodeID, prop.Request)
