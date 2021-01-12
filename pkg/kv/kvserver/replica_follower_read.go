@@ -61,7 +61,14 @@ func (r *Replica) canServeFollowerRead(
 	if err != nil {
 		return roachpb.NewError(err)
 	}
-	if typ := repDesc.GetType(); typ != roachpb.VOTER_FULL {
+	// TODO DURING REVIEW: Is there a reason we shouldn't be allowing
+	// VOTER_INCOMINGs here? Since we use LEARNERs to upreplicate, VOTER_INCOMINGs
+	// should already be fairly up-to-date with the range and should be able to
+	// serve follower reads. Note that even before this patch, the DistSender was
+	// already routing follower read requests to VOTER_INCOMING replicas but
+	// they'd get rejected here. I assume that wasn't intentional?
+	typ := repDesc.GetType()
+	if typ != roachpb.VOTER_FULL && typ != roachpb.NON_VOTER {
 		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
 		return pErr
 	}

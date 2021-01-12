@@ -79,6 +79,13 @@ func TestNewReplicaSlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
 
+	// Check that non-voters are included.
+	typNonVoter := roachpb.NON_VOTER
+	rd.InternalReplicas[2].Type = &typNonVoter
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+
 	// Check that, if the leasehoder points to a learner, that learner is
 	// included.
 	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
