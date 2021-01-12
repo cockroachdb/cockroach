@@ -119,6 +119,25 @@ indexrelid  indrelid  indkey  indclass  indoption  indcollation
 450499966   55        2 3 4   0 0 0     2 2 2      0 0 0
 450499967   55        5       0         2          0
 
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name     column_name  implicit
+new_idx        a            true
+new_idx        d            false
+primary        a            true
+primary        pk           false
+t_a_b_idx      a            true
+t_a_b_idx      b            false
+t_a_c_key      a            true
+t_a_c_key      c            false
+t_d_a_b_c_idx  a            false
+t_d_a_b_c_idx  b            false
+t_d_a_b_c_idx  c            false
+t_d_a_b_c_idx  d            true
+
 query TTT colnames
 SELECT
   tablename, indexname, indexdef

@@ -2097,7 +2097,8 @@ CREATE TABLE crdb_internal.index_columns (
   column_type      STRING NOT NULL,
   column_id        INT NOT NULL,
   column_name      STRING,
-  column_direction STRING
+  column_direction STRING,
+  implicit         BOOL
 )
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -2146,16 +2147,20 @@ CREATE TABLE crdb_internal.index_columns (
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							key, tree.NewDInt(tree.DInt(c)), colName, colDir,
+							tree.MakeDBool(i < idx.ExplicitColumnStartIdx()),
 						); err != nil {
 							return err
 						}
 					}
+
+					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
 					for _, c := range idx.StoreColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
+							notImplicit,
 						); err != nil {
 							return err
 						}
@@ -2166,6 +2171,7 @@ CREATE TABLE crdb_internal.index_columns (
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
+							notImplicit,
 						); err != nil {
 							return err
 						}
@@ -2176,6 +2182,7 @@ CREATE TABLE crdb_internal.index_columns (
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
+							notImplicit,
 						); err != nil {
 							return err
 						}
