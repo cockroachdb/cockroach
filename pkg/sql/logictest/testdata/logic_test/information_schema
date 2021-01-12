@@ -1644,6 +1644,54 @@ time_prec   rowid        64                 2                        0          
 statement ok
 DROP TABLE time_prec
 
+statement ok
+CREATE TABLE t1 (
+  id INT8 NULL,
+  name STRING NULL,
+  class STRING NULL,
+  FAMILY "primary" (id, name, rowid)
+)
+
+query TTTTT colnames
+SELECT table_catalog, table_schema, table_name, column_name, column_comment
+FROM information_schema.columns
+WHERE table_name = 't1'
+----
+table_catalog  table_schema  table_name  column_name    column_comment
+test           public        t1          id             ·
+test           public        t1          name           ·
+test           public        t1          class          ·
+test           public        t1          rowid          ·
+
+statement ok
+COMMENT ON COLUMN public.t1.id IS 'identification'
+
+statement ok
+COMMENT ON COLUMN public.t1.name IS 'character'
+
+query TTTTT colnames
+SELECT table_catalog, table_schema, table_name, column_name, column_comment
+FROM information_schema.columns
+WHERE table_name = 't1'
+----
+table_catalog  table_schema  table_name  column_name    column_comment
+test           public        t1          id             'identification'
+test           public        t1          name           'character'
+test           public        t1          class          ·
+test           public        t1          rowid          ·
+
+query TTTTT colnames
+SELECT table_catalog, table_schema, table_name, column_name, column_comment
+FROM information_schema.columns
+WHERE table_name = 't1' AND column_comment != ''
+----
+table_catalog  table_schema  table_name  column_name    column_comment
+test           public        t1          id             'identification'
+test           public        t1          name           'character'
+
+statement ok
+DROP TABLE t1
+
 ## information_schema.key_column_usage
 ## information_schema.referential_constraints
 
@@ -1674,6 +1722,25 @@ CREATE TABLE constraint_column.t3 (
 )
 
 statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE constraint_column.t4 (
+    a INT UNIQUE WITHOUT INDEX,
+    b FLOAT,
+    c STRING,
+    UNIQUE WITHOUT INDEX (b, c)
+)
+
+statement ok
+CREATE TABLE constraint_column.t5 (
+    a INT REFERENCES constraint_column.t4(a) ON DELETE CASCADE,
+    b FLOAT,
+    c STRING,
+    CONSTRAINT fk3 FOREIGN KEY (b, c) REFERENCES constraint_column.t4(b, c) MATCH FULL ON UPDATE RESTRICT
+)
+
+statement ok
 SET DATABASE = constraint_column
 
 query TTTTTTTII colnames
@@ -1688,6 +1755,12 @@ constraint_column   public             fk               constraint_column  publi
 constraint_column   public             primary          constraint_column  public        t2          t1_id        1                 NULL
 constraint_column   public             fk2              constraint_column  public        t3          a            1                 1
 constraint_column   public             fk2              constraint_column  public        t3          b            2                 2
+constraint_column   public             unique_a         constraint_column  public        t4          a            1                 NULL
+constraint_column   public             unique_b_c       constraint_column  public        t4          b            1                 NULL
+constraint_column   public             unique_b_c       constraint_column  public        t4          c            2                 NULL
+constraint_column   public             fk3              constraint_column  public        t5          b            1                 1
+constraint_column   public             fk3              constraint_column  public        t5          c            2                 2
+constraint_column   public             fk_a_ref_t4      constraint_column  public        t5          a            1                 1
 
 query TTTTTTTTTTT colnames
 SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'public' ORDER BY TABLE_NAME, CONSTRAINT_NAME
@@ -1695,6 +1768,8 @@ SELECT * FROM information_schema.referential_constraints WHERE constraint_schema
 constraint_catalog  constraint_schema  constraint_name  unique_constraint_catalog  unique_constraint_schema  unique_constraint_name  match_option  update_rule  delete_rule  table_name  referenced_table_name
 constraint_column   public             fk               constraint_column          public                    t1_a_key                NONE          NO ACTION    RESTRICT     t2          t1
 constraint_column   public             fk2              constraint_column          public                    index_key               NONE          CASCADE      NO ACTION    t3          t1
+constraint_column   public             fk3              constraint_column          public                    unique_b_c              FULL          RESTRICT     NO ACTION    t5          t4
+constraint_column   public             fk_a_ref_t4      constraint_column          public                    unique_a                NONE          NO ACTION    CASCADE      t5          t4
 
 statement ok
 DROP DATABASE constraint_column CASCADE
@@ -3330,7 +3405,7 @@ experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_multi_column_inverted_indexes     off
 experimental_enable_temp_tables                       off
-experimental_enable_unique_without_index_constraints  off
+experimental_enable_unique_without_index_constraints  on
 experimental_enable_virtual_columns                   off
 extra_float_digits                                    0
 force_savepoint_restart                               off
@@ -3374,3 +3449,47 @@ transaction_priority                                  normal
 transaction_read_only                                 off
 transaction_status                                    NoTxn
 vectorize_row_count_threshold                         0
+
+# information_schema can be used with the anonymous database.
+# It should show information across all databases.
+subtest anonymous_database
+
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b BOOLEAN);
+CREATE DATABASE other_db;
+SET DATABASE = other_db;
+CREATE TABLE t2(c STRING PRIMARY KEY, d DECIMAL);
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM "".information_schema.columns
+WHERE (table_catalog = 'test' OR table_catalog = 'other_db')
+AND table_schema = 'public'
+AND (table_name = 't1' OR table_name = 't2')
+ORDER BY 3,4
+----
+table_catalog  table_schema  table_name  column_name  ordinal_position
+test           public        t1          a            1
+test           public        t1          b            2
+other_db       public        t2          c            1
+other_db       public        t2          d            2
+
+statement ok
+SET DATABASE = "";
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM "".information_schema.columns
+WHERE (table_catalog = 'test' OR table_catalog = 'other_db')
+AND table_schema = 'public'
+AND (table_name = 't1' OR table_name = 't2')
+ORDER BY 3,4
+----
+table_catalog  table_schema  table_name  column_name  ordinal_position
+test           public        t1          a            1
+test           public        t1          b            2
+other_db       public        t2          c            1
+other_db       public        t2          d            2
+
+statement ok
+SET DATABASE = test

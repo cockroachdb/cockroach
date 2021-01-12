@@ -943,21 +943,21 @@ ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 inner-join (lookup geo_table)
  ├── columns: k:1 geom:2 k:5 geom:6
- ├── key columns: [5] = [5]
+ ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=9801]
- ├── cost: 112484.05
+ ├── cost: 112684.05
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
  ├── inner-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(5)=999.956829, null(5)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
  │    ├── cost: 41784.03
- │    ├── key: (1,5)
+ │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
@@ -978,28 +978,31 @@ ON ST_Intersects(geo_table2.geom, geo_table.geom)
 distribution: local
 vectorized: true
 ·
-• lookup join (inner)
+• project
 │ columns: (k, geom, k, geom)
 │ estimated row count: 9,801 (missing stats)
-│ table: geo_table@primary
-│ equality: (k) = (k)
-│ equality cols are key
-│ pred: st_intersects(geom, geom)
 │
-└── • project
-    │ columns: (k, geom, k)
-    │ estimated row count: 10,000 (missing stats)
+└── • lookup join (inner)
+    │ columns: (k, geom, k, k, geom)
+    │ table: geo_table@primary
+    │ equality: (k) = (k)
+    │ equality cols are key
+    │ pred: st_intersects(geom, geom)
     │
-    └── • inverted join (inner)
-        │ columns: (k, geom, k, geom_inverted_key)
-        │ table: geo_table@geom_index
-        │ inverted expr: st_intersects(geom, geom_inverted_key)
+    └── • project
+        │ columns: (k, geom, k)
+        │ estimated row count: 10,000 (missing stats)
         │
-        └── • scan
-              columns: (k, geom)
-              estimated row count: 1,000 (missing stats)
-              table: geo_table2@primary
-              spans: FULL SCAN
+        └── • inverted join (inner)
+            │ columns: (k, geom, k, geom_inverted_key)
+            │ table: geo_table@geom_index
+            │ inverted expr: st_intersects(geom, geom_inverted_key)
+            │
+            └── • scan
+                  columns: (k, geom)
+                  estimated row count: 1,000 (missing stats)
+                  table: geo_table2@primary
+                  spans: FULL SCAN
 
 # Do not use the index when using a _ prefixed builtin.
 query T
@@ -1029,22 +1032,22 @@ ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 left-join (lookup geo_table)
  ├── columns: k:1 geom:2 k:5 geom:6
- ├── key columns: [5] = [5]
+ ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=10000]
- ├── cost: 112684.05
+ ├── cost: 112884.05
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
  ├── left-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
  │    ├── cost: 41984.03
- │    ├── key: (1,5)
- │    ├── fd: (1)-->(2), (5)-->(11)
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
@@ -1063,7 +1066,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 semi-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [5] = [5]
+ ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=10]
@@ -1072,13 +1075,13 @@ semi-join (lookup geo_table)
  ├── fd: (1)-->(2)
  ├── prune: (1)
  ├── inner-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
  │    ├── cost: 41984.03
- │    ├── key: (1,5)
- │    ├── fd: (1)-->(2), (5)-->(11)
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
@@ -1098,7 +1101,7 @@ WHERE ST_Intersects(geo_table2.geom, geo_table.geom))
 ----
 anti-join (lookup geo_table)
  ├── columns: k:1 geom:2
- ├── key columns: [5] = [5]
+ ├── key columns: [11] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=990]
@@ -1107,13 +1110,13 @@ anti-join (lookup geo_table)
  ├── fd: (1)-->(2)
  ├── prune: (1)
  ├── left-join (inverted geo_table@geom_index)
- │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
+ │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11 continuation:16
  │    ├── inverted-expr
- │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0]
+ │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
  │    ├── cost: 41984.03
- │    ├── key: (1,5)
- │    ├── fd: (1)-->(2), (5)-->(11)
+ │    ├── key: (1,11)
+ │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]

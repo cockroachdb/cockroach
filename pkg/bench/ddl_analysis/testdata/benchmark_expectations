@@ -65,6 +65,6 @@ min	max	benchmark
 46	46	Truncate/truncate_2_column_2_rows
 8	8	VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1	1	VirtualTableQueries/select_crdb_internal.tables_with_1_fk
-3	3	SystemDatabaseQueries/select_system.users_without_schema_name
-6	6	SystemDatabaseQueries/select_system.users_with_empty_database_name
-2	2	SystemDatabaseQueries/select_system.users_with_schema_name
+2	2	SystemDatabaseQueries/select_system.users_without_schema_name
+1	1	SystemDatabaseQueries/select_system.users_with_empty_database_name
+1	1	SystemDatabaseQueries/select_system.users_with_schema_name

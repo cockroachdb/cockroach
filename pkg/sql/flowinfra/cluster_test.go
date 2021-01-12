@@ -71,7 +71,7 @@ func TestClusterFlow(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPublicNonPrimaryIndexes()[0].ID))
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -271,6 +271,7 @@ func TestClusterFlow(t *testing.T) {
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
+	metas = ignoreTraceData(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -321,6 +322,18 @@ func ignoreMetricsMeta(metas []execinfrapb.ProducerMetadata) []execinfrapb.Produ
 	res := make([]execinfrapb.ProducerMetadata, 0)
 	for _, m := range metas {
 		if m.Metrics == nil {
+			res = append(res, m)
+		}
+	}
+	return res
+}
+
+// ignoreTraceData takes a slice of metadata and returns the entries
+// excluding the ones with trace data.
+func ignoreTraceData(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+	res := make([]execinfrapb.ProducerMetadata, 0)
+	for _, m := range metas {
+		if m.TraceData == nil {
 			res = append(res, m)
 		}
 	}
@@ -545,6 +558,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	metas = ignoreMisplannedRanges(metas)
 	metas = ignoreLeafTxnState(metas)
 	metas = ignoreMetricsMeta(metas)
+	metas = ignoreTraceData(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -852,6 +866,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						metas = ignoreMisplannedRanges(metas)
 						metas = ignoreLeafTxnState(metas)
 						metas = ignoreMetricsMeta(metas)
+						metas = ignoreTraceData(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

@@ -250,6 +250,14 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	false,
 )
 
+// InterleavedTablesEnabled is the setting that controls whether it's possible
+// to create interleaved indexes or tables.
+var InterleavedTablesEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.interleaved_tables.enabled",
+	"allows creation of interleaved tables or indexes",
+	false,
+)
+
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the
@@ -473,6 +481,12 @@ var (
 		Help:        "Latency of SQL transactions",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaSQLTxnsOpen = metric.Metadata{
+		Name:        "sql.txns.open",
+		Help:        "Number of currently open SQL transactions",
+		Measurement: "Open SQL Transactions",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Below are the metadata for the statement started counters.

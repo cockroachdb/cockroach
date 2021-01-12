@@ -80,7 +80,7 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn  *enginepb.TxnMeta // always non-nil
+	txn  *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
 	key  roachpb.Key       // the key of the conflict
 	held bool              // is the conflict a held lock?
 
@@ -93,7 +93,6 @@ type waitingState struct {
 // TODO(sbhola):
 // - metrics about lockTable state to export to observability debug pages:
 //   number of locks, number of waiting requests, wait time?, ...
-// - test cases where guard.readTS != guard.writeTS.
 
 // The btree for a particular SpanScope.
 type treeMu struct {
@@ -270,10 +269,9 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn     *enginepb.TxnMeta
-	spans   *spanset.SpanSet
-	readTS  hlc.Timestamp
-	writeTS hlc.Timestamp
+	txn   *enginepb.TxnMeta
+	ts    hlc.Timestamp
+	spans *spanset.SpanSet
 
 	// Snapshots of the trees for which this request has some spans. Note that
 	// the lockStates in these snapshots may have been removed from
@@ -871,7 +869,7 @@ func (l *lockState) Format(buf *strings.Builder, finalizedTxnCache *txnCache) {
 	txn, ts := l.getLockHolder()
 	if txn == nil {
 		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(buf, l.reservation.txn, l.reservation.writeTS)
+		writeResInfo(buf, l.reservation.txn, l.reservation.ts)
 	} else {
 		writeHolderInfo(buf, txn, ts)
 	}
@@ -970,7 +968,12 @@ func (l *lockState) informActiveWaiters() {
 		g := qg.guard
 		var state waitingState
 		if g.isSameTxnAsReservation(waitForState) {
-			state = waitingState{kind: waitSelf}
+			state = waitingState{
+				kind: waitSelf,
+				key:  waitForState.key,
+				txn:  waitForState.txn,
+				held: waitForState.held, // false
+			}
 		} else {
 			state = waitForState
 			state.guardAccess = spanset.SpanReadWrite
@@ -1211,7 +1214,7 @@ func (l *lockState) tryActiveWait(
 			return false, false
 		}
 		// Locked by some other txn.
-		if g.readTS.Less(lockHolderTS) {
+		if g.ts.Less(lockHolderTS) {
 			return false, false
 		}
 		g.mu.Lock()
@@ -1341,7 +1344,12 @@ func (l *lockState) tryActiveWait(
 	g.key = l.key
 	g.mu.startWait = true
 	if g.isSameTxnAsReservation(waitForState) {
-		g.mu.state = waitingState{kind: waitSelf}
+		g.mu.state = waitingState{
+			kind: waitSelf,
+			key:  waitForState.key,
+			txn:  waitForState.txn,
+			held: waitForState.held, // false
+		}
 	} else {
 		state := waitForState
 		state.guardAccess = sa
@@ -1534,7 +1542,7 @@ func (l *lockState) discoveredLock(
 		// the lock table. If not then it shouldn't have discovered the lock in
 		// the first place. Bugs here would cause infinite loops where the same
 		// lock is repeatedly re-discovered.
-		if g.readTS.Less(ts) {
+		if g.ts.Less(ts) {
 			return errors.AssertionFailedf("discovered non-conflicting lock")
 		}
 
@@ -1764,7 +1772,7 @@ func (l *lockState) increasedLockTs(newTs hlc.Timestamp) {
 		g := e.Value.(*lockTableGuardImpl)
 		curr := e
 		e = e.Next()
-		if g.readTS.Less(newTs) {
+		if g.ts.Less(newTs) {
 			// Stop waiting.
 			l.waitingReaders.Remove(curr)
 			if g == l.distinguishedWaiter {
@@ -1971,9 +1979,8 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 		g.lt = t
 		g.txn = req.txnMeta()
+		g.ts = req.Timestamp
 		g.spans = req.LockSpans
-		g.readTS = req.readConflictTimestamp()
-		g.writeTS = req.writeConflictTimestamp()
 		g.sa = spanset.NumSpanAccess - 1
 		g.index = -1
 	} else {

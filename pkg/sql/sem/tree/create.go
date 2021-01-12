@@ -25,10 +25,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
@@ -1107,6 +1109,12 @@ func (node *PartitionByIndex) ContainsPartitions() bool {
 	return node != nil && node.PartitionBy != nil
 }
 
+// ContainsPartitioningClause determines if the partition by table contains
+// a partitioning clause, including PARTITION BY NOTHING.
+func (node *PartitionByIndex) ContainsPartitioningClause() bool {
+	return node != nil
+}
+
 // PartitionByTable represents a PARTITION [ALL] BY definition within
 // a CREATE/ALTER TABLE statement.
 type PartitionByTable struct {
@@ -1134,6 +1142,12 @@ func (node *PartitionByTable) Format(ctx *FmtCtx) {
 // a partition clause which is not PARTITION BY NOTHING.
 func (node *PartitionByTable) ContainsPartitions() bool {
 	return node != nil && node.PartitionBy != nil
+}
+
+// ContainsPartitioningClause determines if the partition by table contains
+// a partitioning clause, including PARTITION BY NOTHING.
+func (node *PartitionByTable) ContainsPartitioningClause() bool {
+	return node != nil
 }
 
 // PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
@@ -1784,6 +1798,12 @@ type RefreshMaterializedView struct {
 	Name              *UnresolvedObjectName
 	Concurrently      bool
 	RefreshDataOption RefreshDataOption
+}
+
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *RefreshMaterializedView) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaRefreshMaterializedView
 }
 
 // RefreshDataOption corresponds to arguments for the REFRESH MATERIALIZED VIEW

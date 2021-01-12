@@ -226,6 +226,25 @@ CREATE TABLE constraint_db.t3 (
 statement ok
 CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1
 
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE constraint_db.t4 (
+    a INT UNIQUE WITHOUT INDEX,
+    b FLOAT,
+    c STRING,
+    CONSTRAINT uwi_b_c UNIQUE WITHOUT INDEX (b, c)
+)
+
+statement ok
+CREATE TABLE constraint_db.t5 (
+    a INT REFERENCES constraint_db.t4(a) ON DELETE CASCADE,
+    b FLOAT,
+    c STRING,
+    CONSTRAINT fk_b_c FOREIGN KEY (b, c) REFERENCES constraint_db.t4(b, c) MATCH FULL ON UPDATE RESTRICT
+)
+
 ## pg_catalog.pg_namespace
 
 query OTOT colnames
@@ -289,6 +308,8 @@ schemaname  tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers
 public      t1         root        NULL        true        false     false        false
 public      t2         root        NULL        true        false     false        false
 public      t3         root        NULL        true        false     false        false
+public      t4         root        NULL        true        false     false        false
+public      t5         root        NULL        true        false     false        false
 
 query TB colnames
 SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
@@ -346,8 +367,12 @@ oid         relname       relnamespace  reltype  reloftype  relowner    relam   
 969972501   primary       2332901747    0        0          1546506610  2631952481  0            0
 969972502   t3_a_b_idx    2332901747    0        0          1546506610  2631952481  0            0
 58          v1            2332901747    0        0          1546506610  0           0            0
-59          mv1           2332901747    0        0          1546506610  0           0            0
+59          t4            2332901747    0        0          1546506610  2631952481  0            0
 3660126519  primary       2332901747    0        0          1546506610  2631952481  0            0
+60          t5            2332901747    0        0          1546506610  2631952481  0            0
+1229708768  primary       2332901747    0        0          1546506610  2631952481  0            0
+61          mv1           2332901747    0        0          1546506610  0           0            0
+4179599057  primary       2332901747    0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -367,6 +392,10 @@ t3            NULL      NULL       0              0              true         fa
 primary       NULL      NULL       0              0              false        false        p
 t3_a_b_idx    NULL      NULL       0              0              false        false        p
 v1            NULL      NULL       0              0              false        false        p
+t4            NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
+t5            NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
 mv1           NULL      NULL       0              0              true         false        p
 primary       NULL      NULL       0              0              false        false        p
 
@@ -388,6 +417,10 @@ t3            false      r        4         2          false       true
 primary       false      i        1         0          false       false
 t3_a_b_idx    false      i        2         0          false       false
 v1            false      v        4         0          false       false
+t4            false      r        4         0          false       true
+primary       false      i        1         0          false       false
+t5            false      r        4         0          false       true
+primary       false      i        1         0          false       false
 mv1           false      m        2         0          false       true
 primary       false      i        1         0          false       false
 
@@ -409,6 +442,10 @@ t3            false        false           false           0             NULL   
 primary       false        false           false           0             NULL    NULL
 t3_a_b_idx    false        false           false           0             NULL    NULL
 v1            false        false           false           0             NULL    NULL
+t4            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
+t5            false        false           false           0             NULL    NULL
+primary       false        false           false           0             NULL    NULL
 mv1           false        false           false           0             NULL    NULL
 primary       false        false           false           0             NULL    NULL
 
@@ -453,9 +490,19 @@ attrelid    relname       attname   atttypid  attstattarget  attlen  attnum  att
 58          v1            a         20        0              8       2       0         -1
 58          v1            b         20        0              8       3       0         -1
 58          v1            c         20        0              8       4       0         -1
-59          mv1           ?column?  20        0              8       1       0         -1
-59          mv1           rowid     20        0              8       2       0         -1
-3660126519  primary       rowid     20        0              8       2       0         -1
+59          t4            a         20        0              8       1       0         -1
+59          t4            b         701       0              8       2       0         -1
+59          t4            c         25        0              -1      3       0         -1
+59          t4            rowid     20        0              8       4       0         -1
+3660126519  primary       rowid     20        0              8       4       0         -1
+60          t5            a         20        0              8       1       0         -1
+60          t5            b         701       0              8       2       0         -1
+60          t5            c         25        0              -1      3       0         -1
+60          t5            rowid     20        0              8       4       0         -1
+1229708768  primary       rowid     20        0              8       4       0         -1
+61          mv1           ?column?  20        0              8       1       0         -1
+61          mv1           rowid     20        0              8       2       0         -1
+4179599057  primary       rowid     20        0              8       2       0         -1
 
 query TTIBTTBBTT colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -496,6 +543,16 @@ v1            p         -1         NULL      NULL        NULL      false       f
 v1            a         -1         NULL      NULL        NULL      false       false      ·            ·
 v1            b         -1         NULL      NULL        NULL      false       false      ·            ·
 v1            c         -1         NULL      NULL        NULL      false       false      ·            ·
+t4            a         -1         NULL      NULL        NULL      false       false      ·            ·
+t4            b         -1         NULL      NULL        NULL      false       false      ·            ·
+t4            c         -1         NULL      NULL        NULL      false       false      ·            ·
+t4            rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+t5            a         -1         NULL      NULL        NULL      false       false      ·            ·
+t5            b         -1         NULL      NULL        NULL      false       false      ·            ·
+t5            c         -1         NULL      NULL        NULL      false       false      ·            ·
+t5            rowid     -1         NULL      NULL        NULL      true        true       ·            ·
+primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1           ?column?  -1         NULL      NULL        NULL      false       false      ·            ·
 mv1           rowid     -1         NULL      NULL        NULL      true        true       ·            ·
 primary       rowid     -1         NULL      NULL        NULL      true        true       ·            ·
@@ -539,6 +596,16 @@ v1            p         false         true        0            NULL    NULL     
 v1            a         false         true        0            NULL    NULL        NULL
 v1            b         false         true        0            NULL    NULL        NULL
 v1            c         false         true        0            NULL    NULL        NULL
+t4            a         false         true        0            NULL    NULL        NULL
+t4            b         false         true        0            NULL    NULL        NULL
+t4            c         false         true        0            NULL    NULL        NULL
+t4            rowid     false         true        0            NULL    NULL        NULL
+primary       rowid     false         true        0            NULL    NULL        NULL
+t5            a         false         true        0            NULL    NULL        NULL
+t5            b         false         true        0            NULL    NULL        NULL
+t5            c         false         true        0            NULL    NULL        NULL
+t5            rowid     false         true        0            NULL    NULL        NULL
+primary       rowid     false         true        0            NULL    NULL        NULL
 mv1           ?column?  false         true        0            NULL    NULL        NULL
 mv1           rowid     false         true        0            NULL    NULL        NULL
 primary       rowid     false         true        0            NULL    NULL        NULL
@@ -598,10 +665,12 @@ WHERE n.nspname = 'public'
 ----
 relname  attname  typname   attcollation  collname
 t1       d        varchar   3403232968    default
-t1       h        _bpchar   3403232968    default
-t1       i        _varchar  3403232968    default
-t1       j        char      3403232968    default
+t5       c        text      3403232968    default
+t4       c        text      3403232968    default
 t3       c        text      3403232968    default
+t1       j        char      3403232968    default
+t1       i        _varchar  3403232968    default
+t1       h        _bpchar   3403232968    default
 t1       k        varchar   999873346     sv
 
 
@@ -629,7 +698,9 @@ oid         relname  adrelid  adnum  adbin           adsrc           pg_get_expr
 841178406   t2       56       2      unique_rowid()  unique_rowid()  unique_rowid()
 2186255414  t3       57       3      'FOO'::STRING   'FOO'::STRING   'FOO'::STRING
 2186255409  t3       57       4      unique_rowid()  unique_rowid()  unique_rowid()
-581442133   mv1      59       2      unique_rowid()  unique_rowid()  unique_rowid()
+581442131   t4       59       4      unique_rowid()  unique_rowid()  unique_rowid()
+4050804964  t5       60       4      unique_rowid()  unique_rowid()  unique_rowid()
+1100914675  mv1      61       2      unique_rowid()  unique_rowid()  unique_rowid()
 
 ## pg_catalog.pg_indexes
 
@@ -646,7 +717,9 @@ crdb_oid    schemaname  tablename  indexname     tablespace
 2315049511  public      t2         t2_t1_id_idx  NULL
 969972501   public      t3         primary       NULL
 969972502   public      t3         t3_a_b_idx    NULL
-3660126519  public      mv1        primary       NULL
+3660126519  public      t4         primary       NULL
+1229708768  public      t5         primary       NULL
+4179599057  public      mv1        primary       NULL
 
 query OTTT colnames
 SELECT crdb_oid, tablename, indexname, indexdef
@@ -661,7 +734,9 @@ crdb_oid    tablename  indexname     indexdef
 2315049511  t2         t2_t1_id_idx  CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
 969972501   t3         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t3 USING btree (rowid ASC)
 969972502   t3         t3_a_b_idx    CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
-3660126519  mv1        primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
+3660126519  t4         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t4 USING btree (rowid ASC)
+1229708768  t5         primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.t5 USING btree (rowid ASC)
+4179599057  mv1        primary       CREATE UNIQUE INDEX "primary" ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -845,14 +920,18 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-oid         conname    connamespace  contype  condef
-370295511   check_c    2332901747    c        CHECK ((c != ''::STRING))
-2143281868  fk         2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
-2792001267  check_b    2332901747    c        CHECK ((b > 11))
-3572320190  primary    2332901747    p        PRIMARY KEY (p ASC)
-4089604113  fk         2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
-4243354484  t1_a_key   2332901747    u        UNIQUE (a ASC)
-4243354485  index_key  2332901747    u        UNIQUE (b ASC, c ASC)
+oid         conname      connamespace  contype  condef
+370295511   check_c      2332901747    c        CHECK ((c != ''::STRING))
+644272476   unique_a     2332901747    u        UNIQUE WITHOUT INDEX (a)
+2112301379  uwi_b_c      2332901747    u        UNIQUE WITHOUT INDEX (b, c)
+2143281868  fk           2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
+2355671820  fk_b_c       2332901747    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
+2792001267  check_b      2332901747    c        CHECK ((b > 11))
+3572320190  primary      2332901747    p        PRIMARY KEY (p ASC)
+3911002394  fk_a_ref_t4  2332901747    f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
+4089604113  fk           2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
+4243354484  t1_a_key     2332901747    u        UNIQUE (a ASC)
+4243354485  index_key    2332901747    u        UNIQUE (b ASC, c ASC)
 
 query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
@@ -861,14 +940,18 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-conname    contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
-check_c    c        false          false        true          57        0         0
-fk         f        false          false        true          57        0         450499961
-check_b    c        false          false        true          57        0         0
-primary    p        false          false        true          55        0         450499963
-fk         f        false          false        true          56        0         450499960
-t1_a_key   u        false          false        true          55        0         450499960
-index_key  u        false          false        true          55        0         450499961
+conname      contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
+check_c      c        false          false        true          57        0         0
+unique_a     u        false          false        true          59        0         0
+uwi_b_c      u        false          false        true          59        0         0
+fk           f        false          false        true          57        0         450499961
+fk_b_c       f        false          false        true          60        0         0
+check_b      c        false          false        true          57        0         0
+primary      p        false          false        true          55        0         450499963
+fk_a_ref_t4  f        false          false        true          60        0         0
+fk           f        false          false        true          56        0         450499960
+t1_a_key     u        false          false        true          55        0         450499960
+index_key    u        false          false        true          55        0         450499961
 
 query T
 SELECT conname
@@ -887,6 +970,8 @@ ORDER BY con.oid
 ----
 conname    confrelid  confupdtype  confdeltype  confmatchtype
 check_c    0          NULL         NULL         NULL
+unique_a   0          NULL         NULL         NULL
+uwi_b_c    0          NULL         NULL         NULL
 check_b    0          NULL         NULL         NULL
 primary    0          NULL         NULL         NULL
 t1_a_key   0          NULL         NULL         NULL
@@ -899,9 +984,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
-conname  confrelid  confupdtype  confdeltype  confmatchtype
-fk       55         a            a            s
-fk       55         a            a            s
+conname      confrelid  confupdtype  confdeltype  confmatchtype
+fk           55         a            a            s
+fk_b_c       59         r            a            f
+fk_a_ref_t4  59         a            c            s
+fk           55         a            a            s
 
 query TBIBT colnames
 SELECT conname, conislocal, coninhcount, connoinherit, conkey
@@ -910,14 +997,18 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-conname    conislocal  coninhcount  connoinherit  conkey
-check_c    true        0            true          {3}
-fk         true        0            true          {1,2}
-check_b    true        0            true          {2}
-primary    true        0            true          {1}
-fk         true        0            true          {1}
-t1_a_key   true        0            true          {2}
-index_key  true        0            true          {3,4}
+conname      conislocal  coninhcount  connoinherit  conkey
+check_c      true        0            true          {3}
+unique_a     true        0            true          NULL
+uwi_b_c      true        0            true          NULL
+fk           true        0            true          {1,2}
+fk_b_c       true        0            true          {2,3}
+check_b      true        0            true          {2}
+primary      true        0            true          {1}
+fk_a_ref_t4  true        0            true          {1}
+fk           true        0            true          {1}
+t1_a_key     true        0            true          {2}
+index_key    true        0            true          {3,4}
 
 query TTTTTTTTT colnames
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, pg_get_constraintdef(con.oid) as condef
@@ -928,6 +1019,8 @@ ORDER BY con.oid
 ----
 conname    confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
 check_c    NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
+unique_a   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
+uwi_b_c    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
 check_b    NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
 primary    NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
 t1_a_key   NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
@@ -940,9 +1033,11 @@ JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype = 'f'
 ORDER BY con.oid
 ----
-conname  confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
-fk       {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
-fk       {2}      NULL       NULL       NULL       NULL       NULL    NULL
+conname      confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin  consrc
+fk           {3,4}    NULL       NULL       NULL       NULL       NULL    NULL
+fk_b_c       {2,3}    NULL       NULL       NULL       NULL       NULL    NULL
+fk_a_ref_t4  {1}      NULL       NULL       NULL       NULL       NULL    NULL
+fk           {2}      NULL       NULL       NULL       NULL       NULL    NULL
 
 ## pg_catalog.pg_depend
 
@@ -957,6 +1052,8 @@ classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
 4294967214  58          0         4294967214  55         3            n
 4294967214  58          0         4294967214  55         4            n
 4294967212  2143281868  0         4294967214  450499961  0            n
+4294967212  2355671820  0         4294967214  0          0            n
+4294967212  3911002394  0         4294967214  0          0            n
 4294967212  4089604113  0         4294967214  450499960  0            n
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
@@ -1045,10 +1142,10 @@ query OORT colnames
 SELECT * FROM pg_enum
 ----
 oid         enumtypid  enumsortorder  enumlabel
-1932239604  100068     0              v1
-1932239412  100068     1              v2
-1965794714  100070     0              v3
-1965794650  100070     1              v4
+1965794714  100070     0              v1
+1965794650  100070     1              v2
+1730908048  100072     0              v3
+1730907984  100072     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1133,10 +1230,10 @@ oid     typname        typnamespace  typowner    typlen  typbyval  typtype
 90003   _geography     1307062959    NULL        -1      false     b
 90004   box2d          1307062959    NULL        32      true      b
 90005   _box2d         1307062959    NULL        -1      false     b
-100068  newtype1       2332901747    1546506610  -1      false     e
-100069  _newtype1      2332901747    1546506610  -1      false     b
-100070  newtype2       2332901747    1546506610  -1      false     e
-100071  _newtype2      2332901747    1546506610  -1      false     b
+100070  newtype1       2332901747    1546506610  -1      false     e
+100071  _newtype1      2332901747    1546506610  -1      false     b
+100072  newtype2       2332901747    1546506610  -1      false     e
+100073  _newtype2      2332901747    1546506610  -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1219,10 +1316,10 @@ oid     typname        typcategory  typispreferred  typisdefined  typdelim  typr
 90003   _geography     A            false           true          ,         0         90002    0
 90004   box2d          U            false           true          ,         0         0        90005
 90005   _box2d         A            false           true          ,         0         90004    0
-100068  newtype1       E            false           true          ,         0         0        100069
-100069  _newtype1      A            false           true          ,         0         100068   0
-100070  newtype2       E            false           true          ,         0         0        100071
-100071  _newtype2      A            false           true          ,         0         100070   0
+100070  newtype1       E            false           true          ,         0         0        100071
+100071  _newtype1      A            false           true          ,         0         100070   0
+100072  newtype2       E            false           true          ,         0         0        100073
+100073  _newtype2      A            false           true          ,         0         100072   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -1305,10 +1402,10 @@ oid     typname        typinput        typoutput        typreceive        typsen
 90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
 90004   box2d          box2d_in        box2d_out        box2d_recv        box2d_send        0         0          0
 90005   _box2d         array_in        array_out        array_recv        array_send        0         0          0
-100068  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100069  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
-100070  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100071  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
+100070  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100071  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
+100072  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100073  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -1391,10 +1488,10 @@ oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 90003   _geography     NULL      NULL        false       0            -1
 90004   box2d          NULL      NULL        false       0            -1
 90005   _box2d         NULL      NULL        false       0            -1
-100068  newtype1       NULL      NULL        false       0            -1
-100069  _newtype1      NULL      NULL        false       0            -1
-100070  newtype2       NULL      NULL        false       0            -1
-100071  _newtype2      NULL      NULL        false       0            -1
+100070  newtype1       NULL      NULL        false       0            -1
+100071  _newtype1      NULL      NULL        false       0            -1
+100072  newtype2       NULL      NULL        false       0            -1
+100073  _newtype2      NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -1477,10 +1574,10 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90003   _geography     0         0             NULL           NULL        NULL
 90004   box2d          0         0             NULL           NULL        NULL
 90005   _box2d         0         0             NULL           NULL        NULL
-100068  newtype1       0         0             NULL           NULL        NULL
-100069  _newtype1      0         0             NULL           NULL        NULL
-100070  newtype2       0         0             NULL           NULL        NULL
-100071  _newtype2      0         0             NULL           NULL        NULL
+100070  newtype1       0         0             NULL           NULL        NULL
+100071  _newtype1      0         0             NULL           NULL        NULL
+100072  newtype2       0         0             NULL           NULL        NULL
+100073  _newtype2      0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -1509,7 +1606,7 @@ FROM pg_catalog.pg_type
 WHERE typname = 'newtype1'
 ----
 oid     typname   typnamespace  typowner    typlen  typbyval  typtype
-100068  newtype1  2332901747    1546506610  -1      false     e
+100070  newtype1  2332901747    1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -1897,7 +1994,7 @@ experimental_enable_hash_sharded_indexes              off                 NULL  
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_multi_column_inverted_indexes     off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
-experimental_enable_unique_without_index_constraints  off                 NULL      NULL        NULL        string
+experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
 experimental_enable_virtual_columns                   off                 NULL      NULL        NULL        string
 extra_float_digits                                    0                   NULL      NULL        NULL        string
 force_savepoint_restart                               off                 NULL      NULL        NULL        string
@@ -1973,7 +2070,7 @@ experimental_enable_hash_sharded_indexes              off                 NULL  
 experimental_enable_implicit_column_partitioning      off                 NULL  user     NULL      off                 off
 experimental_enable_multi_column_inverted_indexes     off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                       off                 NULL  user     NULL      off                 off
-experimental_enable_unique_without_index_constraints  off                 NULL  user     NULL      off                 off
+experimental_enable_unique_without_index_constraints  on                  NULL  user     NULL      off                 off
 experimental_enable_virtual_columns                   off                 NULL  user     NULL      off                 off
 extra_float_digits                                    0                   NULL  user     NULL      0                   2
 force_savepoint_restart                               off                 NULL  user     NULL      off                 off
@@ -2108,8 +2205,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-73        20        1         1             9223372036854775807  1       1         false
-74        20        6         2             10                   5       1         false
+75        20        1         1             9223372036854775807  1       1         false
+76        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2156,7 +2253,9 @@ WHERE n.nspname = 'public'
 841178406   t2   unique_rowid()
 2186255414  t3   'FOO'::STRING
 2186255409  t3   unique_rowid()
-581442133   mv1  unique_rowid()
+581442131   t4   unique_rowid()
+4050804964  t5   unique_rowid()
+1100914675  mv1  unique_rowid()
 
 # Verify that a set database shows tables from that database for a non-root
 # user, when that user has permissions.
@@ -2172,7 +2271,7 @@ SET DATABASE = 'constraint_db'
 query I
 SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
-4
+6
 
 user root
 
@@ -2565,7 +2664,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-617444901  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+1136917443  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2678,13 +2777,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-98  98  jt
+100  100  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-1   NULL  NULL
-98  98    jt
+1    NULL  NULL
+100  100   jt
 
 subtest regression_49207
 statement ok
@@ -2919,3 +3018,35 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'pg_catalog' AND (t.oid = 1042 OR t.oid = 1014)
 ----
 0
+
+# pg_catalog is explicitly disallowed for use with the anonymous database.
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM "".pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = "";
+
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = test;
+
+subtest 58945
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true
+
+statement ok
+CREATE TABLE t_hash (
+  a INT,
+  INDEX t_hash_a_idx (a DESC) USING HASH WITH BUCKET_COUNT=8
+);
+
+query T colnames
+SELECT indoption
+FROM pg_catalog.pg_index
+WHERE indexrelid IN (SELECT crdb_oid FROM pg_catalog.pg_indexes WHERE indexname = 't_hash_a_idx')
+----
+indoption
+1

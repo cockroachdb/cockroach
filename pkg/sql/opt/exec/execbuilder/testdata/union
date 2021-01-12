@@ -134,9 +134,9 @@ vectorized: true
 • render
 │ columns: ("?column?", "?column?", "?column?")
 │ estimated row count: 1
-│ render 0: "?column?"
-│ render 1: "?column?"
-│ render 2: "?column?"
+│ render ?column?: "?column?"
+│ render ?column?: "?column?"
+│ render ?column?: "?column?"
 │
 └── • except
     │ columns: ("?column?", "?column?", "?column?")
@@ -168,7 +168,7 @@ vectorized: true
 • render
 │ columns: ("?column?")
 │ estimated row count: 1,333 (missing stats)
-│ render 0: 1
+│ render ?column?: 1
 │
 └── • union all
     │ columns: ()

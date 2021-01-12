@@ -92,7 +92,7 @@ func runTestFlow(
 	for {
 		row, meta := rowBuf.Next()
 		if meta != nil {
-			if meta.LeafTxnFinalState != nil || meta.Metrics != nil {
+			if meta.LeafTxnFinalState != nil || meta.Metrics != nil || meta.TraceData != nil {
 				continue
 			}
 			t.Fatalf("unexpected metadata: %v", meta)

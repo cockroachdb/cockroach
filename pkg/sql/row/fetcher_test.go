@@ -49,22 +49,13 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 	fetcherArgs := make([]FetcherTableArgs, len(entries))
 
 	for i, entry := range entries {
-		var index *descpb.IndexDescriptor
-		var isSecondaryIndex bool
-
-		if entry.indexIdx > 0 {
-			index = &entry.tableDesc.GetPublicNonPrimaryIndexes()[entry.indexIdx-1]
-			isSecondaryIndex = true
-		} else {
-			index = entry.tableDesc.GetPrimaryIndex()
-		}
-
+		index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
 		fetcherArgs[i] = FetcherTableArgs{
 			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
-			Index:            index,
+			Index:            index.IndexDesc(),
 			ColIdxMap:        entry.tableDesc.ColumnIdxMap(),
-			IsSecondaryIndex: isSecondaryIndex,
+			IsSecondaryIndex: !index.Primary(),
 			Cols:             entry.tableDesc.Columns,
 			ValNeededForCol:  entry.valNeededForCol,
 		}
@@ -182,6 +173,7 @@ func TestNextRowSingle(t *testing.T) {
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -203,7 +195,7 @@ func TestNextRowSingle(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
+						tableDesc.Name, tableDesc.GetPrimaryIndex().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -302,6 +294,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -323,7 +316,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPrimaryIndex().Name,
+						tableDesc.Name, tableDesc.GetPrimaryIndex().GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -412,6 +405,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		false, /*limitBatches*/
 		0,     /*limitHint*/
 		false, /*traceKV*/
+		false, /*forceProductionKVBatchSize*/
 	)
 	assert.Error(t, err)
 	assert.Equal(t, pgerror.GetPGCode(err), pgcode.OutOfMemory)
@@ -499,6 +493,7 @@ INDEX(c)
 		// batch that ends between rows.
 		1,     /*limitHint*/
 		false, /*traceKV*/
+		false, /*forceProductionKVBatchSize*/
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -655,10 +650,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			if err := rf.StartScan(
 				context.Background(),
 				kv.NewTxn(ctx, kvDB, 0),
-				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPublicNonPrimaryIndexes()[0].ID)},
+				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -677,10 +673,10 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.GetPublicNonPrimaryIndexes()[0].ID {
+				if desc.GetID() != tableDesc.ID || index.ID != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
-						tableDesc.Name, tableDesc.GetPublicNonPrimaryIndexes()[0].Name,
+						tableDesc.Name, tableDesc.PublicNonPrimaryIndexes()[0].GetName(),
 						desc.GetName(), index.Name,
 					)
 				}
@@ -987,12 +983,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
 				tableDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, entry.tableName)
-				var indexID descpb.IndexID
-				if entry.indexIdx == 0 {
-					indexID = tableDesc.GetPrimaryIndexID()
-				} else {
-					indexID = tableDesc.GetPublicNonPrimaryIndexes()[entry.indexIdx-1].ID
-				}
+				indexID := tableDesc.ActiveIndexes()[entry.indexIdx].GetID()
 				idLookups[idLookupKey(tableDesc.ID, indexID)] = entry
 
 				// We take every entry's index span (primary or
@@ -1021,6 +1012,7 @@ func TestNextRowInterleaved(t *testing.T) {
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}

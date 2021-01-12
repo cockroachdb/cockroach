@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterTableSetSchemaNode struct {
@@ -92,11 +94,18 @@ func (p *planner) AlterTableSetSchema(
 }
 
 func (n *alterTableSetSchemaNode) startExec(params runParams) error {
+	telemetry.Inc(n.n.TelemetryCounter())
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.tableDesc
 	schemaID := tableDesc.GetParentSchemaID()
 	databaseID := tableDesc.GetParentID()
+
+	kind := tree.GetTableType(tableDesc.IsSequence(), tableDesc.IsView(), tableDesc.GetIsMaterializedView())
+	oldName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
 
 	desiredSchemaID, err := p.prepareSetSchema(ctx, tableDesc, n.newSchema)
 	if err != nil {
@@ -138,7 +147,25 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 	newTbKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings,
 		databaseID, desiredSchemaID, tableDesc.Name)
 
-	return p.writeNameKey(ctx, newTbKey, tableDesc.ID)
+	if err := p.writeNameKey(ctx, newTbKey, tableDesc.ID); err != nil {
+		return err
+	}
+
+	newName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx,
+		desiredSchemaID,
+		&eventpb.SetSchema{
+			CommonEventDetails:    eventpb.CommonEventDetails{},
+			CommonSQLEventDetails: eventpb.CommonSQLEventDetails{},
+			DescriptorName:        oldName.FQString(),
+			NewDescriptorName:     newName.FQString(),
+			DescriptorType:        kind,
+		},
+	)
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

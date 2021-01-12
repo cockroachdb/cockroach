@@ -262,6 +262,9 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			if s.partitioner == nil {
 				s.partitioner = s.partitionerCreator()
 			}
+			// Note that b will never have a selection vector set because the
+			// allSpooler performs a deselection when buffering up the tuples,
+			// and the in-memory sorter has allSpooler as its input.
 			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
 				colexecerror.InternalError(err)
 			}

@@ -35,6 +35,7 @@ CREATE TABLE information_schema.columns (
 	TABLE_SCHEMA             STRING NOT NULL,
 	TABLE_NAME               STRING NOT NULL,
 	COLUMN_NAME              STRING NOT NULL,
+  COLUMN_COMMENT           STRING,
 	ORDINAL_POSITION         INT NOT NULL,
 	COLUMN_DEFAULT           STRING,
 	IS_NULLABLE              STRING NOT NULL,

@@ -1,0 +1,50 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "diagnosticspb_proto",
+    srcs = ["diagnostics.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build:build_proto",
+        "//pkg/config/zonepb:zonepb_proto",
+        "//pkg/roachpb:roachpb_proto",
+        "//pkg/sql/catalog/descpb:descpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
+)
+
+go_proto_library(
+    name = "diagnosticspb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb",
+    proto = ":diagnosticspb_proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",  # keep
+        "//pkg/build",
+        "//pkg/config/zonepb",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+go_library(
+    name = "diagnosticspb",
+    embed = [":diagnosticspb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "diagnosticspb_test",
+    srcs = ["dep_test.go"],
+    embed = [":diagnosticspb"],
+    deps = [
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+    ],
+)

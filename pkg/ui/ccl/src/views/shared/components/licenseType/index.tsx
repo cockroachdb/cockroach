@@ -21,7 +21,6 @@ class CCLLicenseType extends React.Component<{}, {}> {
 /**
  * LicenseType is an indicator showing the current build license.
  */
-// tslint:disable-next-line:variable-name
 const LicenseType = swapByLicense(OSSLicenseType, CCLLicenseType);
 
 export default LicenseType;

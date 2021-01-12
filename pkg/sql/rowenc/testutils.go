@@ -1000,8 +1000,8 @@ func TestingMakePrimaryIndexKey(
 	desc catalog.TableDescriptor, vals ...interface{},
 ) (roachpb.Key, error) {
 	index := desc.GetPrimaryIndex()
-	if len(vals) > len(index.ColumnIDs) {
-		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
+	if len(vals) > index.NumColumns() {
+		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), index.NumColumns())
 	}
 	datums := make([]tree.Datum, len(vals))
 	for i, v := range vals {
@@ -1018,7 +1018,7 @@ func TestingMakePrimaryIndexKey(
 			return nil, errors.Errorf("unexpected value type %T", v)
 		}
 		// Check that the value type matches.
-		colID := index.ColumnIDs[i]
+		colID := index.GetColumnID(i)
 		var done bool
 		if err := desc.ForeachPublicColumn(func(c *descpb.ColumnDescriptor) error {
 			if !done && c.ID == colID {
@@ -1037,11 +1037,11 @@ func TestingMakePrimaryIndexKey(
 	// MakeIndexKeyPrefix.
 	var colIDToRowIndex catalog.TableColMap
 	for i := range vals {
-		colIDToRowIndex.Set(index.ColumnIDs[i], i)
+		colIDToRowIndex.Set(index.GetColumnID(i), i)
 	}
 
-	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.ID)
-	key, _, err := EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+	keyPrefix := MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, index.GetID())
+	key, _, err := EncodeIndexKey(desc, index.IndexDesc(), colIDToRowIndex, datums, keyPrefix)
 	if err != nil {
 		return nil, err
 	}

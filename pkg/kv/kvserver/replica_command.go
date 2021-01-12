@@ -2031,10 +2031,9 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Newf(
-			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s",
-			snapType, recipient, snap.State.Desc)
+		err := errors.Newf("attempting to send snapshot that does not contain the recipient as a replica; "+
+			"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc)
+		return errors.Mark(err, errMarkSnapshotError)
 	}
 
 	sender, err := r.GetReplicaDescriptor()

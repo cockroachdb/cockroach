@@ -67,15 +67,23 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
-// ColNamesFormat writes a string describing the column names and directions
-// in this index to the given buffer.
-func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	start := 0
+// ExplicitColumnStartIdx returns the start index of any explicit columns.
+func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
+	start := int(desc.Partitioning.NumImplicitColumns)
+	// We do not currently handle implicit columns along with hash sharded indexes.
+	// Thus, safe to override this to 1.
 	if desc.IsSharded() {
 		start = 1
 	}
-	for i := start; i < len(desc.ColumnNames); i++ {
-		if i > start {
+	return start
+}
+
+// ColNamesFormat writes a string describing the column names and directions
+// in this index to the given buffer.
+func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
+	startIdx := desc.ExplicitColumnStartIdx()
+	for i := startIdx; i < len(desc.ColumnNames); i++ {
+		if i > startIdx {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNameP(&desc.ColumnNames[i])
@@ -164,10 +172,16 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 	return !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
 }
 
-// IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
+// IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
+// It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
-func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
+func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique && !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+}
+
+// GetName is part of the UniqueConstraint interface.
+func (desc *IndexDescriptor) GetName() string {
+	return desc.Name
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old

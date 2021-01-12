@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -219,15 +218,11 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	f := &flowinfra.FlowBase{
 		FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx,
 			NodeID: base.TestingIDContainer,
-			Cfg: &execinfra.ServerConfig{
-				LatencyGetter: &serverpb.LatencyGetter{
-					NodesStatusServer: &serverpb.OptionalNodesStatusServer{},
-				},
-			}},
+		},
 	}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
-		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
+		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, false, &wg, &execinfra.RowChannel{},
 		nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		nil /* fdSemaphore */, descs.DistSQLTypeResolver{},
 	)

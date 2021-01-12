@@ -625,8 +625,9 @@ $(KRB5_DIR)/Makefile: $(C_DEPS_DIR)/krb5-rebuild $(KRB5_SRC_DIR)/src/configure
 	mkdir -p $(KRB5_DIR)
 	@# NOTE: If you change the configure flags below, bump the version in
 	@# $(C_DEPS_DIR)/krb5-rebuild. See above for rationale.
-	@# If CFLAGS is set to -g1 then make will fail. Use "env -" to clear the environment.
-	cd $(KRB5_DIR) && env -u CFLAGS -u CXXFLAGS $(KRB5_SRC_DIR)/src/configure $(xconfigure-flags) --enable-static --disable-shared
+	@# If CFLAGS is set to -g1 then make will fail.
+	@# We specify -fcommon to get around duplicate definition errors in recent gcc.
+	cd $(KRB5_DIR) && env -u CXXFLAGS CFLAGS="-fcommon"  $(KRB5_SRC_DIR)/src/configure $(xconfigure-flags) --enable-static --disable-shared
 
 $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | bin/.submodules-initialized
 	rm -rf $(PROTOBUF_DIR)
@@ -823,6 +824,7 @@ DOCGEN_TARGETS := \
 	docs/generated/redact_safe.md \
 	bin/.docgen_http \
 	bin/.docgen_logformats \
+	docs/generated/logsinks.md \
 	docs/generated/logging.md \
 	docs/generated/eventlog.md
 
@@ -833,6 +835,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
+  pkg/sql/colexec/crossjoiner.eg.go \
   pkg/sql/colexec/default_cmp_expr.eg.go \
   pkg/sql/colexec/default_cmp_proj_ops.eg.go \
   pkg/sql/colexec/default_cmp_sel_ops.eg.go \
@@ -1312,7 +1315,6 @@ protos%.d.ts: protos%.js pkg/ui/yarn.installed
 	$(PBTS) $< >> $@
 
 STYLINT            := ./node_modules/.bin/stylint
-TSLINT             := ./node_modules/.bin/tslint
 TSC                := ./node_modules/.bin/tsc
 KARMA              := ./node_modules/.bin/karma
 WEBPACK            := ./node_modules/.bin/webpack
@@ -1333,10 +1335,8 @@ ui-topo: pkg/ui/yarn.installed
 .PHONY: ui-lint
 ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(STYLINT) -c .stylintrc styl
-	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json -p tsconfig.json
-	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
-	$(NODE_RUN) -C pkg/ui $(TSLINT) -c tslint.json *.js
 	$(NODE_RUN) -C pkg/ui $(TSC)
+	$(NODE_RUN) -C pkg/ui yarn lint
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
@@ -1485,7 +1485,7 @@ pkg/sql/lexbase/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserv
 	gofmt -s -w $@
 
 pkg/sql/lex/keywords.go: pkg/sql/parser/sql.y pkg/sql/lex/allkeywords/main.go | bin/.bootstrap
-	go run -tags all-keywords pkg/sql/lex/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
+	$(GO) run $(GOMODVENDORFLAGS) -tags all-keywords pkg/sql/lex/allkeywords/main.go < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
@@ -1550,34 +1550,41 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/role_events.proto \
 	pkg/util/log/eventpb/zone_events.proto \
 	pkg/util/log/eventpb/session_events.proto \
+	pkg/util/log/eventpb/sql_audit_events.proto \
 	pkg/util/log/eventpb/cluster_events.proto
 
+LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
+
+docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP)
+	$(GO) run $(GOMODVENDORFLAGS) $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
+
 docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/eventpb/eventlog_channels_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $< eventlog_channels_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/eventpb/json_encode_generated.go: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $< json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $< json_encode_go $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 docs/generated/logging.md: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/severity/severity_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/channel/channel_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $^ channel.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 pkg/util/log/log_channels_generated.go: pkg/util/log/gen.go pkg/util/log/logpb/log.proto
-	$(GO) run $(GOFLAGS) $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
+	$(GO) run $(GOMODVENDORFLAGS) $^ log_channels.go $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
 
 settings-doc-gen := $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))

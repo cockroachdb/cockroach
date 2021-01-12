@@ -24,8 +24,10 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@io_etcd_go_etcd_raft_v3//:raft",
     ],
 )
 
@@ -39,6 +41,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
@@ -52,5 +55,6 @@ go_test(
         "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
     ],
 )

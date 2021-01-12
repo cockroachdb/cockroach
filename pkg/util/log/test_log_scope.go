@@ -18,6 +18,7 @@ import (
 	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -148,17 +149,32 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	// Create a fresh configuration.
 	cfg := logconfig.DefaultConfig()
-	// Make all logged errors go to the external stderr, in addition to
-	// the log file.
-	cfg.Sinks.Stderr.Filter = severity.ERROR
-	// Disable the internal fd2 capture.
+
+	if skip.UnderBench() {
+		// Avoid logging anything to stderr, to avoid polluting the output
+		// of benchmarks. This is necessary because 'go test' unhelpfully
+		// merges stdout and stderr writes together.
+		cfg.Sinks.Stderr.Filter = severity.NONE
+	} else {
+		// Normal case: make all logged errors/fatal calls go to the
+		// external stderr, in addition to the log file.
+		cfg.Sinks.Stderr.Filter = severity.ERROR
+	}
+	// Disable the internal fd2 capture to file, to ensure that panic
+	// objects get reported to stderr.
 	cfg.CaptureFd2.Enable = false
+	// We cannot enable redactable markers on stderr when fd2 capture is
+	// disabled.
 	bf := false
 	cfg.Sinks.Stderr.Redactable = &bf
 
 	if err := cfg.Validate(&sc.logDir); err != nil {
 		t.Fatal(err)
 	}
+
+	// Reset the server identifiers, so that new servers
+	// can report their IDs through logging.
+	TestingClearServerIdentifiers()
 
 	// Switch to the new configuration.
 	TestingResetActive()
@@ -256,7 +272,6 @@ func (l *TestLogScope) Close(t tShim) {
 			"bug in TestLogScope - previous config:\n%s\nafter restore:\n%s",
 			l.previous.appliedConfig, restoredConfig)
 	}
-	//	t.Logf("restored configuration:\n%s", restoredConfig)
 }
 
 // calledDuringPanic returns true if panic() is one of its callers.

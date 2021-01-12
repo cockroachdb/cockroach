@@ -92,6 +92,9 @@ type TestServerInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
+	// Tracer returns a *tracing.Tracer as an interface{}.
+	Tracer() interface{}
+
 	// GossipI returns the gossip used by the TestServer.
 	// The real return type is *gossip.Gossip.
 	GossipI() interface{}
@@ -193,23 +196,15 @@ type TestServerInterface interface {
 	// inside the specified database.
 	ForceTableGC(ctx context.Context, database, table string, timestamp hlc.Timestamp) error
 
-	// CheckForUpdates phones home to check for updates and report usage.
-	//
-	// When using this for testing, consider setting DiagnosticsReportingEnabled
-	// to false so the periodic check doesn't interfere with the test.
-	//
-	// This can be slow because of cloud detection; use cloudinfo.Disable() in
-	// tests to avoid that.
-	CheckForUpdates(ctx context.Context)
+	// UpdateChecker returns the server's *diagnostics.UpdateChecker as an
+	// interface{}. The UpdateChecker periodically phones home to check for new
+	// updates that are available.
+	UpdateChecker() interface{}
 
-	// ReportDiagnostics phones home to report diagnostics.
-	//
-	// If using this for testing, consider setting DiagnosticsReportingEnabled to
-	// false so the periodic reporting doesn't interfere with the test.
-	//
-	// This can be slow because of cloud detection; use cloudinfo.Disable() in
-	// tests to avoid that.
-	ReportDiagnostics(ctx context.Context)
+	// DiagnosticsReporter returns the server's *diagnostics.Reporter as an
+	// interface{}. The DiagnosticsReporter periodically phones home to report
+	// diagnostics and usage.
+	DiagnosticsReporter() interface{}
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
 	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)

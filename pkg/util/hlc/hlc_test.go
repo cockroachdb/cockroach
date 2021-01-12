@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type Event uint8
@@ -356,6 +357,41 @@ func TestExampleManualClock(t *testing.T) {
 	if wallNanos := c.Now().WallTime; wallNanos != 20 {
 		t.Fatalf("unexpected wall time: %d", wallNanos)
 	}
+}
+
+// TestHybridManualClock test the basic functionality of the
+// TestHybridManualClock.
+func TestHybridManualClock(t *testing.T) {
+	m := NewHybridManualClock()
+	c := NewClock(m.UnixNano, time.Nanosecond)
+
+	// We do a two sided test to make sure that the physical clock matches
+	// the hybrid value. Since we cant pull a value off both clocks at the same
+	// time, we use two LessOrEqual comparisons with reverse order, to establish
+	// that the values are roughly equal.
+	require.LessOrEqual(t, c.Now().WallTime, UnixNano())
+	require.LessOrEqual(t, UnixNano(), c.Now().WallTime)
+
+	m.Increment(10)
+	require.LessOrEqual(t, c.Now().WallTime, UnixNano()+10)
+	require.LessOrEqual(t, UnixNano()+10, c.Now().WallTime)
+}
+
+// TestHybridManualClockPause test the Pause() functionality of the
+// HybridManualClock.
+func TestHybridManualClockPause(t *testing.T) {
+	m := NewHybridManualClock()
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	now := c.Now().WallTime
+	time.Sleep(10 * time.Millisecond)
+	require.Less(t, now, c.Now().WallTime)
+	m.Pause()
+	now = c.Now().WallTime
+	require.Equal(t, now, c.Now().WallTime)
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, now, c.Now().WallTime)
+	m.Increment(10)
+	require.Equal(t, now+10, c.Now().WallTime)
 }
 
 func TestHLCMonotonicityCheck(t *testing.T) {

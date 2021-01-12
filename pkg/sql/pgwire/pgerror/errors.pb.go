@@ -40,7 +40,7 @@ func (m *Error) Reset()         { *m = Error{} }
 func (m *Error) String() string { return proto.CompactTextString(m) }
 func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_fc85771fb5477664, []int{0}
+	return fileDescriptor_errors_e17d3410d3b0dac7, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -75,7 +75,7 @@ func (m *Error_Source) Reset()         { *m = Error_Source{} }
 func (m *Error_Source) String() string { return proto.CompactTextString(m) }
 func (*Error_Source) ProtoMessage()    {}
 func (*Error_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_fc85771fb5477664, []int{0, 0}
+	return fileDescriptor_errors_e17d3410d3b0dac7, []int{0, 0}
 }
 func (m *Error_Source) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -772,10 +772,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_fc85771fb5477664)
+	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_e17d3410d3b0dac7)
 }
 
-var fileDescriptor_errors_fc85771fb5477664 = []byte{
+var fileDescriptor_errors_e17d3410d3b0dac7 = []byte{
 	// 306 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x51, 0xb1, 0x4e, 0xf3, 0x30,
 	0x18, 0x8c, 0xfb, 0xa7, 0x49, 0xea, 0x5f, 0x82, 0xe2, 0x01, 0x59, 0x1d, 0xdc, 0x8a, 0x85, 0xb2,

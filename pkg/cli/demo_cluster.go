@@ -60,6 +60,8 @@ type transientCluster struct {
 
 	adminPassword string
 	adminUser     security.SQLUsername
+
+	stickyEngineRegistry server.StickyInMemEnginesRegistry
 }
 
 func (c *transientCluster) checkConfigAndSetupLogging(
@@ -110,6 +112,7 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 	c.httpFirstPort = demoCtx.httpPort
 	c.sqlFirstPort = demoCtx.sqlPort
 
+	c.stickyEngineRegistry = server.NewStickyInMemEnginesRegistry()
 	return nil
 }
 
@@ -138,6 +141,7 @@ func (c *transientCluster) start(
 			c.sockForServer(nodeID), nodeID, joinAddr, c.demoDir,
 			c.sqlFirstPort,
 			c.httpFirstPort,
+			c.stickyEngineRegistry,
 		)
 		if i == 0 {
 			// The first node also auto-inits the cluster.
@@ -149,14 +153,11 @@ func (c *transientCluster) start(
 		servRPCReadyCh := make(chan struct{})
 
 		if demoCtx.simulateLatency {
-			args.Knobs = base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					PauseAfterGettingRPCAddress:  latencyMapWaitCh,
-					SignalAfterGettingRPCAddress: servRPCReadyCh,
-					ContextTestingKnobs: rpc.ContextTestingKnobs{
-						ArtificialLatencyMap: make(map[string]int),
-					},
-				},
+			serverKnobs := args.Knobs.Server.(*server.TestingKnobs)
+			serverKnobs.PauseAfterGettingRPCAddress = latencyMapWaitCh
+			serverKnobs.SignalAfterGettingRPCAddress = servRPCReadyCh
+			serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
+				ArtificialLatencyMap: make(map[string]int),
 			}
 		}
 
@@ -209,27 +210,12 @@ func (c *transientCluster) start(
 			<-servReadyFnCh
 			errCh <- nil
 		}
-
-		// Ensure we close all sticky stores we've created.
-		for _, store := range args.StoreSpecs {
-			if store.StickyInMemoryEngineID != "" {
-				engineID := store.StickyInMemoryEngineID
-				c.stopper.AddCloser(stop.CloserFn(func() {
-					if err := server.CloseStickyInMemEngine(engineID); err != nil {
-						// Something else may have already closed the sticky store.
-						// Since we are closer, it doesn't really matter.
-						log.Warningf(
-							ctx,
-							"could not close sticky in-memory store %s: %+v",
-							engineID,
-							err,
-						)
-					}
-				}))
-			}
-		}
 	}
 
+	// Ensure we close all sticky stores we've created.
+	c.stopper.AddCloser(stop.CloserFn(func() {
+		c.stickyEngineRegistry.CloseAllStickyInMemEngines()
+	}))
 	c.servers = servers
 
 	if demoCtx.simulateLatency {
@@ -307,10 +293,10 @@ func (c *transientCluster) start(
 	}
 
 	// Start up the update check loop.
-	// We don't do this in (*server.Server).Start() because we don't want it
-	// in tests.
+	// We don't do this in (*server.Server).Start() because we don't want this
+	// overhead and possible interference in tests.
 	if !demoCtx.disableTelemetry {
-		c.s.PeriodicallyCheckForUpdates(ctx)
+		c.s.StartDiagnostics(ctx)
 	}
 	return nil
 }
@@ -323,6 +309,7 @@ func testServerArgsForTransientCluster(
 	joinAddr string,
 	demoDir string,
 	sqlBasePort, httpBasePort int,
+	stickyEngineRegistry server.StickyInMemEnginesRegistry,
 ) base.TestServerArgs {
 	// Assign a path to the store spec, to be saved.
 	storeSpec := base.DefaultTestStoreSpec
@@ -342,6 +329,11 @@ func testServerArgsForTransientCluster(
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				StickyEngineRegistry: stickyEngineRegistry,
+			},
+		},
 	}
 
 	if !testingForceRandomizeDemoPorts {
@@ -505,7 +497,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 
 	// TODO(#42243): re-compute the latency mapping.
 	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID, c.s.ServingRPCAddr(), c.demoDir,
-		c.sqlFirstPort, c.httpFirstPort)
+		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
 	s, err := server.TestServerFactory.New(args)
 	if err != nil {
 		return err
@@ -759,7 +751,7 @@ func (c *transientCluster) runWorkload(
 						log.Warningf(ctx, "error running workload query: %+v", err)
 					}
 					select {
-					case <-c.s.Stopper().ShouldStop():
+					case <-c.s.Stopper().ShouldQuiesce():
 						return
 					default:
 					}
@@ -769,7 +761,9 @@ func (c *transientCluster) runWorkload(
 		// As the SQL shell is tied to `c.s`, this means we want to tie the workload
 		// onto this as we want the workload to stop when the server dies,
 		// rather than the cluster. Otherwise, interrupts on cockroach demo hangs.
-		c.s.Stopper().RunWorker(ctx, workloadFun(workerFn))
+		if err := c.s.Stopper().RunAsyncTask(ctx, "workload", workloadFun(workerFn)); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -1187,17 +1187,6 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	return nil // unreached, but the compiler can't tell.
 }
 
-// restart stops and restarts all stores but leaves the engines intact,
-// so the stores should contain the same persistent storage as before.
-func (m *multiTestContext) restart() {
-	for i := range m.stores {
-		m.stopStore(i)
-	}
-	for i := range m.stores {
-		m.restartStore(i)
-	}
-}
-
 // changeReplicas performs a ChangeReplicas operation, retrying until the
 // destination store has been addded or removed. Returns the range's
 // NextReplicaID, which is the ID of the newly-added replica if this is an add.
@@ -1663,6 +1652,9 @@ func verifyRangeStats(
 	if err != nil {
 		return err
 	}
+	// When used with a real wall clock these will not be the same, since it
+	// takes time to load stats.
+	expMS.AgeTo(ms.LastUpdateNanos)
 	// Clear system counts as these are expected to vary.
 	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	if ms != expMS {

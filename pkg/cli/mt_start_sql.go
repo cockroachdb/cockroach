@@ -98,7 +98,9 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		tempStorageMaxSizeBytes,
 	)
 
-	sqlServer, addr, httpAddr, instanceID, err := server.StartTenant(
+	initGEOS(ctx)
+
+	sqlServer, addr, httpAddr, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
@@ -115,11 +117,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	if !cluster.TelemetryOptOut() {
 		sqlServer.StartDiagnostics(ctx)
 	}
-
-	// Register the server's identifiers so that log events are
-	// decorated with the server's identity. This helps when gathering
-	// log events from multiple servers into the same log collector.
-	log.SetTenantIDs(serverCfg.SQLConfig.TenantID.String(), int32(instanceID))
 
 	log.Infof(ctx, "SQL server for tenant %s listening at %s, http at %s", serverCfg.SQLConfig.TenantID, addr, httpAddr)
 

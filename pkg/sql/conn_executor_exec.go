@@ -1455,6 +1455,8 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
 
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
+
 	onTxnFinish = func(ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
 		ex.recordTransaction(ev, implicit, txnStart)
@@ -1471,6 +1473,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
+	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	txnServiceLat := ex.phaseTimes.getTransactionServiceLatency()
@@ -1496,11 +1499,12 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 // child span if one is found. A context derived from parentCtx which
 // additionally contains the new span is also returned.
 func createRootOrChildSpan(
-	parentCtx context.Context, opName string, tr *tracing.Tracer,
+	parentCtx context.Context, opName string, tr *tracing.Tracer, os ...tracing.SpanOption,
 ) (context.Context, *tracing.Span) {
 	// WithForceRealSpan is used to support the use of session tracing, which
 	// may start recording on this span.
-	return tracing.EnsureChildSpan(parentCtx, tr, opName, tracing.WithForceRealSpan())
+	os = append(os, tracing.WithForceRealSpan())
+	return tracing.EnsureChildSpan(parentCtx, tr, opName, os...)
 }
 
 // logTraceAboveThreshold logs a span's recording if the duration is above a

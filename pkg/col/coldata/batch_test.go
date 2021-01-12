@@ -108,3 +108,37 @@ func TestBatchReset(t *testing.T) {
 	b = coldata.NewMemBatch(typsBytes, coldata.StandardColumnFactory)
 	resetAndCheck(b, typsBytes, 1, true)
 }
+
+// TestBatchWithBytesAndNulls verifies that the invariant of Bytes vectors is
+// maintained when NULL values are present in the vector and there is a
+// selection vector on the batch.
+func TestBatchWithBytesAndNulls(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	b := coldata.NewMemBatch([]*types.T{types.Bytes}, coldata.StandardColumnFactory)
+	// We will insert some garbage data into the Bytes vector in positions that
+	// are not mentioned in the selection vector. All the values that are
+	// selected are actually NULL values, so we don't set anything on the Bytes
+	// vector there.
+	if coldata.BatchSize() < 6 {
+		return
+	}
+	sel := []int{1, 3, 5}
+	vec := b.ColVec(0).Bytes()
+	vec.Set(0, []byte("zero"))
+	vec.Set(2, []byte("two"))
+	b.SetSelection(true)
+	copy(b.Selection(), sel)
+
+	// This is where the invariant of non-decreasing offsets in the Bytes vector
+	// should be updated.
+	b.SetLength(len(sel))
+
+	// In many cases in the vectorized execution engine, for performance
+	// reasons, we will attempt to get something from the Bytes vector at
+	// positions on which we have NULLs, so all of the Gets below should be
+	// safe.
+	for _, idx := range sel {
+		assert.True(t, len(vec.Get(idx)) == 0)
+	}
+}

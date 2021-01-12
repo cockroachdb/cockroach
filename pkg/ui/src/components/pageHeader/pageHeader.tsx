@@ -17,9 +17,5 @@ export interface PageHeaderProps {
 }
 
 export function PageHeader(props: PageHeaderProps) {
-  return (
-    <div className="page-header">
-      {props.children}
-    </div>
-  );
+  return <div className="page-header">{props.children}</div>;
 }

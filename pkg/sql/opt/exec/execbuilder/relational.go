@@ -1507,11 +1507,9 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
 	//
-	// NB: For left outer paired-joins, this is where the continuation column and
-	// the PK columns for the right side, which were part of the inputCols, are
-	// projected away. (The GenerateInvertedJoins exploration rule has already
-	// done this for semi and anti paired-joins by adding a Project operator
-	// after the join).
+	// NB: For paired-joins, this is where the continuation column and the PK
+	// columns for the right side, which were part of the inputCols, are projected
+	// away.
 	if !inputCols.SubsetOf(join.Cols) {
 		outCols := join.Cols
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
@@ -1529,6 +1527,13 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	}
 
 	md := b.mem.Metadata()
+	tab := md.Table(join.Table)
+	idx := tab.Index(join.Index)
+
+	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
+	for i, c := range join.PrefixKeyCols {
+		prefixEqCols[i] = input.getNodeColumnOrdinal(c)
+	}
 
 	inputCols := join.Input.Relational().OutputCols
 	lookupCols := join.Cols.Difference(inputCols)
@@ -1536,10 +1541,12 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		lookupCols.Remove(join.ContinuationCol)
 	}
 
-	// Add the inverted column since it will be referenced in the inverted
-	// expression and needs a corresponding indexed var. It will be projected
-	// away below.
-	lookupCols.Add(join.InvertedCol)
+	// Add the virtual inverted column. Its source column will be referenced in
+	// the inverted expression and needs a corresponding indexed var. It will be
+	// projected away below.
+	virtualInvertedCol := idx.VirtualInvertedColumn()
+	virtualInvertedColID := join.Table.ColumnID(virtualInvertedCol.Ordinal())
+	lookupCols.Add(virtualInvertedColID)
 
 	lookupOrdinals, lookupColMap := b.getColumns(lookupCols, join.Table)
 	// allExprCols are the columns used in expressions evaluated by this join.
@@ -1571,19 +1578,17 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 	if err != nil {
 		return execPlan{}, err
 	}
-	tab := md.Table(join.Table)
-	idx := tab.Index(join.Index)
 
-	// The inverted filter refers to the original column, but it is actually
-	// evaluated implicitly using the inverted column; the original column is not
-	// even accessible here.
+	// The inverted filter refers to the inverted source column, but it is
+	// actually evaluated implicitly using the virtual inverted column; the
+	// inverted source column is not even accessible here.
 	//
 	// TODO(radu): this is sketchy. The inverted column should not even have the
 	// geospatial type (which would make the expression invalid in terms of
 	// typing). Perhaps we need to pass this information in a more specific way
 	// and not as a generic expression?
-	ord, _ := ctx.ivarMap.Get(int(join.InvertedCol))
-	ctx.ivarMap.Set(int(join.Table.ColumnID(idx.VirtualInvertedColumn().InvertedSourceColumnOrdinal())), ord)
+	ord, _ := ctx.ivarMap.Get(int(virtualInvertedColID))
+	ctx.ivarMap.Set(int(join.Table.ColumnID(virtualInvertedCol.InvertedSourceColumnOrdinal())), ord)
 	invertedExpr, err := b.buildScalar(&ctx, join.InvertedExpr)
 	if err != nil {
 		return execPlan{}, err
@@ -1595,6 +1600,7 @@ func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, erro
 		input.root,
 		tab,
 		idx,
+		prefixEqCols,
 		lookupOrdinals,
 		onExpr,
 		join.IsFirstJoinInPairedJoiner,

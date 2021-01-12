@@ -33,14 +33,24 @@ func newFailedLeaseTrigger(isTransfer bool) result.Result {
 	return trigger
 }
 
-func checkCanReceiveLease(newLease *roachpb.Lease, rec EvalContext) error {
-	repDesc, ok := rec.Desc().GetReplicaDescriptorByID(newLease.Replica.ReplicaID)
+// CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
+// Returns an error if the respective replica is not eligible.
+//
+// An error is also returned is the replica is not part of `rngDesc`.
+//
+// For now, don't allow replicas of type LEARNER to be leaseholders. There's
+// no reason this wouldn't work in principle, but it seems inadvisable. In
+// particular, learners can't become raft leaders, so we wouldn't be able to
+// co-locate the leaseholder + raft leader, which is going to affect tail
+// latencies. Additionally, as of the time of writing, learner replicas are
+// only used for a short time in replica addition, so it's not worth working
+// out the edge cases.
+func CheckCanReceiveLease(
+	wouldbeLeaseholder roachpb.ReplicaDescriptor, rngDesc *roachpb.RangeDescriptor,
+) error {
+	repDesc, ok := rngDesc.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
-		if newLease.Replica.StoreID == rec.StoreID() {
-			return errors.AssertionFailedf(
-				`could not find replica for store %s in %s`, rec.StoreID(), rec.Desc())
-		}
-		return errors.Errorf(`replica %s not found in %s`, newLease.Replica, rec.Desc())
+		return errors.Errorf(`replica %s not found in %s`, wouldbeLeaseholder, rngDesc)
 	} else if t := repDesc.GetType(); t != roachpb.VOTER_FULL {
 		// NB: there's no harm in transferring the lease to a VOTER_INCOMING,
 		// but we disallow it anyway. On the other hand, transferring to

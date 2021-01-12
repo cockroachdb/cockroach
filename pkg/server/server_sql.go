@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -111,6 +112,10 @@ type SQLServer struct {
 	// connManager is the connection manager to use to set up additional
 	// SQL listeners in AcceptClients().
 	connManager netutil.Server
+
+	// set to true when the server has started accepting client conns.
+	// Used by health checks.
+	acceptingClients syncutil.AtomicBool
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -374,10 +379,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		Executor:       cfg.circularInternalExecutor,
 		RPCContext:     cfg.rpcContext,
 		Stopper:        cfg.stopper,
-
-		LatencyGetter: &serverpb.LatencyGetter{
-			NodesStatusServer: &cfg.nodesStatusServer,
-		},
 
 		TempStorage:     tempEngine,
 		TempStoragePath: cfg.TempStorageConfig.Path,
@@ -643,25 +644,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		leaseMgr,
 	)
 
-	var reporter *diagnostics.Reporter
-	if cfg.tenantConnect != nil {
-		reporter = &diagnostics.Reporter{
-			StartTime:     timeutil.Now(),
-			AmbientCtx:    &cfg.AmbientCtx,
-			Config:        cfg.BaseConfig.Config,
-			Settings:      cfg.Settings,
-			ClusterID:     cfg.rpcContext.ClusterID.Get,
-			TenantID:      cfg.rpcContext.TenantID,
-			SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
-			SQLServer:     pgServer.SQLServer,
-			InternalExec:  cfg.circularInternalExecutor,
-			DB:            cfg.db,
-			Recorder:      cfg.recorder,
-			Locality:      cfg.Locality,
-		}
-		if cfg.TestingKnobs.Server != nil {
-			reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
-		}
+	reporter := &diagnostics.Reporter{
+		StartTime:     timeutil.Now(),
+		AmbientCtx:    &cfg.AmbientCtx,
+		Config:        cfg.BaseConfig.Config,
+		Settings:      cfg.Settings,
+		ClusterID:     cfg.rpcContext.ClusterID.Get,
+		TenantID:      cfg.rpcContext.TenantID,
+		SQLInstanceID: cfg.nodeIDContainer.SQLInstanceID,
+		SQLServer:     pgServer.SQLServer,
+		InternalExec:  cfg.circularInternalExecutor,
+		DB:            cfg.db,
+		Recorder:      cfg.recorder,
+		Locality:      cfg.Locality,
+	}
+	if cfg.TestingKnobs.Server != nil {
+		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
 	return &SQLServer{

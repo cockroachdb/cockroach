@@ -143,8 +143,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Create a set of partial index IDs to not add or remove entries from.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := n.run.tw.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
+	if len(n.run.tw.tableDesc().PartialIndexes()) > 0 {
 		partialIndexValOffset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
 		if n.run.tw.canaryOrdinal != -1 {
 			partialIndexValOffset++

@@ -306,7 +306,9 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Create the FlowCtx for the flow.
-	flowCtx := ds.NewFlowContext(ctx, req.Flow.FlowID, evalCtx, req.TraceKV, localState)
+	flowCtx := ds.NewFlowContext(
+		ctx, req.Flow.FlowID, evalCtx, req.TraceKV, localState, req.Flow.Gateway == roachpb.NodeID(ds.NodeID.SQLInstanceID()),
+	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
@@ -392,6 +394,7 @@ func (ds *ServerImpl) NewFlowContext(
 	evalCtx *tree.EvalContext,
 	traceKV bool,
 	localState LocalState,
+	isGatewayNode bool,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -402,6 +405,7 @@ func (ds *ServerImpl) NewFlowContext(
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
 		Local:          localState.IsLocal,
+		Gateway:        isGatewayNode,
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

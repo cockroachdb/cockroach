@@ -323,6 +323,31 @@ abc abc abc
 query error substring\(\): negative byte subarray length -1 not allowed
 SELECT substring('11100011'::bytea, 4, -1)
 
+query TTTTT
+SELECT
+  encode(substring(decode('ff0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 1, 1), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 1, 7), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('ff0001', 'hex'), 4), 'hex')
+----
+ff0001  ff  ff0001  0001  ·
+
+query TTTTTTTTTT
+SELECT
+  encode(substring(decode('5c0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('aa5c1a1a1a1a0001', 'hex'), 2), 'hex'),
+  encode(substring(decode('5c0001', 'hex'), 1, 1), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 1, 2), 'hex'),
+  encode(substring(decode('aa5c0001', 'hex'), 2, 2), 'hex'),
+  encode(substring(decode('aa5c1a1a1a1a0001', 'hex'), 2, 2), 'hex'),
+  encode(substring(decode('5c0001', 'hex'), 1), 'escape'),
+  encode(substring(decode('aa5c0001', 'hex'), 2, 1), 'escape')
+----
+5c0001  aa5c0001  5c0001  5c1a1a1a1a0001  5c  aa5c  5c00  5c1a  \\\000\001  \\
+
 query error unknown signature: concat_ws\(\)
 SELECT concat_ws()
 

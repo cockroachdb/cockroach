@@ -132,9 +132,14 @@ type mutationBuilder struct {
 	// an insert; otherwise it's an update.
 	canaryColID opt.ColumnID
 
-	// arbiters stores the ordinals of indexes that are used to detect conflicts
-	// for UPSERT and INSERT ON CONFLICT statements.
-	arbiters cat.IndexOrdinals
+	// arbiterIndexes stores the ordinals of indexes that are used to detect
+	// conflicts for UPSERT and INSERT ON CONFLICT statements.
+	arbiterIndexes cat.IndexOrdinals
+
+	// arbiterConstraints stores the ordinals of unique without index constraints
+	// that are used to detect conflicts for UPSERT and INSERT ON CONFLICT
+	// statements.
+	arbiterConstraints cat.UniqueOrdinals
 
 	// roundedDecimalCols is the set of columns that have already been rounded.
 	// Keeping this set avoids rounding the same column multiple times.
@@ -271,7 +276,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 			includeMutations:       true,
 			includeSystem:          true,
 			includeVirtualInverted: false,
-			includeVirtualComputed: false,
+			includeVirtualComputed: true,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -332,7 +337,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
 			// If the primary key column is hidden, then we don't need to use it
 			// for the distinct on.
-			if col := primaryIndex.Column(i); !col.IsHidden() {
+			// TODO(radu): this logic seems fragile, is it assuming that only an
+			// implicit `rowid` column can be a hidden PK column?
+			if col := primaryIndex.Column(i); col.Visibility() != cat.Hidden {
 				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
 			}
 		}
@@ -994,7 +1001,8 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		FetchCols:           checkEmptyList(mb.fetchColIDs),
 		UpdateCols:          checkEmptyList(mb.updateColIDs),
 		CanaryCol:           mb.canaryColID,
-		Arbiters:            mb.arbiters,
+		ArbiterIndexes:      mb.arbiterIndexes,
+		ArbiterConstraints:  mb.arbiterConstraints,
 		CheckCols:           checkEmptyList(mb.checkColIDs),
 		PartialIndexPutCols: checkEmptyList(mb.partialIndexPutColIDs),
 		PartialIndexDelCols: checkEmptyList(mb.partialIndexDelColIDs),
@@ -1287,7 +1295,7 @@ func (mb *mutationBuilder) makeCheckInputScan(
 			inputCols[i] = mb.fetchColIDs[tabOrd]
 		}
 		if inputCols[i] == 0 {
-			panic(errors.AssertionFailedf("no value for FK column (tabOrd=%d)", tabOrd))
+			panic(errors.AssertionFailedf("no value for check input column (tabOrd=%d)", tabOrd))
 		}
 
 		// Synthesize new column.

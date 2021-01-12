@@ -14,6 +14,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -236,4 +239,13 @@ func TestMustSetInner(t *testing.T) {
 	if _, isET := res.GetInner().(*EndTxnResponse); !isET {
 		t.Fatalf("unexpected response union: %+v", res)
 	}
+}
+
+func TestContentionEvent_SafeFormat(t *testing.T) {
+	ce := &ContentionEvent{
+		Key:     Key("foo"),
+		TxnMeta: enginepb.TxnMeta{ID: uuid.FromStringOrNil("51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27")},
+	}
+	const exp = redact.RedactableString(`conflicted with ‹51b5ef6a-f18f-4e85-bc3f-c44e33f2bb27› on ‹"foo"› for 0.00s`)
+	require.Equal(t, exp, redact.Sprint(ce))
 }

@@ -135,6 +135,21 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
 
+	// See https://www.postgresql.org/docs/10/runtime-config-compatible.html#GUC-ESCAPE-STRING-WARNING
+	`escape_string_warning`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			s = strings.ToLower(s)
+			if strings.TrimSpace(s) != "on" || strings.TrimSpace(s) != "off") {
+				err := newVarValueError("escape_string_warning", s, "ON", "OFF")
+				err = errors.WithDetail(err, compatErrMsg)
+				return err
+			}
+			return nil
+		},
+		Get:           func(evalCtx *extendedEvalContext) string { return "ON" },
+		GlobalDefault: func(_ *settings.Values) string { return "ON" },
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	// and https://www.postgresql.org/docs/10/static/datatype-binary.html
 	`bytea_output`: {
@@ -843,8 +858,10 @@ var varGen = map[string]sessionVar{
 					// TODO(knz): if/when we want to support this, we'll need to change
 					// the interface between GetStringVal() and Set() to take string
 					// arrays instead of a single string.
-					return "", unimplemented.Newf("schema names containing commas in search_path",
-						"schema name %q not supported in search_path", s)
+					return "",
+						errors.WithHintf(unimplemented.NewWithIssuef(53971,
+							`schema name %q has commas so is not supported in search_path.`, s),
+							`Did you mean to omit quotes? SET search_path = %s`, s)
 				}
 				buf.WriteString(comma)
 				buf.WriteString(s)

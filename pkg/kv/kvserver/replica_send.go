@@ -14,7 +14,6 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -126,39 +125,17 @@ func (r *Replica) sendWithRangeID(
 	return br, pErr
 }
 
+// maybeAddRangeInfoToResponse populates br.RangeInfo if the client doesn't
+// have up-to-date info about the range's descriptor and lease.
 func (r *Replica) maybeAddRangeInfoToResponse(
 	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) {
-	if ba.ReturnRangeInfo {
-		desc, lease := r.GetDescAndLease(ctx)
-		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
-
-		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.ClientRangeInfosOnBatchResponse) {
-			// Also set the RangeInfo on the individual responses, for compatibility
-			// with 20.1.
-			for _, r := range br.Responses {
-				reply := r.GetInner()
-				header := reply.Header()
-				header.DeprecatedRangeInfos = br.RangeInfos
-				reply.SetHeader(header)
-			}
-		}
-	} else if ba.ClientRangeInfo != nil {
-		returnRangeInfoIfClientStale(ctx, br, r, *ba.ClientRangeInfo)
-	}
-}
-
-// returnRangeInfoIfClientStale populates br.RangeInfos if the client doesn't
-// have up-to-date info about the range's descriptor and lease.
-func returnRangeInfoIfClientStale(
-	ctx context.Context, br *roachpb.BatchResponse, r *Replica, cinfo roachpb.ClientRangeInfo,
-) {
-	desc, lease := r.GetDescAndLease(ctx)
 	// Compare the client's info with the replica's info to detect if the client
 	// has stale knowledge. Note that the client can have more recent knowledge
 	// than the replica in case this is a follower.
-	needInfo := (cinfo.LeaseSequence < lease.Sequence) ||
-		(cinfo.DescriptorGeneration < desc.Generation)
+	cinfo := &ba.ClientRangeInfo
+	desc, lease := r.GetDescAndLease(ctx)
+	needInfo := (cinfo.LeaseSequence < lease.Sequence) || (cinfo.DescriptorGeneration < desc.Generation)
 	if !needInfo {
 		return
 	}

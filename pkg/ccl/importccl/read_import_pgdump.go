@@ -424,12 +424,12 @@ func readPostgresStmt(
 				}
 			case *tree.AlterTableValidateConstraint:
 				// ignore
-			case *tree.AlterTableOwner:
-				// ignore
 			default:
 				return errors.Errorf("unsupported statement: %s", stmt)
 			}
 		}
+	case *tree.AlterTableOwner:
+		// ignore
 	case *tree.CreateSequence:
 		name, err := getTableName(&stmt.Name)
 		if err != nil {
@@ -915,7 +915,7 @@ func (m *pgDumpReader) readFile(
 			}
 		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// ignored.
-		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
+		case *tree.CreateTable, *tree.AlterTable, *tree.AlterTableOwner, *tree.CreateIndex, *tree.CreateSequence, *tree.DropTable:
 			// handled during schema extraction.
 		case *tree.Delete:
 			switch stmt := i.Table.(type) {

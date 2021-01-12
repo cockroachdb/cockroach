@@ -211,8 +211,8 @@ func (desc *wrapper) collectConstraintInfo(
 	info := make(map[string]descpb.ConstraintDetail)
 
 	// Indexes provide PK and Unique constraints that are enforced by an index.
-	indexes := desc.AllNonDropIndexes()
-	for _, index := range indexes {
+	for _, indexI := range desc.NonDropIndexes() {
+		index := indexI.IndexDesc()
 		if index.ID == desc.PrimaryIndex.ID {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,
@@ -332,23 +332,34 @@ func (desc *wrapper) collectConstraintInfo(
 	return info, nil
 }
 
-// FindFKReferencedIndex finds the first index in the supplied referencedTable
-// that can satisfy a foreign key of the supplied column ids.
-func FindFKReferencedIndex(
+// FindFKReferencedUniqueConstraint finds the first index in the supplied
+// referencedTable that can satisfy a foreign key of the supplied column ids.
+// If no such index exists, attempts to find a unique constraint on the supplied
+// column ids. If neither an index nor unique constraint is found, returns an
+// error.
+func FindFKReferencedUniqueConstraint(
 	referencedTable catalog.TableDescriptor, referencedColIDs descpb.ColumnIDs,
-) (*descpb.IndexDescriptor, error) {
+) (descpb.UniqueConstraint, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
 	primaryIndex := referencedTable.GetPrimaryIndex()
-	if primaryIndex.IsValidReferencedIndex(referencedColIDs) {
-		return primaryIndex, nil
+	if primaryIndex.IsValidReferencedUniqueConstraint(referencedColIDs) {
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
-	indexes := referencedTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
-		if idx.IsValidReferencedIndex(referencedColIDs) {
-			return idx, nil
+	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
+		if idx.IsValidReferencedUniqueConstraint(referencedColIDs) {
+			return idx.IndexDesc(), nil
+		}
+	}
+	// As a last resort, try to find a unique constraint with matching columns.
+	uniqueWithoutIndexConstraints := referencedTable.GetUniqueWithoutIndexConstraints()
+	for i := range uniqueWithoutIndexConstraints {
+		c := &uniqueWithoutIndexConstraints[i]
+		// TODO(rytaft): We should allow out-of-order unique constraints, as long
+		// as they have the same columns.
+		if descpb.ColumnIDs(c.ColumnIDs).Equals(referencedColIDs) {
+			return c, nil
 		}
 	}
 	return nil, pgerror.Newf(
@@ -366,14 +377,12 @@ func FindFKOriginIndex(
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
 	if primaryIndex := originTable.GetPrimaryIndex(); primaryIndex.IsValidOriginIndex(originColIDs) {
-		return primaryIndex, nil
+		return primaryIndex.IndexDesc(), nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	indexes := originTable.GetPublicNonPrimaryIndexes()
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range originTable.PublicNonPrimaryIndexes() {
 		if idx.IsValidOriginIndex(originColIDs) {
-			return idx, nil
+			return idx.IndexDesc(), nil
 		}
 	}
 	return nil, pgerror.Newf(

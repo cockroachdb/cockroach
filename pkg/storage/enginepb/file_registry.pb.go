@@ -40,7 +40,7 @@ func (x RegistryVersion) String() string {
 	return proto.EnumName(RegistryVersion_name, int32(x))
 }
 func (RegistryVersion) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_file_registry_848b8e06af99c90e, []int{0}
+	return fileDescriptor_file_registry_44f67dae837f08b2, []int{0}
 }
 
 // EnvType determines which rocksdb::Env is used and for what purpose.
@@ -73,7 +73,7 @@ func (x EnvType) String() string {
 	return proto.EnumName(EnvType_name, int32(x))
 }
 func (EnvType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_file_registry_848b8e06af99c90e, []int{1}
+	return fileDescriptor_file_registry_44f67dae837f08b2, []int{1}
 }
 
 // Registry describes how a files are handled. This includes the
@@ -92,7 +92,7 @@ func (m *FileRegistry) Reset()         { *m = FileRegistry{} }
 func (m *FileRegistry) String() string { return proto.CompactTextString(m) }
 func (*FileRegistry) ProtoMessage()    {}
 func (*FileRegistry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_file_registry_848b8e06af99c90e, []int{0}
+	return fileDescriptor_file_registry_44f67dae837f08b2, []int{0}
 }
 func (m *FileRegistry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -130,7 +130,7 @@ func (m *FileEntry) Reset()         { *m = FileEntry{} }
 func (m *FileEntry) String() string { return proto.CompactTextString(m) }
 func (*FileEntry) ProtoMessage()    {}
 func (*FileEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_file_registry_848b8e06af99c90e, []int{1}
+	return fileDescriptor_file_registry_44f67dae837f08b2, []int{1}
 }
 func (m *FileEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -708,10 +708,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/enginepb/file_registry.proto", fileDescriptor_file_registry_848b8e06af99c90e)
+	proto.RegisterFile("storage/enginepb/file_registry.proto", fileDescriptor_file_registry_44f67dae837f08b2)
 }
 
-var fileDescriptor_file_registry_848b8e06af99c90e = []byte{
+var fileDescriptor_file_registry_44f67dae837f08b2 = []byte{
 	// 372 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0x4f, 0xcb, 0xd3, 0x40,
 	0x10, 0xc6, 0xb3, 0x79, 0xad, 0x6d, 0xe6, 0xad, 0x1a, 0x56, 0x0f, 0xa5, 0xc2, 0x52, 0xaa, 0x42,

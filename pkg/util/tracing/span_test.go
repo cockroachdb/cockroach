@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -195,4 +196,37 @@ func TestSpan_LogStructured(t *testing.T) {
 	var d1 types.DynamicAny
 	require.NoError(t, types.UnmarshalAny(item, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
+}
+
+func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
+	tr := NewTracer()
+	tr._mode = int32(modeBackground)
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	defer ch.Finish()
+	require.Len(t, sp.crdb.mu.recording.children, 1)
+	require.Equal(t, ch.crdb, sp.crdb.mu.recording.children[0])
+	ch.LogStructured(&types.Int32Value{Value: 5})
+	// Check that the child span (incl its payload) is in the recording.
+	rec := sp.GetRecording()
+	require.Len(t, rec, 2)
+	require.Len(t, rec[1].InternalStructured, 1)
+}
+
+// TestSpanMaxChildren verifies that a Span can
+// track at most maxChildrenPerSpan direct children.
+func TestSpanMaxChildren(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	for i := 0; i < maxChildrenPerSpan+123; i++ {
+		ch := tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
+		ch.Finish()
+		exp := i + 1
+		if exp > maxChildrenPerSpan {
+			exp = maxChildrenPerSpan
+		}
+		require.Len(t, sp.crdb.mu.recording.children, exp)
+	}
 }

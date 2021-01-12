@@ -51,7 +51,11 @@ func NewUnorderedDistinct(
 type unorderedDistinct struct {
 	OneInputNode
 
-	ht             *hashTable
+	ht *hashTable
+	// lastInputBatch tracks the last input batch read from the input and not
+	// emitted into the output. It is the only batch that we need to export when
+	// spilling to disk, and it will contain only the distinct tuples that need
+	// to be emitted into the output.
 	lastInputBatch coldata.Batch
 }
 
@@ -68,11 +72,11 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 		if op.lastInputBatch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
-		// Note that distinctBuild might panic with a memory budget exceeded
-		// error, in which case no tuples from the last input batch are output.
-		// In such scenario, we don't know at which point of distinctBuild that
-		// happened, but it doesn't matter - we will export the last input batch
-		// when falling back to disk.
+		// distinctBuild call might result in an OOM error after lastInputBatch
+		// is updated in-place to include only the new distinct tuples. If an
+		// OOM occurs, we are careful not to filter them out (since the
+		// filtering has already been performed); if an OOM doesn't occur, we
+		// will emit the updated last input batch here.
 		op.ht.distinctBuild(ctx, op.lastInputBatch)
 		if op.lastInputBatch.Length() > 0 {
 			// We've just appended some distinct tuples to the hash table, so we
@@ -84,15 +88,15 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
-	// We have output all the distinct tuples except for the ones that are part
-	// of the last input batch, so we only need to export that batch, and then
-	// we're done exporting.
+func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	if op.lastInputBatch != nil {
 		batch := op.lastInputBatch
 		op.lastInputBatch = nil
 		return batch
 	}
+	// We only need to export the last input batch because the buffered in the
+	// hash table data is used by the unorderedDistinctFilterer (which is
+	// planned by the external distinct).
 	return coldata.ZeroBatch
 }
 
@@ -102,4 +106,63 @@ func (op *unorderedDistinct) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	op.ht.reset(ctx)
+}
+
+// unorderedDistinctFilterer filters out tuples that are duplicates of the
+// tuples already emitted by the unordered distinct.
+type unorderedDistinctFilterer struct {
+	OneInputNode
+	NonExplainable
+
+	ht *hashTable
+	// seenBatch tracks whether the operator has already read at least one
+	// batch.
+	seenBatch bool
+}
+
+var _ colexecbase.Operator = &unorderedDistinctFilterer{}
+
+func (f *unorderedDistinctFilterer) Init() {
+	f.input.Init()
+}
+
+func (f *unorderedDistinctFilterer) Next(ctx context.Context) coldata.Batch {
+	if f.ht.vals.Length() == 0 {
+		// The hash table is empty, so there is nothing to filter against.
+		return f.input.Next(ctx)
+	}
+	for {
+		batch := f.input.Next(ctx)
+		if batch.Length() == 0 {
+			return coldata.ZeroBatch
+		}
+		if !f.seenBatch {
+			// This is the first batch we received from bufferExportingOperator
+			// and the hash table is not empty; therefore, this batch must be
+			// the last input batch coming from the in-memory unordered
+			// distinct.
+			//
+			// That batch has already been updated in-place to contain only
+			// distinct tuples all of which have been appended to the hash
+			// table, so we don't need to perform filtering on it. However, we
+			// might need to repair the hash table in case the OOM error
+			// occurred when tuples were being appended to f.ht.vals.
+			//
+			// See https://github.com/cockroachdb/cockroach/pull/58006#pullrequestreview-565859919
+			// for all the gory details.
+			f.ht.maybeRepairAfterDistinctBuild(ctx)
+			f.seenBatch = true
+			return batch
+		}
+		// The unordered distinct has emitted some tuples, so we need to check
+		// all tuples in batch against the hash table.
+		f.ht.computeHashAndBuildChains(ctx, batch)
+		// Remove the duplicates within batch itself.
+		f.ht.removeDuplicates(batch, f.ht.keys, f.ht.probeScratch.first, f.ht.probeScratch.next, f.ht.checkProbeForDistinct)
+		// Remove the duplicates of already emitted distinct tuples.
+		f.ht.removeDuplicates(batch, f.ht.keys, f.ht.buildScratch.first, f.ht.buildScratch.next, f.ht.checkBuildForDistinct)
+		if batch.Length() > 0 {
+			return batch
+		}
+	}
 }

@@ -3414,7 +3414,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	var allowErrors int32
 	for task := 0; task < numBackgroundTasks; task++ {
 		taskNum := task
-		tc.Stopper().RunWorker(context.Background(), func(context.Context) {
+		_ = tc.Stopper().RunAsyncTask(context.Background(), "bg-task", func(context.Context) {
 			conn := tc.Conns[taskNum%len(tc.Conns)]
 			// Use different sql gateways to make sure leasing is right.
 			if err := startBackgroundWrites(tc.Stopper(), conn, rows, bgActivity, &allowErrors); err != nil {
@@ -6093,6 +6093,8 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 
 func TestPaginatedBackupTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const numAccounts = 1
@@ -6192,6 +6194,8 @@ func TestPaginatedBackupTenant(t *testing.T) {
 // Ensure that backing up and restoring tenants succeeds.
 func TestBackupRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 	const numAccounts = 1
@@ -6208,10 +6212,15 @@ func TestBackupRestoreTenant(t *testing.T) {
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
 
+	// Prevent a logging assertion that the server ID is initialized multiple times.
+	log.TestingClearServerIdentifiers()
+
 	_, conn11 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
 	defer conn11.Close()
 	tenant11 := sqlutils.MakeSQLRunner(conn11)
 	tenant11.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.baz(i int primary key); INSERT INTO foo.baz VALUES (111), (211)`)
+
+	log.TestingClearServerIdentifiers()
 
 	_, conn20 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20)})
 	defer conn20.Close()
@@ -6268,6 +6277,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
 		)
 
+		log.TestingClearServerIdentifiers()
+
 		ten10Stopper := stop.NewStopper()
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{
@@ -6283,13 +6294,25 @@ func TestBackupRestoreTenant(t *testing.T) {
 		ten10Stopper.Stop(ctx)
 		restoreConn10 = nil
 
+		// Mark tenant as DROP.
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
 			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
 		)
 
+		// Make GC jobs run in 1 second.
+		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		// Now run the GC job to delete the tenant and its data.
 		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		// Wait for tenant GC job to complete.
+		restoreDB.CheckQueryResultsRetry(
+			t,
+			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
+			[][]string{{"succeeded"}},
+		)
+
 		ten10Prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(10))
 		ten10PrefixEnd := ten10Prefix.PrefixEnd()
 		rows, err := restoreTC.Server(0).DB().Scan(ctx, ten10Prefix, ten10PrefixEnd, 0 /* maxRows */)
@@ -6302,6 +6325,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
 		)
 
+		log.TestingClearServerIdentifiers()
+
 		_, restoreConn10 = serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
 		)
@@ -6310,6 +6335,22 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		// Wait for tenant GC job to complete.
+		restoreDB.CheckQueryResultsRetry(
+			t,
+			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
+			[][]string{{"succeeded"}, {"succeeded"}},
+		)
+
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+		)
 	})
 
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {
@@ -6325,6 +6366,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
 			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
 		)
+
+		log.TestingClearServerIdentifiers()
 
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
@@ -6355,6 +6398,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 			},
 		)
 
+		log.TestingClearServerIdentifiers()
+
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
 		)
@@ -6363,6 +6408,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		log.TestingClearServerIdentifiers()
 
 		_, restoreConn11 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11), Existing: true},
@@ -6382,6 +6429,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
+		log.TestingClearServerIdentifiers()
+
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), Existing: true},
 		)
@@ -6399,6 +6448,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
+
+		log.TestingClearServerIdentifiers()
 
 		_, restoreConn20 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), Existing: true},

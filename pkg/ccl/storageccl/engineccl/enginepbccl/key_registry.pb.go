@@ -50,7 +50,7 @@ func (x EncryptionType) String() string {
 	return proto.EnumName(EncryptionType_name, int32(x))
 }
 func (EncryptionType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_cc37749f10f852e8, []int{0}
+	return fileDescriptor_key_registry_160983c0db19b441, []int{0}
 }
 
 // DataKeysRegistry contains all data keys (including the raw key) as well
@@ -70,7 +70,7 @@ func (m *DataKeysRegistry) Reset()         { *m = DataKeysRegistry{} }
 func (m *DataKeysRegistry) String() string { return proto.CompactTextString(m) }
 func (*DataKeysRegistry) ProtoMessage()    {}
 func (*DataKeysRegistry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_cc37749f10f852e8, []int{0}
+	return fileDescriptor_key_registry_160983c0db19b441, []int{0}
 }
 func (m *DataKeysRegistry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +118,7 @@ func (m *KeyInfo) Reset()         { *m = KeyInfo{} }
 func (m *KeyInfo) String() string { return proto.CompactTextString(m) }
 func (*KeyInfo) ProtoMessage()    {}
 func (*KeyInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_cc37749f10f852e8, []int{1}
+	return fileDescriptor_key_registry_160983c0db19b441, []int{1}
 }
 func (m *KeyInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -156,7 +156,7 @@ func (m *SecretKey) Reset()         { *m = SecretKey{} }
 func (m *SecretKey) String() string { return proto.CompactTextString(m) }
 func (*SecretKey) ProtoMessage()    {}
 func (*SecretKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_cc37749f10f852e8, []int{2}
+	return fileDescriptor_key_registry_160983c0db19b441, []int{2}
 }
 func (m *SecretKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -197,7 +197,7 @@ func (m *EncryptionSettings) Reset()         { *m = EncryptionSettings{} }
 func (m *EncryptionSettings) String() string { return proto.CompactTextString(m) }
 func (*EncryptionSettings) ProtoMessage()    {}
 func (*EncryptionSettings) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_cc37749f10f852e8, []int{3}
+	return fileDescriptor_key_registry_160983c0db19b441, []int{3}
 }
 func (m *EncryptionSettings) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1509,10 +1509,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/key_registry.proto", fileDescriptor_key_registry_cc37749f10f852e8)
+	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/key_registry.proto", fileDescriptor_key_registry_160983c0db19b441)
 }
 
-var fileDescriptor_key_registry_cc37749f10f852e8 = []byte{
+var fileDescriptor_key_registry_160983c0db19b441 = []byte{
 	// 594 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x94, 0x4f, 0x6f, 0xd3, 0x4c,
 	0x10, 0xc6, 0xb3, 0x49, 0x93, 0x36, 0x93, 0x26, 0x8d, 0xf6, 0xed, 0x8b, 0xa2, 0x1e, 0x4c, 0x14,

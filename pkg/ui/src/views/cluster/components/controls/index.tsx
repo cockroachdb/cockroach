@@ -16,7 +16,6 @@ import { ArrowDirection } from "src/views/shared/components/dropdown";
 import React from "react";
 import "./controls.styl";
 
-// tslint:disable-next-line: variable-name
 const ButtonGroup = Button.Group;
 
 export interface RangeSelectProps {
@@ -28,38 +27,60 @@ export interface RangeSelectProps {
 }
 
 export class TimeFrameControls extends React.Component<RangeSelectProps> {
-  handleChangeArrow = (direction: ArrowDirection) => () => this.props.onArrowClick(direction);
+  handleChangeArrow = (direction: ArrowDirection) => () =>
+    this.props.onArrowClick(direction);
 
   render() {
     const { disabledArrows } = this.props;
     const left = _.includes(disabledArrows, ArrowDirection.LEFT);
     const center = _.includes(disabledArrows, ArrowDirection.CENTER);
     const right = _.includes(disabledArrows, ArrowDirection.RIGHT);
-    const delay = .3;
+    const delay = 0.3;
     return (
       <div className="controls-content">
         <ButtonGroup>
-          <Tooltip placement="bottom" title="previous timeframe" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
+          <Tooltip
+            placement="bottom"
+            title="previous timeframe"
+            mouseEnterDelay={delay}
+            mouseLeaveDelay={delay}
+          >
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.LEFT)}
               disabled={left}
               className={`_action ${left ? "disabled" : "active"}`}
-            ><img src={CaretLeft} alt="previous timeframe" /></Button>
+            >
+              <img src={CaretLeft} alt="previous timeframe" />
+            </Button>
           </Tooltip>
-          <Tooltip placement="bottom" title="next timeframe" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
+          <Tooltip
+            placement="bottom"
+            title="next timeframe"
+            mouseEnterDelay={delay}
+            mouseLeaveDelay={delay}
+          >
             <Button
               onClick={this.handleChangeArrow(ArrowDirection.RIGHT)}
               disabled={right}
               className={`_action ${right ? "disabled" : "active"}`}
-            ><img src={CaretRight} alt="next timeframe" /></Button>
+            >
+              <img src={CaretRight} alt="next timeframe" />
+            </Button>
           </Tooltip>
         </ButtonGroup>
-        <Tooltip placement="bottom" title="Now" mouseEnterDelay={delay} mouseLeaveDelay={delay}>
+        <Tooltip
+          placement="bottom"
+          title="Now"
+          mouseEnterDelay={delay}
+          mouseLeaveDelay={delay}
+        >
           <Button
             onClick={this.handleChangeArrow(ArrowDirection.CENTER)}
             disabled={center}
             className={`_action ${center ? "disabled" : "active"} btn__now`}
-          >Now</Button>
+          >
+            Now
+          </Button>
         </Tooltip>
       </div>
     );

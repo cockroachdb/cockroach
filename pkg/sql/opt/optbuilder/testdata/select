@@ -1412,3 +1412,94 @@ project
            │    └── u:2 = 1
            └── v: filters
                 └── ((v:3 > 100) AND (v:3 < 200)) AND (u:2 > 50)
+
+exec-ddl
+CREATE TABLE inaccessible (
+    k INT PRIMARY KEY,
+    "v:inaccessible" INT
+)
+----
+
+build
+SELECT * FROM inaccessible
+----
+project
+ ├── columns: k:1!null
+ └── scan inaccessible
+      └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+
+build
+SELECT v FROM inaccessible
+----
+error (42703): column "v" does not exist
+
+build
+INSERT INTO inaccessible VALUES (1)
+----
+insert inaccessible
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:4 => k:1
+ │    └── column5:5 => v:2
+ └── project
+      ├── columns: column5:5 column1:4!null
+      ├── values
+      │    ├── columns: column1:4!null
+      │    └── (1,)
+      └── projections
+           └── NULL::INT8 [as=column5:5]
+
+build
+INSERT INTO inaccessible VALUES (1) RETURNING v
+----
+error (42703): column "v" does not exist
+
+build
+INSERT INTO inaccessible(k, v) VALUES (1, 1)
+----
+error (42703): column "v" does not exist
+
+build
+UPSERT INTO inaccessible(k, v) VALUES (1, 1)
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=k+1
+----
+update inaccessible
+ ├── columns: <none>
+ ├── fetch columns: k:4 v:5
+ ├── update-mapping:
+ │    └── k_new:7 => k:1
+ └── project
+      ├── columns: k_new:7!null k:4!null v:5 crdb_internal_mvcc_timestamp:6
+      ├── scan inaccessible
+      │    └── columns: k:4!null v:5 crdb_internal_mvcc_timestamp:6
+      └── projections
+           └── k:4 + 1 [as=k_new:7]
+
+build
+UPDATE inaccessible SET k=k+1 WHERE v=1
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET k=v+1
+----
+error (42703): column "v" does not exist
+
+build
+UPDATE inaccessible SET v=1
+----
+error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible WHERE v=1
+----
+error (42703): column "v" does not exist
+
+build
+DELETE FROM inaccessible RETURNING v
+----
+error (42703): column "v" does not exist

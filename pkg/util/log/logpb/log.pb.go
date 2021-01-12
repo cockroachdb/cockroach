@@ -77,7 +77,7 @@ func (x Severity) String() string {
 	return proto.EnumName(Severity_name, int32(x))
 }
 func (Severity) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_1138047630abb4e3, []int{0}
+	return fileDescriptor_log_cdb914dacde7ffc4, []int{0}
 }
 
 // Channel is the logical logging channel on which a message is sent.
@@ -234,7 +234,7 @@ func (x Channel) String() string {
 	return proto.EnumName(Channel_name, int32(x))
 }
 func (Channel) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_1138047630abb4e3, []int{1}
+	return fileDescriptor_log_cdb914dacde7ffc4, []int{1}
 }
 
 // Entry represents a cockroach log entry in the following two cases:
@@ -283,7 +283,7 @@ func (m *Entry) Reset()         { *m = Entry{} }
 func (m *Entry) String() string { return proto.CompactTextString(m) }
 func (*Entry) ProtoMessage()    {}
 func (*Entry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_1138047630abb4e3, []int{0}
+	return fileDescriptor_log_cdb914dacde7ffc4, []int{0}
 }
 func (m *Entry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -322,7 +322,7 @@ func (m *FileDetails) Reset()         { *m = FileDetails{} }
 func (m *FileDetails) String() string { return proto.CompactTextString(m) }
 func (*FileDetails) ProtoMessage()    {}
 func (*FileDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_1138047630abb4e3, []int{1}
+	return fileDescriptor_log_cdb914dacde7ffc4, []int{1}
 }
 func (m *FileDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -358,7 +358,7 @@ func (m *FileInfo) Reset()         { *m = FileInfo{} }
 func (m *FileInfo) String() string { return proto.CompactTextString(m) }
 func (*FileInfo) ProtoMessage()    {}
 func (*FileInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_1138047630abb4e3, []int{2}
+	return fileDescriptor_log_cdb914dacde7ffc4, []int{2}
 }
 func (m *FileInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1364,9 +1364,9 @@ var (
 	ErrIntOverflowLog   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("util/log/logpb/log.proto", fileDescriptor_log_1138047630abb4e3) }
+func init() { proto.RegisterFile("util/log/logpb/log.proto", fileDescriptor_log_cdb914dacde7ffc4) }
 
-var fileDescriptor_log_1138047630abb4e3 = []byte{
+var fileDescriptor_log_cdb914dacde7ffc4 = []byte{
 	// 682 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x53, 0xd1, 0x6e, 0xf3, 0x34,
 	0x18, 0x6d, 0x9a, 0xa4, 0x49, 0xbe, 0xfe, 0x9a, 0x8c, 0x35, 0xa4, 0xc0, 0x46, 0x56, 0x4d, 0x48,

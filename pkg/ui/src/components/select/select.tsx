@@ -9,7 +9,10 @@
 // licenses/APL.txt.
 
 import * as React from "react";
-import { default as AntSelect, SelectProps as AntSelectProps } from "antd/es/select";
+import {
+  default as AntSelect,
+  SelectProps as AntSelectProps,
+} from "antd/es/select";
 import cn from "classnames";
 
 import "./select.styl";
@@ -21,11 +24,9 @@ interface SelectProps extends AntSelectProps {
 
 export function Select(props: SelectProps) {
   const { display } = props;
-  const classNames = cn(
-    "select",
-    {
-      "select--type-link": display === "link",
-    });
+  const classNames = cn("select", {
+    "select--type-link": display === "link",
+  });
 
   return (
     <AntSelect {...props} className={classNames}>

@@ -46,7 +46,7 @@ func (m *ChangeAggregatorSpec) Reset()         { *m = ChangeAggregatorSpec{} }
 func (m *ChangeAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec) ProtoMessage()    {}
 func (*ChangeAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_b7addf517cbc7dc0, []int{0}
+	return fileDescriptor_processors_changefeeds_f6611d63ac43ab7f, []int{0}
 }
 func (m *ChangeAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -80,7 +80,7 @@ func (m *ChangeAggregatorSpec_Watch) Reset()         { *m = ChangeAggregatorSpec
 func (m *ChangeAggregatorSpec_Watch) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec_Watch) ProtoMessage()    {}
 func (*ChangeAggregatorSpec_Watch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_b7addf517cbc7dc0, []int{0, 0}
+	return fileDescriptor_processors_changefeeds_f6611d63ac43ab7f, []int{0, 0}
 }
 func (m *ChangeAggregatorSpec_Watch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -126,7 +126,7 @@ func (m *ChangeFrontierSpec) Reset()         { *m = ChangeFrontierSpec{} }
 func (m *ChangeFrontierSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeFrontierSpec) ProtoMessage()    {}
 func (*ChangeFrontierSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_changefeeds_b7addf517cbc7dc0, []int{1}
+	return fileDescriptor_processors_changefeeds_f6611d63ac43ab7f, []int{1}
 }
 func (m *ChangeFrontierSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -866,10 +866,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_changefeeds.proto", fileDescriptor_processors_changefeeds_b7addf517cbc7dc0)
+	proto.RegisterFile("sql/execinfrapb/processors_changefeeds.proto", fileDescriptor_processors_changefeeds_f6611d63ac43ab7f)
 }
 
-var fileDescriptor_processors_changefeeds_b7addf517cbc7dc0 = []byte{
+var fileDescriptor_processors_changefeeds_f6611d63ac43ab7f = []byte{
 	// 500 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x93, 0xcf, 0x8a, 0x13, 0x41,
 	0x10, 0xc6, 0x33, 0x9b, 0xac, 0xb2, 0x1d, 0x17, 0x65, 0x58, 0x74, 0x08, 0x38, 0x09, 0x8b, 0x87,

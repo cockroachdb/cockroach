@@ -13,7 +13,7 @@ package server
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -37,6 +37,23 @@ type stickyInMemEngine struct {
 	storage.Engine
 }
 
+// StickyInMemEnginesRegistry manages the lifecycle of sticky engines.
+type StickyInMemEnginesRegistry interface {
+	// GetOrCreateStickyInMemEngine returns an engine associated with the given id.
+	// It will create a new in-memory engine if one does not already exist.
+	// At most one engine with a given id can be active in
+	// "GetOrCreateStickyInMemEngine" at any given time.
+	// Note that if you re-create an existing sticky engine the new attributes
+	// and cache size will be ignored.
+	// One must Close() on the sticky engine before another can be fetched.
+	GetOrCreateStickyInMemEngine(
+		ctx context.Context, spec base.StoreSpec,
+	) (storage.Engine, error)
+	// CloseAllStickyInMemEngines closes all sticky in memory engines that were
+	// created by this registry.
+	CloseAllStickyInMemEngines()
+}
+
 // stickyInMemEngine implements Engine.
 var _ storage.Engine = &stickyInMemEngine{}
 
@@ -53,76 +70,58 @@ func (e *stickyInMemEngine) Closed() bool {
 }
 
 // stickyInMemEnginesRegistryImpl is the bookkeeper for all active
-// sticky engines, keyed by their id.
+// sticky engines, keyed by their id. It implements the
+// StickyInMemEnginesRegistry interface.
 type stickyInMemEnginesRegistryImpl struct {
 	entries map[string]*stickyInMemEngine
 	mu      syncutil.Mutex
 }
 
-var stickyInMemEnginesRegistry = &stickyInMemEnginesRegistryImpl{
-	entries: map[string]*stickyInMemEngine{},
+// NewStickyInMemEnginesRegistry creates a new StickyInMemEnginesRegistry.
+func NewStickyInMemEnginesRegistry() StickyInMemEnginesRegistry {
+	return &stickyInMemEnginesRegistryImpl{
+		entries: map[string]*stickyInMemEngine{},
+	}
 }
 
-// getOrCreateStickyInMemEngine returns an engine associated with the given id.
-// It will create a new in-memory engine if one does not already exist.
-// At most one engine with a given id can be active in
-// "getOrCreateStickyInMemEngine" at any given time.
-// Note that if you re-create an existing sticky engine the new attributes
-// and cache size will be ignored.
-// One must Close() on the sticky engine before another can be fetched.
-func getOrCreateStickyInMemEngine(
-	ctx context.Context, id string, attrs roachpb.Attributes, cacheSize int64,
+// GetOrCreateStickyInMemEngine implements the StickyInMemEnginesRegistry interface.
+func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
+	ctx context.Context, spec base.StoreSpec,
 ) (storage.Engine, error) {
-	stickyInMemEnginesRegistry.mu.Lock()
-	defer stickyInMemEnginesRegistry.mu.Unlock()
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
 
-	if engine, ok := stickyInMemEnginesRegistry.entries[id]; ok {
+	if engine, ok := registry.entries[spec.StickyInMemoryEngineID]; ok {
 		if !engine.closed {
-			return nil, errors.Errorf("sticky engine %s has not been closed", id)
+			return nil, errors.Errorf("sticky engine %s has not been closed", spec.StickyInMemoryEngineID)
 		}
 
-		log.Infof(ctx, "re-using sticky in-mem engine %s", id)
+		log.Infof(ctx, "re-using sticky in-mem engine %s", spec.StickyInMemoryEngineID)
 		engine.closed = false
 		return engine, nil
 	}
 
-	log.Infof(ctx, "creating new sticky in-mem engine %s", id)
+	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
 	engine := &stickyInMemEngine{
-		id:     id,
+		id:     spec.StickyInMemoryEngineID,
 		closed: false,
-		Engine: storage.NewInMem(ctx, attrs, cacheSize),
+		Engine: storage.NewInMem(ctx, spec.Attributes, spec.Size.InBytes),
 	}
-	stickyInMemEnginesRegistry.entries[id] = engine
+	registry.entries[spec.StickyInMemoryEngineID] = engine
 	return engine, nil
 }
 
-// CloseStickyInMemEngine closes the underlying engine and
-// removes the sticky engine keyed by the given id.
-// It will error if it does not exist.
-func CloseStickyInMemEngine(id string) error {
-	stickyInMemEnginesRegistry.mu.Lock()
-	defer stickyInMemEnginesRegistry.mu.Unlock()
-
-	if engine, ok := stickyInMemEnginesRegistry.entries[id]; ok {
-		engine.closed = true
-		engine.Engine.Close()
-		delete(stickyInMemEnginesRegistry.entries, id)
-		return nil
-	}
-	return errors.Errorf("sticky in-mem engine %s does not exist", id)
-}
-
 // CloseAllStickyInMemEngines closes and removes all sticky in memory engines.
-func CloseAllStickyInMemEngines() {
-	stickyInMemEnginesRegistry.mu.Lock()
-	defer stickyInMemEnginesRegistry.mu.Unlock()
+func (registry *stickyInMemEnginesRegistryImpl) CloseAllStickyInMemEngines() {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
 
-	for _, engine := range stickyInMemEnginesRegistry.entries {
+	for _, engine := range registry.entries {
 		engine.closed = true
 		engine.Engine.Close()
 	}
 
-	for id := range stickyInMemEnginesRegistry.entries {
-		delete(stickyInMemEnginesRegistry.entries, id)
+	for id := range registry.entries {
+		delete(registry.entries, id)
 	}
 }

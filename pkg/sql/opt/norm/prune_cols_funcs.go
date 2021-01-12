@@ -100,7 +100,6 @@ func (c *CustomFuncs) neededMutationCols(
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
-	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
@@ -112,6 +111,10 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 		return colSet
 	}
+
+	// cols accumulates the result. The column IDs are relative to tabMeta.
+	// TODO(radu): this should be a set of ordinals instead.
+	var cols opt.ColSet
 
 	// addFamilyCols adds all columns in each family containing at least one
 	// column that is being updated.
@@ -153,6 +156,12 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			}
 		}
 
+		// TODO(radu): The execution code requires that each update column has a
+		// corresponding fetch column (even if the old value is not necessary).
+		// Note that when this limitation is fixed, the rest of the code below
+		// needs to be revisited as well.
+		cols.UnionWith(updateCols)
+
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			// If the columns being updated are not part of the index, then the
@@ -187,9 +196,6 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			// It is possible to update a subset of families only for the primary
 			// index, and only when key columns are not being updated. Otherwise,
 			// all columns in the index must be fetched.
-			// TODO(andyk): It should be possible to not include columns that are
-			// being updated, since the existing value is not used. However, this
-			// would require execution support.
 			if i == cat.PrimaryIndex && !keyCols.Intersects(updateCols) {
 				addFamilyCols(updateCols)
 			} else {
@@ -204,6 +210,19 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			}
 		}
 
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			var fkCols opt.ColSet
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				fkCols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
+			if fkCols.Intersects(updateCols) {
+				cols.UnionWith(fkCols)
+			}
+		}
+
 	case opt.DeleteOp:
 		// Add in all strict key columns from all indexes, since these are needed
 		// to compose the keys of rows to delete. Include mutation indexes, since
@@ -211,6 +230,15 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		// or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			cols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+		}
+
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				cols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
 		}
 	}
 

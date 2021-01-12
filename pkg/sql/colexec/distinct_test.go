@@ -217,6 +217,54 @@ func TestDistinct(t *testing.T) {
 	}
 }
 
+func TestUnorderedDistinctRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewPseudoRand()
+	nCols := 1 + rng.Intn(3)
+	typs := make([]*types.T, nCols)
+	distinctCols := make([]uint32, nCols)
+	for i := range typs {
+		typs[i] = types.Int
+		distinctCols[i] = uint32(i)
+	}
+	nDistinctBatches := 2 + rng.Intn(2)
+	newTupleProbability := rng.Float64()
+	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
+	const maxNumTuples = 25000
+	if nTuples > maxNumTuples {
+		// If we happen to set a large value for coldata.BatchSize() and a small
+		// value for newTupleProbability, we might end up with huge number of
+		// tuples. Then, when runTests test harness uses small batch size, the
+		// test might take a while, so we'll limit the number of tuples.
+		nTuples = maxNumTuples
+	}
+	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
+	runTestsWithTyps(
+		t,
+		[]tuples{tups},
+		[][]*types.T{typs},
+		expected,
+		// tups and expected are in an arbitrary order, so we use an unordered
+		// verifier.
+		unorderedVerifier,
+		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			return NewUnorderedDistinct(testAllocator, input[0], distinctCols, typs), nil
+		},
+	)
+}
+
+// getNewValueProbabilityForDistinct returns the probability that we need to use
+// a new value for a single element in a tuple when overall the tuples need to
+// be distinct with newTupleProbability and they consists of nCols columns.
+func getNewValueProbabilityForDistinct(newTupleProbability float64, nCols int) float64 {
+	// We have the following equation:
+	//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
+	// so applying some manipulations we get:
+	//   newValueProbability = 1 - (1 - newTupleProbability) ^ (1 / nCols).
+	return 1.0 - math.Pow(1-newTupleProbability, 1.0/float64(nCols))
+}
+
 // runDistinctBenchmarks runs the benchmarks of a distinct operator variant on
 // multiple configurations.
 func runDistinctBenchmarks(
@@ -251,11 +299,7 @@ func runDistinctBenchmarks(
 					}
 					distinctCols := []uint32{0, 1, 2, 3}[:nCols]
 					numOrderedCols := getNumOrderedCols(nCols)
-					// We have the following equation:
-					//   newTupleProbability = 1 - (1 - newValueProbability) ^ nCols,
-					// so applying some manipulations we get:
-					//   newValueProbability = 1 - (1 - newTupleProbability) ^ (1 / nCols).
-					newValueProbability := 1.0 - math.Pow(1-newTupleProbability, 1.0/float64(nCols))
+					newValueProbability := getNewValueProbabilityForDistinct(newTupleProbability, nCols)
 					for i := range distinctCols {
 						col := cols[i].Int64()
 						col[0] = 0

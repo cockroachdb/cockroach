@@ -602,7 +602,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
+%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -753,6 +753,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> alter_zone_table_stmt
 %type <tree.Statement> alter_table_set_schema_stmt
 %type <tree.Statement> alter_table_locality_stmt
+%type <tree.Statement> alter_table_owner_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -780,11 +781,13 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
 %type <tree.Statement> alter_view_set_schema_stmt
+%type <tree.Statement> alter_view_owner_stmt
 
 // ALTER SEQUENCE
 %type <tree.Statement> alter_rename_sequence_stmt
 %type <tree.Statement> alter_sequence_options_stmt
 %type <tree.Statement> alter_sequence_set_schema_stmt
+%type <tree.Statement> alter_sequence_owner_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1392,6 +1395,7 @@ alter_table_stmt:
 | alter_rename_table_stmt
 | alter_table_set_schema_stmt
 | alter_table_locality_stmt
+| alter_table_owner_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
 | ALTER TABLE error     // SHOW HELP: ALTER TABLE
@@ -1431,6 +1435,7 @@ alter_partition_stmt:
 alter_view_stmt:
   alter_rename_view_stmt
 | alter_view_set_schema_stmt
+| alter_view_owner_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
@@ -1450,6 +1455,7 @@ alter_sequence_stmt:
   alter_rename_sequence_stmt
 | alter_sequence_options_stmt
 | alter_sequence_set_schema_stmt
+| alter_sequence_owner_stmt
 | ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
 
 alter_sequence_options_stmt:
@@ -2009,13 +2015,6 @@ alter_table_cmd:
     /* SKIP DOC */
     $$.val = &tree.AlterTableInjectStats{
       Stats: $3.expr(),
-    }
-  }
-  // ALTER TABLE <name> OWNER TO <newowner>
-| OWNER TO role_spec
-  {
-    $$.val = &tree.AlterTableOwner{
-      Owner: $3.user(),
     }
   }
 
@@ -7264,7 +7263,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| LOCALITY REGIONAL BY ROW ON name
+| LOCALITY REGIONAL BY ROW AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7296,7 +7295,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-|  REGIONAL AFFINITY AT ROW LEVEL ON name
+|  REGIONAL AFFINITY AT ROW LEVEL AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7328,7 +7327,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| REGIONAL AFFINITY ROW LEVEL ON name
+| REGIONAL AFFINITY ROW LEVEL AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7360,11 +7359,29 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| ROW LEVEL REGIONAL AFFINITY ON name
+| ROW LEVEL REGIONAL AFFINITY AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
       RegionalByRowColumn: tree.Name($6),
+    }
+  }
+
+alter_table_owner_stmt:
+  ALTER TABLE relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $3.unresolvedObjectName(),
+      Owner: $6.user(),
+      IfExists: false,
+    }
+  }
+| ALTER TABLE IF EXISTS relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $5.unresolvedObjectName(),
+      Owner: $8.user(),
+      IfExists: true,
     }
   }
 
@@ -7402,6 +7419,46 @@ alter_view_set_schema_stmt:
 		}
 	}
 
+alter_view_owner_stmt:
+	ALTER VIEW relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $3.unresolvedObjectName(),
+      Owner: $6.user(),
+      IfExists: false,
+      IsView: true,
+    }
+  }
+| ALTER MATERIALIZED VIEW relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $4.unresolvedObjectName(),
+      Owner: $7.user(),
+      IfExists: false,
+      IsView: true,
+      IsMaterialized: true,
+    }
+  }
+| ALTER VIEW IF EXISTS relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $5.unresolvedObjectName(),
+      Owner: $8.user(),
+      IfExists: true,
+      IsView: true,
+    }
+  }
+| ALTER MATERIALIZED VIEW IF EXISTS relation_expr OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Name: $6.unresolvedObjectName(),
+      Owner: $9.user(),
+      IfExists: true,
+      IsView: true,
+      IsMaterialized: true,
+    }
+  }
+
 alter_sequence_set_schema_stmt:
 	ALTER SEQUENCE relation_expr SET SCHEMA schema_name
 	 {
@@ -7413,6 +7470,26 @@ alter_sequence_set_schema_stmt:
 	{
 		$$.val = &tree.AlterTableSetSchema{
 			Name: $5.unresolvedObjectName(), Schema: tree.Name($8), IfExists: true, IsSequence: true,
+		}
+	}
+
+alter_sequence_owner_stmt:
+	ALTER SEQUENCE relation_expr OWNER TO role_spec
+	{
+		$$.val = &tree.AlterTableOwner{
+			Name: $3.unresolvedObjectName(),
+			Owner: $6.user(),
+			IfExists: false,
+			IsSequence: true,
+		}
+	}
+| ALTER SEQUENCE IF EXISTS relation_expr OWNER TO role_spec
+	{
+		$$.val = &tree.AlterTableOwner{
+			Name: $5.unresolvedObjectName(),
+			Owner: $8.user(),
+			IfExists: true,
+			IsSequence: true,
 		}
 	}
 
@@ -7845,6 +7922,12 @@ survival_goal_clause:
   {
     $$.val = tree.SurvivalGoalZoneFailure
   }
+| SURVIVE opt_equal AVAILABILITY ZONE FAILURE
+  {
+    /* SKIP DOC */
+    $$.val = tree.SurvivalGoalZoneFailure
+  }
+
 
 opt_survival_goal_clause:
   survival_goal_clause
@@ -12106,6 +12189,7 @@ unreserved_keyword:
 | AT
 | ATTRIBUTE
 | AUTOMATIC
+| AVAILABILITY
 | BACKUP
 | BACKUPS
 | BEFORE

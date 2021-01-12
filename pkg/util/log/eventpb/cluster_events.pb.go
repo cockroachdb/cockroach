@@ -35,7 +35,7 @@ func (m *CommonNodeEventDetails) Reset()         { *m = CommonNodeEventDetails{}
 func (m *CommonNodeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonNodeEventDetails) ProtoMessage()    {}
 func (*CommonNodeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{0}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{0}
 }
 func (m *CommonNodeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +70,7 @@ func (m *NodeJoin) Reset()         { *m = NodeJoin{} }
 func (m *NodeJoin) String() string { return proto.CompactTextString(m) }
 func (*NodeJoin) ProtoMessage()    {}
 func (*NodeJoin) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{1}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{1}
 }
 func (m *NodeJoin) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,7 @@ func (m *NodeRestart) Reset()         { *m = NodeRestart{} }
 func (m *NodeRestart) String() string { return proto.CompactTextString(m) }
 func (*NodeRestart) ProtoMessage()    {}
 func (*NodeRestart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{2}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{2}
 }
 func (m *NodeRestart) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *CommonNodeDecommissionDetails) Reset()         { *m = CommonNodeDecommi
 func (m *CommonNodeDecommissionDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonNodeDecommissionDetails) ProtoMessage()    {}
 func (*CommonNodeDecommissionDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{3}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{3}
 }
 func (m *CommonNodeDecommissionDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -185,7 +185,7 @@ func (m *NodeDecommissioning) Reset()         { *m = NodeDecommissioning{} }
 func (m *NodeDecommissioning) String() string { return proto.CompactTextString(m) }
 func (*NodeDecommissioning) ProtoMessage()    {}
 func (*NodeDecommissioning) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{4}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{4}
 }
 func (m *NodeDecommissioning) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,7 +221,7 @@ func (m *NodeDecommissioned) Reset()         { *m = NodeDecommissioned{} }
 func (m *NodeDecommissioned) String() string { return proto.CompactTextString(m) }
 func (*NodeDecommissioned) ProtoMessage()    {}
 func (*NodeDecommissioned) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{5}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{5}
 }
 func (m *NodeDecommissioned) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -257,7 +257,7 @@ func (m *NodeRecommissioned) Reset()         { *m = NodeRecommissioned{} }
 func (m *NodeRecommissioned) String() string { return proto.CompactTextString(m) }
 func (*NodeRecommissioned) ProtoMessage()    {}
 func (*NodeRecommissioned) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_events_b40f75192836174e, []int{6}
+	return fileDescriptor_cluster_events_10690454bf71dc4a, []int{6}
 }
 func (m *NodeRecommissioned) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1493,10 +1493,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/cluster_events.proto", fileDescriptor_cluster_events_b40f75192836174e)
+	proto.RegisterFile("util/log/eventpb/cluster_events.proto", fileDescriptor_cluster_events_10690454bf71dc4a)
 }
 
-var fileDescriptor_cluster_events_b40f75192836174e = []byte{
+var fileDescriptor_cluster_events_10690454bf71dc4a = []byte{
 	// 463 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x94, 0xc1, 0x6a, 0xd4, 0x40,
 	0x18, 0xc7, 0x33, 0x6d, 0xcd, 0xea, 0xd7, 0xa5, 0x94, 0x51, 0x24, 0x2c, 0x74, 0x52, 0x02, 0x62,

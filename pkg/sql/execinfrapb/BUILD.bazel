@@ -41,7 +41,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/streamingccl/streamclient",  # keep
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
@@ -141,6 +140,7 @@ go_proto_library(
     proto = ":execinfrapb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/streamingccl",  # keep
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",

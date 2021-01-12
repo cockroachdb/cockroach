@@ -209,15 +209,17 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 func (p *planner) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	desc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
+	desc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
+	// Note that the value of required doesn't matter for lookups by ID.
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, desc.ParentSchemaID)
+	sc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -402,14 +404,20 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-		Required: true,
-	})
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
+		tree.DatabaseLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, schemaID)
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
+		tree.SchemaLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -419,6 +427,52 @@ func (p *planner) getQualifiedTableName(
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
+}
+
+// getQualifiedSchemaName returns the database-qualified name of the
+// schema represented by the provided descriptor.
+func (p *planner) getQualifiedSchemaName(
+	ctx context.Context, desc catalog.SchemaDescriptor,
+) (*tree.ObjectNamePrefix, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(dbDesc.GetName()),
+		SchemaName:      tree.Name(desc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}, nil
+}
+
+// getQualifiedTypeName returns the database-qualified name of the type
+// represented by the provided descriptor.
+func (p *planner) getQualifiedTypeName(
+	ctx context.Context, desc catalog.TypeDescriptor,
+) (*tree.TypeName, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
+		Required: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	schemaID := desc.GetParentSchemaID()
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, tree.SchemaLookupFlags{})
+	if err != nil {
+		return nil, err
+	}
+
+	typeName := tree.MakeNewQualifiedTypeName(
+		dbDesc.GetName(),
+		resolvedSchema.Name,
+		desc.GetName(),
+	)
+
+	return &typeName, nil
 }
 
 // findTableContainingIndex returns the descriptor of a table
@@ -461,8 +515,8 @@ func findTableContainingIndex(
 			continue
 		}
 
-		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
-		if err != nil || dropped {
+		idx, err := tableDesc.FindIndexWithName(string(idxName))
+		if err != nil || idx.Dropped() {
 			// err is nil if the index does not exist on the table.
 			continue
 		}

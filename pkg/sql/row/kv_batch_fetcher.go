@@ -25,21 +25,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// kvBatchSize is the number of keys we request at a time.
+// getKVBatchSize returns the number of keys we request at a time.
 // On a single node, 1000 was enough to avoid any performance degradation. On
 // multi-node clusters, we want bigger chunks to make up for the higher latency.
+//
+// If forceProductionKVBatchSize is true, then the "production" value will be
+// returned regardless of whether the build is metamorphic or not. This should
+// only be used by tests the output of which differs if defaultKVBatchSize is
+// randomized.
 // TODO(radu): parameters like this should be configurable
-var kvBatchSize int64 = int64(util.ConstantWithMetamorphicTestValue(
-	10000, /* defaultValue */
-	1,     /* metamorphicValue */
+func getKVBatchSize(forceProductionKVBatchSize bool) int64 {
+	if forceProductionKVBatchSize {
+		return productionKVBatchSize
+	}
+	return defaultKVBatchSize
+}
+
+var defaultKVBatchSize = int64(util.ConstantWithMetamorphicTestValue(
+	"kv-batch-size",
+	productionKVBatchSize, /* defaultValue */
+	1,                     /* metamorphicValue */
 ))
+
+const productionKVBatchSize = 10000
 
 // TestingSetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
 // This is to be used only in tests - we have no test coverage for arbitrary kv batch sizes at this time.
 func TestingSetKVBatchSize(val int64) func() {
-	oldVal := kvBatchSize
-	kvBatchSize = val
-	return func() { kvBatchSize = oldVal }
+	oldVal := defaultKVBatchSize
+	defaultKVBatchSize = val
+	return func() { defaultKVBatchSize = oldVal }
 }
 
 // sendFunc is the function used to execute a KV batch; normally
@@ -79,6 +94,9 @@ type txnKVFetcher struct {
 	remainingBatches [][]byte
 	mon              *mon.BytesMonitor
 	acc              mon.BoundAccount
+
+	// If set, we will use the production value for kvBatchSize.
+	forceProductionKVBatchSize bool
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -92,6 +110,7 @@ func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	if !f.useBatchLimit {
 		return 0
 	}
+	kvBatchSize := getKVBatchSize(f.forceProductionKVBatchSize)
 	if f.firstBatchLimit == 0 || f.firstBatchLimit >= kvBatchSize {
 		return kvBatchSize
 	}
@@ -192,6 +211,7 @@ func makeKVBatchFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
+	forceProductionKVBatchSize bool,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -201,7 +221,8 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
+		lockWaitPolicy, mon, forceProductionKVBatchSize,
 	)
 }
 
@@ -216,6 +237,7 @@ func makeKVBatchFetcherWithSendFunc(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
+	forceProductionKVBatchSize bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -261,15 +283,16 @@ func makeKVBatchFetcherWithSendFunc(
 	}
 
 	return txnKVFetcher{
-		sendFn:          sendFn,
-		spans:           copySpans,
-		reverse:         reverse,
-		useBatchLimit:   useBatchLimit,
-		firstBatchLimit: firstBatchLimit,
-		lockStrength:    lockStrength,
-		lockWaitPolicy:  lockWaitPolicy,
-		mon:             mon,
-		acc:             mon.MakeBoundAccount(),
+		sendFn:                     sendFn,
+		spans:                      copySpans,
+		reverse:                    reverse,
+		useBatchLimit:              useBatchLimit,
+		firstBatchLimit:            firstBatchLimit,
+		lockStrength:               lockStrength,
+		lockWaitPolicy:             lockWaitPolicy,
+		mon:                        mon,
+		acc:                        mon.MakeBoundAccount(),
+		forceProductionKVBatchSize: forceProductionKVBatchSize,
 	}, nil
 }
 

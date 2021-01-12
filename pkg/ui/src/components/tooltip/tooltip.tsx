@@ -9,7 +9,10 @@
 // licenses/APL.txt.
 
 import * as React from "react";
-import { default as AntTooltip, TooltipProps as AntTooltipProps } from "antd/es/tooltip";
+import {
+  default as AntTooltip,
+  TooltipProps as AntTooltipProps,
+} from "antd/es/tooltip";
 import cn from "classnames";
 
 import "antd/es/tooltip/style/css";
@@ -20,15 +23,15 @@ export interface TooltipProps {
   theme?: "default" | "blue";
 }
 
-export function Tooltip(props: TooltipProps & AntTooltipProps ) {
+export function Tooltip(props: TooltipProps & AntTooltipProps) {
   const { children, theme, overlayClassName } = props;
-  const classes = cn("tooltip-overlay", `crl-tooltip--theme-${theme}`, overlayClassName);
+  const classes = cn(
+    "tooltip-overlay",
+    `crl-tooltip--theme-${theme}`,
+    overlayClassName,
+  );
   return (
-    <AntTooltip
-      {...props}
-      mouseEnterDelay={0.5}
-      overlayClassName={classes}
-    >
+    <AntTooltip {...props} mouseEnterDelay={0.5} overlayClassName={classes}>
       {children}
     </AntTooltip>
   );

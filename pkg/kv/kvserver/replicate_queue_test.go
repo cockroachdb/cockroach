@@ -569,7 +569,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 
 	workerReady := make(chan bool)
 	// Create persistent range load.
-	tc.Stopper().RunWorker(ctx, func(ctx context.Context) {
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "load", func(ctx context.Context) {
 		s = sqlutils.MakeSQLRunner(tc.Conns[remoteNodeID-1])
 		workerReady <- true
 		for {
@@ -584,7 +584,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			case <-time.After(queryInterval):
 			}
 		}
-	})
+	}))
 	<-workerReady
 	// Wait until we see remote making progress
 	leaseHolderRepl, err := leaseHolderStore.GetReplica(rangeID)

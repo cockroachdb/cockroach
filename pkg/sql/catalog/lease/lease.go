@@ -388,6 +388,9 @@ func CountLeases(
 	if err != nil {
 		return 0, err
 	}
+	if values == nil {
+		return 0, errors.New("failed to count leases")
+	}
 	count := int(tree.MustBeDInt(values[0]))
 	return count, nil
 }
@@ -1652,7 +1655,9 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 func (m *Manager) RefreshLeases(
 	ctx context.Context, s *stop.Stopper, db *kv.DB, g gossip.OptionalGossip,
 ) {
-	s.RunWorker(ctx, func(ctx context.Context) {
+	// TODO(ajwerner): is this task needed? refreshLeases appears to already
+	// delegate everything to a goroutine.
+	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		m.refreshLeases(ctx, g, db, s)
 	})
 }
@@ -1662,7 +1667,7 @@ func (m *Manager) refreshLeases(
 ) {
 	descUpdateCh := make(chan *descpb.Descriptor)
 	m.watchForUpdates(ctx, s, db, g, descUpdateCh)
-	s.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
 			case desc := <-descUpdateCh:
@@ -1762,7 +1767,7 @@ func (m *Manager) watchForGossipUpdates(
 		return
 	}
 
-	s.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.RunAsyncTask(ctx, "gossip-updates", func(ctx context.Context) {
 		descKeyPrefix := m.storage.codec.TablePrefix(uint32(systemschema.DescriptorTable.ID))
 		// TODO(ajwerner): Add a mechanism to unregister this channel upon
 		// return. NB: this call is allowed to bypass OptionalGossip because
@@ -1860,9 +1865,11 @@ func (m *Manager) watchForRangefeedUpdates(
 		case descUpdateCh <- &descriptor:
 		}
 	}
-	s.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.RunAsyncTask(ctx, "lease-rangefeed", func(ctx context.Context) {
 		for {
 			select {
+			case <-m.stopper.ShouldQuiesce():
+				return
 			case <-ctx.Done():
 				return
 			case e := <-eventCh:
@@ -1945,7 +1952,8 @@ func (m *Manager) waitForRangefeedsToBeUsable(ctx context.Context, s *stop.Stopp
 	upgradeChan := make(chan struct{})
 	timer := timeutil.NewTimer()
 	timer.Reset(0)
-	s.RunWorker(ctx, func(ctx context.Context) {
+	// NB: we intentionally do *not* close upgradeChan if the task never starts.
+	_ = s.RunAsyncTask(ctx, "wait-rangefeed-version", func(ctx context.Context) {
 		for {
 			select {
 			case <-timer.C:
@@ -1988,14 +1996,14 @@ func (m *Manager) getResolvedTimestamp() hlc.Timestamp {
 var leaseRefreshLimit = settings.RegisterIntSetting(
 	"sql.tablecache.lease.refresh_limit",
 	"maximum number of descriptors to periodically refresh leases for",
-	50,
+	500,
 )
 
 // PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
 // traffic immediately.
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
-	m.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
 		if m.storage.leaseDuration <= 0 {
 			return
 		}
@@ -2074,7 +2082,7 @@ func (m *Manager) DeleteOrphanedLeases(timeThreshold int64) {
 
 	// Run as async worker to prevent blocking the main server Start method.
 	// Exit after releasing all the orphaned leases.
-	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	_ = m.stopper.RunAsyncTask(context.Background(), "del-orphaned-leases", func(ctx context.Context) {
 		// This could have been implemented using DELETE WHERE, but DELETE WHERE
 		// doesn't implement AS OF SYSTEM TIME.
 
@@ -2113,7 +2121,6 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 					log.Infof(ctx, "released orphaned lease: %+v", lease)
 					wg.Done()
 				}); err != nil {
-				log.Warningf(ctx, "did not release orphaned lease: %+v, err = %s", lease, err)
 				wg.Done()
 			}
 		}

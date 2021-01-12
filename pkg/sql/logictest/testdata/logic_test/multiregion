@@ -120,13 +120,13 @@ test                                          {}                   NULL
 statement ok
 USE multi_region_test_db
 
-query TTBBT colnames
+query TTBT colnames
 SHOW REGIONS FROM DATABASE
 ----
-database              region          primary  is_region_active  zones
-multi_region_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-multi_region_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
-multi_region_test_db  us-east-1       false    true              {us-az1,us-az2,us-az3}
+database              region          primary  zones
+multi_region_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+multi_region_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+multi_region_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
 SHOW REGIONS
@@ -141,11 +141,11 @@ SHOW SURVIVAL GOAL FROM DATABASE
 ----
 multi_region_test_db  region
 
-query TTBBT colnames
+query TTBT colnames
 SHOW REGIONS FROM DATABASE region_test_db
 ----
-database        region          primary  is_region_active  zones
-region_test_db  ap-southeast-2  true     true              {ap-az1,ap-az2,ap-az3}
+database        region          primary  zones
+region_test_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
 
 query TT
 SHOW SURVIVAL GOAL FROM DATABASE region_test_db
@@ -289,31 +289,6 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
-statement error REGIONAL BY ROW ON name is not yet supported
-CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW ON a
-
-statement ok
-CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
-----
-CREATE TABLE public.regional_by_row_table (
-                            a INT8 NULL,
-                            FAMILY "primary" (a, rowid)
-) LOCALITY REGIONAL BY ROW
-
-query TT
-SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_table
-----
-TABLE regional_by_row_table  ALTER TABLE regional_by_row_table CONFIGURE ZONE USING
-                             range_min_bytes = 134217728,
-                             range_max_bytes = 536870912,
-                             gc.ttlseconds = 90000,
-                             num_replicas = 3,
-                             constraints = '[]',
-                             lease_preferences = '[]'
-
 statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
 
@@ -341,7 +316,6 @@ SHOW TABLES
 ----
 schema_name  table_name                              type   owner  estimated_row_count  locality
 public       global_table                            table  root   0                    GLOBAL
-public       regional_by_row_table                   table  root   0                    REGIONAL BY ROW
 public       regional_implicit_primary_region_table  table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
 public       regional_primary_region_table           table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
 public       regional_us-east-1_table                table  root   0                    REGIONAL BY TABLE IN "us-east-1"
@@ -371,12 +345,12 @@ public  crdb_internal_region  {ca-central-1}  root
 statement ok
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  is_region_active  zones
-alter_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-alter_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
+database       region          primary  zones
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -399,13 +373,13 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
 statement ok
 ALTER DATABASE alter_test_db ADD REGION "us-east-1"
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  is_region_active  zones
-alter_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-alter_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
-alter_test_db  us-east-1       false    true              {us-az1,us-az2,us-az3}
+database       region          primary  zones
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -437,14 +411,15 @@ ALTER DATABASE new_db ADD REGION "us-west-1"
 statement error implementation pending
 ALTER DATABASE new_db DROP REGION "us-west-1"
 
-statement error implementation pending
-ALTER TABLE a SET LOCALITY REGIONAL BY ROW
-
 statement ok
-CREATE DATABASE primary_region_db
+CREATE DATABASE alter_primary_region_db
+
+# TODO(ajstorm) add test here to validate that REGIONAL BY TABLE tables behave appropriately
+statement ok
+use alter_primary_region_db
 
 query TT
-SHOW ZONE CONFIGURATION FOR DATABASE primary_region_db
+SHOW ZONE CONFIGURATION FOR DATABASE alter_primary_region_db
 ----
 RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                range_min_bytes = 134217728,
@@ -454,26 +429,26 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-query TTBBT colnames
-show regions from database primary_region_db
+query TTBT colnames
+show regions from database alter_primary_region_db
 ----
-database  region  primary  is_region_active  zones
+database  region  primary  zones
 
 query TTTT colnames
-SHOW ENUMS FROM primary_region_db.public
+SHOW ENUMS FROM alter_primary_region_db.public
 ----
 schema  name  values  owner
 
 statement error region "test" does not exist
-ALTER DATABASE primary_region_db PRIMARY REGION "test"
+ALTER DATABASE alter_primary_region_db PRIMARY REGION "test"
 
 statement ok
-ALTER DATABASE primary_region_db PRIMARY REGION "ca-central-1"
+ALTER DATABASE alter_primary_region_db PRIMARY REGION "ca-central-1"
 
 query TT
-SHOW ZONE CONFIGURATION FOR DATABASE primary_region_db
+SHOW ZONE CONFIGURATION FOR DATABASE alter_primary_region_db
 ----
-DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USING
+DATABASE alter_primary_region_db  ALTER DATABASE alter_primary_region_db CONFIGURE ZONE USING
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
@@ -481,28 +456,28 @@ DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USIN
                             constraints = '{+region=ca-central-1: 1}',
                             lease_preferences = '[[+region=ca-central-1]]'
 
-query TTBBT colnames
-show regions from database primary_region_db
+query TTBT colnames
+show regions from database alter_primary_region_db
 ----
-database           region        primary  is_region_active  zones
-primary_region_db  ca-central-1  true     true              {ca-az1,ca-az2,ca-az3}
+database                 region        primary  zones
+alter_primary_region_db  ca-central-1  true     {ca-az1,ca-az2,ca-az3}
 
 query TTTT colnames
-SHOW ENUMS FROM primary_region_db.public
+SHOW ENUMS FROM alter_primary_region_db.public
 ----
 schema  name                  values          owner
 public  crdb_internal_region  {ca-central-1}  root
 
 statement error region "ap-southeast-2" has not been added to the database
-ALTER DATABASE primary_region_db PRIMARY REGION "ap-southeast-2"
+ALTER DATABASE alter_primary_region_db PRIMARY REGION "ap-southeast-2"
 
 statement ok
-ALTER DATABASE primary_region_db ADD REGION "ap-southeast-2"
+ALTER DATABASE alter_primary_region_db ADD REGION "ap-southeast-2"
 
 query TT
-SHOW ZONE CONFIGURATION FOR DATABASE primary_region_db
+SHOW ZONE CONFIGURATION FOR DATABASE alter_primary_region_db
 ----
-DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USING
+DATABASE alter_primary_region_db  ALTER DATABASE alter_primary_region_db CONFIGURE ZONE USING
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
@@ -511,25 +486,25 @@ DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USIN
                             lease_preferences = '[[+region=ca-central-1]]'
 
 query TTTT colnames
-SHOW ENUMS FROM primary_region_db.public
+SHOW ENUMS FROM alter_primary_region_db.public
 ----
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBBT colnames
-show regions from database primary_region_db
+query TTBT colnames
+show regions from database alter_primary_region_db
 ----
-database           region          primary  is_region_active  zones
-primary_region_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-primary_region_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
+database                 region          primary  zones
+alter_primary_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_primary_region_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 
 statement ok
-ALTER DATABASE primary_region_db PRIMARY REGION "ap-southeast-2"
+ALTER DATABASE alter_primary_region_db PRIMARY REGION "ap-southeast-2"
 
 query TT
-SHOW ZONE CONFIGURATION FOR DATABASE primary_region_db
+SHOW ZONE CONFIGURATION FOR DATABASE alter_primary_region_db
 ----
-DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USING
+DATABASE alter_primary_region_db  ALTER DATABASE alter_primary_region_db CONFIGURE ZONE USING
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
@@ -538,14 +513,209 @@ DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USIN
                             lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TTTT colnames
-SHOW ENUMS FROM primary_region_db.public
+SHOW ENUMS FROM alter_primary_region_db.public
 ----
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBBT colnames
-show regions from database primary_region_db
+query TTBT colnames
+show regions from database alter_primary_region_db
 ----
-database           region          primary  is_region_active  zones
-primary_region_db  ap-southeast-2  true     true              {ap-az1,ap-az2,ap-az3}
-primary_region_db  ca-central-1    false    true              {ca-az1,ca-az2,ca-az3}
+database                 region          primary  zones
+alter_primary_region_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
+alter_primary_region_db  ca-central-1    false    {ca-az1,ca-az2,ca-az3}
+
+statement ok
+create database alter_survive_db
+
+statement ok
+use alter_survive_db
+
+statement error database must have associated regions before a survival goal can be set
+alter database alter_survive_db survive region failure
+
+statement ok
+alter database alter_survive_db primary region "ca-central-1"
+
+statement error at least 3 regions are required for surviving a region failure
+alter database alter_survive_db survive region failure
+
+statement ok
+alter database alter_survive_db add region "ap-southeast-2"
+
+statement ok
+alter database alter_survive_db add region "us-east-1"
+
+# Create some tables to validate that their zone configurations are adjusted appropriately.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 90000,
+                                  num_replicas = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+create table t_no_locality (i int)
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_no_locality
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                           lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+create table t_global (i int) locality global
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_global
+----
+TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 90000,
+                num_replicas = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                lease_preferences = '[[+region=ca-central-1]]'
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name                                 owner  primary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                       root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
+alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            {}                                       NULL
+multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            {}                                       NULL
+postgres                                      root   NULL            {}                                       NULL
+region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
+system                                        node   NULL            {}                                       NULL
+test                                          root   NULL            {}                                       NULL
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 90000,
+                                  num_replicas = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+alter database alter_survive_db survive region failure
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name                                 owner  primary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                       root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
+alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            {}                                       NULL
+multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            {}                                       NULL
+postgres                                      root   NULL            {}                                       NULL
+region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
+system                                        node   NULL            {}                                       NULL
+test                                          root   NULL            {}                                       NULL
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 90000,
+                                  num_replicas = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_no_locality
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                           lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_global
+----
+TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 90000,
+                num_replicas = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+alter database alter_survive_db survive zone failure
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name                                 owner  primary_region  regions                                  survival_goal
+alter_primary_region_db                       root   ap-southeast-2  {ap-southeast-2,ca-central-1}            zone
+alter_survive_db                       root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
+alter_test_db                                 root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  zone
+defaultdb                                     root   NULL            {}                                       NULL
+multi_region_test_db                          root   ca-central-1    {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_explicit_primary_region_db  root   ap-southeast-2  {ap-southeast-2,ca-central-1,us-east-1}  region
+multi_region_test_survive_zone_failure_db     root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
+new_db                                        root   NULL            {}                                       NULL
+postgres                                      root   NULL            {}                                       NULL
+region_test_db                                root   ap-southeast-2  {ap-southeast-2}                         zone
+system                                        node   NULL            {}                                       NULL
+test                                          root   NULL            {}                                       NULL
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE alter_survive_db
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                           lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_no_locality
+----
+DATABASE alter_survive_db  ALTER DATABASE alter_survive_db CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                           lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE t_global
+----
+TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 90000,
+                num_replicas = 3,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                lease_preferences = '[[+region=ca-central-1]]'

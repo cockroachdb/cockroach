@@ -371,11 +371,10 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	// Decompose netutil.ListenAndServeGRPC so we can listen before serving.
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	require.NoError(t, err)
-	stopper.RunWorker(ctx, func(context.Context) {
+	stopper.AddCloser(stop.CloserFn(s.Stop))
+	_ = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
-		<-stopper.ShouldStop()
-		s.Stop()
 	})
 
 	// Add listen address into list of other bogus addresses.
@@ -401,7 +400,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	// Begin serving on gRPC server. Connector should quickly connect
 	// and complete startup.
-	stopper.RunWorker(ctx, func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 	require.NoError(t, <-startedC)

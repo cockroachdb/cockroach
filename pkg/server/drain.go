@@ -188,6 +188,7 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
+	s.sqlServer.acceptingClients.Set(false)
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
 	time.Sleep(drainWait.Get(&s.st.SV))

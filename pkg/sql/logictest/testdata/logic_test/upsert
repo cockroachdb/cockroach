@@ -1246,3 +1246,29 @@ query I
 WITH cte(c) AS (UPSERT INTO t54456 SELECT i FROM generate_series(25001, 40000) AS i RETURNING c) SELECT count(*) FROM cte
 ----
 15000
+
+# Regression test for #59125. Ensure that valid rows don't get filtered out
+# from ON CONFLICT DO NOTHING.
+statement ok
+CREATE TABLE uniq (
+  x STRING PRIMARY KEY,
+  y STRING UNIQUE,
+  z STRING UNIQUE
+)
+
+statement ok
+INSERT INTO uniq VALUES ('x1', 'y1', 'z1');
+
+# The first row has a conflict due to the unique index on y, so it should be
+# discarded. The second row does not conflict with the existing row, so it
+# should be inserted. The third row is a duplicate of the second row, so it
+# should be discarded.
+statement ok
+INSERT INTO uniq VALUES ('x2', 'y1', 'z2'), ('x2', 'y2', 'z2'), ('x2', 'y2', 'z2')
+ON CONFLICT DO NOTHING
+
+query TTT rowsort
+SELECT * FROM uniq
+----
+x1  y1  z1
+x2  y2  z2

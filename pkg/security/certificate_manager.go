@@ -230,7 +230,7 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 		ch := sysutil.RefreshSignaledChan()
 		for {
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			case sig := <-ch:
 				log.Infof(context.Background(), "received signal %q, triggering certificate reload", sig)

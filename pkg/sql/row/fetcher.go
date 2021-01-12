@@ -569,6 +569,7 @@ func (rf *Fetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -584,6 +585,7 @@ func (rf *Fetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
@@ -609,6 +611,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -665,6 +668,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
@@ -1418,7 +1422,12 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 		return nil
 	})
 
-	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.GetPublicNonPrimaryIndexes()}
+	indexes := make([]descpb.IndexDescriptor, len(table.desc.PublicNonPrimaryIndexes()))
+	for i, idx := range table.desc.PublicNonPrimaryIndexes() {
+		indexes[i] = *idx.IndexDesc()
+	}
+
+	rh := rowHelper{TableDesc: table.desc, Indexes: indexes}
 
 	return table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var lastColID descpb.ColumnID

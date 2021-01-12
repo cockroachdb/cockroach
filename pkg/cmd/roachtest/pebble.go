@@ -61,7 +61,7 @@ func registerPebble(r *testRegistry) {
 				"rm -f %s && tar cvPf %s %s) > init.log 2>&1",
 			benchDir, size, initialKeys, cache, dataTar, dataTar, benchDir))
 
-		for _, workload := range []string{"A", "B", "C", "D", "E"} {
+		for _, workload := range []string{"A", "B", "C", "D", "E", "F"} {
 			keys := "zipf"
 			switch workload {
 			case "D":

@@ -60,7 +60,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 	_ = TestingSetRedactable(true)
 	Errorf(context.Background(), "test3 %v end", "hello")
-	if !contains(redactableIndicator+" test3", t) {
+	if !contains(redactableIndicator+" [-] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
 	if !contains("test3 "+startRedactable+"hello"+endRedactable+" end", t) {
@@ -72,7 +72,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	Errorf(context.Background(), "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world")))
-	if !contains(redactableIndicator+" test3e", t) {
+	if !contains(redactableIndicator+" [-] 4  test3e", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
 	if !contains("test3e hello error-in-error "+startRedactable+"world"+endRedactable+" end", t) {
@@ -184,7 +184,8 @@ func TestRedactedDecodeFile(t *testing.T) {
 				}
 				if strings.HasSuffix(entry.File, "redact_test.go") {
 					assert.Equal(t, tc.expRedactable, entry.Redactable)
-					assert.Equal(t, tc.expMessage, entry.Message)
+					msg := strings.TrimPrefix(strings.TrimSpace(entry.Message), "1  ")
+					assert.Equal(t, tc.expMessage, msg)
 					foundMessage = true
 				}
 			}

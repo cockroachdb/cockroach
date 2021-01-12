@@ -33,15 +33,14 @@ const cx = classNames.bind(styles);
 export function Badge(props: BadgeProps) {
   const { size, status, icon, iconPosition, text } = props;
   const classes = cx("badge", `badge--size-${size}`, `badge--status-${status}`);
-  const iconClasses = cx("badge__icon", `badge__icon--position-${iconPosition || "left"}`);
+  const iconClasses = cx(
+    "badge__icon",
+    `badge__icon--position-${iconPosition || "left"}`,
+  );
   return (
     <div className={classes}>
-      { icon && <div className={iconClasses}>{icon}</div> }
-      <div
-        className={cx("badge__text", "badge__text--no-wrap")}
-      >
-        { text }
-      </div>
+      {icon && <div className={iconClasses}>{icon}</div>}
+      <div className={cx("badge__text", "badge__text--no-wrap")}>{text}</div>
     </div>
   );
 }

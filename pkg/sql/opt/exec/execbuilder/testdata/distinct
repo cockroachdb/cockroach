@@ -200,9 +200,9 @@ vectorized: true
 │ columns: (z, d, b)
 │ ordering: +d,+b
 │ estimated row count: 1,000 (missing stats)
-│ render 0: 1
-│ render 1: b
-│ render 2: d
+│ render z: 1
+│ render b: b
+│ render d: d
 │
 └── • scan
       columns: (b, d)

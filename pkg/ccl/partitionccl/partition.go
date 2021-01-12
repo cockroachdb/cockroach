@@ -284,12 +284,11 @@ func selectPartitionExprs(
 
 	a := &rowenc.DatumAlloc{}
 	var prefixDatums []tree.Datum
-	if err := tableDesc.ForeachIndex(catalog.IndexOpts{
+	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
 		AddMutations: true,
-	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
-		genExpr := true
+	}, func(idx catalog.Index) error {
 		return selectPartitionExprsByName(
-			a, evalCtx, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName, genExpr)
+			a, evalCtx, tableDesc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, prefixDatums, exprsByPartName, true /* genExpr */)
 	}); err != nil {
 		return nil, err
 	}

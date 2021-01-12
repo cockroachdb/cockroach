@@ -11,7 +11,10 @@
 import { createSelector } from "reselect";
 
 import { AdminUIState } from "src/redux/state";
-import { RELEASE_NOTES_SIGNUP_DISMISSED_KEY, UIDataStatus } from "src/redux/uiData";
+import {
+  RELEASE_NOTES_SIGNUP_DISMISSED_KEY,
+  UIDataStatus,
+} from "src/redux/uiData";
 
 export const dismissReleaseNotesSignupForm = createSelector(
   (state: AdminUIState) => state.uiData[RELEASE_NOTES_SIGNUP_DISMISSED_KEY],

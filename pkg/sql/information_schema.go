@@ -403,6 +403,26 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		// Get the collations for all comments of current database.
+		comments, err := getComments(ctx, p)
+		if err != nil {
+			return err
+		}
+		// Push all comments of columns into map.
+		commentMap := make(map[tree.DInt]map[tree.DInt]string)
+		for _, comment := range comments {
+			objID := tree.MustBeDInt(comment[0])
+			objSubID := tree.MustBeDInt(comment[1])
+			description := comment[2].String()
+			commentType := tree.MustBeDInt(comment[3])
+			if commentType == 2 {
+				if commentMap[objID] == nil {
+					commentMap[objID] = make(map[tree.DInt]string)
+				}
+				commentMap[objID][objSubID] = description
+			}
+		}
+
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
@@ -433,11 +453,18 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+
+				// Match the comment belonging to current column from map,using table id and column id
+				tableID := tree.DInt(table.GetID())
+				columnID := tree.DInt(column.ID)
+				description := commentMap[tableID][columnID]
+
 				return addRow(
 					dbNameStr,                        // table_catalog
 					scNameStr,                        // table_schema
 					tree.NewDString(table.GetName()), // table_name
 					tree.NewDString(column.Name),     // column_name
+					tree.NewDString(description),     // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                    // column_default
 					yesOrNoDatum(column.Nullable), // is_nullable
@@ -900,22 +927,24 @@ CREATE TABLE information_schema.referential_constraints (
 				if r, ok := matchOptionMap[fk.Match]; ok {
 					matchType = r
 				}
-				referencedIdx, err := tabledesc.FindFKReferencedIndex(refTable, fk.ReferencedColumnIDs)
+				refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+					refTable, fk.ReferencedColumnIDs,
+				)
 				if err != nil {
 					return err
 				}
 				return addRow(
-					dbNameStr,                           // constraint_catalog
-					scNameStr,                           // constraint_schema
-					tree.NewDString(fk.Name),            // constraint_name
-					dbNameStr,                           // unique_constraint_catalog
-					scNameStr,                           // unique_constraint_schema
-					tree.NewDString(referencedIdx.Name), // unique_constraint_name
-					matchType,                           // match_option
-					dStringForFKAction(fk.OnUpdate),     // update_rule
-					dStringForFKAction(fk.OnDelete),     // delete_rule
-					tbNameStr,                           // table_name
-					tree.NewDString(refTable.GetName()), // referenced_table_name
+					dbNameStr,                                // constraint_catalog
+					scNameStr,                                // constraint_schema
+					tree.NewDString(fk.Name),                 // constraint_name
+					dbNameStr,                                // unique_constraint_catalog
+					scNameStr,                                // unique_constraint_schema
+					tree.NewDString(refConstraint.GetName()), // unique_constraint_name
+					matchType,                                // match_option
+					dStringForFKAction(fk.OnUpdate),          // update_rule
+					dStringForFKAction(fk.OnDelete),          // delete_rule
+					tbNameStr,                                // table_name
+					tree.NewDString(refTable.GetName()),      // referenced_table_name
 				)
 			})
 		})
@@ -1297,7 +1326,7 @@ CREATE TABLE information_schema.statistics (
 					)
 				}
 
-				return table.ForeachIndex(catalog.IndexOpts{}, func(index *descpb.IndexDescriptor, _ bool) error {
+				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					// Columns in the primary key that aren't in index.ColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
@@ -1305,31 +1334,34 @@ CREATE TABLE information_schema.statistics (
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > len(index.StoreColumnNames)
+						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = len(index.ExtraColumnIDs) > 0
+						hasImplicitCols = index.NumExtraColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for _, col := range table.GetPrimaryIndex().ColumnNames {
+						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
+							col := table.GetPrimaryIndex().GetColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
 
 					sequence := 1
-					for i, col := range index.ColumnNames {
+					for i := 0; i < index.NumColumns(); i++ {
+						col := index.GetColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.ColumnDirections[i])
-						if err := appendRow(index, col, sequence, dir, false, false); err != nil {
+						dir := dStringForIndexDirection(index.GetColumnDirection(i))
+						if err := appendRow(index.IndexDesc(), col, sequence, dir, false, false); err != nil {
 							return err
 						}
 						sequence++
 						delete(implicitCols, col)
 					}
-					for _, col := range index.StoreColumnNames {
+					for i := 0; i < index.NumStoredColumns(); i++ {
+						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
-						if err := appendRow(index, col, sequence,
+						if err := appendRow(index.IndexDesc(), col, sequence,
 							indexDirectionNA, true, false); err != nil {
 							return err
 						}
@@ -1343,10 +1375,11 @@ CREATE TABLE information_schema.statistics (
 						//
 						// Note that simply iterating over implicitCols map
 						// produces non-deterministic output.
-						for _, col := range table.GetPrimaryIndex().ColumnNames {
+						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
+							col := table.GetPrimaryIndex().GetColumnName(i)
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
-								if err := appendRow(index, col, sequence,
+								if err := appendRow(index.IndexDesc(), col, sequence,
 									indexDirectionAsc, false, true); err != nil {
 									return err
 								}

@@ -171,7 +171,7 @@ func newInfoStore(
 		callbackCh:      make(chan struct{}, 1),
 	}
 
-	is.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	_ = is.stopper.RunAsyncTask(context.Background(), "infostore", func(ctx context.Context) {
 		for {
 			for {
 				is.callbackWorkMu.Lock()

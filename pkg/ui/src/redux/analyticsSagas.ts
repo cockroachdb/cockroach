@@ -21,20 +21,28 @@ import {
   trackPaginate,
   trackSearch,
   trackTableSort,
+  trackDownloadDiagnosticsBundle,
+  trackSubnavSelection,
 } from "src/util/analytics";
 import {
   TRACK_STATEMENTS_SEARCH,
   TRACK_STATEMENTS_PAGINATION,
   TRACK_TABLE_SORT,
   TableSortActionPayload,
+  TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
+  TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
 } from "./analyticsActions";
 
-export function* trackActivateStatementsDiagnostics(action: PayloadAction<DiagnosticsReportPayload>) {
+export function* trackActivateStatementsDiagnostics(
+  action: PayloadAction<DiagnosticsReportPayload>,
+) {
   const { statementFingerprint } = action.payload;
   yield call(trackActivateDiagnostics, statementFingerprint);
 }
 
-export function* trackOpenStatementsDiagnostics(action: PayloadAction<DiagnosticsReportPayload>) {
+export function* trackOpenStatementsDiagnostics(
+  action: PayloadAction<DiagnosticsReportPayload>,
+) {
   const { statementFingerprint } = action.payload;
   yield call(trackDiagnosticsModalOpen, statementFingerprint);
 }
@@ -47,17 +55,42 @@ export function* trackStatementsPagination(action: PayloadAction<number>) {
   yield call(trackPaginate, action.payload);
 }
 
-export function* trackTableSortChange(action: PayloadAction<TableSortActionPayload>) {
+export function* trackTableSortChange(
+  action: PayloadAction<TableSortActionPayload>,
+) {
   const { tableName, columnName, ascending } = action.payload;
   yield call(trackTableSort, tableName, columnName, ascending);
 }
 
+export function* trackDownloadDiagnosticBundleSaga(
+  action: PayloadAction<string>,
+) {
+  yield call(trackDownloadDiagnosticsBundle, action.payload);
+}
+
+export function* trackStatementDetailsSubnavSelectionSaga(
+  action: PayloadAction<string>,
+) {
+  yield call(trackSubnavSelection, action.payload);
+}
+
 export function* analyticsSaga() {
   yield all([
-    takeEvery(CREATE_STATEMENT_DIAGNOSTICS_REPORT, trackActivateStatementsDiagnostics),
+    takeEvery(
+      CREATE_STATEMENT_DIAGNOSTICS_REPORT,
+      trackActivateStatementsDiagnostics,
+    ),
     takeEvery(OPEN_STATEMENT_DIAGNOSTICS_MODAL, trackOpenStatementsDiagnostics),
     takeEvery(TRACK_STATEMENTS_SEARCH, trackStatementsSearch),
     takeEvery(TRACK_STATEMENTS_PAGINATION, trackStatementsPagination),
     takeEvery(TRACK_TABLE_SORT, trackTableSortChange),
+    takeEvery(
+      TRACK_DOWNLOAD_DIAGNOSTIC_BUNDLE,
+      trackDownloadDiagnosticBundleSaga,
+    ),
+    takeEvery(
+      TRACK_STATEMENT_DETAILS_SUBNAV_SELECTION,
+      trackStatementDetailsSubnavSelectionSaga,
+    ),
   ]);
 }

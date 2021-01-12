@@ -229,6 +229,7 @@ type DatumRowConverter struct {
 }
 
 var kvDatumRowConverterBatchSize = util.ConstantWithMetamorphicTestValue(
+	"datum-row-converter-batch-size",
 	5000, /* defaultValue */
 	1,    /* metamorphicValue */
 )
@@ -414,7 +415,7 @@ func NewDatumRowConverter(
 		return nil, errors.New("unexpected hidden column")
 	}
 
-	padding := 2 * (len(tableDesc.GetPublicNonPrimaryIndexes()) + len(tableDesc.Families))
+	padding := 2 * (len(tableDesc.PublicNonPrimaryIndexes()) + len(tableDesc.Families))
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 

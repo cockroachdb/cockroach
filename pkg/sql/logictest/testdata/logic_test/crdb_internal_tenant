@@ -9,7 +9,9 @@ query IT
 SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 ----
 0  role_members
+0  role_options
 0  test
+0  users
 
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
@@ -237,10 +239,10 @@ SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted
 
-query ITITTITT colnames
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction
+descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction  implicit
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name = ''

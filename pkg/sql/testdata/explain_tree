@@ -84,9 +84,9 @@ vectorized: false
     └── • render
         │ columns: (column8 decimal, cid int, sum decimal)
         │ estimated row count: 98 (missing stats)
-        │ render 0: ((1)[decimal] - (sum)[decimal])[decimal]
-        │ render 1: (cid)[int]
-        │ render 2: (sum)[decimal]
+        │ render column8: ((1)[decimal] - (sum)[decimal])[decimal]
+        │ render cid: (cid)[int]
+        │ render sum: (sum)[decimal]
         │
         └── • group
             │ columns: (cid int, sum decimal)
@@ -274,9 +274,9 @@ vectorized: false
 ├── • render
 │   │ columns: (movie_id int, title string, name string)
 │   │ estimated row count: 1,000 (missing stats)
-│   │ render 0: (@S1)[string]
-│   │ render 1: (id)[int]
-│   │ render 2: (title)[string]
+│   │ render name: (@S1)[string]
+│   │ render id: (id)[int]
+│   │ render title: (title)[string]
 │   │
 │   └── • scan
 │         columns: (id int, title string)

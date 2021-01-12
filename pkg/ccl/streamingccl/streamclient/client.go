@@ -8,25 +8,12 @@
 
 package streamclient
 
-import "time"
+import (
+	"context"
+	"time"
 
-// StreamAddress is the location of the stream. The topology of a stream should
-// be resolvable given a stream address.
-type StreamAddress string
-
-// PartitionAddress is the address where the stream client should be able to
-// read the events produced by a partition of a stream.
-//
-// Each partition will emit events for a fixed span of keys.
-type PartitionAddress string
-
-// Topology is a configuration of stream partitions. These are particular to a
-// stream. It specifies the number and addresses of partitions of the stream.
-//
-// There are a fixed number of Partitions in a Topology.
-type Topology struct {
-	Partitions []PartitionAddress
-}
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+)
 
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
@@ -34,9 +21,36 @@ type Topology struct {
 //  generations in a stream.
 type Client interface {
 	// GetTopology returns the Topology of a stream.
-	GetTopology(address StreamAddress) (Topology, error)
+	GetTopology(address streamingccl.StreamAddress) (streamingccl.Topology, error)
 
 	// ConsumePartition returns a channel on which we can start listening for
 	// events from a given partition that occur after a startTime.
-	ConsumePartition(address PartitionAddress, startTime time.Time) (chan Event, error)
+	//
+	// Canceling the context will stop reading the partition and close the event
+	// channel.
+	// TODO: Add an error channel so that the client can report any errors
+	// encountered while reading the stream.
+	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime time.Time) (chan streamingccl.Event, error)
+}
+
+// NewStreamClient creates a new stream client based on the stream
+// address.
+func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
+	var streamClient Client
+	streamURL, err := streamAddress.URL()
+	if err != nil {
+		return streamClient, err
+	}
+
+	switch streamURL.Scheme {
+	case TestScheme:
+		streamClient, err = newRandomStreamClient(streamURL)
+		if err != nil {
+			return streamClient, err
+		}
+	default:
+		streamClient = &mockClient{}
+	}
+
+	return streamClient, nil
 }

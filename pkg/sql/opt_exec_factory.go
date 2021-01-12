@@ -548,7 +548,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	}
 
 	primaryIndex := tabDesc.GetPrimaryIndex()
-	tableScan.index = primaryIndex
+	tableScan.index = primaryIndex.IndexDesc()
 	tableScan.disableBatchLimit()
 
 	n := &indexJoinNode{
@@ -689,6 +689,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
+	prefixEqCols []exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
@@ -716,6 +717,12 @@ func (ef *execFactory) ConstructInvertedJoin(
 		invertedExpr:              invertedExpr,
 		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
 		reqOrdering:               ReqOrdering(reqOrdering),
+	}
+	if len(prefixEqCols) > 0 {
+		n.prefixEqCols = make([]int, len(prefixEqCols))
+		for i, c := range prefixEqCols {
+			n.prefixEqCols[i] = int(c)
+		}
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
@@ -1148,7 +1155,8 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
@@ -1302,6 +1310,14 @@ func (ef *execFactory) ConstructUpdate(
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
+	// TODO(radu): the execution code has an annoying limitation that the fetch
+	// columns must be a superset of the update columns, even when the "old" value
+	// of a column is not necessary. The optimizer code for pruning columns is
+	// aware of this limitation.
+	if !updateColOrdSet.SubsetOf(fetchColOrdSet) {
+		return nil, errors.AssertionFailedf("execution requires all update columns have a fetch column")
+	}
+
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1399,7 +1415,8 @@ func (ef *execFactory) ConstructUpdate(
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	canaryCol exec.NodeColumnOrdinal,
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	fetchColOrdSet exec.TableColumnOrdinalSet,
@@ -1562,7 +1579,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := tabDesc.GetPrimaryIndex()
+	indexDesc := tabDesc.GetPrimaryIndex().IndexDesc()
 	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {

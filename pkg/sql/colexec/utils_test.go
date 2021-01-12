@@ -1550,7 +1550,12 @@ func (tc *joinTestCase) mirror() *joinTestCase {
 		return nil
 	}
 	mirroringCase := *tc
-	mirroringCase.description = strings.ReplaceAll(tc.description, "LEFT", "RIGHT")
+	mirroringCase.description = strings.NewReplacer(
+		"LEFT", "RIGHT",
+		"RIGHT", "LEFT",
+		"left", "right",
+		"right", "left",
+	).Replace(tc.description)
 	if tc.joinType == descpb.LeftSemiJoin {
 		mirroringCase.joinType = descpb.RightSemiJoin
 	} else {

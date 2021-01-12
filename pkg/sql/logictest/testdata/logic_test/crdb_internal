@@ -228,10 +228,10 @@ SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique  is_inverted
 
-query ITITTITT colnames
+query ITITTITTB colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
 ----
-descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction
+descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction  implicit
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name = ''
@@ -749,6 +749,58 @@ other_db       admin     ALL
 other_db       root      ALL
 other_db       testuser  DROP
 other_db       testuser  SELECT
+
+statement ok
+SET DATABASE = test
+
+# crdb_internal can be used with the anonymous database.
+# It should show information across all databases.
+subtest anonymous_database
+
+query TTT colnames
+SELECT * FROM "".crdb_internal.cluster_database_privileges ORDER BY 1,2,3
+----
+database_name  grantee   privilege_type
+defaultdb      admin     ALL
+defaultdb      root      ALL
+other_db       admin     ALL
+other_db       root      ALL
+other_db       testuser  DROP
+other_db       testuser  SELECT
+postgres       admin     ALL
+postgres       root      ALL
+system         admin     GRANT
+system         admin     SELECT
+system         root      GRANT
+system         root      SELECT
+test           admin     ALL
+test           root      ALL
+testdb         admin     ALL
+testdb         root      ALL
+
+statement ok
+SET DATABASE = "";
+
+query TTT colnames
+SELECT * FROM crdb_internal.cluster_database_privileges ORDER BY 1,2,3
+----
+database_name  grantee   privilege_type
+defaultdb      admin     ALL
+defaultdb      root      ALL
+other_db       admin     ALL
+other_db       root      ALL
+other_db       testuser  DROP
+other_db       testuser  SELECT
+postgres       admin     ALL
+postgres       root      ALL
+system         admin     GRANT
+system         admin     SELECT
+system         root      GRANT
+system         root      SELECT
+test           admin     ALL
+test           root      ALL
+testdb         admin     ALL
+testdb         root      ALL
 
 statement ok
 SET DATABASE = test

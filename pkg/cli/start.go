@@ -500,14 +500,7 @@ If problems persist, please see %s.`
 		}
 	}
 
-	// Set up the Geospatial library.
-	// We need to make sure this happens before any queries involving geospatial data is executed.
-	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
-	if err != nil {
-		log.Ops.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
-	} else {
-		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
-	}
+	initGEOS(ctx)
 
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
@@ -587,11 +580,11 @@ If problems persist, please see %s.`
 			serverStatusMu.started = true
 			serverStatusMu.Unlock()
 
-			// Start up the update check loop.
-			// We don't do this in (*server.Server).Start() because we don't want it
-			// in tests.
+			// Start up the diagnostics reporting and update check loops.
+			// We don't do this in (*server.Server).Start() because we don't
+			// want this overhead and possible interference in tests.
 			if !cluster.TelemetryOptOut() {
-				s.PeriodicallyCheckForUpdates(ctx)
+				s.StartDiagnostics(ctx)
 			}
 			initialStart := s.InitialStart()
 
@@ -717,24 +710,26 @@ If problems persist, please see %s.`
 	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case err := <-errChan:
-		// SetSync both flushes and ensures that subsequent log writes are flushed too.
-		log.StartSync()
+		// StartAlwaysFlush both flushes and ensures that subsequent log
+		// writes are flushed too.
+		log.StartAlwaysFlush()
 		return err
 
-	case <-stopper.ShouldStop():
+	case <-stopper.ShouldQuiesce():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
-		// StartSync both flushes and ensures that subsequent log writes are flushed too.
-		log.StartSync()
+		// StartAlwaysFlush both flushes and ensures that subsequent log
+		// writes are flushed too.
+		log.StartAlwaysFlush()
 		return nil
 
 	case sig := <-signalCh:
-		// We start synchronizing log writes from here, because if a
+		// We start flushing log writes from here, because if a
 		// signal was received there is a non-zero chance the sender of
 		// this signal will follow up with SIGKILL if the shutdown is not
 		// timely, and we don't want logs to be lost.
-		log.StartSync()
+		log.StartAlwaysFlush()
 
 		log.Ops.Infof(shutdownCtx, "received signal '%s'", sig)
 		switch sig {
@@ -831,7 +826,7 @@ If problems persist, please see %s.`
 			select {
 			case <-ticker.C:
 				log.Ops.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
-			case <-stopper.ShouldStop():
+			case <-stopper.IsStopped():
 				return
 			case <-stopWithoutDrain:
 				return
@@ -1098,4 +1093,15 @@ func getClientGRPCConn(
 		stopper.Stop(ctx)
 	}
 	return conn, clock, closer, nil
+}
+
+// initGEOS sets up the Geospatial library.
+// We need to make sure this happens before any queries involving geospatial data is executed.
+func initGEOS(ctx context.Context) {
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
+	if err != nil {
+		log.Ops.Warningf(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
+	} else {
+		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
+	}
 }

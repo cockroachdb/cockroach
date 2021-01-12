@@ -128,10 +128,10 @@ var _ClosedTimestamp_serviceDesc = grpc.ServiceDesc{
 }
 
 func init() {
-	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_3759bf1dbe758d6d)
+	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_3096204571c3b264)
 }
 
-var fileDescriptor_service_3759bf1dbe758d6d = []byte{
+var fileDescriptor_service_3096204571c3b264 = []byte{
 	// 230 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x8f, 0xb1, 0x4a, 0x04, 0x31,
 	0x10, 0x86, 0x13, 0x14, 0x8b, 0x6d, 0x84, 0xc5, 0x6a, 0x91, 0x29, 0x84, 0xd3, 0xab, 0x12, 0xd1,

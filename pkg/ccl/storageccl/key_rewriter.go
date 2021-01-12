@@ -105,9 +105,9 @@ func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, er
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a
 		// map to avoid duplicating entries.
 
-		for _, index := range desc.AllNonDropIndexes() {
-			oldPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(oldID, index.ID))
-			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.ID))
+		for _, index := range desc.NonDropIndexes() {
+			oldPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(oldID, index.GetID()))
+			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.GetID()))
 			if !seenPrefixes[string(oldPrefix)] {
 				seenPrefixes[string(oldPrefix)] = true
 				prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
@@ -190,22 +190,22 @@ func (kr *KeyRewriter) RewriteKey(key []byte, isFromSpan bool) ([]byte, bool, er
 		// If there isn't any more data, we are at some split boundary.
 		return key, true, nil
 	}
-	idx, err := desc.FindIndexByID(descpb.IndexID(indexID))
+	idx, err := desc.FindIndexWithID(descpb.IndexID(indexID))
 	if err != nil {
 		return nil, false, err
 	}
-	if len(idx.InterleavedBy) == 0 {
+	if idx.NumInterleavedBy() == 0 {
 		// Not interleaved.
 		return key, true, nil
 	}
 	// We do not support interleaved secondary indexes.
-	if idx.ID != desc.GetPrimaryIndexID() {
+	if !idx.Primary() {
 		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
 	}
-	colIDs, _ := idx.FullColumnIDs()
+	colIDs, _ := idx.IndexDesc().FullColumnIDs()
 	var skipCols int
-	for _, ancestor := range idx.Interleave.Ancestors {
-		skipCols += int(ancestor.SharedPrefixLen)
+	for i := 0; i < idx.NumInterleaveAncestors(); i++ {
+		skipCols += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
 	}
 	for i := 0; i < len(colIDs)-skipCols; i++ {
 		n, err := encoding.PeekLength(k)

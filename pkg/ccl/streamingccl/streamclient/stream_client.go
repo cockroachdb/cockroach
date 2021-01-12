@@ -8,26 +8,33 @@
 
 package streamclient
 
-import "time"
+import (
+	"context"
+	"time"
 
-// client is a mock stream client.
-type client struct{}
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+)
 
-var _ Client = &client{}
+// mockClient is a mock stream client.
+type mockClient struct{}
 
-// NewStreamClient returns a new mock stream client.
-func NewStreamClient() Client {
-	return &client{}
-}
+var _ Client = &mockClient{}
 
 // GetTopology implements the Client interface.
-func (m *client) GetTopology(address StreamAddress) (Topology, error) {
-	panic("unimplemented mock method")
+func (m *mockClient) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topology, error) {
+	return streamingccl.Topology{
+		Partitions: []streamingccl.PartitionAddress{"some://address"},
+	}, nil
 }
 
 // ConsumePartition implements the Client interface.
-func (m *client) ConsumePartition(
-	address PartitionAddress, startTime time.Time,
-) (chan Event, error) {
-	panic("unimplemented mock method")
+func (m *mockClient) ConsumePartition(
+	ctx context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+) (chan streamingccl.Event, error) {
+	eventCh := make(chan streamingccl.Event)
+	go func() {
+		<-ctx.Done()
+		close(eventCh)
+	}()
+	return eventCh, nil
 }

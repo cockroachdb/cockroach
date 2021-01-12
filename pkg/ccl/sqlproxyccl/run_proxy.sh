@@ -34,7 +34,7 @@ $COCKROACH start-single-node --host 127.0.0.1 --background
 $COCKROACH sql --host 127.0.0.1 -e 'select crdb_internal.create_tenant(123);'
 
 # Spawn tenant SQL server (:36257) pointing at KV layer (:26257)
-$COCKROACH mt start-sql --tenant-id 123 --kv-addrs 127.0.0.1:26257 --sql-addr 127.0.0.1:36257 --logtostderr=NONE &
+COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true $COCKROACH mt start-sql --tenant-id 123 --kv-addrs 127.0.0.1:26257 --sql-addr 127.0.0.1:36257 --logtostderr=NONE &
 sleep 1
 
 # Create user on tenant (proxy does not forward client certs)

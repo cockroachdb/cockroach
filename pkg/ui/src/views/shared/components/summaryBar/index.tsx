@@ -58,7 +58,10 @@ function numberToString(n: number) {
   return n.toString();
 }
 
-export function formatNumberForDisplay(value: number, format: (n: number) => string = numberToString) {
+export function formatNumberForDisplay(
+  value: number,
+  format: (n: number) => string = numberToString,
+) {
   if (!_.isNumber(value)) {
     return "-";
   }
@@ -70,9 +73,7 @@ export function formatNumberForDisplay(value: number, format: (n: number) => str
  * collection of summarized statistics.
  */
 export function SummaryBar(props: { children?: React.ReactNode }) {
-  return <div className="summary-section">
-    { props.children }
-  </div>;
+  return <div className="summary-section">{props.children}</div>;
 }
 
 /**
@@ -81,7 +82,9 @@ export function SummaryBar(props: { children?: React.ReactNode }) {
  * separated from other summary stats. A summary stat can contain children, such
  * as messages and breakdowns.
  */
-export function SummaryValue(props: SummaryValueProps & {children?: React.ReactNode}) {
+export function SummaryValue(
+  props: SummaryValueProps & { children?: React.ReactNode },
+) {
   const topClasses = classNames(
     "summary-stat",
     props.classModifier ? `summary-stat--${props.classModifier}` : null,
@@ -89,14 +92,10 @@ export function SummaryValue(props: SummaryValueProps & {children?: React.ReactN
   return (
     <div className={topClasses}>
       <div className="summary-stat__body">
-        <span className="summary-stat__title">
-          { props.title }
-        </span>
-        <span className="summary-stat__value">
-          { props.value }
-        </span>
+        <span className="summary-stat__title">{props.title}</span>
+        <span className="summary-stat__value">{props.value}</span>
       </div>
-      { props.children }
+      {props.children}
     </div>
   );
 }
@@ -107,7 +106,9 @@ export function SummaryValue(props: SummaryValueProps & {children?: React.ReactN
  * the value is a non-numeric value and applies an appearance modifier specific
  * to numeric values.
  */
-export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNode}) {
+export function SummaryStat(
+  props: SummaryStatProps & { children?: React.ReactNode },
+) {
   return (
     <SummaryValue
       title={props.title}
@@ -123,18 +124,18 @@ export function SummaryStat(props: SummaryStatProps & {children?: React.ReactNod
  * SummaryLabel places a label onto a SummaryBar without a corresponding
  * statistic. This can be used to label a section of the bar.
  */
-export function SummaryLabel(props: {children?: React.ReactNode}) {
-  return <div className="summary-label">
-    { props.children }
-  </div>;
+export function SummaryLabel(props: { children?: React.ReactNode }) {
+  return <div className="summary-label">{props.children}</div>;
 }
 
 /**
  * SummaryStatMessage can be placed inside of a SummaryStat to provide visible
  * descriptive information about that statistic.
  */
-export function SummaryStatMessage(props: SummaryStatMessageProps & {children?: React.ReactNode}) {
-  return <span className="summary-stat__tooltip">{ props.message }</span>;
+export function SummaryStatMessage(
+  props: SummaryStatMessageProps & { children?: React.ReactNode },
+) {
+  return <span className="summary-stat__tooltip">{props.message}</span>;
 }
 
 /**
@@ -142,48 +143,67 @@ export function SummaryStatMessage(props: SummaryStatMessageProps & {children?: 
  * a detailed breakdown of the main statistic. Each breakdown contains a label
  * and numeric statistic.
  */
-export function SummaryStatBreakdown(props: SummaryStatBreakdownProps & {children?: React.ReactNode}) {
-  const modifierClass = props.modifier ? `summary-stat-breakdown--${props.modifier}` : null;
-  return <div className={classNames("summary-stat-breakdown", modifierClass)}>
-    <div className="summary-stat-breakdown__body">
-      <span className="summary-stat-breakdown__title">
-        { props.title }
-      </span>
-      <span className="summary-stat-breakdown__value">
-        { formatNumberForDisplay(props.value, props.format) }
-      </span>
+export function SummaryStatBreakdown(
+  props: SummaryStatBreakdownProps & { children?: React.ReactNode },
+) {
+  const modifierClass = props.modifier
+    ? `summary-stat-breakdown--${props.modifier}`
+    : null;
+  return (
+    <div className={classNames("summary-stat-breakdown", modifierClass)}>
+      <div className="summary-stat-breakdown__body">
+        <span className="summary-stat-breakdown__title">{props.title}</span>
+        <span className="summary-stat-breakdown__value">
+          {formatNumberForDisplay(props.value, props.format)}
+        </span>
+      </div>
     </div>
-  </div>;
+  );
 }
 
 /**
  * SummaryMetricStat is a helpful component that creates a SummaryStat where
  * metric data is automatically derived from a metric component.
  */
-export function SummaryMetricStat(propsWithID: SummaryStatProps & { id: string, summaryStatMessage?: string } & { children?: React.ReactNode }) {
+export function SummaryMetricStat(
+  propsWithID: SummaryStatProps & {
+    id: string;
+    summaryStatMessage?: string;
+  } & { children?: React.ReactNode },
+) {
   const { id, ...props } = propsWithID;
-  return <MetricsDataProvider current id={id} >
-    <SummaryMetricStatHelper {...props} />
-  </MetricsDataProvider>;
+  return (
+    <MetricsDataProvider current id={id}>
+      <SummaryMetricStatHelper {...props} />
+    </MetricsDataProvider>
+  );
 }
 
-function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { summaryStatMessage?: string } & { children?: React.ReactNode}) {
+function SummaryMetricStatHelper(
+  props: MetricsDataComponentProps &
+    SummaryStatProps & { summaryStatMessage?: string } & {
+      children?: React.ReactNode;
+    },
+) {
   const value = aggregateLatestValuesFromMetrics(props.data, props.aggregator);
-  const {title, format, summaryStatMessage} = props;
+  const { title, format, summaryStatMessage } = props;
   return (
     <SummaryStat
       title={title}
       format={format}
       value={_.isNumber(value) ? value : props.value}
     >
-      {summaryStatMessage &&
-        <SummaryStatMessage message={summaryStatMessage}/>
-      }
+      {summaryStatMessage && (
+        <SummaryStatMessage message={summaryStatMessage} />
+      )}
     </SummaryStat>
   );
 }
 
-function aggregateLatestValuesFromMetrics(data?: TSResponse, aggregator?: SummaryMetricsAggregator) {
+function aggregateLatestValuesFromMetrics(
+  data?: TSResponse,
+  aggregator?: SummaryMetricsAggregator,
+) {
   if (!data || !data.results || !data.results.length) {
     return null;
   }
@@ -210,20 +230,27 @@ function aggregateLatestValuesFromMetrics(data?: TSResponse, aggregator?: Summar
  * SummaryHeadlineStat is similar to a normal SummaryStat, but is visually laid
  * out to draw attention to the numerical statistic.
  */
-export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProps, {}> {
+export class SummaryHeadlineStat extends React.Component<
+  SummaryHeadlineStatProps,
+  {}
+> {
   render() {
-    return <div className="summary-headline-stat">
-      <div className="summary-headline-stat__value">{formatNumberForDisplay(this.props.value, this.props.format)}</div>
-      <div className="summary-headline-stat__title">
-        {this.props.title}
-        <div className="section-heading__tooltip">
-          <ToolTipWrapper text={this.props.tooltip}>
-            <div className="section-heading__tooltip-hover-area">
-              <div className="section-heading__info-icon">i</div>
-            </div>
-          </ToolTipWrapper>
+    return (
+      <div className="summary-headline-stat">
+        <div className="summary-headline-stat__value">
+          {formatNumberForDisplay(this.props.value, this.props.format)}
+        </div>
+        <div className="summary-headline-stat__title">
+          {this.props.title}
+          <div className="section-heading__tooltip">
+            <ToolTipWrapper text={this.props.tooltip}>
+              <div className="section-heading__tooltip-hover-area">
+                <div className="section-heading__info-icon">i</div>
+              </div>
+            </ToolTipWrapper>
+          </div>
         </div>
       </div>
-    </div>;
+    );
   }
 }

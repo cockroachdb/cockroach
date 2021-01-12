@@ -515,12 +515,19 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) opt.ScalarExp
 // It returns the referenced tuple field value, or nil if folding is not
 // possible or results in an error.
 func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdinal) opt.ScalarExpr {
-	// Case 1: The input is a static tuple constructor.
+	// Case 1: The input is NULL. This is possible when FoldIndirection has
+	// already folded an Indirection expression with an out-of-bounds index to
+	// Null.
+	if n, ok := input.(*memo.NullExpr); ok {
+		return c.f.ConstructNull(n.Typ.TupleContents()[idx])
+	}
+
+	// Case 2: The input is a static tuple constructor.
 	if tup, ok := input.(*memo.TupleExpr); ok {
 		return tup.Elems[idx]
 	}
 
-	// Case 2: The input is a constant DTuple.
+	// Case 3: The input is a constant DTuple.
 	if memo.CanExtractConstDatum(input) {
 		datum := memo.ExtractConstDatum(input)
 

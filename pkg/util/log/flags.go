@@ -30,10 +30,10 @@ type config struct {
 	// used for testing.
 	showLogs bool
 
-	// syncWrites can be set asynchronously to force all file output to
-	// synchronize to disk. This is set via SetSync() and used e.g. in
-	// start.go upon encountering errors.
-	syncWrites syncutil.AtomicBool
+	// flushWrites can be set asynchronously to force all file output to
+	// be flushed to disk immediately. This is set via SetAlwaysFlush()
+	// and used e.g. in start.go upon encountering errors.
+	flushWrites syncutil.AtomicBool
 }
 
 var debugLog *loggerT
@@ -153,7 +153,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		bt, bf := true, false
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
-		fakeConfig := logconfig.FileConfig{
+		fakeConfig := logconfig.FileSinkConfig{
 			CommonSinkConfig: logconfig.CommonSinkConfig{
 				Filter:      severity.INFO,
 				Criticality: &bt,
@@ -165,10 +165,10 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 				// impression to the entry parser.
 				Redactable: &bf,
 			},
-			Dir:          config.CaptureFd2.Dir,
-			MaxGroupSize: config.CaptureFd2.MaxGroupSize,
-			MaxFileSize:  &mf,
-			SyncWrites:   &bt,
+			Dir:            config.CaptureFd2.Dir,
+			MaxGroupSize:   config.CaptureFd2.MaxGroupSize,
+			MaxFileSize:    &mf,
+			BufferedWrites: &bf,
 		}
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
 		if err != nil {
@@ -287,7 +287,9 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
 // from the provided configuration.
-func newFileSinkInfo(fileNamePrefix string, c logconfig.FileConfig) (*sinkInfo, *fileSink, error) {
+func newFileSinkInfo(
+	fileNamePrefix string, c logconfig.FileSinkConfig,
+) (*sinkInfo, *fileSink, error) {
 	info := &sinkInfo{}
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, nil, err
@@ -295,7 +297,7 @@ func newFileSinkInfo(fileNamePrefix string, c logconfig.FileConfig) (*sinkInfo, 
 	fileSink := newFileSink(
 		*c.Dir,
 		fileNamePrefix,
-		*c.SyncWrites,
+		*c.BufferedWrites,
 		int64(*c.MaxFileSize),
 		int64(*c.MaxGroupSize),
 		info.getStartLines)
@@ -330,6 +332,16 @@ func (l *sinkInfo) describeAppliedConfig() (c logconfig.CommonSinkConfig) {
 	f := l.formatter.formatterName()
 	c.Format = &f
 	return c
+}
+
+// TestingClearServerIdentifiers clears the server identity from the
+// logging system. This is for use in tests that start multiple
+// servers with conflicting identities subsequently.
+// See discussion here: https://github.com/cockroachdb/cockroach/issues/58938
+func TestingClearServerIdentifiers() {
+	logging.idMu.Lock()
+	logging.idMu.idPayload = idPayload{}
+	logging.idMu.Unlock()
 }
 
 // TestingResetActive clears the active bit. This is for use in tests
@@ -383,7 +395,7 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the file sinks.
-	config.Sinks.FileGroups = make(map[string]*logconfig.FileConfig)
+	config.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
 	_ = allSinkInfos.iter(func(l *sinkInfo) error {
 		if cl := logging.testingFd2CaptureLogger; cl != nil && cl.sinkInfos[0] == l {
 			// Not a real sink. Omit.
@@ -394,7 +406,7 @@ func DescribeAppliedConfig() string {
 			return nil
 		}
 
-		fc := &logconfig.FileConfig{}
+		fc := &logconfig.FileSinkConfig{}
 		fc.CommonSinkConfig = l.describeAppliedConfig()
 		mf := logconfig.ByteSize(fileSink.logFileMaxSize)
 		fc.MaxFileSize = &mf
@@ -404,7 +416,7 @@ func DescribeAppliedConfig() string {
 		dir := fileSink.mu.logDir
 		fileSink.mu.Unlock()
 		fc.Dir = &dir
-		fc.SyncWrites = &fileSink.syncWrites
+		fc.BufferedWrites = &fileSink.bufferedWrites
 
 		// Describe the connections to this file sink.
 		for ch, logger := range chans {

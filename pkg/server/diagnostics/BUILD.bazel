@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "diagnostics",
-    srcs = ["reporter.go"],
+    srcs = [
+        "diagnostics.go",
+        "reporter.go",
+        "update_checker.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/diagnostics",
     visibility = ["//visibility:public"],
     deps = [
@@ -13,7 +17,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security",
-        "//pkg/server/diagnosticspb",
+        "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -23,6 +27,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/util/cloudinfo",
+        "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
@@ -45,10 +50,12 @@ go_test(
     srcs = [
         "main_test.go",
         "reporter_test.go",
+        "update_checker_test.go",
     ],
     deps = [
         ":diagnostics",
         "//pkg/base",
+        "//pkg/build",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
@@ -57,7 +64,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/server/diagnosticspb",
+        "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql",
@@ -65,6 +72,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/util/cloudinfo",
         "//pkg/util/leaktest",
         "//pkg/util/log",

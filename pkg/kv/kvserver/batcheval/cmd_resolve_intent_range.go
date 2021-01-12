@@ -24,12 +24,9 @@ func init() {
 }
 
 func declareKeysResolveIntentRange(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
-	declareKeysResolveIntentCombined(header, req, latchSpans)
+	declareKeysResolveIntentCombined(rs, req, latchSpans)
 }
 
 // ResolveIntentRange resolves write intents in the specified

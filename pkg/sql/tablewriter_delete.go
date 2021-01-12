@@ -42,8 +42,8 @@ func (*tableDeleter) desc() string { return "deleter" }
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, _ *tree.EvalContext) error {
-	td.tableWriterBase.init(txn, td.tableDesc())
+func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *tree.EvalContext) error {
+	td.tableWriterBase.init(txn, td.tableDesc(), evalCtx)
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -145,7 +145,9 @@ func (td *tableDeleter) deleteAllRowsScan(
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(
+		ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV, td.forceProductionBatchSizes,
+	); err != nil {
 		return resume, err
 	}
 
@@ -254,7 +256,7 @@ func (td *tableDeleter) deleteIndexScan(
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -276,7 +278,9 @@ func (td *tableDeleter) deleteIndexScan(
 	); err != nil {
 		return resume, err
 	}
-	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
+	if err := rf.StartScan(
+		ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV, td.forceProductionBatchSizes,
+	); err != nil {
 		return resume, err
 	}
 

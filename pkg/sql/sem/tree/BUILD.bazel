@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "tree",
@@ -27,7 +28,6 @@ go_library(
         "constants.go",
         "copy.go",
         "create.go",
-        "createtypevariety_string.go",
         "datum.go",
         "decimal.go",
         "delete.go",
@@ -74,7 +74,6 @@ go_library(
         "set.go",
         "show.go",
         "split.go",
-        "statementtype_string.go",
         "stmt.go",
         "survival_goal.go",
         "table_name.go",
@@ -96,6 +95,8 @@ go_library(
         "window_funcs_util.go",
         "with.go",
         "zone.go",
+        ":gen-createtypevariety-stringer",  # keep
+        ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
@@ -198,6 +199,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/optbuilder",
@@ -225,4 +227,16 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-createtypevariety-stringer",
+    file = "create.go",
+    typ = "CreateTypeVariety",
+)
+
+stringer(
+    name = "gen-statementtype-stringer",
+    file = "stmt.go",
+    typ = "StatementType",
 )

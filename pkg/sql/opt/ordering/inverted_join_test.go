@@ -55,9 +55,9 @@ func TestInvertedJoinProvided(t *testing.T) {
 		t.Fatal(err)
 	}
 	tn = tree.NewUnqualifiedTableName("t2")
-	tab = md.AddTable(tc.Table(tn), tn)
+	inputTab := md.AddTable(tc.Table(tn), tn)
 
-	if c6 := tab.ColumnID(0); c6 != 6 {
+	if c6 := inputTab.ColumnID(0); c6 != 6 {
 		t.Fatalf("unexpected ID for column c6: %d\n", c6)
 	}
 
@@ -134,7 +134,6 @@ func TestInvertedJoinProvided(t *testing.T) {
 					InvertedExpr: invertedExpr,
 					Table:        tab,
 					Index:        1,
-					InvertedCol:  opt.ColumnID(5),
 					Cols:         tc.outCols,
 				},
 			)

@@ -310,7 +310,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
-		} else if resultIsError(t.Result, `merge failed: cannot merge range with non-voter replicas`) {
+		} else if resultIsError(t.Result,
+			`merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
 			// This operation executed concurrently with one that was changing
 			// replicas.
 		} else if resultIsError(t.Result, `merge failed: ranges not collocated`) {
@@ -337,6 +338,17 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				kvserver.IsIllegalReplicationChangeError(err)
 		}
 		if !ignore {
+			v.failIfError(op, t.Result)
+		}
+	case *TransferLeaseOperation:
+		if resultIsError(t.Result, `cannot transfer lease to replica of type (VOTER_INCOMING|VOTER_OUTGOING|VOTER_DEMOTING|LEARNER|NON_VOTER)`) {
+			// Only VOTER_FULL replicas can currently hold a range lease.
+			// Attempts to transfer to lease to any other replica type are
+			// rejected.
+		} else if resultIsError(t.Result, `unable to find store \d+ in range`) {
+			// A lease transfer that races with a replica removal may find that
+			// the store it was targeting is no longer part of the range.
+		} else {
 			v.failIfError(op, t.Result)
 		}
 	case *BatchOperation:

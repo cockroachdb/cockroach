@@ -25,16 +25,22 @@ import * as protos from "src/js/protos";
 
 const sandbox = sinon.createSandbox();
 
-describe("analytics listener", function() {
+describe("analytics listener", function () {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
-  const setClusterData = (store: Store<AdminUIState>, enabled = true, enterprise = true) => {
-    store.dispatch(clusterReducerObj.receiveData(
-      new protos.cockroach.server.serverpb.ClusterResponse({
-        cluster_id: clusterID,
-        reporting_enabled: enabled,
-        enterprise_enabled: enterprise,
-      }),
-    ));
+  const setClusterData = (
+    store: Store<AdminUIState>,
+    enabled = true,
+    enterprise = true,
+  ) => {
+    store.dispatch(
+      clusterReducerObj.receiveData(
+        new protos.cockroach.server.serverpb.ClusterResponse({
+          cluster_id: clusterID,
+          reporting_enabled: enabled,
+          enterprise_enabled: enterprise,
+        }),
+      ),
+    );
   };
 
   describe("page method", function () {
@@ -158,7 +164,7 @@ describe("analytics listener", function() {
       return { title, input, expected };
     }
 
-    ([
+    [
       testRedaction(
         "old database URL",
         "/databases/database/foobar/table/baz",
@@ -169,11 +175,7 @@ describe("analytics listener", function() {
         "/database/foobar/table/baz",
         "/database/[db]/table/[tbl]",
       ),
-      testRedaction(
-        "clusterviz map root",
-        "/overview/map/",
-        "/overview/map/",
-      ),
+      testRedaction("clusterviz map root", "/overview/map/", "/overview/map/"),
       testRedaction(
         "clusterviz map single locality",
         "/overview/map/datacenter=us-west-1",
@@ -194,7 +196,7 @@ describe("analytics listener", function() {
         "/statement/SELECT * FROM database.table",
         "/statement/[statement]",
       ),
-    ]).map(function ({ title, input, expected }) {
+    ].map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
         setClusterData(store);
         const sync = new AnalyticsSync(analytics, store, defaultRedactions);
@@ -236,13 +238,15 @@ describe("analytics listener", function() {
     });
 
     const setVersionData = function () {
-      store.dispatch(nodesReducerObj.receiveData([
-        {
-          build_info: {
-            tag: "0.1",
+      store.dispatch(
+        nodesReducerObj.receiveData([
+          {
+            build_info: {
+              tag: "0.1",
+            },
           },
-        },
-      ]));
+        ]),
+      );
     };
 
     it("does nothing if cluster info is not available", function () {

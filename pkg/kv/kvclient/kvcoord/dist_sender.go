@@ -20,7 +20,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1554,17 +1553,6 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if reply.Error == nil {
-			// 20.1 nodes return RangeInfos in individual responses. Let's move it to
-			// the br.
-			if ba.ReturnRangeInfo &&
-				len(reply.RangeInfos) == 0 &&
-				!ds.st.Version.IsActive(ctx, clusterversion.ClientRangeInfosOnBatchResponse) {
-				// All the responses have the same RangeInfos in them, so just look at the
-				// first one.
-				firstRes := reply.Responses[0].GetInner()
-				reply.RangeInfos = append(reply.RangeInfos, firstRes.Header().DeprecatedRangeInfos...)
-			}
-
 			return response{reply: reply, positions: positions}
 		}
 
@@ -1870,7 +1858,7 @@ func (ds *DistSender) sendToReplicas(
 		prevReplica = curReplica
 		// Communicate to the server the information our cache has about the range.
 		// If it's stale, the serve will return an update.
-		ba.ClientRangeInfo = &roachpb.ClientRangeInfo{
+		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
 			// Note that DescriptorGeneration will be 0 if the cached descriptor is
 			// "speculative" (see DescSpeculative()). Even if the speculation is
 			// correct, we want the serve to return an update, at which point the
@@ -1973,12 +1961,12 @@ func (ds *DistSender) sendToReplicas(
 
 			if br.Error == nil {
 				// If the server gave us updated range info, lets update our cache with it.
-				//
-				// TODO(andreimatei): shouldn't we do this unconditionally? Our cache knows how
-				// to disregard stale information.
 				if len(br.RangeInfos) > 0 {
 					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
+					// The field is cleared by the DistSender because it refers
+					// routing information not exposed by the KV API.
+					br.RangeInfos = nil
 				}
 				return br, nil
 			}

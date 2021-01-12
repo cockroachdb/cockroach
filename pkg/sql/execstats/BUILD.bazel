@@ -9,7 +9,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

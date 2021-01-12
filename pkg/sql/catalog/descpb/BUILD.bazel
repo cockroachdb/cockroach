@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "descpb",
@@ -8,14 +9,14 @@ go_library(
         "column.go",
         "constraint.go",
         "descriptor.go",
-        "formatversion_string.go",
         "index.go",
         "join_type.go",
         "locking.go",
         "privilege.go",
-        "privilegedescversion_string.go",
         "region_name.go",
         "structured.go",
+        ":gen-formatversion-stringer",  # keep
+        ":gen-privilegedescversion-stringer",  # keep
     ],
     embed = [":descpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
@@ -81,4 +83,16 @@ go_proto_library(
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+stringer(
+    name = "gen-privilegedescversion-stringer",
+    file = "privilege.go",
+    typ = "PrivilegeDescVersion",
+)
+
+stringer(
+    name = "gen-formatversion-stringer",
+    file = "structured.go",
+    typ = "FormatVersion",
 )

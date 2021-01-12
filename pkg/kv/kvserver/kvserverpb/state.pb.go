@@ -108,7 +108,7 @@ func (m *ReplicaState) Reset()         { *m = ReplicaState{} }
 func (m *ReplicaState) String() string { return proto.CompactTextString(m) }
 func (*ReplicaState) ProtoMessage()    {}
 func (*ReplicaState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_50e6a6403c7eff35, []int{0}
+	return fileDescriptor_state_acd314f0f91777f8, []int{0}
 }
 func (m *ReplicaState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -180,7 +180,7 @@ func (m *RangeInfo) Reset()         { *m = RangeInfo{} }
 func (m *RangeInfo) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo) ProtoMessage()    {}
 func (*RangeInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_50e6a6403c7eff35, []int{1}
+	return fileDescriptor_state_acd314f0f91777f8, []int{1}
 }
 func (m *RangeInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -216,7 +216,7 @@ func (m *RangeInfo_CTEntry) Reset()         { *m = RangeInfo_CTEntry{} }
 func (m *RangeInfo_CTEntry) String() string { return proto.CompactTextString(m) }
 func (*RangeInfo_CTEntry) ProtoMessage()    {}
 func (*RangeInfo_CTEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_50e6a6403c7eff35, []int{1, 0}
+	return fileDescriptor_state_acd314f0f91777f8, []int{1, 0}
 }
 func (m *RangeInfo_CTEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -252,7 +252,7 @@ func (m *LatchManagerInfo) Reset()         { *m = LatchManagerInfo{} }
 func (m *LatchManagerInfo) String() string { return proto.CompactTextString(m) }
 func (*LatchManagerInfo) ProtoMessage()    {}
 func (*LatchManagerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_state_50e6a6403c7eff35, []int{2}
+	return fileDescriptor_state_acd314f0f91777f8, []int{2}
 }
 func (m *LatchManagerInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1952,10 +1952,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_50e6a6403c7eff35)
+	proto.RegisterFile("kv/kvserver/kvserverpb/state.proto", fileDescriptor_state_acd314f0f91777f8)
 }
 
-var fileDescriptor_state_50e6a6403c7eff35 = []byte{
+var fileDescriptor_state_acd314f0f91777f8 = []byte{
 	// 1061 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcd, 0x6e, 0x1b, 0x37,
 	0x10, 0xf6, 0x5a, 0x2b, 0x5b, 0xa2, 0xec, 0x58, 0x61, 0x9d, 0x78, 0xe3, 0xc4, 0x92, 0x21, 0xa0,

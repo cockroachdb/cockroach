@@ -116,11 +116,10 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
 	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry, defaultZoneConfig)
-	n.Stopper.RunWorker(context.TODO(), func(context.Context) {
+	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
+	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
-		<-n.Stopper.ShouldStop()
-		server.Stop()
 		node.Gossip.EnableSimulationCycler(false)
 	})
 	n.Nodes = append(n.Nodes, node)
@@ -144,10 +143,9 @@ func (n *Network) StartNode(node *Node) error {
 		encoding.EncodeUint64Ascending(nil, 0), time.Hour); err != nil {
 		return err
 	}
-	n.Stopper.RunWorker(context.TODO(), func(context.Context) {
+	return n.Stopper.RunAsyncTask(context.TODO(), "start-node", func(context.Context) {
 		netutil.FatalIfUnexpected(node.Server.Serve(node.Listener))
 	})
-	return nil
 }
 
 // GetNodeFromID returns the simulation node associated with

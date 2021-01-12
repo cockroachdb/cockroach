@@ -40,7 +40,7 @@ go_proto_library(
     proto = ":jobspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl/streamclient",  # keep
+        "//pkg/ccl/streamingccl",  # keep
         "//pkg/roachpb",
         "//pkg/security",  # keep
         "//pkg/sql/catalog/descpb",

@@ -253,6 +253,7 @@ type zigzagJoiner struct {
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
 var zigzagJoinerBatchSize = int64(util.ConstantWithMetamorphicTestValue(
+	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
 	1, /* metamorphicValue */
 ))
@@ -419,11 +420,7 @@ func (z *zigzagJoiner) setupInfo(
 	info.table = &tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
-	if indexOrdinal == 0 {
-		info.index = info.table.GetPrimaryIndex()
-	} else {
-		info.index = &info.table.GetPublicNonPrimaryIndexes()[indexOrdinal-1]
-	}
+	info.index = info.table.ActiveIndexes()[indexOrdinal].IndexDesc()
 
 	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
@@ -651,8 +648,8 @@ func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.GetPrimaryIndex().ColumnIDs, colID); idx != -1 {
-			direction, err = zi.table.GetPrimaryIndex().ColumnDirections[idx].ToEncodingDirection()
+		} else if idx := findColumnID(zi.table.GetPrimaryIndex().IndexDesc().ColumnIDs, colID); idx != -1 {
+			direction, err = zi.table.GetPrimaryIndex().GetColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
@@ -768,6 +765,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			return nil, err
@@ -912,6 +910,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)

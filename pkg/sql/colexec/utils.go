@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -205,6 +206,7 @@ func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
 // [startIdx, endIdx) from batch (paying attention to the selection vector)
 // into b.
 // NOTE: this does *not* perform memory accounting.
+// NOTE: batch must be of non-zero length.
 func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx int) {
 	for _, colIdx := range b.colsToStore {
 		b.colVecs[colIdx].Append(
@@ -264,4 +266,12 @@ func maybeAllocateLimitedBoolArray(array []bool, length int) []bool {
 	array = array[:length]
 	copy(array, zeroBoolColumn)
 	return array
+}
+
+func makeOrdering(cols []uint32) []execinfrapb.Ordering_Column {
+	res := make([]execinfrapb.Ordering_Column, len(cols))
+	for i, colIdx := range cols {
+		res[i].ColIdx = colIdx
+	}
+	return res
 }

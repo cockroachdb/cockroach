@@ -1358,13 +1358,13 @@ func (s *adminServer) Health(
 		return resp, nil
 	}
 
-	if err := s.checkReadinessForHealthCheck(); err != nil {
+	if err := s.checkReadinessForHealthCheck(ctx); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *adminServer) checkReadinessForHealthCheck() error {
+func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 	serveMode := s.server.grpc.mode.get()
 	switch serveMode {
 	case modeInitializing:
@@ -1395,6 +1395,10 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 		// grpc.mode being modeDraining, if a RPC client
 		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
 		return status.Errorf(codes.Unavailable, "node is shutting down")
+	}
+
+	if !s.server.sqlServer.acceptingClients.Get() {
+		return status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
 
 	return nil
@@ -1653,7 +1657,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if row == nil {
+		if chunkRow == nil {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
 		}
@@ -2424,6 +2428,9 @@ func (s *adminServer) queryTableID(
 	)
 	if err != nil {
 		return descpb.InvalidID, err
+	}
+	if row == nil {
+		return descpb.InvalidID, errors.Newf("failed to resolve %q as a table name", tableName)
 	}
 	return descpb.ID(tree.MustBeDOid(row[0]).DInt), nil
 }

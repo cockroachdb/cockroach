@@ -253,9 +253,9 @@ define JoinPrivate {
     # Flags modify what type of join we choose.
     Flags JoinFlags
 
-    # WasReordered indicates whether reorderings of the join tree rooted at this
-    # join have already been considered.
-    WasReordered bool
+    # SkipReorderJoins indicates whether the ReorderJoins rule should match this
+    # join.
+    SkipReorderJoins bool
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
@@ -379,10 +379,6 @@ define InvertedJoinPrivate {
     # Index identifies the inverted index to do lookups in. It can be passed to
     # the cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
-
-    # InvertedCol is the inverted column in the index that is referenced by
-    # InvertedExpr.
-    InvertedCol ColumnID
 
     # IsFirstJoinInPairedJoiner is true if this is the first join of a
     # paired-joiner used for left joins.

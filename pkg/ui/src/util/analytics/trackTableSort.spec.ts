@@ -55,7 +55,10 @@ describe("trackTableSort", () => {
     assert.isTrue(table === tableName, "Table name matches given table name");
 
     assert.isTrue(isString(columnName), "Column name is a string");
-    assert.isTrue(title === columnName, "Column name matches given column name");
+    assert.isTrue(
+      title === columnName,
+      "Column name matches given column name",
+    );
 
     assert.isTrue(isString(direction), "Sort direction is a string");
     assert.isTrue(

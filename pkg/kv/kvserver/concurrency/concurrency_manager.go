@@ -59,6 +59,7 @@ type Config struct {
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
+	OnContentionEvent func(*roachpb.ContentionEvent) // may be nil; allowed to mutate the event
 	TxnWaitKnobs      txnwait.TestingKnobs
 }
 
@@ -92,6 +93,7 @@ func NewManager(cfg Config) Manager {
 			ir:                cfg.IntentResolver,
 			lt:                lt,
 			disableTxnPushing: cfg.DisableTxnPushing,
+			onContentionEvent: cfg.OnContentionEvent,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.
@@ -406,31 +408,6 @@ func (r *Request) txnMeta() *enginepb.TxnMeta {
 		return nil
 	}
 	return &r.Txn.TxnMeta
-}
-
-// readConflictTimestamp returns the maximum timestamp at which the request
-// conflicts with locks acquired by other transaction. The request must wait
-// for all locks acquired by other transactions at or below this timestamp
-// to be released. All locks acquired by other transactions above this
-// timestamp are ignored.
-func (r *Request) readConflictTimestamp() hlc.Timestamp {
-	ts := r.Timestamp
-	if r.Txn != nil {
-		ts = r.Txn.ReadTimestamp
-		ts.Forward(r.Txn.MaxTimestamp)
-	}
-	return ts
-}
-
-// writeConflictTimestamp returns the minimum timestamp at which the request
-// acquires locks when performing mutations. All writes performed by the
-// requests must take place at or above this timestamp.
-func (r *Request) writeConflictTimestamp() hlc.Timestamp {
-	ts := r.Timestamp
-	if r.Txn != nil {
-		ts = r.Txn.WriteTimestamp
-	}
-	return ts
 }
 
 func (r *Request) isSingle(m roachpb.Method) bool {

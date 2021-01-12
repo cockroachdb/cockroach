@@ -78,8 +78,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running   NULL  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed    NULL  0.00
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -199,8 +199,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    NULL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  NULL  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    waiting for GC TTL  0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  NULL                1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -281,8 +281,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx   root  running    NULL  0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx          root  succeeded  NULL  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    waiting for GC TTL  0  ·
+SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  NULL                1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -1418,9 +1418,19 @@ CREATE TABLE unique_without_index (
   a INT,
   b INT UNIQUE WITHOUT INDEX,
   c INT UNIQUE,
+  d INT UNIQUE WITHOUT INDEX,
+  e INT,
   UNIQUE WITHOUT INDEX (b),
   UNIQUE WITHOUT INDEX (a, b),
-  UNIQUE WITHOUT INDEX (c)
+  UNIQUE WITHOUT INDEX (c),
+  UNIQUE WITHOUT INDEX (d, e)
+)
+
+statement ok
+CREATE TABLE uwi_child (
+  d INT REFERENCES unique_without_index (d),
+  e INT,
+  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e)
 )
 
 # We don't yet support adding unique constraints without an index after a table
@@ -1444,6 +1454,8 @@ unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (
 unique_without_index  unique_b                    UNIQUE  UNIQUE WITHOUT INDEX (b)     true
 unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)     true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
 
 statement ok
@@ -1465,6 +1477,8 @@ unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (
 unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
 unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)      true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)   true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
@@ -1483,8 +1497,34 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
+
+query TTTTB
+SHOW CONSTRAINTS FROM uwi_child
+----
+uwi_child  fk_d_e                         FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
+uwi_child  fk_d_ref_unique_without_index  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
+
+# Attempting to drop a column with a foreign key reference fails.
+statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
+ALTER TABLE unique_without_index DROP COLUMN d
+
+# It succeeds if we use CASCADE, and also drops the fk reference.
+statement ok
+ALTER TABLE unique_without_index DROP COLUMN d CASCADE
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)  true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)            true
+
+query TTTTB
+SHOW CONSTRAINTS FROM uwi_child
+----
 
 # TODO(rytaft): Add test cases for dropping both a valid and not-valid
 # unique constraint once supported.
@@ -1495,3 +1535,23 @@ CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
 ALTER TABLE t54629 ADD CONSTRAINT pk PRIMARY KEY (c);
 INSERT INTO t54629 VALUES (1);
 DELETE FROM t54629 WHERE c = 1;
+
+subtest regression_45985
+
+statement ok
+BEGIN;
+CREATE TABLE t45985 (a INT);
+ALTER TABLE t45985 ADD COLUMN b INT;
+COMMIT;
+
+query I
+SELECT count(descriptor_id)
+  FROM (
+        SELECT json_array_elements_text(
+                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'descriptorIds'
+               )::INT8 AS descriptor_id
+          FROM system.jobs
+       )
+ WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
+----
+0
