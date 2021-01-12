@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"testing"
 
@@ -122,21 +121,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	// We intentionally instantiate a testing memory monitor with a limit that
-	// resembles a cluster with --max-sql-memory argument of 2GB.
-	const memMonitorLimit = math.MaxInt32
-	memMonitor := mon.NewMonitorWithLimit(
-		"external-distinct-spilling-test",
-		mon.MemoryResource,
-		memMonitorLimit,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
-	memMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	evalCtx := tree.MakeTestingEvalContextWithMon(st, memMonitor)
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -155,7 +140,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	)
 
 	rng, _ := randutil.NewPseudoRand()
-	nCols := 2 + rng.Intn(4)
+	nCols := 1 + rng.Intn(3)
 	typs := make([]*types.T, nCols)
 	distinctCols := make([]uint32, nCols)
 	for i := range typs {
@@ -181,6 +166,14 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	nDistinctBatches := nBatchesOutputByInMemoryOp * (2 + rng.Intn(2))
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
+	const maxNumTuples = 50000
+	if nTuples > maxNumTuples {
+		// If we happen to set a large value for coldata.BatchSize() and a small
+		// value for newTupleProbability, we might end up with huge number of
+		// tuples. Then, when runTests test harness uses small batch size, the
+		// test might take a while, so we'll limit the number of tuples.
+		nTuples = maxNumTuples
+	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 
 	var numRuns, numSpills int
@@ -195,7 +188,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		unorderedVerifier,
 		func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 			// Since we're giving very low memory limit to the operator, in
-			// order to make the test runs faster, we'll use an unlimited number
+			// order to make the test run faster, we'll use an unlimited number
 			// of file descriptors.
 			sem := colexecbase.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)

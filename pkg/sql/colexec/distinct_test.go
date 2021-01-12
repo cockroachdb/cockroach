@@ -221,7 +221,7 @@ func TestUnorderedDistinctRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
-	nCols := 2 + rng.Intn(4)
+	nCols := 1 + rng.Intn(3)
 	typs := make([]*types.T, nCols)
 	distinctCols := make([]uint32, nCols)
 	for i := range typs {

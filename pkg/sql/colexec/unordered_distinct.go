@@ -91,17 +91,9 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 
 func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
 	if op.lastInputBatch != nil {
-		// TODO(yuzefovich): use proper ctx when it is added to the signature
-		// (there is a concurrent PR that does it).
-		op.ht.maybeRepairAfterDistinctBuild(context.TODO())
 		batch := op.lastInputBatch
 		op.lastInputBatch = nil
-		// We wrap the batch into a special marker type that indicates to the
-		// unorderedDistinctFilterer that filtering on this batch has already
-		// been performed.
-		// If we simply return the batch, all of the tuples in it will be
-		// filtered out since they have been appended to the hash table already.
-		return unorderedDistinctAlreadyFilteredBatch{Batch: batch}
+		return batch
 	}
 	// We only need to export the last input batch because the buffered in the
 	// hash table data is used by the unorderedDistinctFilterer (which is
@@ -117,10 +109,6 @@ func (op *unorderedDistinct) reset(ctx context.Context) {
 	op.ht.reset(ctx)
 }
 
-type unorderedDistinctAlreadyFilteredBatch struct {
-	coldata.Batch
-}
-
 // unorderedDistinctFilterer filters out tuples that are duplicates of the
 // tuples already emitted by the unordered distinct. Batches of the
 // unorderedDistinctAlreadyFilteredBatch type are propagated unchanged.
@@ -129,6 +117,9 @@ type unorderedDistinctFilterer struct {
 	NonExplainable
 
 	ht *hashTable
+	// seenBatch tracks whether the operator has already read at least one
+	// batch.
+	seenBatch bool
 }
 
 var _ colexecbase.Operator = &unorderedDistinctFilterer{}
@@ -138,12 +129,31 @@ func (f *unorderedDistinctFilterer) Init() {
 }
 
 func (f *unorderedDistinctFilterer) Next(ctx context.Context) coldata.Batch {
+	if f.ht.vals.Length() == 0 {
+		// The hash table is empty, so there is nothing to filter against.
+		return f.input.Next(ctx)
+	}
 	for {
 		batch := f.input.Next(ctx)
 		if batch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
-		if _, alreadyFiltered := batch.(unorderedDistinctAlreadyFilteredBatch); alreadyFiltered {
+		if !f.seenBatch {
+			// This is the first batch we received from bufferExportingOperator
+			// and the hash table is not empty; therefore, this batch must be
+			// the last input batch coming from the in-memory unordered
+			// distinct.
+			//
+			// That batch has already been updated in-place to contain only
+			// distinct tuples all of which have been appended to the hash
+			// table, so we don't need to perform filtering on it. However, we
+			// might need to repair the hash table in case the OOM error
+			// occurred when tuples were being appended to f.ht.vals.
+			//
+			// See https://github.com/cockroachdb/cockroach/pull/58006#pullrequestreview-565859919
+			// for all the gory details.
+			f.ht.maybeRepairAfterDistinctBuild(ctx)
+			f.seenBatch = true
 			return batch
 		}
 		// The unordered distinct has emitted some tuples, so we need to check
