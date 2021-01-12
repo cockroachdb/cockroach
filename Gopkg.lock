@@ -697,7 +697,7 @@
 
 [[projects]]
   branch = "v1.2.0-with-clone-fix"
-  digest = "1:c6e7d6ec253d51e58ec35b760f33b344946fe87d62dcbce6274b3100e4b08573"
+  digest = "1:d1f09aee33fd0673112e998a847998af8977e9368ebfd393a6677dca9a2516e2"
   name = "github.com/gogo/protobuf"
   packages = [
     "gogoproto",
@@ -730,7 +730,7 @@
     "vanity/command",
   ]
   pruneopts = "T"
-  revision = "ca10b809dba0aa7ed3e43b8202027f20e3d40608"
+  revision = "fecfd0f31404f86c8eac2794bad7d85476d26d97"
   source = "https://github.com/cockroachdb/gogoproto"
 
 [[projects]]

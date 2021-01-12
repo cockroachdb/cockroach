@@ -1385,7 +1385,7 @@ func (m *GCPolicy) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -1512,7 +1512,7 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -1612,7 +1612,7 @@ func (m *Constraints) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -1693,7 +1693,7 @@ func (m *LeasePreference) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -2000,7 +2000,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -2128,7 +2128,7 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {
@@ -2259,7 +2259,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthZone
 			}
 			if (iNdEx + skippy) > l {

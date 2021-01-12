@@ -1296,7 +1296,7 @@ func (m *StatementStatistics) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1435,7 +1435,7 @@ func (m *SensitiveInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1507,7 +1507,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1695,7 +1695,7 @@ func (m *StatementStatisticsKey) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1805,7 +1805,7 @@ func (m *CollectedStatementStatistics) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1946,7 +1946,7 @@ func (m *ExplainTreePlanNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2054,7 +2054,7 @@ func (m *ExplainTreePlanNode_Attr) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {
@@ -2191,7 +2191,7 @@ func (m *TxnStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthAppStats
 			}
 			if (iNdEx + skippy) > l {

@@ -2081,7 +2081,7 @@ func (m *TxnMeta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -2391,7 +2391,7 @@ func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -2681,7 +2681,7 @@ func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -2799,7 +2799,7 @@ func (m *RangeAppliedState) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -2941,7 +2941,7 @@ func (m *MVCCWriteValueOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3112,7 +3112,7 @@ func (m *MVCCWriteIntentOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3222,7 +3222,7 @@ func (m *MVCCUpdateIntentOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3394,7 +3394,7 @@ func (m *MVCCCommitIntentOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3474,7 +3474,7 @@ func (m *MVCCAbortIntentOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3554,7 +3554,7 @@ func (m *MVCCAbortTxnOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
@@ -3802,7 +3802,7 @@ func (m *MVCCLogicalOp) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthMvcc3
 			}
 			if (iNdEx + skippy) > l {
