@@ -174,9 +174,6 @@ func (fr *fakeReplica) redirectOnOrAcquireLease(
 	// baseQueue only checks that the returned error is nil.
 	return kvserverpb.LeaseStatus{}, nil
 }
-func (fr *fakeReplica) IsLeaseValid(context.Context, roachpb.Lease, hlc.ClockTimestamp) bool {
-	return true
-}
-func (fr *fakeReplica) GetLease() (roachpb.Lease, roachpb.Lease) {
-	return roachpb.Lease{}, roachpb.Lease{}
+func (fr *fakeReplica) LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus {
+	return kvserverpb.LeaseStatus{}
 }

@@ -672,10 +672,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 				// the leader of the range has cut off communication with this replica.
 				// Expiration based leases, by contrast, will expire quickly if the
 				// leader of the range stops sending this replica heartbeats.
-				lease, pendingLease := r.GetLease()
-				now := s.Clock().NowAsClockTimestamp()
-				return !r.IsLeaseValid(ctx, lease, now) &&
-					(pendingLease.Empty() || !r.IsLeaseValid(ctx, pendingLease, now))
+				return !r.CurrentLeaseStatus(ctx).IsValid()
 			}
 			// We unconditionally send this replica through the GC queue. It's
 			// reasonably likely that the GC queue will do nothing because the replica

@@ -1167,7 +1167,7 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 	now := r.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	status := r.leaseStatusForRequestRLocked(ctx, now, ts)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
 	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
@@ -1602,15 +1602,15 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(ctx context.Con
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().NowAsClockTimestamp()) {
+	status := r.leaseStatusAtRLocked(ctx, r.Clock().NowAsClockTimestamp())
+	if !status.IsValid() || status.OwnedBy(r.StoreID()) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()
 	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 		return
 	}
-	lhReplicaID := uint64(lease.Replica.ReplicaID)
+	lhReplicaID := uint64(status.Lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
 	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)

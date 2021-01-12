@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -1094,11 +1095,13 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 					default:
 					}
 
-					var drainingLease roachpb.Lease
+					now := s.Clock().NowAsClockTimestamp()
+					var drainingLeaseStatus kvserverpb.LeaseStatus
 					for {
 						var llHandle *leaseRequestHandle
 						r.mu.Lock()
-						lease, nextLease := r.getLeaseRLocked()
+						drainingLeaseStatus = r.leaseStatusAtRLocked(ctx, now)
+						_, nextLease := r.getLeaseRLocked()
 						if nextLease != (roachpb.Lease{}) && nextLease.OwnedBy(s.StoreID()) {
 							llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 						}
@@ -1108,15 +1111,14 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 							<-llHandle.C()
 							continue
 						}
-						drainingLease = lease
 						break
 					}
 
 					// Learner replicas aren't allowed to become the leaseholder or raft
 					// leader, so only consider the `Voters` replicas.
 					needsLeaseTransfer := len(r.Desc().Replicas().VoterDescriptors()) > 1 &&
-						drainingLease.OwnedBy(s.StoreID()) &&
-						r.IsLeaseValid(ctx, drainingLease, s.Clock().NowAsClockTimestamp())
+						drainingLeaseStatus.IsValid() &&
+						drainingLeaseStatus.OwnedBy(s.StoreID())
 
 					// Note that this code doesn't deal with transferring the Raft
 					// leadership. Leadership tries to follow the lease, so when leases
@@ -1149,10 +1151,10 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 						if transferStatus != transferOK {
 							if err != nil {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									drainingLease, desc, err)
+									drainingLeaseStatus.Lease, desc, err)
 							} else {
 								log.VErrEventf(ctx, 1, "failed to transfer lease %s for range %s when draining: %s",
-									drainingLease, desc, transferStatus)
+									drainingLeaseStatus.Lease, desc, transferStatus)
 							}
 						}
 					}
