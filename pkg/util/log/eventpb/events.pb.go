@@ -33,7 +33,7 @@ func (m *CommonEventDetails) Reset()         { *m = CommonEventDetails{} }
 func (m *CommonEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonEventDetails) ProtoMessage()    {}
 func (*CommonEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_events_6670628996377969, []int{0}
+	return fileDescriptor_events_bc33ca9fad1c48ba, []int{0}
 }
 func (m *CommonEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -78,7 +78,7 @@ func (m *CommonSQLEventDetails) Reset()         { *m = CommonSQLEventDetails{} }
 func (m *CommonSQLEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLEventDetails) ProtoMessage()    {}
 func (*CommonSQLEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_events_6670628996377969, []int{1}
+	return fileDescriptor_events_bc33ca9fad1c48ba, []int{1}
 }
 func (m *CommonSQLEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -599,10 +599,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/events.proto", fileDescriptor_events_6670628996377969)
+	proto.RegisterFile("util/log/eventpb/events.proto", fileDescriptor_events_bc33ca9fad1c48ba)
 }
 
-var fileDescriptor_events_6670628996377969 = []byte{
+var fileDescriptor_events_bc33ca9fad1c48ba = []byte{
 	// 365 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x91, 0xc1, 0xaa, 0xd3, 0x40,
 	0x14, 0x86, 0x33, 0xde, 0x8b, 0x92, 0xe1, 0x5e, 0x95, 0xe0, 0x85, 0x50, 0x70, 0x52, 0xb2, 0xb1,

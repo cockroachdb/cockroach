@@ -47,7 +47,7 @@ var BytesEncodeFormat_value = map[string]int32{
 }
 
 func (BytesEncodeFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{0}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{0}
 }
 
 // VectorizeExecMode controls if an when the Executor executes queries using
@@ -77,7 +77,7 @@ var VectorizeExecMode_value = map[string]int32{
 }
 
 func (VectorizeExecMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{1}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{1}
 }
 
 // SessionData contains session parameters that are easily serializable and are
@@ -128,7 +128,7 @@ func (m *SessionData) Reset()         { *m = SessionData{} }
 func (m *SessionData) String() string { return proto.CompactTextString(m) }
 func (*SessionData) ProtoMessage()    {}
 func (*SessionData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{0}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{0}
 }
 func (m *SessionData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -169,7 +169,7 @@ func (m *DataConversionConfig) Reset()         { *m = DataConversionConfig{} }
 func (m *DataConversionConfig) String() string { return proto.CompactTextString(m) }
 func (*DataConversionConfig) ProtoMessage()    {}
 func (*DataConversionConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{1}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{1}
 }
 func (m *DataConversionConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -206,7 +206,7 @@ func (m *SequenceState) Reset()         { *m = SequenceState{} }
 func (m *SequenceState) String() string { return proto.CompactTextString(m) }
 func (*SequenceState) ProtoMessage()    {}
 func (*SequenceState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{2}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{2}
 }
 func (m *SequenceState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -241,7 +241,7 @@ func (m *SequenceState_Seq) Reset()         { *m = SequenceState_Seq{} }
 func (m *SequenceState_Seq) String() string { return proto.CompactTextString(m) }
 func (*SequenceState_Seq) ProtoMessage()    {}
 func (*SequenceState_Seq) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9433ac4cb00ae665, []int{2, 0}
+	return fileDescriptor_session_data_e53021bf25081c1a, []int{2, 0}
 }
 func (m *SequenceState_Seq) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1306,10 +1306,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/sessiondatapb/session_data.proto", fileDescriptor_session_data_9433ac4cb00ae665)
+	proto.RegisterFile("sql/sessiondatapb/session_data.proto", fileDescriptor_session_data_e53021bf25081c1a)
 }
 
-var fileDescriptor_session_data_9433ac4cb00ae665 = []byte{
+var fileDescriptor_session_data_e53021bf25081c1a = []byte{
 	// 786 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0x41, 0x6f, 0xe3, 0x44,
 	0x14, 0xf6, 0x34, 0x4d, 0x49, 0x26, 0xa4, 0xeb, 0xce, 0x76, 0x91, 0xd5, 0x05, 0x27, 0xaa, 0x38,

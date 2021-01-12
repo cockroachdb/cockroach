@@ -66,7 +66,7 @@ type Timestamp struct {
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 func (*Timestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_018bda073af0c1c7, []int{0}
+	return fileDescriptor_timestamp_e3db50d085ffaa11, []int{0}
 }
 func (m *Timestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -504,10 +504,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_018bda073af0c1c7)
+	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_e3db50d085ffaa11)
 }
 
-var fileDescriptor_timestamp_018bda073af0c1c7 = []byte{
+var fileDescriptor_timestamp_e3db50d085ffaa11 = []byte{
 	// 213 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
 	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,

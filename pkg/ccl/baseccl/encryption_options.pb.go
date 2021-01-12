@@ -38,7 +38,7 @@ func (x EncryptionKeySource) String() string {
 	return proto.EnumName(EncryptionKeySource_name, int32(x))
 }
 func (EncryptionKeySource) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_encryption_options_46022063d9b927cf, []int{0}
+	return fileDescriptor_encryption_options_80b9a505141c04a1, []int{0}
 }
 
 // EncryptionKeyFiles is used when plain key files are passed.
@@ -51,7 +51,7 @@ func (m *EncryptionKeyFiles) Reset()         { *m = EncryptionKeyFiles{} }
 func (m *EncryptionKeyFiles) String() string { return proto.CompactTextString(m) }
 func (*EncryptionKeyFiles) ProtoMessage()    {}
 func (*EncryptionKeyFiles) Descriptor() ([]byte, []int) {
-	return fileDescriptor_encryption_options_46022063d9b927cf, []int{0}
+	return fileDescriptor_encryption_options_80b9a505141c04a1, []int{0}
 }
 func (m *EncryptionKeyFiles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -90,7 +90,7 @@ func (m *EncryptionOptions) Reset()         { *m = EncryptionOptions{} }
 func (m *EncryptionOptions) String() string { return proto.CompactTextString(m) }
 func (*EncryptionOptions) ProtoMessage()    {}
 func (*EncryptionOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_encryption_options_46022063d9b927cf, []int{1}
+	return fileDescriptor_encryption_options_80b9a505141c04a1, []int{1}
 }
 func (m *EncryptionOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -581,10 +581,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("ccl/baseccl/encryption_options.proto", fileDescriptor_encryption_options_46022063d9b927cf)
+	proto.RegisterFile("ccl/baseccl/encryption_options.proto", fileDescriptor_encryption_options_80b9a505141c04a1)
 }
 
-var fileDescriptor_encryption_options_46022063d9b927cf = []byte{
+var fileDescriptor_encryption_options_80b9a505141c04a1 = []byte{
 	// 317 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x91, 0x4f, 0x4f, 0xf2, 0x40,
 	0x10, 0xc6, 0xbb, 0x2f, 0x09, 0x7f, 0x86, 0x37, 0x46, 0x57, 0x89, 0xc4, 0xc3, 0x4a, 0xd0, 0x03,

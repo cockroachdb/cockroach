@@ -32,7 +32,7 @@ func (m *CreateRole) Reset()         { *m = CreateRole{} }
 func (m *CreateRole) String() string { return proto.CompactTextString(m) }
 func (*CreateRole) ProtoMessage()    {}
 func (*CreateRole) Descriptor() ([]byte, []int) {
-	return fileDescriptor_role_events_ba060246133a76c4, []int{0}
+	return fileDescriptor_role_events_4e2bb77c7c1dbf21, []int{0}
 }
 func (m *CreateRole) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -69,7 +69,7 @@ func (m *DropRole) Reset()         { *m = DropRole{} }
 func (m *DropRole) String() string { return proto.CompactTextString(m) }
 func (*DropRole) ProtoMessage()    {}
 func (*DropRole) Descriptor() ([]byte, []int) {
-	return fileDescriptor_role_events_ba060246133a76c4, []int{1}
+	return fileDescriptor_role_events_4e2bb77c7c1dbf21, []int{1}
 }
 func (m *DropRole) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,7 +108,7 @@ func (m *AlterRole) Reset()         { *m = AlterRole{} }
 func (m *AlterRole) String() string { return proto.CompactTextString(m) }
 func (*AlterRole) ProtoMessage()    {}
 func (*AlterRole) Descriptor() ([]byte, []int) {
-	return fileDescriptor_role_events_ba060246133a76c4, []int{2}
+	return fileDescriptor_role_events_4e2bb77c7c1dbf21, []int{2}
 }
 func (m *AlterRole) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -904,10 +904,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/role_events.proto", fileDescriptor_role_events_ba060246133a76c4)
+	proto.RegisterFile("util/log/eventpb/role_events.proto", fileDescriptor_role_events_4e2bb77c7c1dbf21)
 }
 
-var fileDescriptor_role_events_ba060246133a76c4 = []byte{
+var fileDescriptor_role_events_4e2bb77c7c1dbf21 = []byte{
 	// 340 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x93, 0x31, 0x4b, 0xf3, 0x40,
 	0x1c, 0xc6, 0x73, 0xed, 0x4b, 0xdb, 0xdc, 0x2b, 0x0e, 0x41, 0x21, 0x14, 0xbc, 0x94, 0x2c, 0x56,

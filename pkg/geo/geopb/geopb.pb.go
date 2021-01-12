@@ -69,7 +69,7 @@ func (x ShapeType) String() string {
 	return proto.EnumName(ShapeType_name, int32(x))
 }
 func (ShapeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{0}
+	return fileDescriptor_geopb_35d37c4d6e2361b0, []int{0}
 }
 
 // SpatialObjectType represents the type of the SpatialObject.
@@ -96,7 +96,7 @@ func (x SpatialObjectType) String() string {
 	return proto.EnumName(SpatialObjectType_name, int32(x))
 }
 func (SpatialObjectType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{1}
+	return fileDescriptor_geopb_35d37c4d6e2361b0, []int{1}
 }
 
 // SpatialObject represents a serialization of a Geospatial type.
@@ -117,7 +117,7 @@ func (m *SpatialObject) Reset()         { *m = SpatialObject{} }
 func (m *SpatialObject) String() string { return proto.CompactTextString(m) }
 func (*SpatialObject) ProtoMessage()    {}
 func (*SpatialObject) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{0}
+	return fileDescriptor_geopb_35d37c4d6e2361b0, []int{0}
 }
 func (m *SpatialObject) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -158,7 +158,7 @@ func (m *BoundingBox) Reset()         { *m = BoundingBox{} }
 func (m *BoundingBox) String() string { return proto.CompactTextString(m) }
 func (*BoundingBox) ProtoMessage()    {}
 func (*BoundingBox) Descriptor() ([]byte, []int) {
-	return fileDescriptor_geopb_bd402adf6a465ece, []int{1}
+	return fileDescriptor_geopb_35d37c4d6e2361b0, []int{1}
 }
 func (m *BoundingBox) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -719,9 +719,9 @@ var (
 	ErrIntOverflowGeopb   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_bd402adf6a465ece) }
+func init() { proto.RegisterFile("geo/geopb/geopb.proto", fileDescriptor_geopb_35d37c4d6e2361b0) }
 
-var fileDescriptor_geopb_bd402adf6a465ece = []byte{
+var fileDescriptor_geopb_35d37c4d6e2361b0 = []byte{
 	// 468 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x92, 0xc1, 0x6e, 0xd3, 0x4c,
 	0x10, 0xc7, 0xbd, 0x89, 0xdd, 0x36, 0x93, 0xb4, 0xdd, 0xec, 0xf7, 0x81, 0xa2, 0x0a, 0x99, 0x28,
