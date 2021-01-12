@@ -7,9 +7,10 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-start_test "Check that the cluster ID is reported at the start of the first log file."
+start_test "Check that the cluster and node ID is reported at the start of the first log file."
 spawn tail -n 1000 -F logs/db/logs/cockroach.log
 eexpect "\\\[config\\\] clusterID:"
+eexpect "\\\[config\\\] nodeID:"
 eexpect "node startup completed"
 end_test
 
@@ -22,7 +23,7 @@ system "$argv start-single-node --insecure --pid-file=server_pid --background -s
 # Stop the server, which also flushes and closes the log files.
 stop_server $argv
 
-start_test "Check that the cluster ID is reported at the start of new log files."
+start_test "Check that the cluster and node ID is reported at the start of new log files."
 # Verify that the string "restarted pre-existing node" can be found
 # somewhere. This ensures that if this string ever changes, the test
 # below won't report a false negative.
@@ -32,4 +33,6 @@ system "grep -q 'restarted pre-existing node' logs/db/logs/*.log"
 system "if grep -q 'restarted pre-existing node' logs/db/logs/cockroach.log; then false; fi"
 # Verify that the last log file does contain the cluster ID.
 system "grep -qF '\[config\] clusterID:' logs/db/logs/cockroach.log"
+system "grep -qF '\[config\] nodeID:' logs/db/logs/cockroach.log"
 end_test
+
