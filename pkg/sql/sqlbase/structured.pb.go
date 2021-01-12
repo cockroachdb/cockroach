@@ -6324,7 +6324,7 @@ func (m *ForeignKeyReference) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -6701,7 +6701,7 @@ func (m *ForeignKeyConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7075,7 +7075,7 @@ func (m *ColumnDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7294,7 +7294,7 @@ func (m *ColumnFamilyDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7375,7 +7375,7 @@ func (m *InterleaveDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7482,7 +7482,7 @@ func (m *InterleaveDescriptor_Ancestor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7629,7 +7629,7 @@ func (m *ShardedDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7760,7 +7760,7 @@ func (m *PartitioningDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -7898,7 +7898,7 @@ func (m *PartitioningDescriptor_List) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -8039,7 +8039,7 @@ func (m *PartitioningDescriptor_Range) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -8852,7 +8852,7 @@ func (m *IndexDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -9032,7 +9032,7 @@ func (m *ConstraintToUpdate) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -9272,7 +9272,7 @@ func (m *PrimaryKeySwap) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -9527,7 +9527,7 @@ func (m *DescriptorMutation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -10593,7 +10593,7 @@ func (m *TableDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -10681,7 +10681,7 @@ func (m *TableDescriptor_SchemaChangeLease) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -10921,7 +10921,7 @@ func (m *TableDescriptor_CheckConstraint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11038,7 +11038,7 @@ func (m *TableDescriptor_NameInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11199,7 +11199,7 @@ func (m *TableDescriptor_Reference) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11287,7 +11287,7 @@ func (m *TableDescriptor_MutationJob) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11463,7 +11463,7 @@ func (m *TableDescriptor_SequenceOpts) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11551,7 +11551,7 @@ func (m *TableDescriptor_SequenceOpts_SequenceOwner) Unmarshal(dAtA []byte) erro
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11650,7 +11650,7 @@ func (m *TableDescriptor_Replacement) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11757,7 +11757,7 @@ func (m *TableDescriptor_GCDescriptorMutation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -11888,7 +11888,7 @@ func (m *DatabaseDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {
@@ -12002,7 +12002,7 @@ func (m *Descriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStructured
 			}
 			if (iNdEx + skippy) > l {

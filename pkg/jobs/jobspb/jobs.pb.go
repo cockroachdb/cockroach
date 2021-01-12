@@ -4784,7 +4784,7 @@ func (m *Lease) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5055,7 +5055,7 @@ func (m *BackupDetails) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthJobs
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -5137,7 +5137,7 @@ func (m *BackupDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5187,7 +5187,7 @@ func (m *BackupProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5332,7 +5332,7 @@ func (m *RestoreDetails) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthJobs
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -5611,7 +5611,7 @@ func (m *RestoreDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5699,7 +5699,7 @@ func (m *RestoreDetails_TableRewrite) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5850,7 +5850,7 @@ func (m *RestoreDetails_BackupLocalityInfo) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthJobs
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -5867,7 +5867,7 @@ func (m *RestoreDetails_BackupLocalityInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -5948,7 +5948,7 @@ func (m *RestoreProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -6334,7 +6334,7 @@ func (m *ImportDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -6514,7 +6514,7 @@ func (m *ImportDetails_Table) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -6821,7 +6821,7 @@ func (m *ImportProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -6902,7 +6902,7 @@ func (m *ResumeSpanList) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7019,7 +7019,7 @@ func (m *DroppedTableDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7150,7 +7150,7 @@ func (m *SchemaChangeGCDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7238,7 +7238,7 @@ func (m *SchemaChangeGCDetails_DroppedIndex) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7326,7 +7326,7 @@ func (m *SchemaChangeGCDetails_DroppedID) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7514,7 +7514,7 @@ func (m *SchemaChangeDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7564,7 +7564,7 @@ func (m *SchemaChangeProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7676,7 +7676,7 @@ func (m *SchemaChangeGCProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7764,7 +7764,7 @@ func (m *SchemaChangeGCProgress_IndexProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7852,7 +7852,7 @@ func (m *SchemaChangeGCProgress_TableProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -7931,7 +7931,7 @@ func (m *ChangefeedTarget) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8111,7 +8111,7 @@ func (m *ChangefeedDetails) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthJobs
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -8223,7 +8223,7 @@ func (m *ChangefeedDetails) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthJobs
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -8270,7 +8270,7 @@ func (m *ChangefeedDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8400,7 +8400,7 @@ func (m *ResolvedSpan) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8511,7 +8511,7 @@ func (m *ChangefeedProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8753,7 +8753,7 @@ func (m *CreateStatsDetails) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8896,7 +8896,7 @@ func (m *CreateStatsDetails_ColStat) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -8946,7 +8946,7 @@ func (m *CreateStatsProgress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -9595,7 +9595,7 @@ func (m *Payload) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -9960,7 +9960,7 @@ func (m *Progress) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {
@@ -10095,7 +10095,7 @@ func (m *Job) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthJobs
 			}
 			if (iNdEx + skippy) > l {

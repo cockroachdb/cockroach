@@ -892,7 +892,7 @@ func (m *StoreStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -909,7 +909,7 @@ func (m *StoreStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1140,7 +1140,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1325,7 +1325,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1437,7 +1437,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthStatus
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -1492,7 +1492,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1599,7 +1599,7 @@ func (m *NodeStatus_NetworkActivity) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1727,7 +1727,7 @@ func (m *HealthAlert) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
@@ -1808,7 +1808,7 @@ func (m *HealthCheckResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStatus
 			}
 			if (iNdEx + skippy) > l {
