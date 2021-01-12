@@ -964,6 +964,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 							})
 						}
 						finishVectorizedStatsCollectors(ctx, vscs)
+						span.Finish()
 						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
 					},
 				},
