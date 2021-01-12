@@ -235,8 +235,14 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 			return err
 		}
 
-		dir := specs[i].Path
+		eng := engines[i]
 		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm/%d", id.StoreID),
+			func(w http.ResponseWriter, req *http.Request) {
+				_, _ = io.WriteString(w, eng.GetCompactionStats())
+			})
+
+		dir := specs[i].Path
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", id.StoreID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)

@@ -108,27 +108,10 @@ func (p *planner) createDatabase(
 		return nil, true, err
 	}
 
-	// Create the multi-region enum if the region config dictates so.
-	if desc.IsMultiRegion() {
-		regionLabels := make(tree.EnumValueList, 0, len(regionConfig.Regions))
-		for _, region := range regionConfig.Regions {
-			regionLabels = append(regionLabels, tree.EnumValue(region.Name))
-		}
-		// TODO(#multiregion): See github issue:
-		// https://github.com/cockroachdb/cockroach/issues/56877.
-		if err := p.createEnumWithID(
-			p.RunParams(ctx),
-			desc.RegionConfig.RegionEnumID,
-			regionLabels,
-			desc,
-			tree.NewQualifiedTypeName(dbName, tree.PublicSchema, tree.RegionEnum),
-			enumTypeMultiRegion,
-		); err != nil {
-			return nil, false, err
-		}
-		if err := p.applyZoneConfigFromDatabaseRegionConfig(ctx, database.Name, *regionConfig); err != nil {
-			return nil, true, err
-		}
+	// Initialize the multi-region database by creating the multi-region enum and
+	// database-level zone configuration.
+	if err := p.initializeMultiRegionDatabase(ctx, desc); err != nil {
+		return nil, true, err
 	}
 
 	// TODO(solon): This check should be removed and a public schema should
