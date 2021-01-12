@@ -260,7 +260,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
 		llHandle.resolve(roachpb.NewError(
-			newNotLeaseHolderError(nil, p.repl.store.StoreID(), p.repl.mu.state.Desc,
+			newNotLeaseHolderError(roachpb.Lease{}, p.repl.store.StoreID(), p.repl.mu.state.Desc,
 				"lease acquisition task couldn't be started; node is shutting down")))
 		return llHandle
 	}
@@ -386,7 +386,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				if err != nil {
 					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
 					pErr = roachpb.NewError(newNotLeaseHolderError(
-						&status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
+						status.Lease, p.repl.store.StoreID(), p.repl.Desc(),
 						fmt.Sprintf("failed to manipulate liveness record: %s", err)))
 				}
 			}
@@ -690,7 +690,7 @@ func (r *Replica) requestLeaseLocked(
 	}
 	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
 		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
-			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc,
+			newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc,
 				"lease transfer in progress")))
 	}
 	// If we're draining, we'd rather not take any new leases (since we're also
@@ -702,7 +702,7 @@ func (r *Replica) requestLeaseLocked(
 		// this code can go away.
 		log.VEventf(ctx, 2, "refusing to take the lease because we're draining")
 		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
-			newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc,
+			newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 				"refusing to take the lease; node is draining")))
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
@@ -744,7 +744,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		}
 		desc := r.mu.state.Desc
 		if !status.Lease.OwnedBy(r.store.StoreID()) {
-			return nil, nil, newNotLeaseHolderError(&status.Lease, r.store.StoreID(), desc,
+			return nil, nil, newNotLeaseHolderError(status.Lease, r.store.StoreID(), desc,
 				"can't transfer the lease because this store doesn't own it")
 		}
 		// Verify the target is a replica of the range.
@@ -778,7 +778,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			}
 			// Another transfer is in progress, and it's not transferring to the
 			// same replica we'd like.
-			return nil, nil, newNotLeaseHolderError(&nextLease, r.store.StoreID(), desc,
+			return nil, nil, newNotLeaseHolderError(nextLease, r.store.StoreID(), desc,
 				"another transfer to a different store is in progress")
 		}
 		// Stop using the current lease.
@@ -868,7 +868,7 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 // Note that this error can be generated on the Raft processing goroutine, so
 // its output should be completely determined by its parameters.
 func newNotLeaseHolderError(
-	l *roachpb.Lease, proposerStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor, msg string,
+	l roachpb.Lease, proposerStoreID roachpb.StoreID, rangeDesc *roachpb.RangeDescriptor, msg string,
 ) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID:   rangeDesc.RangeID,
@@ -877,7 +877,7 @@ func newNotLeaseHolderError(
 	if proposerStoreID != 0 {
 		err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
 	}
-	if l != nil {
+	if !l.Empty() {
 		// Normally, we return the lease-holding Replica here. However, in the
 		// case in which a leader removes itself, we want the followers to
 		// avoid handing out a misleading clue (which in itself shouldn't be
@@ -886,8 +886,9 @@ func newNotLeaseHolderError(
 		// could catch tests in a loop, presumably due to manual clocks).
 		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
 		if stillMember {
-			err.LeaseHolder = &l.Replica
-			err.Lease = l
+			err.Lease = new(roachpb.Lease)
+			*err.Lease = l
+			err.LeaseHolder = &err.Lease.Replica
 		}
 	}
 	return err
@@ -965,7 +966,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				// Lease state couldn't be determined.
 				log.VEventf(ctx, 2, "lease state couldn't be determined")
 				return nil, roachpb.NewError(
-					newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc,
+					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
 						"lease state couldn't be determined"))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
@@ -1011,7 +1012,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(&status.Lease, r.store.StoreID(), r.mu.state.Desc,
+						newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc,
 							"lease held by different store"))
 				}
 				// Check that we're not in the process of transferring the lease away.
@@ -1027,7 +1028,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
 					repDesc.ReplicaID); ok {
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc,
+						newNotLeaseHolderError(transferLease, r.store.StoreID(), r.mu.state.Desc,
 							"lease transfer in progress"))
 				}
 
@@ -1071,7 +1072,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
-					newNotLeaseHolderError(&status.Lease, r.store.StoreID(), r.mu.state.Desc, "lease proscribed"))
+					newNotLeaseHolderError(status.Lease, r.store.StoreID(), r.mu.state.Desc, "lease proscribed"))
 			}
 
 			// Return a nil handle to signal that we have a valid lease.
@@ -1120,10 +1121,10 @@ func (r *Replica) redirectOnOrAcquireLease(
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
 							} else if st := r.CurrentLeaseStatus(ctx); st.IsValid() {
-								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
+								err = newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.Desc(),
 									"lease acquisition attempt lost to another lease, which has expired in the meantime")
 							} else {
-								err = newNotLeaseHolderError(&st.Lease, r.store.StoreID(), r.Desc(),
+								err = newNotLeaseHolderError(st.Lease, r.store.StoreID(), r.Desc(),
 									"lease acquisition attempt lost to another lease")
 							}
 							pErr = roachpb.NewError(err)
@@ -1144,11 +1145,11 @@ func (r *Replica) redirectOnOrAcquireLease(
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
-					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
+					return roachpb.NewError(newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.Desc(),
 						"lease acquisition canceled because context canceled"))
 				case <-r.store.Stopper().ShouldStop():
 					llHandle.Cancel()
-					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
+					return roachpb.NewError(newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.Desc(),
 						"lease acquisition canceled because node is stopping"))
 				}
 			}
