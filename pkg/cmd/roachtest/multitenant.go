@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,9 +30,12 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	require.NoError(t, err)
 
 	kvAddrs := c.ExternalAddr(ctx, c.All())
-	errCh := make(chan error)
+
+	tenantCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errCh := make(chan error, 1)
 	go func() {
-		errCh <- c.RunE(ctx, c.Node(1),
+		errCh <- c.RunE(tenantCtx, c.Node(1),
 			"./cockroach", "mt", "start-sql",
 			// TODO(tbg): make this test secure.
 			// "--certs-dir", "certs",
@@ -41,7 +45,10 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 			"--kv-addrs", strings.Join(kvAddrs, ","),
 			// Don't bind to external interfaces when running locally.
 			"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0")+":36257",
+			// Ensure that log files get created.
+			"--log='file-defaults: {dir: .}'",
 		)
+		close(errCh)
 	}()
 	u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
 	require.NoError(t, err)
@@ -56,6 +63,8 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 		t.Fatal(err)
 	default:
 	}
+
+	t.Status("checking that a client can connect to the tenant server")
 
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
@@ -73,4 +82,26 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	require.NoError(t, db.QueryRow(`SELECT * FROM foo LIMIT 1`).Scan(&id, &v))
 	require.Equal(t, 1, id)
 	require.Equal(t, "bar", v)
+
+	t.Status("stopping the server ahead of checking for the tenant server")
+
+	// Stop the server, which also ensures that log files get flushed.
+	cancel()
+	<-errCh
+
+	t.Status("checking log file contents")
+
+	// Check that the server identifiers are present in the tenant log file.
+	if err := c.RunE(ctx, c.Node(1),
+		"grep", "-q", "'\\[config\\] clusterID:'", "cockroach.log"); err != nil {
+		t.Fatal(errors.Wrap(err, "cluster ID not found in log file"))
+	}
+	if err := c.RunE(ctx, c.Node(1),
+		"grep", "-q", "'\\[config\\] tenantID:'", "cockroach.log"); err != nil {
+		t.Fatal(errors.Wrap(err, "tenant ID not found in log file"))
+	}
+	if err := c.RunE(ctx, c.Node(1),
+		"grep", "-q", "'\\[config\\] instanceID:'", "cockroach.log"); err != nil {
+		t.Fatal(errors.Wrap(err, "SQL instance ID not found in log file"))
+	}
 }

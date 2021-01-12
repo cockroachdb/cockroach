@@ -216,7 +216,9 @@ func SetNodeIDs(clusterID string, nodeID int32) {
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%s", nodeID)
+	if nodeID != 0 {
+		logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%d", nodeID)
+	}
 
 	// Perform the change proper.
 	logging.idMu.Lock()
