@@ -68,21 +68,31 @@ func TestNewReplicaSlice(t *testing.T) {
 			},
 		},
 	}
-	rs, err := NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	rs, err := NewReplicaSlice(ctx, ns, rd, nil, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 
 	// Check that learners are not included.
 	typLearner := roachpb.LEARNER
 	rd.InternalReplicas[2].Type = &typLearner
-	rs, err = NewReplicaSlice(ctx, ns, rd, nil /* leaseholder */)
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, false)
 	require.NoError(t, err)
 	require.Equal(t, 2, rs.Len())
 
-	// Check that, if the leasehoder points to a learner, that learner is
+	// Check that non-voters are included iff it is a follower-read.
+	typNonVoter := roachpb.NON_VOTER
+	rd.InternalReplicas[2].Type = &typNonVoter
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, true)
+	require.NoError(t, err)
+	require.Equal(t, 3, rs.Len())
+	rs, err = NewReplicaSlice(ctx, ns, rd, nil, false)
+	require.NoError(t, err)
+	require.Equal(t, 2, rs.Len())
+
+	// Check that, if the leaseholder points to a learner, that learner is
 	// included.
 	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
-	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder)
+	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
 }

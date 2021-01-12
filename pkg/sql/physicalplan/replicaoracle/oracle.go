@@ -255,7 +255,7 @@ func (o *binPackingOracle) ChoosePreferredReplica(
 func replicaSliceOrErr(
 	ctx context.Context, nodeDescs kvcoord.NodeDescStore, desc *roachpb.RangeDescriptor,
 ) (kvcoord.ReplicaSlice, error) {
-	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc, nil /* leaseholder */)
+	replicas, err := kvcoord.NewReplicaSlice(ctx, nodeDescs, desc, nil, false)
 	if err != nil {
 		return kvcoord.ReplicaSlice{}, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
 	}

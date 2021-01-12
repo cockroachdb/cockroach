@@ -53,6 +53,10 @@ const (
 
 // RequiresReadLease returns whether the ReadConsistencyType requires
 // that a read-only request be performed on an active valid leaseholder.
+// TODO DURING REVIEW: Not entirely related to the PR, but this confused me for
+// a while. This method seems to be incorrectly named since we don't require
+// `CONSISTENT` requests to be served only by the leaseholders anymore. Is that
+// correct?
 func (rc ReadConsistencyType) RequiresReadLease() bool {
 	switch rc {
 	case CONSISTENT:

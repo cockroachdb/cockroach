@@ -229,7 +229,9 @@ func (ds *DistSender) singleRangeFeed(
 	if ds.rpcContext != nil {
 		latencyFn = ds.rpcContext.RemoteClocks.Latency
 	}
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */)
+	// TODO(aayush): We should be able create RangeFeeds on non-voting replicas.
+	// Do this in a focussed patch.
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil, false)
 	if err != nil {
 		return args.Timestamp, err
 	}
