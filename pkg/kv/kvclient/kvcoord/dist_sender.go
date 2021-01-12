@@ -1783,7 +1783,14 @@ func (ds *DistSender) sendToReplicas(
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
 	leaseholder := routing.Leaseholder()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder)
+	canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
+	var replicas ReplicaSlice
+	var err error
+	if canFollowerRead {
+		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, AllExtantReplicas)
+	} else {
+		replicas, err = NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, OnlyPotentialLeaseholders)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1796,7 +1803,6 @@ func (ds *DistSender) sendToReplicas(
 
 	// Try the leaseholder first, if the request wants it.
 	{
-		canFollowerRead := (ds.clusterID != nil) && CanSendToFollower(ds.clusterID.Get(), ds.st, ba)
 		sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
 		if sendToLeaseholder {
 			idx := replicas.Find(leaseholder.ReplicaID)

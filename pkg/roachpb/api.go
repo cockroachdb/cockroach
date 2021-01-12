@@ -53,6 +53,8 @@ const (
 
 // RequiresReadLease returns whether the ReadConsistencyType requires
 // that a read-only request be performed on an active valid leaseholder.
+// TODO(aayush): Rename the method since we no longer require a replica to be a
+// leaseholder to serve a consistent read.
 func (rc ReadConsistencyType) RequiresReadLease() bool {
 	switch rc {
 	case CONSISTENT:

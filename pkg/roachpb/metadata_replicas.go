@@ -116,6 +116,10 @@ func predNonVoter(rDesc ReplicaDescriptor) bool {
 }
 
 func predVoterOrNonVoter(rDesc ReplicaDescriptor) bool {
+	return predVoterFullOrIncoming(rDesc) || predNonVoter(rDesc)
+}
+
+func predVoterFullOrNonVoter(rDesc ReplicaDescriptor) bool {
 	return predVoterFull(rDesc) || predNonVoter(rDesc)
 }
 
@@ -260,12 +264,13 @@ func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predNonVoter)
 }
 
-// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
-// replicas in the set. This set will not contain learners or, during an atomic
-// replication change, incoming or outgoing voters. Notably, this set must
-// encapsulate all replicas of a range for a range merge to proceed.
-func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
-	return d.FilterToDescriptors(predVoterOrNonVoter)
+// VoterFullAndNonVoterDescriptors returns the descriptors of
+// VOTER_FULL/NON_VOTER replicas in the set. This set will not contain learners
+// or, during an atomic replication change, incoming or outgoing voters.
+// Notably, this set must encapsulate all replicas of a range for a range merge
+// to proceed.
+func (d ReplicaSet) VoterFullAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterFullOrNonVoter)
 }
 
 // Filter returns a ReplicaSet corresponding to the replicas for which the
