@@ -403,6 +403,11 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		//Get the collations for all comments of the column.
+		comments, err := getColumnComments(ctx, p)
+		if err != nil {
+			return err
+		}
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
@@ -433,11 +438,25 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+
+				//Search the comment belonging to current column from collations,using table id and column id
+				var description string
+				for _, comment := range comments {
+					objID := comment[0]
+					objSubID := comment[1]
+					if objID.String() == tree.NewDInt(tree.DInt(table.GetID())).String() &&
+						objSubID.String() == tree.NewDInt(tree.DInt(column.ID)).String() {
+						description = comment[2].String()
+						break
+					}
+				}
+
 				return addRow(
 					dbNameStr,                        // table_catalog
 					scNameStr,                        // table_schema
 					tree.NewDString(table.GetName()), // table_name
 					tree.NewDString(column.Name),     // column_name
+					tree.NewDString(description),     // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                    // column_default
 					yesOrNoDatum(column.Nullable), // is_nullable
@@ -2191,4 +2210,21 @@ func userCanSeeDescriptor(
 
 func descriptorIsVisible(desc catalog.Descriptor, allowAdding bool) bool {
 	return desc.Public() || (allowAdding && desc.Adding())
+}
+
+// getColumnComments returns all comments of the columns in the database.
+// A comment is represented as a datum row, containing object id (table id),
+// sub id (column id), comment text.
+func getColumnComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
+	return p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx,
+		"select-comments",
+		p.EvalContext().Txn,
+		`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
+              COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
+              COALESCE(pc.comment, sc.comment) AS comment
+         FROM (SELECT * FROM system.comments) AS sc
+    FULL JOIN (SELECT * FROM crdb_internal.predefined_comments) AS pc
+           ON (pc.object_id = sc.object_id AND pc.sub_id = sc.sub_id AND pc.type = sc.type)
+    WHERE sc.type = 2`)
 }
