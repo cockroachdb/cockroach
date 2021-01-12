@@ -123,8 +123,7 @@ func (r *Replica) executeWriteBatch(
 	// other transactions to be released while sequencing in the concurrency
 	// manager.
 	if curLease, _ := r.GetLease(); curLease.Sequence > st.Lease.Sequence {
-		curLeaseCpy := curLease // avoid letting curLease escape
-		err := newNotLeaseHolderError(&curLeaseCpy, r.store.StoreID(), r.Desc(),
+		err := newNotLeaseHolderError(curLease, r.store.StoreID(), r.Desc(),
 			"stale lease discovered before proposing")
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
 		return nil, g, roachpb.NewError(err)

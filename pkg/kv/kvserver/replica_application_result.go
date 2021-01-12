@@ -211,7 +211,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
 		err := newNotLeaseHolderError(
-			r.mu.state.Lease,
+			*r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
 			"reproposal failed due to closed timestamp",
