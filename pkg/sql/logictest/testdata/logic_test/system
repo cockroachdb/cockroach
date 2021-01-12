@@ -600,3 +600,18 @@ query TTB
 SELECT * from system.role_members
 ----
 admin  root  true
+
+statement ok
+SET DATABASE = "";
+
+query T
+SELECT username FROM system.users WHERE username = 'root'
+----
+root
+
+statement ok
+SET DATABASE = test
+
+# system is a database, not a schema.
+query error relation ".system.users" does not exist
+SELECT username FROM "".system.users WHERE username = 'root'

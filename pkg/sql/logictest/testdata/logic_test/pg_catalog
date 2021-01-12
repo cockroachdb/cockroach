@@ -2919,3 +2919,16 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'pg_catalog' AND (t.oid = 1042 OR t.oid = 1014)
 ----
 0
+
+# pg_catalog is explicitly disallowed for use with the anonymous database.
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM "".pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = "";
+
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = test;

@@ -3374,3 +3374,47 @@ transaction_priority                                  normal
 transaction_read_only                                 off
 transaction_status                                    NoTxn
 vectorize_row_count_threshold                         0
+
+# information_schema can be used with the anonymous database.
+# It should show information across all databases.
+subtest anonymous_database
+
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b BOOLEAN);
+CREATE DATABASE other_db;
+SET DATABASE = other_db;
+CREATE TABLE t2(c STRING PRIMARY KEY, d DECIMAL);
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM "".information_schema.columns
+WHERE (table_catalog = 'test' OR table_catalog = 'other_db')
+AND table_schema = 'public'
+AND (table_name = 't1' OR table_name = 't2')
+ORDER BY 3,4
+----
+table_catalog  table_schema  table_name  column_name  ordinal_position
+test           public        t1          a            1
+test           public        t1          b            2
+other_db       public        t2          c            1
+other_db       public        t2          d            2
+
+statement ok
+SET DATABASE = "";
+
+query TTTTI colnames
+SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
+FROM "".information_schema.columns
+WHERE (table_catalog = 'test' OR table_catalog = 'other_db')
+AND table_schema = 'public'
+AND (table_name = 't1' OR table_name = 't2')
+ORDER BY 3,4
+----
+table_catalog  table_schema  table_name  column_name  ordinal_position
+test           public        t1          a            1
+test           public        t1          b            2
+other_db       public        t2          c            1
+other_db       public        t2          d            2
+
+statement ok
+SET DATABASE = test
