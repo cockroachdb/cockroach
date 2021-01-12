@@ -384,10 +384,10 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	//     fact, if an existing index has the relevant columns as a prefix, that
 	//     is good enough.
 
-	// matches returns true if the key columns in the given index match the given
-	// columns. If strict is false, it is acceptable if the given columns are a
-	// prefix of the index key columns.
-	matches := func(idx *Index, cols []int, strict bool) bool {
+	// indexMatches returns true if the key columns in the given index match the
+	// given columns. If strict is false, it is acceptable if the given columns
+	// are a prefix of the index key columns.
+	indexMatches := func(idx *Index, cols []int, strict bool) bool {
 		if idx.LaxKeyColumnCount() < len(cols) {
 			return false
 		}
@@ -405,15 +405,39 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		return true
 	}
 
-	// 1. Verify that the target table has a unique index.
+	// uniqueConstraintMatches returns true if the key columns in the given unique
+	// constraint match the given columns.
+	uniqueConstraintMatches := func(uc *UniqueConstraint, cols []int) bool {
+		if colCount := uc.ColumnCount(); colCount < len(cols) || colCount > len(cols) {
+			return false
+		}
+		for i := range cols {
+			if uc.columnOrdinals[i] != cols[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// 1. Verify that the target table has a unique index or unique constraint.
 	var targetIndex *Index
+	var targetUniqueConstraint *UniqueConstraint
 	for _, idx := range targetTable.Indexes {
-		if matches(idx, toCols, true /* strict */) {
+		if indexMatches(idx, toCols, true /* strict */) {
 			targetIndex = idx
 			break
 		}
 	}
 	if targetIndex == nil {
+		for i := range targetTable.uniqueConstraints {
+			uc := &targetTable.uniqueConstraints[i]
+			if uniqueConstraintMatches(uc, toCols) {
+				targetUniqueConstraint = uc
+				break
+			}
+		}
+	}
+	if targetIndex == nil && targetUniqueConstraint == nil {
 		panic(fmt.Errorf(
 			"there is no unique constraint matching given keys for referenced table %s",
 			targetTable.Name(),
@@ -424,7 +448,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		// 2. Search for an existing index in the source table; add it if necessary.
 		found := false
 		for _, idx := range tab.Indexes {
-			if matches(idx, fromCols, false /* strict */) {
+			if indexMatches(idx, fromCols, false /* strict */) {
 				found = true
 				break
 			}

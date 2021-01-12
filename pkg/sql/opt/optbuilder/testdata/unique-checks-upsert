@@ -872,3 +872,122 @@ build
 INSERT INTO uniq_hidden_pk VALUES (1, 2, 3, 4) ON CONFLICT (a, b, d) DO UPDATE SET a = 10
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+exec-ddl
+CREATE TABLE uniq_fk_parent (
+  a INT UNIQUE WITHOUT INDEX
+)
+----
+
+exec-ddl
+CREATE TABLE uniq_fk_child (
+  k INT PRIMARY KEY,
+  a INT REFERENCES uniq_fk_parent (a)
+)
+----
+
+exec-ddl
+CREATE TABLE uniq_fk_grandchild (
+  k INT REFERENCES uniq_fk_child (k)
+)
+----
+
+# We need existing rows since we are updating an inbound foreign key column.
+build
+UPSERT INTO uniq_fk_parent (a) VALUES (1)
+----
+upsert uniq_fk_parent
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: rowid:7
+ ├── fetch columns: uniq_fk_parent.a:6 rowid:7
+ ├── insert-mapping:
+ │    ├── column1:4 => uniq_fk_parent.a:1
+ │    └── column5:5 => rowid:2
+ ├── update-mapping:
+ │    └── column1:4 => uniq_fk_parent.a:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_rowid:9 column1:4!null column5:5 uniq_fk_parent.a:6 rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
+ │    ├── left-join (hash)
+ │    │    ├── columns: column1:4!null column5:5 uniq_fk_parent.a:6 rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
+ │    │    ├── ensure-upsert-distinct-on
+ │    │    │    ├── columns: column1:4!null column5:5
+ │    │    │    ├── grouping columns: column5:5
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column5:5 column1:4!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:4!null
+ │    │    │    │    │    └── (1,)
+ │    │    │    │    └── projections
+ │    │    │    │         └── unique_rowid() [as=column5:5]
+ │    │    │    └── aggregations
+ │    │    │         └── first-agg [as=column1:4]
+ │    │    │              └── column1:4
+ │    │    ├── scan uniq_fk_parent
+ │    │    │    └── columns: uniq_fk_parent.a:6 rowid:7!null uniq_fk_parent.crdb_internal_mvcc_timestamp:8
+ │    │    └── filters
+ │    │         └── column5:5 = rowid:7
+ │    └── projections
+ │         └── CASE WHEN rowid:7 IS NULL THEN column5:5 ELSE rowid:7 END [as=upsert_rowid:9]
+ ├── unique-checks
+ │    └── unique-checks-item: uniq_fk_parent(a)
+ │         └── semi-join (hash)
+ │              ├── columns: column1:10!null upsert_rowid:11
+ │              ├── with-scan &1
+ │              │    ├── columns: column1:10!null upsert_rowid:11
+ │              │    └── mapping:
+ │              │         ├──  column1:4 => column1:10
+ │              │         └──  upsert_rowid:9 => upsert_rowid:11
+ │              ├── scan uniq_fk_parent
+ │              │    └── columns: uniq_fk_parent.a:12 rowid:13!null
+ │              └── filters
+ │                   ├── column1:10 = uniq_fk_parent.a:12
+ │                   └── upsert_rowid:11 != rowid:13
+ └── f-k-checks
+      └── f-k-checks-item: uniq_fk_child(a) -> uniq_fk_parent(a)
+           └── semi-join (hash)
+                ├── columns: a:15
+                ├── except
+                │    ├── columns: a:15
+                │    ├── left columns: a:15
+                │    ├── right columns: column1:16
+                │    ├── with-scan &1
+                │    │    ├── columns: a:15
+                │    │    └── mapping:
+                │    │         └──  uniq_fk_parent.a:6 => a:15
+                │    └── with-scan &1
+                │         ├── columns: column1:16!null
+                │         └── mapping:
+                │              └──  column1:4 => column1:16
+                ├── scan uniq_fk_child
+                │    └── columns: uniq_fk_child.a:18
+                └── filters
+                     └── a:15 = uniq_fk_child.a:18
+
+# We do not need existing rows since we are not updating an inbound foreign key
+# column (k is the UPSERT key column so it's not updated).
+build
+UPSERT INTO uniq_fk_child (k, a) VALUES (1, 2)
+----
+upsert uniq_fk_child
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:4 => k:1
+ │    └── column2:5 => uniq_fk_child.a:2
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:4!null column2:5!null
+ │    └── (1, 2)
+ └── f-k-checks
+      └── f-k-checks-item: uniq_fk_child(a) -> uniq_fk_parent(a)
+           └── anti-join (hash)
+                ├── columns: column2:6!null
+                ├── with-scan &1
+                │    ├── columns: column2:6!null
+                │    └── mapping:
+                │         └──  column2:5 => column2:6
+                ├── scan uniq_fk_parent
+                │    └── columns: uniq_fk_parent.a:7
+                └── filters
+                     └── column2:6 = uniq_fk_parent.a:7
