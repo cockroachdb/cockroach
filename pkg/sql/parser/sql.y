@@ -5202,6 +5202,7 @@ show_survival_goal_stmt:
 // %Help: SHOW REGIONS - shows regions
 // %Category: DDL
 // %Text:
+// SHOW REGIONS
 // SHOW REGIONS FROM ALL DATABASES
 // SHOW REGIONS FROM CLUSTER
 // SHOW REGIONS FROM DATABASE
@@ -5230,6 +5231,12 @@ show_regions_stmt:
     $$.val = &tree.ShowRegions{
       ShowRegionsFrom: tree.ShowRegionsFromDatabase,
       DatabaseName: tree.Name($5),
+    }
+  }
+| SHOW REGIONS
+  {
+    $$.val = &tree.ShowRegions{
+      ShowRegionsFrom: tree.ShowRegionsFromDefault,
     }
   }
 | SHOW REGIONS error // SHOW HELP: SHOW REGIONS
