@@ -141,7 +141,7 @@ func ExamineDescriptors(
 		}
 
 		_, parentExists := descGetter[desc.GetParentID()]
-		_, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
+		parentSchema, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
 			if err := d.Validate(ctx, descGetter); err != nil {
@@ -161,15 +161,21 @@ func ExamineDescriptors(
 			// parent schema id is always 0.
 			parentSchemaExists = true
 		}
+		var invalidParentID bool
 		if desc.GetParentID() != descpb.InvalidID && !parentExists {
 			problemsFound = true
+			invalidParentID = true
 			fmt.Fprint(stdout, reportMsg(desc, "invalid parent id %d", desc.GetParentID()))
 		}
 		if desc.GetParentSchemaID() != descpb.InvalidID &&
-			desc.GetParentSchemaID() != keys.PublicSchemaID &&
-			!parentSchemaExists {
-			problemsFound = true
-			fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
+			desc.GetParentSchemaID() != keys.PublicSchemaID {
+			if !parentSchemaExists {
+				problemsFound = true
+				fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
+			} else if !invalidParentID && parentSchema.GetParentID() != desc.GetParentID() {
+				problemsFound = true
+				fmt.Fprint(stdout, reportMsg(desc, "invalid parent id of parent schema, expected %d, found %d", desc.GetParentID(), parentSchema.GetParentID()))
+			}
 		}
 
 		// Process namespace entries pointing to this descriptor.
