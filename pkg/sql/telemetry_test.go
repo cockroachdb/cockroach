@@ -145,6 +145,9 @@ func (tt *telemetryTest) Start(t *testing.T) {
 	tt.server, tt.serverDB, _ = serverutils.StartServer(tt.t, params)
 	tt.prepareCluster(tt.serverDB)
 
+	// Prevent a logging assertion that the server ID is initialized multiple times.
+	log.TestingClearServerIdentifiers()
+
 	tt.tenant, tt.tenantDB = serverutils.StartTenant(tt.t, tt.server, base.TestTenantArgs{
 		TenantID:                    roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
 		AllowSettingClusterSettings: true,
