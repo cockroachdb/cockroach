@@ -26,12 +26,14 @@ const (
 	tableEventTypeDropColumn
 	tableEventTruncate
 	tableEventPrimaryKeyChange
+	tableEventTypeRenameColumn
 )
 
 var (
 	defaultTableEventFilter = tableEventFilter{
 		tableEventTypeDropColumn:            false,
 		tableEventTypeAddColumnWithBackfill: false,
+		tableEventTypeRenameColumn:          false,
 		tableEventTypeAddColumnNoBackfill:   true,
 		tableEventTypeUnknown:               true,
 	}
@@ -40,6 +42,7 @@ var (
 		tableEventTypeDropColumn:            false,
 		tableEventTypeAddColumnWithBackfill: false,
 		tableEventTypeAddColumnNoBackfill:   false,
+		tableEventTypeRenameColumn:          false,
 		tableEventTypeUnknown:               true,
 	}
 
@@ -61,6 +64,8 @@ func classifyTableEvent(e TableEvent) tableEventType {
 		return tableEventTruncate
 	case primaryKeyChanged(e):
 		return tableEventPrimaryKeyChange
+	case renameColumn(e):
+		return tableEventTypeRenameColumn
 	default:
 		return tableEventTypeUnknown
 	}
@@ -99,6 +104,18 @@ func dropColumnMutationExists(desc *tabledesc.Immutable) bool {
 		}
 		if m.Direction == descpb.DescriptorMutation_DROP &&
 			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+			return true
+		}
+	}
+	return false
+}
+
+func renameColumn(e TableEvent) (res bool) {
+	if len(e.Before.Columns) != len(e.After.Columns) {
+		return false
+	}
+	for i, c := range e.Before.Columns {
+		if c.ColName() != e.After.Columns[i].ColName() {
 			return true
 		}
 	}
