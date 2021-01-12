@@ -349,9 +349,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 //   2. All non-key columns (including mutation columns) have insert and update
 //      values specified for them.
 //   3. Each update value is the same as the corresponding insert value.
-//
-// TODO(radu): once FKs no longer require indexes, this function will have to
-// take FKs into account explicitly.
+//   4. There are no inbound foreign keys containing non-key columns.
 //
 // TODO(andyk): The fast path is currently only enabled when the UPSERT alias
 // is explicitly selected by the user. It's possible to fast path some queries
@@ -387,6 +385,18 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			return true
 		}
 	}
+
+	// If there are inbound foreign key constraints that contain any non-key
+	// columns, we need the existing values.
+	for i, n := 0, mb.tab.InboundForeignKeyCount(); i < n; i++ {
+		for j, m := 0, mb.tab.InboundForeignKey(i).ColumnCount(); j < m; j++ {
+			ord := mb.tab.InboundForeignKey(i).ReferencedColumnOrdinal(mb.tab, j)
+			if !keyOrds.Contains(ord) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
