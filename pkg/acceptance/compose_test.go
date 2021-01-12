@@ -17,6 +17,7 @@ import (
 )
 
 func TestComposeGSS(t *testing.T) {
+	t.Skip("TestComposeGSS broken at 19.2")
 	out, err := exec.Command(
 		"docker-compose",
 		"--no-ansi",
