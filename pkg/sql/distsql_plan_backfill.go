@@ -40,10 +40,11 @@ func initIndexBackfillerSpec(
 	indexesToBackfill []descpb.IndexID,
 ) (execinfrapb.BackfillerSpec, error) {
 	return execinfrapb.BackfillerSpec{
-		Table:     desc,
-		ReadAsOf:  readAsOf,
-		Type:      execinfrapb.BackfillerSpec_Index,
-		ChunkSize: chunkSize,
+		Table:             desc,
+		ReadAsOf:          readAsOf,
+		Type:              execinfrapb.BackfillerSpec_Index,
+		ChunkSize:         chunkSize,
+		IndexesToBackfill: indexesToBackfill,
 	}, nil
 }
 

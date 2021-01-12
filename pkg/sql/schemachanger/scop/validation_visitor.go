@@ -33,4 +33,3 @@ func (op ValidateCheckConstraint) Visit(ctx context.Context, v ValidationVisitor
 func (op UniqueIndexValidation) Visit(ctx context.Context, v ValidationVisitor) error {
 	return v.UniqueIndexValidation(ctx, op)
 }
-

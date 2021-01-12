@@ -59,6 +59,14 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
+INSERT INTO foo(i) VALUES (0)
+
+query I
+SELECT * FROM foo
+----
+0
+
+statement ok
 ALTER TABLE foo ADD COLUMN j INT DEFAULT 1
 
 statement ok
@@ -70,6 +78,7 @@ INSERT INTO foo(i) VALUES (2)
 query II
 SELECT * FROM foo
 ----
+0  1
 1  1
 2  1
 

@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -110,6 +111,7 @@ func (ip *IndexBackfillPlanner) plan(
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
+	td := tabledesc.NewExistingMutable(*tableDesc.TableDesc())
 	if err := ip.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		evalCtx = createSchemaChangeEvalCtx(ctx, ip.execCfg, nowTimestamp, ip.ieFactory)
 		planCtx = ip.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
@@ -117,7 +119,7 @@ func (ip *IndexBackfillPlanner) plan(
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		spec, err := initIndexBackfillerSpec(
-			*tableDesc.TableDesc(), readAsOf, indexBackfillBatchSize, indexesToBackfill)
+			*td.TableDesc(), readAsOf, indexBackfillBatchSize, indexesToBackfill)
 		if err != nil {
 			return err
 		}

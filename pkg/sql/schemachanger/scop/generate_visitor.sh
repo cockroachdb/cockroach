@@ -7,7 +7,15 @@ TYPE="$2"
 INPUT="$3"
 OUTPUT="$4"
 
-cat > "$OUTPUT" <<- EOF
+TEMP=$(tempfile -d .)
+
+cleanup() {
+  rm "$TEMP"
+}
+
+trap cleanup EXIT
+
+cat > "$TEMP" <<- EOF
 // Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
@@ -24,7 +32,7 @@ import "context"
 
 EOF
 
-cat "$INPUT" | awk >> "$OUTPUT" -v TYPE="$TYPE" '
+cat "$INPUT" | awk >> "$TEMP" -v TYPE="$TYPE" '
 BEGIN { for (i in ops) {} };
 /type [A-Z].* struct {/ {
     ops[length(ops)] = $2;
@@ -43,12 +51,14 @@ TYPE, TYPE, TYPE);
     for (i in ops) {
         printf("\t%s(context.Context, %s) error\n", ops[i], ops[i]);
     }
-    printf("}\n\n");
+    printf("}\n");
     for (i in ops) {
         printf(\
-"// Visit is part of the %sOp interface.\n" \
+"\n// Visit is part of the %sOp interface.\n" \
 "func (op %s) Visit(ctx context.Context, v %sVisitor) error {\n" \
 "\treturn v.%s(ctx, op)\n" \
-"}\n\n", TYPE, ops[i], TYPE, ops[i]);
+"}\n", TYPE, ops[i], TYPE, ops[i]);
     }
 }'
+
+cat "$TEMP" | crlfmt -tab 2 > "$OUTPUT"

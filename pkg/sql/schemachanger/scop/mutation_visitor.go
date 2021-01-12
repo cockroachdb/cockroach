@@ -39,7 +39,9 @@ type MutationVisitor interface {
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 
@@ -64,7 +66,9 @@ func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(ctx, op)
 }
 
@@ -84,7 +88,9 @@ func (op MakeAddedIndexDeleteAndWriteOnly) Visit(ctx context.Context, v Mutation
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedColumnDescriptorDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeAddedColumnDescriptorDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeAddedColumnDescriptorDeleteAndWriteOnly(ctx, op)
 }
 
@@ -99,7 +105,9 @@ func (op MakeAddedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedColumnDescriptorDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+func (op MakeDroppedColumnDescriptorDeleteAndWriteOnly) Visit(
+	ctx context.Context, v MutationVisitor,
+) error {
 	return v.MakeDroppedColumnDescriptorDeleteAndWriteOnly(ctx, op)
 }
 
@@ -117,4 +125,3 @@ func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error
 func (op MakeColumnAbsent) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeColumnAbsent(ctx, op)
 }
-

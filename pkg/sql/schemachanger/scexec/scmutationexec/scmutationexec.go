@@ -14,20 +14,27 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
-func NewMutationVisitor(descs MutableDescGetter) *MutationVisitor {
-	return &MutationVisitor{descs: descs}
+// MutableDescGetter encapsulates the logic to retrieve descriptors.
+// All retrieved descriptors are modified.
+type MutableDescGetter interface {
+	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
 }
 
-type MutationVisitor struct {
+func NewMutationVisitor(descs MutableDescGetter) scop.MutationVisitor {
+	return &visitor{descs: descs}
+}
+
+type visitor struct {
 	descs MutableDescGetter
 }
 
-func (m *MutationVisitor) MakeAddedColumnDescriptorDeleteAndWriteOnly(
+func (m *visitor) MakeAddedColumnDescriptorDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDescriptorDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -43,7 +50,7 @@ func (m *MutationVisitor) MakeAddedColumnDescriptorDeleteAndWriteOnly(
 	)
 }
 
-func (m *MutationVisitor) MakeColumnDescriptorPublic(
+func (m *visitor) MakeColumnDescriptorPublic(
 	ctx context.Context, op scop.MakeColumnDescriptorPublic,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -67,7 +74,7 @@ func (m *MutationVisitor) MakeColumnDescriptorPublic(
 	return nil
 }
 
-func (m *MutationVisitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
+func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -90,7 +97,7 @@ func (m *MutationVisitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	return table.AddIndexMutation(&idx, descpb.DescriptorMutation_DROP)
 }
 
-func (m *MutationVisitor) MakeDroppedColumnDeleteAndWriteOnly(
+func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -113,7 +120,7 @@ func (m *MutationVisitor) MakeDroppedColumnDeleteAndWriteOnly(
 	return nil
 }
 
-func (m *MutationVisitor) MakeDroppedColumnDeleteOnly(
+func (m *visitor) MakeDroppedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDeleteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -129,7 +136,7 @@ func (m *MutationVisitor) MakeDroppedColumnDeleteOnly(
 	)
 }
 
-func (m *MutationVisitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
+func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -138,36 +145,17 @@ func (m *MutationVisitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColu
 		ctx,
 		table,
 		getColumnMutation(op.ColumnID),
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_DELETE_ONLY,
 	)
 	if err != nil {
 		return err
 	}
 	col := mut.GetColumn()
-	// Remove the family if it exists.
-	f, err := table.GetFamilyOfColumn(col.ID)
-	if err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err,
-			"removing column family")
-	}
-	for i := range f.ColumnIDs {
-		if f.ColumnIDs[i] == col.ID {
-			f.ColumnIDs = append(f.ColumnIDs[:i], f.ColumnIDs[i+1:]...)
-			f.ColumnNames = append(f.ColumnNames[:i], f.ColumnNames[i+1:]...)
-			break
-		}
-	}
-	if len(f.ColumnIDs) == 0 {
-		for i := range table.Families {
-			if f == &table.Families[i] {
-				table.Families = append(table.Families[:i], table.Families[i+1:]...)
-			}
-		}
-	}
+	table.RemoveColumnFromFamily(col.ID)
 	return nil
 }
 
-func (m *MutationVisitor) MakeAddedIndexDeleteAndWriteOnly(
+func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -183,7 +171,7 @@ func (m *MutationVisitor) MakeAddedIndexDeleteAndWriteOnly(
 	)
 }
 
-func (m *MutationVisitor) MakeAddedColumnDescriptorDeleteOnly(
+func (m *visitor) MakeAddedColumnDescriptorDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDescriptorDeleteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -213,7 +201,7 @@ func (m *MutationVisitor) MakeAddedColumnDescriptorDeleteOnly(
 	return nil
 }
 
-func (m *MutationVisitor) MakeDroppedIndexDeleteOnly(
+func (m *visitor) MakeDroppedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeDroppedIndexDeleteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -229,7 +217,7 @@ func (m *MutationVisitor) MakeDroppedIndexDeleteOnly(
 	)
 }
 
-func (m *MutationVisitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
+func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -247,7 +235,7 @@ func (m *MutationVisitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	return table.AddIndexMutation(idx, descpb.DescriptorMutation_DROP)
 }
 
-func (m *MutationVisitor) MakeAddedIndexDeleteOnly(
+func (m *visitor) MakeAddedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
 ) error {
 
@@ -267,9 +255,7 @@ func (m *MutationVisitor) MakeAddedIndexDeleteOnly(
 	return table.AddIndexMutation(idx, descpb.DescriptorMutation_ADD)
 }
 
-func (m *MutationVisitor) AddCheckConstraint(
-	ctx context.Context, op scop.AddCheckConstraint,
-) error {
+func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstraint) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -289,7 +275,7 @@ func (m *MutationVisitor) AddCheckConstraint(
 	return nil
 }
 
-func (m *MutationVisitor) MakeAddedPrimaryIndexPublic(
+func (m *visitor) MakeAddedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -308,7 +294,7 @@ func (m *MutationVisitor) MakeAddedPrimaryIndexPublic(
 	return nil
 }
 
-func (m *MutationVisitor) MakeDroppedColumnDescriptorDeleteAndWriteOnly(
+func (m *visitor) MakeDroppedColumnDescriptorDeleteAndWriteOnly(
 	ctx context.Context, op scop.MakeDroppedColumnDescriptorDeleteAndWriteOnly,
 ) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
@@ -332,7 +318,7 @@ func (m *MutationVisitor) MakeDroppedColumnDescriptorDeleteAndWriteOnly(
 	return nil
 }
 
-func (m *MutationVisitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
+func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -341,7 +327,7 @@ func (m *MutationVisitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndex
 	return err
 }
 
-func (m *MutationVisitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) error {
+func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) error {
 	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -353,4 +339,4 @@ func (m *MutationVisitor) AddColumnFamily(ctx context.Context, op scop.AddColumn
 	return nil
 }
 
-var _ scop.MutationVisitor = (*MutationVisitor)(nil)
+var _ scop.MutationVisitor = (*visitor)(nil)

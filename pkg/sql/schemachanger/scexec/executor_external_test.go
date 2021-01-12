@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -157,7 +158,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
-					scop.MakeAddedNonPrimaryIndexDeleteOnly{
+					scop.MakeAddedIndexDeleteOnly{
 						TableID: table.ID,
 						Index:   indexToAdd,
 					},
@@ -295,7 +296,14 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+					exec := scexec.New(
+						txn,
+						descriptors,
+						ti.lm.Codec(),
+						noopBackfiller{},
+						nil,
+					)
+					require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
@@ -311,7 +319,8 @@ func TestSchemaChanger(t *testing.T) {
 			stages := sc.Stages()
 			require.NoError(t, err)
 			for _, s := range stages {
-				require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+				exec := scexec.New(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil)
+				require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
 				after = s.NextTargets
 			}
 			return nil
@@ -382,13 +391,12 @@ func TestSchemaChanger(t *testing.T) {
 				require.NoError(t, err)
 				stages := sc.Stages()
 				for _, s := range stages {
-					require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil).ExecuteOps(ctx, s.Ops))
 					ts = s.NextTargets
 				}
 			}
 			return nil
 		}))
-		//var after []targets.TargetState
 		ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
@@ -398,8 +406,8 @@ func TestSchemaChanger(t *testing.T) {
 			require.NoError(t, err)
 			stages := sc.Stages()
 			for _, s := range stages {
-				require.NoError(t, scexec.New(txn, descriptors, ti.lm.Codec(), nil, nil).ExecuteOps(ctx, s.Ops))
-				//after = s.NextTargets
+				exec := scexec.New(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil)
+				require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
 			}
 			return nil
 		})
@@ -408,3 +416,17 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 }
+
+type noopBackfiller struct{}
+
+func (n noopBackfiller) BackfillIndex(
+	ctx context.Context,
+	_ scexec.JobProgressTracker,
+	_ catalog.TableDescriptor,
+	source descpb.IndexID,
+	destinations ...descpb.IndexID,
+) error {
+	return nil
+}
+
+var _ scexec.IndexBackfiller = noopBackfiller{}

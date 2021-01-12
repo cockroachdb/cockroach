@@ -84,3 +84,39 @@ func getColumnMutation(
 		return nil, 0, errors.AssertionFailedf("mutation not found")
 	}
 }
+
+// findFamilyOrdinalForColumnID finds a family which contains the needle column
+// id and returns its index in the families slice.
+func findFamilyOrdinalForColumnID(
+	table catalog.TableDescriptor, needle descpb.ColumnID,
+) (int, error) {
+	families := table.GetFamilies()
+	for i := range families {
+		for _, colID := range families[i].ColumnIDs {
+			if colID == needle {
+				return i, nil
+			}
+		}
+	}
+	return -1, errors.Errorf("failed to find column family for column %d in table %d: %v",
+		needle, table.GetID(), table)
+}
+
+func removeColumnFromFamily(table *tabledesc.Mutable, colID descpb.ColumnID) error {
+	famIdx, err := findFamilyOrdinalForColumnID(table, colID)
+	if err != nil {
+		return errors.WithAssertionFailure(err)
+	}
+	f := &table.Families[famIdx]
+	for i, id := range f.ColumnIDs {
+		if id == colID {
+			f.ColumnIDs = append(f.ColumnIDs[:i], f.ColumnIDs[i+1:]...)
+			f.ColumnNames = append(f.ColumnNames[:i], f.ColumnNames[i+1:]...)
+			break
+		}
+	}
+	if len(f.ColumnIDs) == 0 {
+		table.Families = append(table.Families[:famIdx], table.Families[famIdx+1:]...)
+	}
+	return nil
+}

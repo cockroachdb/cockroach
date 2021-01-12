@@ -27,4 +27,3 @@ type BackfillVisitor interface {
 func (op IndexBackfill) Visit(ctx context.Context, v BackfillVisitor) error {
 	return v.IndexBackfill(ctx, op)
 }
-
