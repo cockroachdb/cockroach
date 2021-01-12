@@ -1794,67 +1794,57 @@ memo (optimized, ~27KB, required=[presentation: w:10] [ordering: +11,+1])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO NOTHING
 ----
-memo (optimized, ~19KB, required=[])
+memo (optimized, ~21KB, required=[])
  ├── G1: (insert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 xyz)
- │         └── cost: 2158.51
- ├── G2: (upsert-distinct-on G5 G6 cols=(7)) (upsert-distinct-on G5 G6 cols=(7),ordering=+7 opt(10,11))
+ │         └── cost: 2147.99
+ ├── G2: (upsert-distinct-on G5 G6 cols=(7)) (upsert-distinct-on G5 G6 cols=(7),ordering=+7 opt(10))
  │    └── []
- │         ├── best: (upsert-distinct-on G5="[ordering: +7 opt(10,11)]" G6 cols=(7),ordering=+7 opt(10,11))
- │         └── cost: 2158.50
+ │         ├── best: (upsert-distinct-on G5 G6 cols=(7))
+ │         └── cost: 2147.98
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
- ├── G5: (select G7 G8)
- │    ├── [ordering: +7 opt(10,11)]
- │    │    ├── best: (select G7="[ordering: +7 opt(10,11)]" G8)
- │    │    └── cost: 2158.08
- │    └── []
- │         ├── best: (select G7 G8)
- │         └── cost: 2158.08
- ├── G6: (aggregations G9 G10)
- ├── G7: (left-join G11 G12 G13) (right-join G12 G11 G13) (merge-join G11 G12 G14 left-join,+7,+11) (lookup-join G11 G14 xyz,keyCols=[7],outCols=(7,8,10,11)) (lookup-join G11 G14 xyz@xy,keyCols=[7],outCols=(7,8,10,11)) (merge-join G12 G11 G14 right-join,+11,+7)
- │    ├── [ordering: +7 opt(10,11)]
- │    │    ├── best: (merge-join G11="[ordering: +7 opt(10)]" G12="[ordering: +11]" G14 left-join,+7,+11)
- │    │    └── cost: 2148.06
- │    └── []
- │         ├── best: (merge-join G11="[ordering: +7 opt(10)]" G12="[ordering: +11]" G14 left-join,+7,+11)
- │         └── cost: 2148.06
- ├── G8: (filters G15)
- ├── G9: (first-agg G16)
- ├── G10: (first-agg G17)
- ├── G11: (project G18 G19 v w)
+ ├── G5: (anti-join G7 G8 G9) (merge-join G7 G8 G10 anti-join,+7,+11) (lookup-join G7 G10 xyz,keyCols=[7],outCols=(7,8,10,11)) (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10,11))
  │    ├── [ordering: +7 opt(10)]
- │    │    ├── best: (project G18="[ordering: +7]" G19 v w)
+ │    │    ├── best: (merge-join G7="[ordering: +7 opt(10)]" G8="[ordering: +11]" G10 anti-join,+7,+11)
+ │    │    └── cost: 2147.96
+ │    └── []
+ │         ├── best: (merge-join G7="[ordering: +7 opt(10)]" G8="[ordering: +11]" G10 anti-join,+7,+11)
+ │         └── cost: 2147.96
+ ├── G6: (aggregations G11 G12)
+ ├── G7: (project G13 G14 v w)
+ │    ├── [ordering: +7 opt(10)]
+ │    │    ├── best: (project G13="[ordering: +7]" G14 v w)
  │    │    └── cost: 1084.03
  │    └── []
- │         ├── best: (project G18 G19 v w)
+ │         ├── best: (project G13 G14 v w)
  │         └── cost: 1084.03
- ├── G12: (scan xyz,cols=(11)) (scan xyz@xy,cols=(11)) (scan xyz@zyx,cols=(11)) (scan xyz@yy,cols=(11))
+ ├── G8: (scan xyz,cols=(11)) (scan xyz@xy,cols=(11)) (scan xyz@zyx,cols=(11)) (scan xyz@yy,cols=(11))
  │    ├── [ordering: +11]
  │    │    ├── best: (scan xyz@xy,cols=(11))
  │    │    └── cost: 1034.02
  │    └── []
  │         ├── best: (scan xyz@xy,cols=(11))
  │         └── cost: 1034.02
- ├── G13: (filters G20)
- ├── G14: (filters)
- ├── G15: (is G21 G22)
- ├── G16: (variable w)
- ├── G17: (variable "?column?")
- ├── G18: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
+ ├── G9: (filters G15)
+ ├── G10: (filters)
+ ├── G11: (first-agg G16)
+ ├── G12: (first-agg G17)
+ ├── G13: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan kuvw@vw,cols=(7,8))
  │    │    └── cost: 1064.02
  │    └── []
  │         ├── best: (scan kuvw,cols=(7,8))
  │         └── cost: 1064.02
- ├── G19: (projections G23)
- ├── G20: (eq G24 G21)
- ├── G21: (variable x)
- ├── G22: (null)
- ├── G23: (const 1.0)
- └── G24: (variable v)
+ ├── G14: (projections G18)
+ ├── G15: (eq G19 G20)
+ ├── G16: (variable w)
+ ├── G17: (variable "?column?")
+ ├── G18: (const 1.0)
+ ├── G19: (variable v)
+ └── G20: (variable x)
 
 # Ensure that streaming ensure-upsert-distinct-on will be used.
 memo
