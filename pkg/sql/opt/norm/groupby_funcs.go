@@ -141,8 +141,8 @@ func (c *CustomFuncs) ConstructProjectionFromDistinctOn(
 
 // AreValuesDistinct returns true if a constant Values operator input contains
 // only rows that are already distinct with respect to the given grouping
-// columns. The Values operator can be wrapped by Select, Project, and/or
-// LeftJoin operators.
+// columns. The Values operator can be wrapped by Select, Project, LeftJoin
+// and/or AntiJoin operators.
 //
 // If nullsAreDistinct is true, then NULL values are treated as not equal to one
 // another, and therefore rows containing a NULL value in any grouping column
@@ -189,6 +189,13 @@ func (c *CustomFuncs) AreValuesDistinct(
 		}
 
 		return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
+
+	case *memo.AntiJoinExpr:
+		// Pass through call to left input if grouping on its columns.
+		leftCols := t.Left.Relational().OutputCols
+		if groupingCols.SubsetOf(leftCols) {
+			return c.AreValuesDistinct(t.Left, groupingCols, nullsAreDistinct)
+		}
 
 	case *memo.UpsertDistinctOnExpr:
 		// Pass through call to input if grouping on passthrough columns.
