@@ -1535,3 +1535,23 @@ CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
 ALTER TABLE t54629 ADD CONSTRAINT pk PRIMARY KEY (c);
 INSERT INTO t54629 VALUES (1);
 DELETE FROM t54629 WHERE c = 1;
+
+subtest regression_45985
+
+statement ok
+BEGIN;
+CREATE TABLE t45985 (a INT);
+ALTER TABLE t45985 ADD COLUMN b INT;
+COMMIT;
+
+query I
+SELECT count(descriptor_id)
+  FROM (
+        SELECT json_array_elements_text(
+                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'descriptorIds'
+               )::INT8 AS descriptor_id
+          FROM system.jobs
+       )
+ WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
+----
+0
