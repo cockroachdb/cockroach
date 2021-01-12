@@ -1453,7 +1453,7 @@ func (m *BackupDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBackup
 			}
 			if (iNdEx + skippy) > l {
@@ -1712,7 +1712,7 @@ func (m *BackupDescriptor_File) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBackup
 			}
 			if (iNdEx + skippy) > l {
@@ -1844,7 +1844,7 @@ func (m *BackupDescriptor_DescriptorRevision) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBackup
 			}
 			if (iNdEx + skippy) > l {
@@ -1984,7 +1984,7 @@ func (m *BackupPartitionDescriptor) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthBackup
 			}
 			if (iNdEx + skippy) > l {

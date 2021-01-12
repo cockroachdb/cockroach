@@ -828,7 +828,7 @@ func (m *TableReaderStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1005,7 +1005,7 @@ func (m *HashJoinerStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1104,7 +1104,7 @@ func (m *AggregatorStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1203,7 +1203,7 @@ func (m *DistinctStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1283,7 +1283,7 @@ func (m *OrdinalityStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1412,7 +1412,7 @@ func (m *MergeJoinerStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1530,7 +1530,7 @@ func (m *SorterStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {
@@ -1648,7 +1648,7 @@ func (m *WindowerStats) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthStats
 			}
 			if (iNdEx + skippy) > l {

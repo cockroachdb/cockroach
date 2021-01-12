@@ -733,7 +733,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthKeyRegistry
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -856,7 +856,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthKeyRegistry
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -931,7 +931,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthKeyRegistry
 			}
 			if (iNdEx + skippy) > l {
@@ -1126,7 +1126,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthKeyRegistry
 			}
 			if (iNdEx + skippy) > l {
@@ -1240,7 +1240,7 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthKeyRegistry
 			}
 			if (iNdEx + skippy) > l {
@@ -1388,7 +1388,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthKeyRegistry
 			}
 			if (iNdEx + skippy) > l {

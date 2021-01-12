@@ -355,7 +355,7 @@ func (m *HistogramData) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthHistogram
 			}
 			if (iNdEx + skippy) > l {
@@ -485,7 +485,7 @@ func (m *HistogramData_Bucket) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthHistogram
 			}
 			if (iNdEx + skippy) > l {

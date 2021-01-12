@@ -1802,7 +1802,7 @@ func (m *Split) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -1882,7 +1882,7 @@ func (m *Merge) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -1962,7 +1962,7 @@ func (m *ChangeReplicas) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -2151,7 +2151,7 @@ func (m *ComputeChecksum) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -2239,7 +2239,7 @@ func (m *Compaction) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -2381,7 +2381,7 @@ func (m *SuggestedCompaction) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -2845,7 +2845,7 @@ func (m *ReplicatedEvalResult) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -2945,7 +2945,7 @@ func (m *ReplicatedEvalResult_AddSSTable) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -3026,7 +3026,7 @@ func (m *WriteBatch) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -3107,7 +3107,7 @@ func (m *LogicalOpLog) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -3354,7 +3354,7 @@ func (m *RaftCommand) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
@@ -3423,7 +3423,7 @@ func (m *RaftCommandFooter) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthProposerKv
 			}
 			if (iNdEx + skippy) > l {
