@@ -1449,7 +1449,7 @@ type SessionTracing struct {
 	enabled bool
 
 	// kvTracingEnabled is set at times when KV tracing is active. When
-	// KV tracning is enabled, the SQL/KV interface logs individual K/V
+	// KV tracing is enabled, the SQL/KV interface logs individual K/V
 	// operators to the current context.
 	kvTracingEnabled bool
 
