@@ -34,6 +34,10 @@ const (
 	JSONContentType = "application/json"
 	// AltJSONContentType is the alternate JSON content type.
 	AltJSONContentType = "application/x-json"
+	// ProtoContentType is the protobuf content type.
+	ProtoContentType = "application/x-protobuf"
+	// AltProtoContentType is the alternate protobuf content type.
+	AltProtoContentType = "application/x-google-protobuf"
 	// PlaintextContentType is the plaintext content type.
 	PlaintextContentType = "text/plain"
 	// GzipEncoding is the gzip encoding.
