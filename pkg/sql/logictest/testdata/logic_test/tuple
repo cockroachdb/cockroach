@@ -933,3 +933,25 @@ query B
 SELECT () = ()
 ----
 true
+
+# Regression tests for #58439. Ensure there are no errors when accessing columns
+# of a null tuple.
+subtest regression_58439
+
+statement ok
+CREATE TABLE t58439 (a INT, b INT);
+INSERT INTO t58439 VALUES (1, 10), (2, 20), (3, 30);
+
+query II
+SELECT (ARRAY[t58439.*][0]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
+query II
+SELECT (ARRAY[t58439.*][2]).* FROM t58439
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
