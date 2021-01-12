@@ -961,21 +961,13 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 }
 
-// hasLease returns whether the most recent range lease was held by the given
-// range replica and whether it's expired for the given timestamp.
-func hasLease(repl *Replica, now hlc.ClockTimestamp) (owned bool, expired bool) {
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
-	status := repl.leaseStatus(context.Background(), *repl.mu.state.Lease, now, repl.mu.minLeaseProposedTS)
-	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != kvserverpb.LeaseState_VALID
-}
-
 func TestReplicaLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	var filterErr atomic.Value
 	applyFilter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
@@ -990,7 +982,7 @@ func TestReplicaLease(t *testing.T) {
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.TestingApplyFilter = applyFilter
 	tc.StartWithStoreConfig(t, stopper, tsc)
-	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.Background())
+	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1002,7 +994,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
-		if _, err := batcheval.RequestLease(context.Background(), tc.store.Engine(),
+		if _, err := batcheval.RequestLease(ctx, tc.store.Engine(),
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
 				Args: &roachpb.RequestLeaseRequest{
@@ -1013,7 +1005,7 @@ func TestReplicaLease(t *testing.T) {
 		}
 	}
 
-	if held, _ := hasLease(tc.repl, tc.Clock().NowAsClockTimestamp()); !held {
+	if !tc.repl.OwnsValidLease(ctx, tc.Clock().NowAsClockTimestamp()) {
 		t.Errorf("expected lease on range start")
 	}
 	tc.manualClock.Set(leaseExpiry(tc.repl))
@@ -1025,12 +1017,12 @@ func TestReplicaLease(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if held, expired := hasLease(tc.repl, tc.Clock().Now().Add(15, 0).UnsafeToClockTimestamp()); held || expired {
+	if tc.repl.OwnsValidLease(ctx, tc.Clock().Now().Add(15, 0).UnsafeToClockTimestamp()) {
 		t.Errorf("expected second replica to have range lease")
 	}
 
 	{
-		_, pErr := tc.repl.redirectOnOrAcquireLease(context.Background())
+		_, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
 		if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok || lErr == nil {
 			t.Fatalf("wanted NotLeaseHolderError, got %s", pErr)
 		}
@@ -1038,15 +1030,15 @@ func TestReplicaLease(t *testing.T) {
 	// Advance clock past expiration and verify that another has
 	// range lease will not be true.
 	tc.manualClock.Increment(21) // 21ns have passed
-	if held, expired := hasLease(tc.repl, tc.Clock().NowAsClockTimestamp()); held || !expired {
-		t.Errorf("expected another replica to have expired lease; %t, %t", held, expired)
+	if tc.repl.OwnsValidLease(ctx, tc.Clock().NowAsClockTimestamp()) {
+		t.Errorf("expected another replica to have expired lease")
 	}
 
 	// Verify that command returns NotLeaseHolderError when lease is rejected.
 	filterErr.Store(roachpb.NewError(&roachpb.LeaseRejectedError{Message: "replica not found"}))
 
 	{
-		_, err := tc.repl.redirectOnOrAcquireLease(context.Background())
+		_, err := tc.repl.redirectOnOrAcquireLease(ctx)
 		if _, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, err)
 		}
@@ -1619,9 +1611,10 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	// Write some arbitrary data in the system span (up to, but not including MaxReservedID+1)
@@ -1631,7 +1624,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	req1 := putArgs(key, nil)
 
 	assignSeqNumsForReqs(txn, &req1)
-	if _, pErr := kv.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{
 		Txn: txn,
 	}, &req1); pErr != nil {
 		t.Fatal(pErr)
@@ -1651,15 +1644,13 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	lease, _ := tc.repl.GetLease()
-	if tc.repl.leaseStatus(context.Background(),
-		lease, tc.Clock().NowAsClockTimestamp(), hlc.ClockTimestamp{}).State != kvserverpb.LeaseState_EXPIRED {
+	if tc.repl.CurrentLeaseStatus(ctx).State != kvserverpb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
 	// Make sure the information for db1 is not gossiped. Since obtaining
 	// a lease updates the gossiped information, we do that.
-	if _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at
@@ -2144,9 +2135,10 @@ func TestAcquireLease(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "withMinLeaseProposedTS", func(t *testing.T, withMinLeaseProposedTS bool) {
+				ctx := context.Background()
 				tc := testContext{}
 				stopper := stop.NewStopper()
-				defer stopper.Stop(context.Background())
+				defer stopper.Stop(ctx)
 				tc.Start(t, stopper)
 
 				lease, _ := tc.repl.GetLease()
@@ -2174,7 +2166,7 @@ func TestAcquireLease(t *testing.T) {
 				if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
 					t.Error(pErr)
 				}
-				if held, expired := hasLease(tc.repl, ts.UnsafeToClockTimestamp()); !held || expired {
+				if !tc.repl.OwnsValidLease(ctx, ts.UnsafeToClockTimestamp()) {
 					t.Errorf("expected lease acquisition")
 				}
 				lease, _ = tc.repl.GetLease()
@@ -2261,7 +2253,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		for i := 0; i < num; i++ {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
-				status := tc.repl.leaseStatus(ctx, *tc.repl.mu.state.Lease, now, hlc.ClockTimestamp{})
+				status := tc.repl.leaseStatusAtRLocked(ctx, now)
 				llHandle := tc.repl.requestLeaseLocked(ctx, status)
 				tc.repl.mu.Unlock()
 				wg.Done()
@@ -10709,31 +10701,30 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 
 	tests := []struct {
 		leaseStatus kvserverpb.LeaseStatus
-		lease       roachpb.Lease
 		raftStatus  raft.BasicStatus
 		exp         bool
 	}{
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, myLease, leader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithoutLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: myLease}, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_VALID, Lease: otherLease}, leader, false},
 
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, candidate, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, myLease, leader, false},
-		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED}, otherLease, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithoutLeader, true},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, followerWithLeader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, candidate, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: myLease}, leader, false},
+		{kvserverpb.LeaseStatus{State: kvserverpb.LeaseState_EXPIRED, Lease: otherLease}, leader, false},
 	}
 
 	for i, test := range tests {
-		v := shouldCampaignOnWake(test.leaseStatus, test.lease, storeID, test.raftStatus)
+		v := shouldCampaignOnWake(test.leaseStatus, storeID, test.raftStatus)
 		if v != test.exp {
 			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
 		}
