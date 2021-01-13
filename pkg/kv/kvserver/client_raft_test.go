@@ -1075,6 +1075,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 func TestRequestsOnLaggingReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, -1)
 	ctx := context.Background()
 
 	clusterArgs := base.TestClusterArgs{

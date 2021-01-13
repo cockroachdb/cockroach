@@ -485,7 +485,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// known, at which point it will either go through or be rejected based on
 		// whether or not it is this replica that became the leader.
 		if !iAmTheLeader && p.Request.IsLeaseRequest() {
-			if leaderKnown && !b.testing.allowLeaseProposalWhenNotLeader {
+			// TODO DURING REVIEW: I needed this to deflake a test. But is
+			// generally seems like a good idea.
+			isExtension := p.Request.Requests[0].GetRequestLease().IsExtension()
+			if leaderKnown && !isExtension && !b.testing.allowLeaseProposalWhenNotLeader {
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 					leader)
 				b.p.rejectProposalWithRedirectLocked(ctx, p, leader)
