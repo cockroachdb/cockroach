@@ -36,7 +36,7 @@ import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import {
   NodeLink,
   StatementLinkTarget,
-} from "src/views/statements/statementsTableContent";
+} from "@cockroachlabs/admin-ui-components";
 import TerminateSessionModal, {
   TerminateSessionModalRef,
 } from "src/views/sessions/terminateSessionModal";

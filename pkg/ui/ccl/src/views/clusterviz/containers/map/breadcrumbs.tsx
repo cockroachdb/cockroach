@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 
 import { generateLocalityRoute } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
-import { intersperse } from "src/util/intersperse";
+import { util } from "@cockroachlabs/admin-ui-components";
 import { getLocalityLabel } from "src/util/localities";
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 import { trustIcon } from "src/util/trust";
@@ -23,6 +23,8 @@ import "./breadcrumbs.styl";
 interface BreadcrumbsProps {
   tiers: LocalityTier[];
 }
+
+const { intersperse } = util;
 
 export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
   render() {

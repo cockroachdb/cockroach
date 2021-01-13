@@ -30,7 +30,6 @@ import {
 } from "src/util/appStats";
 import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import { AggregateStatistics } from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
 import { selectDiagnosticsReportsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 import {
@@ -38,6 +37,7 @@ import {
   StatementDetailsDispatchProps,
   StatementDetailsStateProps,
   StatementDetailsProps,
+  AggregateStatistics,
 } from "@cockroachlabs/admin-ui-components";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
