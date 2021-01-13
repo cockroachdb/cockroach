@@ -954,7 +954,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		// changing privileges. There might be a more principled solution in
 		// dropping and acquiring fresh leases at regular checkpoint but it is not
 		// clear what this buys us in terms of checking the descriptors validity.
-		// Thus, in favour of simpler code and no correctness concerns we release
+		// Thus, in favor of simpler code and no correctness concerns we release
 		// the lease once the flow is planned.
 		defer tc.ReleaseAll(ctx)
 		tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
@@ -966,6 +966,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 			true /* distribute */)
 		chunkSize := sc.getChunkSize(indexBackfillBatchSize)
 		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize)
+		if err != nil {
+			return err
+		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, todoSpans)
 		return err
 	}); err != nil {

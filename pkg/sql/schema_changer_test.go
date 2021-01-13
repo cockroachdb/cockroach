@@ -3252,7 +3252,7 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 			DisableBackfillMigrations: true,
 		},
 	}
-	server, db, kvDB := serverutils.StartServer(t, params)
+	server, db, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -3284,15 +3284,6 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	// Wait until the first mutation has processed through the state machine
 	// and has started backfilling.
 	<-notification
-
-	// Wait until the mutation is queued up.
-	testutils.SucceedsSoon(t, func() error {
-		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if l := len(tableDesc.Mutations); l != 1 {
-			return errors.Errorf("number of mutations = %d", l)
-		}
-		return nil
-	})
 
 	sqlDB.Exec(t, `GRANT ALL ON TABLE t.test TO foo`)
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT privilege_type FROM [SHOW GRANTS ON TABLE t.test] WHERE grantee='%s'`, "foo"), [][]string{{"ALL"}})
