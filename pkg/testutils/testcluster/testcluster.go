@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -742,7 +744,7 @@ func (tc *TestCluster) RemoveNonVotersOrFatal(
 	return desc
 }
 
-// TransferRangeLease is part of the TestServerInterface.
+// TransferRangeLease is part of the TestClusterInterface.
 func (tc *TestCluster) TransferRangeLease(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
 ) error {
@@ -761,6 +763,90 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
 		t.Fatalf(`could transfer lease for range %s error is %+v`, rangeDesc, err)
 	}
+}
+
+// MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
+func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
+	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+) error {
+	if rangeDesc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+		// Expiration-based leases will not expire due to a liveness pause.
+		return errors.Errorf("expiration-based leases unsupported")
+	}
+	knobs := tc.clusterArgs.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !knobs.AllowLeaseRequestProposalsWhenNotLeader {
+		// Without this knob, we'd have to architect a Raft leadership change
+		// too in order to let the replica get the lease. It's easier to just
+		// require that callers set it.
+		return errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
+	}
+
+	// We are going to stop the current leaseholder's liveness, wait for it to
+	// expire, and then issue a request to the target in hopes that it grabs the
+	// lease. But it is possible that another replica grabs the lease before us
+	// when it's up for grabs. To handle that case, we wrap the entire operation
+	// in an outer retry loop.
+	const retryDur = testutils.DefaultSucceedsSoonDuration
+	return retry.ForDuration(retryDur, func() error {
+		// Find the current leaseholder.
+		lh, err := tc.FindRangeLeaseHolder(rangeDesc, nil /* hint */)
+		if err != nil {
+			return err
+		}
+		if lh == dest {
+			return nil
+		}
+
+		// Stop the leaseholder's node liveness heartbeats so that its range lease's
+		// expire. This will eventually allow our target to acquire the lease.
+		lhServer, err := tc.findMemberServer(lh.StoreID)
+		if err != nil {
+			return err
+		}
+		resume := lhServer.NodeLiveness().(*liveness.NodeLiveness).PauseAllHeartbeatsForTest()
+		defer resume()
+
+		// Repeatedly issue requests to the target replica until it notices that the
+		// old leaseholder's liveness has expired and it can acquire the lease. Once
+		// the loop completes, the lease will have moved.
+		destServer, err := tc.findMemberStore(dest.StoreID)
+		if err != nil {
+			return err
+		}
+		var newLease *roachpb.Lease
+		if err := retry.ForDuration(retryDur, func() error {
+			ctx := context.Background()
+			req := &roachpb.LeaseInfoRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: rangeDesc.StartKey.AsRawKey(),
+				},
+			}
+			h := roachpb.Header{RangeID: rangeDesc.RangeID}
+			reply, pErr := kv.SendWrappedWith(ctx, destServer, h, req)
+			if pErr != nil {
+				log.Infof(ctx, "LeaseInfoRequest failed: %v", pErr)
+				if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok && lErr.Lease != nil {
+					// Did the lease move?
+					if lErr.Lease.Replica.StoreID != lh.StoreID {
+						newLease = lErr.Lease
+						return nil
+					}
+				}
+				return pErr.GoError()
+			}
+			newLease = &reply.(*roachpb.LeaseInfoResponse).Lease
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// Is the lease in the right place?
+		if newLease.Replica.StoreID != dest.StoreID {
+			return errors.Errorf("LeaseInfoRequest succeeded, "+
+				"but lease in wrong location, want %v, got %v", dest, newLease.Replica)
+		}
+		return nil
+	})
 }
 
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
@@ -783,15 +869,9 @@ func (tc *TestCluster) FindRangeLease(
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
-	var hintServer *server.TestServer
-	for _, s := range tc.Servers {
-		if s.GetNode().Descriptor.NodeID == hint.NodeID {
-			hintServer = s
-			break
-		}
-	}
-	if hintServer == nil {
-		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Errorf("bad hint: %+v; no such node", hint)
+	hintServer, err := tc.findMemberServer(hint.StoreID)
+	if err != nil {
+		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
 
 	return hintServer.GetRangeLease(context.TODO(), rangeDesc.StartKey.AsRawKey())
@@ -874,18 +954,23 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 	})
 }
 
-// findMemberStore returns the store containing a given replica.
-func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store, error) {
+// findMemberServer returns the server containing a given store.
+func (tc *TestCluster) findMemberServer(storeID roachpb.StoreID) (*server.TestServer, error) {
 	for _, server := range tc.Servers {
 		if server.Stores().HasStore(storeID) {
-			store, err := server.Stores().GetStore(storeID)
-			if err != nil {
-				return nil, err
-			}
-			return store, nil
+			return server, nil
 		}
 	}
 	return nil, errors.Errorf("store not found")
+}
+
+// findMemberStore returns the store with a given ID.
+func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store, error) {
+	server, err := tc.findMemberServer(storeID)
+	if err != nil {
+		return nil, err
+	}
+	return server.Stores().GetStore(storeID)
 }
 
 // WaitForFullReplication waits until all stores in the cluster

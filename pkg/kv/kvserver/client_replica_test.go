@@ -3522,8 +3522,20 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 		return nil
 	}
 
+	// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+	knobs.AllowLeaseRequestProposalsWhenNotLeader = true
+
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}},
+		ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+			NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+				// This test waits for an epoch-based lease to expire, so we're
+				// setting the liveness duration as low as possible while still
+				// keeping the test stable.
+				LivenessDuration: 3000 * time.Millisecond,
+				RenewalDuration:  1500 * time.Millisecond,
+			},
+			Store: knobs,
+		}},
 	})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Servers[0].DB()
@@ -3551,8 +3563,10 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	}()
 	txn2UnblockC := <-txn2BlockedC
 
-	// Transfer the lease to Server 1.
-	err = tc.TransferRangeLease(rangeDesc, tc.Target(1))
+	// Transfer the lease to Server 1. Do so non-cooperatively instead of using
+	// a lease transfer, because the cooperative lease transfer would get stuck
+	// acquiring latches, which are held by txn2.
+	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1))
 	require.NoError(t, err)
 
 	// Roll back txn1.
