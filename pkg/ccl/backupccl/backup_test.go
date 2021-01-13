@@ -6239,6 +6239,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	t.Run("inside-tenant", func(t *testing.T) {
 		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+		tenant10.Exec(t, `CREATE DATABASE foo2`)
+		tenant10.Exec(t, `RESTORE foo.bar FROM 'userfile://defaultdb.myfililes/test' WITH into_db='foo2'`)
+		tenant10.CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 	})
 
 	t.Run("non-existent", func(t *testing.T) {

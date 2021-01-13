@@ -1216,7 +1216,7 @@ func (r *restoreResumer) Resume(
 
 	numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
-		if !build.IsRelease() {
+		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
 			return err
 		}
 		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
