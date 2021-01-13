@@ -674,6 +674,9 @@ func (ij *invertedJoiner) close() {
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)
 		}
+		if ij.spanBuilder != nil {
+			ij.spanBuilder.Release()
+		}
 	}
 }
 
