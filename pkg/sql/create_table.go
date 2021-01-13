@@ -1523,6 +1523,7 @@ func NewTableDesc(
 				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
 			)
 		}
+		desc.PartitionAllBy = true
 		partitionByAll = n.PartitionByTable.PartitionBy
 	}
 

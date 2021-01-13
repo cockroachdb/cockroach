@@ -1104,6 +1104,11 @@ message TableDescriptor {
     }
   }
   optional LocalityConfig locality_config = 42;
+
+  // PartitionAllBy is set if PARTITION ALL BY is set on the table.
+  // This means that all indexes implicitly inherit all partitioning
+  // from the PARTITION ALL BY clause.
+  optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
 }
 
 // SurvivalGoal is the survival goal for a database.
