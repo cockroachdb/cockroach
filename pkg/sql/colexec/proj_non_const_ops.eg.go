@@ -12355,7 +12355,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 						f, err := arg1.Float64()
 						if err != nil {
-							colexecerror.InternalError(err)
+							colexecerror.ExpectedError(err)
 						}
 						projCol[i] = arg2.MulFloat(f)
 					}
@@ -12374,7 +12374,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 						f, err := arg1.Float64()
 						if err != nil {
-							colexecerror.InternalError(err)
+							colexecerror.ExpectedError(err)
 						}
 						projCol[i] = arg2.MulFloat(f)
 					}
@@ -12395,7 +12395,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 					f, err := arg1.Float64()
 					if err != nil {
-						colexecerror.InternalError(err)
+						colexecerror.ExpectedError(err)
 					}
 					projCol[i] = arg2.MulFloat(f)
 				}
@@ -12410,7 +12410,7 @@ func (p projMultDecimalIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 					f, err := arg1.Float64()
 					if err != nil {
-						colexecerror.InternalError(err)
+						colexecerror.ExpectedError(err)
 					}
 					projCol[i] = arg2.MulFloat(f)
 				}
@@ -15401,7 +15401,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 						f, err := arg2.Float64()
 						if err != nil {
-							colexecerror.InternalError(err)
+							colexecerror.ExpectedError(err)
 						}
 						projCol[i] = arg1.MulFloat(f)
 					}
@@ -15420,7 +15420,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 						f, err := arg2.Float64()
 						if err != nil {
-							colexecerror.InternalError(err)
+							colexecerror.ExpectedError(err)
 						}
 						projCol[i] = arg1.MulFloat(f)
 					}
@@ -15441,7 +15441,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 					f, err := arg2.Float64()
 					if err != nil {
-						colexecerror.InternalError(err)
+						colexecerror.ExpectedError(err)
 					}
 					projCol[i] = arg1.MulFloat(f)
 				}
@@ -15456,7 +15456,7 @@ func (p projMultIntervalDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 					f, err := arg2.Float64()
 					if err != nil {
-						colexecerror.InternalError(err)
+						colexecerror.ExpectedError(err)
 					}
 					projCol[i] = arg1.MulFloat(f)
 				}
