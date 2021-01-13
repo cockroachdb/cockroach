@@ -291,7 +291,7 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 	idx := index.IndexDesc()
 	segments := make([]string, 0, len(idx.ColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
-	segments = append(segments, idx.ColumnNames...)
+	segments = append(segments, idx.ColumnNames[idx.ExplicitColumnStartIdx():]...)
 	if idx.Unique {
 		segments = append(segments, "key")
 	} else {

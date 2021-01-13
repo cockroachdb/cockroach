@@ -321,7 +321,7 @@ SHOW CREATE TABLE like_hash
 ----
 like_hash  CREATE TABLE public.like_hash (
            a INT8 NULL,
-           INDEX like_hash_base_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
            FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
 )
 
