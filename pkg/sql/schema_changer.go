@@ -108,7 +108,7 @@ func NewSchemaChangerForTesting(
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	sqlInstanceID base.SQLInstanceID,
-	db kv.DB,
+	db *kv.DB,
 	leaseMgr *lease.Manager,
 	jobRegistry *jobs.Registry,
 	execCfg *ExecutorConfig,
@@ -118,7 +118,7 @@ func NewSchemaChangerForTesting(
 		descID:        tableID,
 		mutationID:    mutationID,
 		sqlInstanceID: sqlInstanceID,
-		db:            &db,
+		db:            db,
 		leaseMgr:      leaseMgr,
 		jobRegistry:   jobRegistry,
 		settings:      settings,
@@ -130,7 +130,10 @@ func NewSchemaChangerForTesting(
 		) sqlutil.InternalExecutor {
 			return execCfg.InternalExecutor
 		},
-		metrics: NewSchemaChangerMetrics(),
+		metrics:        NewSchemaChangerMetrics(),
+		clock:          db.Clock(),
+		distSQLPlanner: execCfg.DistSQLPlanner,
+		testingKnobs:   &SchemaChangerTestingKnobs{},
 	}
 }
 
