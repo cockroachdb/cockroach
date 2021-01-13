@@ -273,6 +273,13 @@ func (d ReplicaSet) VoterFullAndNonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterFullOrNonVoter)
 }
 
+// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL,
+// VOTER_INCOMING and NON_VOTER replicas in the set. Notably, this is the set of
+// replicas the DistSender will consider routing follower read requests to.
+func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterOrNonVoter)
+}
+
 // Filter returns a ReplicaSet corresponding to the replicas for which the
 // supplied predicate returns true.
 func (d ReplicaSet) Filter(pred func(rDesc ReplicaDescriptor) bool) ReplicaSet {

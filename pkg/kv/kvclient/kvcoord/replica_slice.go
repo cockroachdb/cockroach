@@ -95,9 +95,9 @@ func NewReplicaSlice(
 	case OnlyPotentialLeaseholders:
 		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
 	case AllExtantReplicas:
-		replicas = desc.Replicas().VoterFullAndNonVoterDescriptors()
+		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
 	default:
-		log.Fatalf(ctx, "unknown ReplicaSliceFilter %s", filter)
+		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
 	}
 	// If we know a leaseholder, though, let's make sure we include it.
 	if leaseholder != nil && len(replicas) < len(desc.Replicas().Descriptors()) {

@@ -772,7 +772,7 @@ func TestJointConfigLease(t *testing.T) {
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
-func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
+func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -788,7 +788,8 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`, testingTargetDuration)
+	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`,
+		testingTargetDuration))
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, testingCloseFraction)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
 
@@ -841,9 +842,6 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	// Re-add the voter and remain in joint config.
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	require.Len(t, scratchDesc.Replicas().FilterToDescriptors(predIncoming), 1)
-
-	// Can't serve follower read from the VOTER_INCOMING.
-	check()
 
 	// Remove the voter and remain in joint config.
 	scratchDesc = tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(1))
