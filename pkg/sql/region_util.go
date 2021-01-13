@@ -26,6 +26,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+const minNumRegionsForSurviveRegionGoal = 3
+
 type liveClusterRegions map[descpb.RegionName]struct{}
 
 func (s *liveClusterRegions) isActive(region descpb.RegionName) bool {
@@ -261,6 +263,68 @@ func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
 		zoneConfigFromRegionConfigForDatabase(regionConfig),
 		"database-multiregion-set-zone-config",
 	)
+}
+
+// updateZoneConfigsForLocalityRegionalByTable loops through all of the tables in the
+// specified database, and refreshes the zone configs for all REGIONAL BY TABLE tables.
+// NOTE: this function uses cached table and schema descriptors. As a result, it may
+// not be safe to run within a schema change.
+func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
+	// No work to be done if the database isn't a multi-region database.
+	if !desc.IsMultiRegion() {
+		return nil
+	}
+
+	lookupFlags := p.CommonLookupFlags(true /*required*/)
+	lookupFlags.AvoidCached = false
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, desc.GetID())
+	if err != nil {
+		return err
+	}
+
+	// Loop over all schemas, then loop over all tables to find all of the REGIONAL BY
+	// TABLE tables.
+	for _, schema := range schemas {
+		tbNames, err := p.Descriptors().GetObjectNames(
+			ctx,
+			p.txn,
+			desc,
+			schema,
+			tree.DatabaseListFlags{
+				CommonLookupFlags: lookupFlags,
+				ExplicitPrefix:    true,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		lookupFlags.Required = false
+		for i := range tbNames {
+			found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
+				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+			)
+			if err != nil {
+				return err
+			}
+
+			// If we couldn't find the table, or it has no LocalityConfig, there's nothing
+			// to do here.
+			if !found || tbDesc.LocalityConfig == nil {
+				continue
+			}
+
+			// Update the zone configuration
+			if err := p.applyZoneConfigFromTableLocalityConfig(
+				ctx,
+				tbNames[i],
+				*tbDesc.LocalityConfig,
+				*desc.RegionConfig,
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // initializeMultiRegionDatabase initializes a multi-region database by creating
