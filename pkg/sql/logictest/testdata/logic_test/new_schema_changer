@@ -91,6 +91,9 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
+INSERT INTO foo VALUES (0);
+
+statement ok
 ALTER TABLE foo ADD COLUMN j INT AS (i+1) STORED
 
 statement ok
@@ -99,19 +102,25 @@ INSERT INTO foo(i) VALUES (1)
 query II
 SELECT * FROM foo
 ----
+0  1
 1  2
 
 statement ok
 DROP TABLE foo
 
+subtest add_column_default_and_computed
+
 statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo VALUES (0)
 
 statement ok
 BEGIN
 
 statement ok
-ALTER TABLE foo ADD COLUMN j INT
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 7
 
 statement ok
 ALTER TABLE foo ADD COLUMN k INT AS (j+1) STORED
@@ -125,6 +134,7 @@ INSERT INTO foo(i, j) VALUES (1, 2)
 query III
 SELECT * FROM foo
 ----
+0  7  8
 1  2  3
 
 statement ok
