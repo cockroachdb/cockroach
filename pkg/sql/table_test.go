@@ -302,11 +302,16 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d (%s): %v", i, d.sql, err)
 		}
-		if !reflect.DeepEqual(d.primary, *schema.GetPrimaryIndex()) {
-			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, schema.GetPrimaryIndex())
+		activeIndexDescs := make([]descpb.IndexDescriptor, len(schema.ActiveIndexes()))
+		for i, index := range schema.ActiveIndexes() {
+			activeIndexDescs[i] = *index.IndexDesc()
 		}
-		if !reflect.DeepEqual(d.indexes, append([]descpb.IndexDescriptor{}, schema.GetPublicNonPrimaryIndexes()...)) {
-			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, schema.GetPublicNonPrimaryIndexes())
+
+		if !reflect.DeepEqual(d.primary, activeIndexDescs[0]) {
+			t.Fatalf("%d (%s): primary mismatch: expected %+v, but got %+v", i, d.sql, d.primary, activeIndexDescs[0])
+		}
+		if !reflect.DeepEqual(d.indexes, activeIndexDescs[1:]) {
+			t.Fatalf("%d (%s): index mismatch: expected %+v, but got %+v", i, d.sql, d.indexes, activeIndexDescs[1:])
 		}
 
 	}

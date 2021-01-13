@@ -461,8 +461,8 @@ func findTableContainingIndex(
 			continue
 		}
 
-		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
-		if err != nil || dropped {
+		idx, err := tableDesc.FindIndexWithName(string(idxName))
+		if err != nil || idx.Dropped() {
 			// err is nil if the index does not exist on the table.
 			continue
 		}

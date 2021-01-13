@@ -220,9 +220,14 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that are
 	// part of indexes.
-	for _, idx := range tableDesc.AllNonDropIndexes() {
-		for _, id := range append(idx.ColumnIDs, idx.ExtraColumnIDs...) {
-			if col.ID == id {
+	for _, idx := range tableDesc.NonDropIndexes() {
+		for i := 0; i < idx.NumColumns(); i++ {
+			if idx.GetColumnID(i) == col.ID {
+				return colInIndexNotSupportedErr
+			}
+		}
+		for i := 0; i < idx.NumExtraColumns(); i++ {
+			if idx.GetExtraColumnID(i) == col.ID {
 				return colInIndexNotSupportedErr
 			}
 		}

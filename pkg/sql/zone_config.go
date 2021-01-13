@@ -315,13 +315,13 @@ func resolveSubzone(
 	}
 
 	indexName := string(zs.TableOrIndex.Index)
-	var index *descpb.IndexDescriptor
+	var index catalog.Index
 	if indexName == "" {
 		index = table.GetPrimaryIndex()
-		indexName = index.Name
+		indexName = index.GetName()
 	} else {
 		var err error
-		index, _, err = table.FindIndexByName(indexName)
+		index, err = table.FindIndexWithName(indexName)
 		if err != nil {
 			return nil, "", err
 		}
@@ -329,12 +329,12 @@ func resolveSubzone(
 
 	partitionName := string(zs.Partition)
 	if partitionName != "" {
-		if partitioning := tabledesc.FindIndexPartitionByName(index, partitionName); partitioning == nil {
+		if partitioning := tabledesc.FindIndexPartitionByName(index.IndexDesc(), partitionName); partitioning == nil {
 			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
 		}
 	}
 
-	return index, partitionName, nil
+	return index.IndexDesc(), partitionName, nil
 }
 
 func deleteRemovedPartitionZoneConfigs(
