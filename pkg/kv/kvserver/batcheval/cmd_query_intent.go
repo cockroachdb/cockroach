@@ -26,10 +26,7 @@ func init() {
 }
 
 func declareKeysQueryIntent(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// QueryIntent requests read the specified keys at the maximum timestamp in
 	// order to read any intent present, if one exists, regardless of the

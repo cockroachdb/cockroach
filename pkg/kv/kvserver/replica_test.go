@@ -8326,9 +8326,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	desc := &roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 	ctx := context.Background()
-
 	tc := &testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -8341,7 +8339,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
+			cmd.DeclareKeys(tc.repl.Desc(), roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {

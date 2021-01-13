@@ -25,16 +25,16 @@ func init() {
 }
 
 func declareKeysDeleteRange(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
 	args := req.(*roachpb.DeleteRangeRequest)
 	if args.Inline {
-		DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
 	} else {
-		DefaultDeclareIsolatedKeys(desc, header, req, latchSpans, lockSpans)
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	}
 }
 

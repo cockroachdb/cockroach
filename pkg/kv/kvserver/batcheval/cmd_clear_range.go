@@ -36,15 +36,15 @@ func init() {
 }
 
 func declareKeysClearRange(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, latchSpans, lockSpans)
+	DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified

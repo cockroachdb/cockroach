@@ -28,10 +28,7 @@ func init() {
 }
 
 func declareKeysSubsume(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// Subsume must not run concurrently with any other command. It declares a
 	// non-MVCC write over every addressable key in the range; this guarantees
