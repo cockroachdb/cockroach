@@ -6,11 +6,13 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package ingestion
 
 import (
 	"context"
+	"net/url"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,17 +28,36 @@ type streamIngestionResumer struct {
 	job *jobs.Job
 }
 
+func resolveStreamClientFromStreamAddress(
+	streamAddress streamclient.StreamAddress,
+) (streamclient.Client, error) {
+	uri, err := url.ParseRequestURI(string(streamAddress))
+	if err != nil {
+		return nil, err
+	}
+	switch uri.Scheme {
+	case "test":
+		// hookup the test generator.
+		return nil, nil
+	default:
+		return nil, errors.Newf("unimplemented stream client spec: %s", streamAddress)
+	}
+}
+
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	streamAddress streamclient.PartitionAddress,
+	streamAddress streamingccl.StreamAddress,
 	progress jobspb.Progress,
 	jobID int64,
 ) error {
 	// Initialize a stream client and resolve topology.
-	client := streamclient.NewStreamClient()
-	sa := streamclient.StreamAddress(streamAddress)
-	topology, err := client.GetTopology(sa)
+	client, err := resolveStreamClientFromStreamAddress(streamAddress)
+	if err != nil {
+		return err
+	}
+	sa := streamingccl.StreamAddress(streamAddress)
+	topology, err := client.GetTopology(streamAddress)
 	if err != nil {
 		return err
 	}
@@ -63,8 +84,6 @@ func ingest(
 	}
 
 	// Plan and run the DistSQL flow.
-	// TODO: Updates from this flow need to feed back into the job to update the
-	// progress.
 	err = distStreamIngest(ctx, execCtx, nodes, jobID, planCtx, dsp, streamIngestionSpecs,
 		streamIngestionFrontierSpec)
 	if err != nil {
@@ -81,7 +100,7 @@ func (s *streamIngestionResumer) Resume(
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, streamclient.PartitionAddress(details.StreamAddress), s.job.Progress(),
+	err := ingest(ctx, p, details.StreamAddress, s.job.Progress(),
 		*s.job.ID())
 	if err != nil {
 		return err

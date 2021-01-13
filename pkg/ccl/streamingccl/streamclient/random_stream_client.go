@@ -10,6 +10,9 @@ package streamclient
 
 import (
 	"context"
+	"math/rand"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,13 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"math/rand"
-	"time"
 )
 
 // client is a mock stream client.
-type randomStreamClient struct{
-	r *rand.Rand
+type randomStreamClient struct {
+	r        *rand.Rand
 	baseDesc *tabledesc.Mutable
 }
 
@@ -36,8 +37,8 @@ var _ Client = &randomStreamClient{}
 func newRandomStreamClient() randomStreamClient {
 	fooTable, err := sql.CreateTestTableDescriptor(
 		context.Background(),
-		50 /* defaultdb */,
-		52 /* first table ID */,
+		50, /* defaultdb */
+		52, /* first table ID */
 		"CREATE TABLE foo (a INT PRIMARY KEY, b INT)",
 		systemschema.JobsTable.Privileges,
 	)
@@ -45,13 +46,15 @@ func newRandomStreamClient() randomStreamClient {
 		panic(err)
 	}
 	return randomStreamClient{
-		r: rand.New(rand.NewSource(42)),
+		r:        rand.New(rand.NewSource(42)),
 		baseDesc: fooTable,
 	}
 }
 
 // GetTopology implements the Client interface.
-func (m *randomStreamClient) GetTopology(address streamingccl.StreamAddress) (streamingccl.Topology, error) {
+func (m *randomStreamClient) GetTopology(
+	address streamingccl.StreamAddress,
+) (streamingccl.Topology, error) {
 	return streamingccl.Topology{
 		Partitions: []streamingccl.PartitionAddress{streamingccl.PartitionAddress(address)},
 	}, nil
@@ -63,11 +66,6 @@ func (m *randomStreamClient) ConsumePartition(
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)
 	lastResolvedTime := timeutil.Now()
-	tableKey := func(i uint32) roachpb.Key {
-		return keys.SystemSQLCodec.TablePrefix(i)
-	}
-	allSpan := roachpb.Span{Key: tableKey(52), EndKey: tableKey(52).PrefixEnd()}
-
 	go func() {
 		kvInterval := time.Second
 		kvTimer := timeutil.NewTimer()
@@ -88,7 +86,7 @@ func (m *randomStreamClient) ConsumePartition(
 				resolvedTime := timeutil.Now()
 				hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 				lastResolvedTime = resolvedTime
-				eventCh <- streamingccl.MakeCheckpointEvent(allSpan, hlcResolvedTime)
+				eventCh <- streamingccl.MakeCheckpointEvent(hlcResolvedTime)
 				resolvedTimer.Reset(resolvedInterval)
 			}
 		}
@@ -99,7 +97,7 @@ func (m *randomStreamClient) ConsumePartition(
 
 func (m *randomStreamClient) makeRandomKey(minTs time.Time) roachpb.KeyValue {
 	// Generate a timestamp between minTs and now().
-	newTimestamp := rand.Intn(int(timeutil.Now().UnixNano()) - int(minTs.UnixNano())) + int(minTs.UnixNano())
+	newTimestamp := rand.Intn(int(timeutil.Now().UnixNano())-int(minTs.UnixNano())) + int(minTs.UnixNano())
 
 	// Generate a random a value.
 	// Generate a random b value.

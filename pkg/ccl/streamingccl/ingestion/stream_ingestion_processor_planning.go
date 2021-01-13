@@ -6,12 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package ingestion
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -32,7 +32,7 @@ func init() {
 }
 
 func distStreamIngestionPlanSpecs(
-	topology streamclient.Topology, nodes []roachpb.NodeID, jobID int64,
+	topology streamingccl.Topology, nodes []roachpb.NodeID, jobID int64,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -45,7 +45,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				PartitionAddress: make([]streamclient.PartitionAddress, 0),
+				PartitionAddress: make([]streamingccl.PartitionAddress, 0),
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}

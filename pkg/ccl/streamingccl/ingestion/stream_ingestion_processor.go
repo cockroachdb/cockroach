@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package ingestion
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -69,9 +70,9 @@ type streamIngestionProcessor struct {
 
 // partitionEvent augments a normal event with the partition it came from.
 type partitionEvent struct {
-	streamclient.Event
+	streamingccl.Event
 
-	partition streamclient.PartitionAddress
+	partition streamingccl.PartitionAddress
 }
 
 var _ execinfra.Processor = &streamIngestionProcessor{}
@@ -112,7 +113,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 		defer close(sip.progressCh)
 
 		startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
-		eventChs := make(map[streamclient.PartitionAddress]chan streamclient.Event)
+		eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 		for _, partitionAddress := range sip.spec.PartitionAddress {
 			eventCh, err := sip.client.ConsumePartition(partitionAddress, startTime)
 			if err != nil {
@@ -181,14 +182,14 @@ func (sip *streamIngestionProcessor) startIngestion(eventCh chan partitionEvent)
 
 	for event := range eventCh {
 		switch event.Type() {
-		case streamclient.KVEvent:
+		case streamingccl.KVEvent:
 			kv := event.GetKV()
 			mvccKey := storage.MVCCKey{
 				Key:       kv.Key,
 				Timestamp: kv.Value.Timestamp,
 			}
 			sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
-		case streamclient.CheckpointEvent:
+		case streamingccl.CheckpointEvent:
 			// TODO: In addition to flushing when receiving a checkpoint event, we
 			// should also flush when we've buffered sufficient KVs. A buffering adder
 			// would save us here.
@@ -241,7 +242,7 @@ func (sip *streamIngestionProcessor) flush() error {
 // merge takes events from all the streams and merges them into a single
 // channel.
 func merge(
-	ctx context.Context, partitionStreams map[streamclient.PartitionAddress]chan streamclient.Event,
+	ctx context.Context, partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
 ) chan partitionEvent {
 	merged := make(chan partitionEvent)
 
@@ -249,7 +250,7 @@ func merge(
 	wg.Add(len(partitionStreams))
 
 	for partition, eventCh := range partitionStreams {
-		go func(partition streamclient.PartitionAddress, eventCh <-chan streamclient.Event) {
+		go func(partition streamingccl.PartitionAddress, eventCh <-chan streamingccl.Event) {
 			defer wg.Done()
 			for {
 				select {
