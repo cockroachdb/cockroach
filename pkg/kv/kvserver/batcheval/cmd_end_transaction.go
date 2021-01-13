@@ -41,10 +41,7 @@ func init() {
 // declareKeysWriteTransaction is the shared portion of
 // declareKeys{End,Heartbeat}Transaction.
 func declareKeysWriteTransaction(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans *spanset.SpanSet,
+	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -55,13 +52,13 @@ func declareKeysWriteTransaction(
 }
 
 func declareKeysEndTxn(
-	desc *roachpb.RangeDescriptor,
+	rs ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
 ) {
 	et := req.(*roachpb.EndTxnRequest)
-	declareKeysWriteTransaction(desc, header, req, latchSpans)
+	declareKeysWriteTransaction(rs, header, req, latchSpans)
 	var minTxnTS hlc.Timestamp
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
@@ -76,7 +73,7 @@ func declareKeysEndTxn(
 			abortSpanAccess = spanset.SpanReadWrite
 		}
 		latchSpans.AddNonMVCC(abortSpanAccess, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+			Key: keys.AbortSpanKey(rs.GetRangeID(), header.Txn.ID),
 		})
 	}
 
@@ -86,7 +83,9 @@ func declareKeysEndTxn(
 		// All requests that intend on resolving local locks need to depend on
 		// the range descriptor because they need to determine which locks are
 		// within the local range.
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.RangeDescriptorKey(rs.GetStartKey()),
+		})
 
 		// The spans may extend beyond this Range, but it's ok for the
 		// purpose of acquiring latches. The parts in our Range will
@@ -120,7 +119,7 @@ func declareKeysEndTxn(
 					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
 				})
 
-				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(rs.GetRangeID())
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    leftRangeIDPrefix,
 					EndKey: leftRangeIDPrefix.PrefixEnd(),
@@ -145,8 +144,8 @@ func declareKeysEndTxn(
 				})
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key:    abortspan.MinKey(header.RangeID),
-					EndKey: abortspan.MaxKey(header.RangeID),
+					Key:    abortspan.MinKey(rs.GetRangeID()),
+					EndKey: abortspan.MaxKey(rs.GetRangeID()),
 				})
 			}
 			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {

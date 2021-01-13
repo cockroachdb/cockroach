@@ -29,10 +29,7 @@ func init() {
 }
 
 func declareKeysRecomputeStats(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	// We don't declare any user key in the range. This is OK since all we're doing is computing a
 	// stats delta, and applying this delta commutes with other operations on the same key space.
@@ -48,7 +45,7 @@ func declareKeysRecomputeStats(
 	//
 	// Note that we're also accessing the range stats key, but we don't declare it for the same
 	// reasons as above.
-	rdKey := keys.RangeDescriptorKey(desc.StartKey)
+	rdKey := keys.RangeDescriptorKey(rs.GetStartKey())
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
 }

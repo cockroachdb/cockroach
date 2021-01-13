@@ -182,6 +182,18 @@ func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
 	return true
 }
 
+// GetRangeID returns the RangeDescriptor's ID.
+// The method implements the batcheval.ImmutableRangeState interface.
+func (r *RangeDescriptor) GetRangeID() RangeID {
+	return r.RangeID
+}
+
+// GetStartKey returns the RangeDescriptor's start key.
+// The method implements the batcheval.ImmutableRangeState interface.
+func (r *RangeDescriptor) GetStartKey() RKey {
+	return r.StartKey
+}
+
 // RSpan returns the RangeDescriptor's resolved span.
 func (r *RangeDescriptor) RSpan() RSpan {
 	return RSpan{Key: r.StartKey, EndKey: r.EndKey}

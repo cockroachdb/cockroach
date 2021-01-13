@@ -21,23 +21,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func init() {
+	RegisterReadWriteCommand(roachpb.TransferLease, declareKeysTransferLease, TransferLease)
+}
+
 func declareKeysTransferLease(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 	// Cover the entire addressable key space with a latch to prevent any writes
 	// from overlapping with lease transfers. In principle we could just use the
 	// current range descriptor (desc) but it could potentially change due to an
 	// as of yet unapplied merge.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey})
-}
-
-func init() {
-	RegisterReadWriteCommand(roachpb.TransferLease, declareKeysTransferLease, TransferLease)
 }
 
 // TransferLease sets the lease holder for the range.

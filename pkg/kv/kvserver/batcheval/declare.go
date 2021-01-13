@@ -21,10 +21,7 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
-	_ *roachpb.RangeDescriptor,
-	header roachpb.Header,
-	req roachpb.Request,
-	latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState, header roachpb.Header, req roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
 	access := spanset.SpanReadWrite
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
@@ -39,7 +36,7 @@ func DefaultDeclareKeys(
 // ensures that the commands are fully isolated from conflicting transactions
 // when it evaluated.
 func DefaultDeclareIsolatedKeys(
-	_ *roachpb.RangeDescriptor,
+	_ ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
@@ -75,12 +72,12 @@ func DefaultDeclareIsolatedKeys(
 // touches to the given SpanSet. This does not include keys touched during the
 // processing of the batch's individual commands.
 func DeclareKeysForBatch(
-	desc *roachpb.RangeDescriptor, header roachpb.Header, latchSpans *spanset.SpanSet,
+	rs ImmutableRangeState, header roachpb.Header, latchSpans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+			Key: keys.AbortSpanKey(rs.GetRangeID(), header.Txn.ID),
 		})
 	}
 }
