@@ -32,7 +32,7 @@ func (m *CreateDatabase) Reset()         { *m = CreateDatabase{} }
 func (m *CreateDatabase) String() string { return proto.CompactTextString(m) }
 func (*CreateDatabase) ProtoMessage()    {}
 func (*CreateDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{0}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{0}
 }
 func (m *CreateDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -71,7 +71,7 @@ func (m *DropDatabase) Reset()         { *m = DropDatabase{} }
 func (m *DropDatabase) String() string { return proto.CompactTextString(m) }
 func (*DropDatabase) ProtoMessage()    {}
 func (*DropDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{1}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{1}
 }
 func (m *DropDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -110,7 +110,7 @@ func (m *AlterDatabaseAddRegion) Reset()         { *m = AlterDatabaseAddRegion{}
 func (m *AlterDatabaseAddRegion) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseAddRegion) ProtoMessage()    {}
 func (*AlterDatabaseAddRegion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{2}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{2}
 }
 func (m *AlterDatabaseAddRegion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -149,7 +149,7 @@ func (m *AlterDatabasePrimaryRegion) Reset()         { *m = AlterDatabasePrimary
 func (m *AlterDatabasePrimaryRegion) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabasePrimaryRegion) ProtoMessage()    {}
 func (*AlterDatabasePrimaryRegion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{3}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{3}
 }
 func (m *AlterDatabasePrimaryRegion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,6 +174,45 @@ func (m *AlterDatabasePrimaryRegion) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AlterDatabasePrimaryRegion proto.InternalMessageInfo
 
+// AlterDatabaseSurvivalGoal is recorded when the survival goal is modified.
+type AlterDatabaseSurvivalGoal struct {
+	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
+	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
+	// The name of the database.
+	DatabaseName string `protobuf:"bytes,3,opt,name=database_name,json=databaseName,proto3" json:",omitempty"`
+	// The new survival goal
+	SurvivalGoal string `protobuf:"bytes,4,opt,name=survival_goal,json=survivalGoal,proto3" json:",omitempty"`
+}
+
+func (m *AlterDatabaseSurvivalGoal) Reset()         { *m = AlterDatabaseSurvivalGoal{} }
+func (m *AlterDatabaseSurvivalGoal) String() string { return proto.CompactTextString(m) }
+func (*AlterDatabaseSurvivalGoal) ProtoMessage()    {}
+func (*AlterDatabaseSurvivalGoal) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{4}
+}
+func (m *AlterDatabaseSurvivalGoal) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AlterDatabaseSurvivalGoal) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AlterDatabaseSurvivalGoal) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterDatabaseSurvivalGoal.Merge(dst, src)
+}
+func (m *AlterDatabaseSurvivalGoal) XXX_Size() int {
+	return m.Size()
+}
+func (m *AlterDatabaseSurvivalGoal) XXX_DiscardUnknown() {
+	xxx_messageInfo_AlterDatabaseSurvivalGoal.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AlterDatabaseSurvivalGoal proto.InternalMessageInfo
+
 // RenameDatabase is recorded when a database is renamed.
 type RenameDatabase struct {
 	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
@@ -188,7 +227,7 @@ func (m *RenameDatabase) Reset()         { *m = RenameDatabase{} }
 func (m *RenameDatabase) String() string { return proto.CompactTextString(m) }
 func (*RenameDatabase) ProtoMessage()    {}
 func (*RenameDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{4}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{5}
 }
 func (m *RenameDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -227,7 +266,7 @@ func (m *ConvertToSchema) Reset()         { *m = ConvertToSchema{} }
 func (m *ConvertToSchema) String() string { return proto.CompactTextString(m) }
 func (*ConvertToSchema) ProtoMessage()    {}
 func (*ConvertToSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{5}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{6}
 }
 func (m *ConvertToSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -266,7 +305,7 @@ func (m *CreateSchema) Reset()         { *m = CreateSchema{} }
 func (m *CreateSchema) String() string { return proto.CompactTextString(m) }
 func (*CreateSchema) ProtoMessage()    {}
 func (*CreateSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{6}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{7}
 }
 func (m *CreateSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -303,7 +342,7 @@ func (m *DropSchema) Reset()         { *m = DropSchema{} }
 func (m *DropSchema) String() string { return proto.CompactTextString(m) }
 func (*DropSchema) ProtoMessage()    {}
 func (*DropSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{7}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{8}
 }
 func (m *DropSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -342,7 +381,7 @@ func (m *RenameSchema) Reset()         { *m = RenameSchema{} }
 func (m *RenameSchema) String() string { return proto.CompactTextString(m) }
 func (*RenameSchema) ProtoMessage()    {}
 func (*RenameSchema) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{8}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{9}
 }
 func (m *RenameSchema) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -381,7 +420,7 @@ func (m *CreateTable) Reset()         { *m = CreateTable{} }
 func (m *CreateTable) String() string { return proto.CompactTextString(m) }
 func (*CreateTable) ProtoMessage()    {}
 func (*CreateTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{9}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{10}
 }
 func (m *CreateTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -420,7 +459,7 @@ func (m *DropTable) Reset()         { *m = DropTable{} }
 func (m *DropTable) String() string { return proto.CompactTextString(m) }
 func (*DropTable) ProtoMessage()    {}
 func (*DropTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{10}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{11}
 }
 func (m *DropTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -459,7 +498,7 @@ func (m *RenameTable) Reset()         { *m = RenameTable{} }
 func (m *RenameTable) String() string { return proto.CompactTextString(m) }
 func (*RenameTable) ProtoMessage()    {}
 func (*RenameTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{11}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{12}
 }
 func (m *RenameTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -496,7 +535,7 @@ func (m *TruncateTable) Reset()         { *m = TruncateTable{} }
 func (m *TruncateTable) String() string { return proto.CompactTextString(m) }
 func (*TruncateTable) ProtoMessage()    {}
 func (*TruncateTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{12}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{13}
 }
 func (m *TruncateTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -537,7 +576,7 @@ func (m *AlterTable) Reset()         { *m = AlterTable{} }
 func (m *AlterTable) String() string { return proto.CompactTextString(m) }
 func (*AlterTable) ProtoMessage()    {}
 func (*AlterTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{13}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{14}
 }
 func (m *AlterTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -580,7 +619,7 @@ func (m *CommentOnColumn) Reset()         { *m = CommentOnColumn{} }
 func (m *CommentOnColumn) String() string { return proto.CompactTextString(m) }
 func (*CommentOnColumn) ProtoMessage()    {}
 func (*CommentOnColumn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{14}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{15}
 }
 func (m *CommentOnColumn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -621,7 +660,7 @@ func (m *CommentOnDatabase) Reset()         { *m = CommentOnDatabase{} }
 func (m *CommentOnDatabase) String() string { return proto.CompactTextString(m) }
 func (*CommentOnDatabase) ProtoMessage()    {}
 func (*CommentOnDatabase) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{15}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{16}
 }
 func (m *CommentOnDatabase) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -662,7 +701,7 @@ func (m *CommentOnTable) Reset()         { *m = CommentOnTable{} }
 func (m *CommentOnTable) String() string { return proto.CompactTextString(m) }
 func (*CommentOnTable) ProtoMessage()    {}
 func (*CommentOnTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{16}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{17}
 }
 func (m *CommentOnTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -705,7 +744,7 @@ func (m *CommentOnIndex) Reset()         { *m = CommentOnIndex{} }
 func (m *CommentOnIndex) String() string { return proto.CompactTextString(m) }
 func (*CommentOnIndex) ProtoMessage()    {}
 func (*CommentOnIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{17}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{18}
 }
 func (m *CommentOnIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -746,7 +785,7 @@ func (m *CreateIndex) Reset()         { *m = CreateIndex{} }
 func (m *CreateIndex) String() string { return proto.CompactTextString(m) }
 func (*CreateIndex) ProtoMessage()    {}
 func (*CreateIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{18}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{19}
 }
 func (m *CreateIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -789,7 +828,7 @@ func (m *DropIndex) Reset()         { *m = DropIndex{} }
 func (m *DropIndex) String() string { return proto.CompactTextString(m) }
 func (*DropIndex) ProtoMessage()    {}
 func (*DropIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{19}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{20}
 }
 func (m *DropIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -830,7 +869,7 @@ func (m *AlterIndex) Reset()         { *m = AlterIndex{} }
 func (m *AlterIndex) String() string { return proto.CompactTextString(m) }
 func (*AlterIndex) ProtoMessage()    {}
 func (*AlterIndex) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{20}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{21}
 }
 func (m *AlterIndex) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -871,7 +910,7 @@ func (m *CreateView) Reset()         { *m = CreateView{} }
 func (m *CreateView) String() string { return proto.CompactTextString(m) }
 func (*CreateView) ProtoMessage()    {}
 func (*CreateView) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{21}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{22}
 }
 func (m *CreateView) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -910,7 +949,7 @@ func (m *DropView) Reset()         { *m = DropView{} }
 func (m *DropView) String() string { return proto.CompactTextString(m) }
 func (*DropView) ProtoMessage()    {}
 func (*DropView) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{22}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{23}
 }
 func (m *DropView) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -949,7 +988,7 @@ func (m *CreateSequence) Reset()         { *m = CreateSequence{} }
 func (m *CreateSequence) String() string { return proto.CompactTextString(m) }
 func (*CreateSequence) ProtoMessage()    {}
 func (*CreateSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{23}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{24}
 }
 func (m *CreateSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -986,7 +1025,7 @@ func (m *DropSequence) Reset()         { *m = DropSequence{} }
 func (m *DropSequence) String() string { return proto.CompactTextString(m) }
 func (*DropSequence) ProtoMessage()    {}
 func (*DropSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{24}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{25}
 }
 func (m *DropSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1023,7 +1062,7 @@ func (m *AlterSequence) Reset()         { *m = AlterSequence{} }
 func (m *AlterSequence) String() string { return proto.CompactTextString(m) }
 func (*AlterSequence) ProtoMessage()    {}
 func (*AlterSequence) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{25}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{26}
 }
 func (m *AlterSequence) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1071,7 +1110,7 @@ func (m *CommonSchemaChangeEventDetails) Reset()         { *m = CommonSchemaChan
 func (m *CommonSchemaChangeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSchemaChangeEventDetails) ProtoMessage()    {}
 func (*CommonSchemaChangeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{26}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{27}
 }
 func (m *CommonSchemaChangeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1112,7 +1151,7 @@ func (m *ReverseSchemaChange) Reset()         { *m = ReverseSchemaChange{} }
 func (m *ReverseSchemaChange) String() string { return proto.CompactTextString(m) }
 func (*ReverseSchemaChange) ProtoMessage()    {}
 func (*ReverseSchemaChange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{27}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{28}
 }
 func (m *ReverseSchemaChange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1148,7 +1187,7 @@ func (m *FinishSchemaChange) Reset()         { *m = FinishSchemaChange{} }
 func (m *FinishSchemaChange) String() string { return proto.CompactTextString(m) }
 func (*FinishSchemaChange) ProtoMessage()    {}
 func (*FinishSchemaChange) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{28}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{29}
 }
 func (m *FinishSchemaChange) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1184,7 +1223,7 @@ func (m *FinishSchemaChangeRollback) Reset()         { *m = FinishSchemaChangeRo
 func (m *FinishSchemaChangeRollback) String() string { return proto.CompactTextString(m) }
 func (*FinishSchemaChangeRollback) ProtoMessage()    {}
 func (*FinishSchemaChangeRollback) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{29}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{30}
 }
 func (m *FinishSchemaChangeRollback) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1223,7 +1262,7 @@ func (m *CreateType) Reset()         { *m = CreateType{} }
 func (m *CreateType) String() string { return proto.CompactTextString(m) }
 func (*CreateType) ProtoMessage()    {}
 func (*CreateType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{30}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{31}
 }
 func (m *CreateType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1260,7 +1299,7 @@ func (m *DropType) Reset()         { *m = DropType{} }
 func (m *DropType) String() string { return proto.CompactTextString(m) }
 func (*DropType) ProtoMessage()    {}
 func (*DropType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{31}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{32}
 }
 func (m *DropType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1297,7 +1336,7 @@ func (m *AlterType) Reset()         { *m = AlterType{} }
 func (m *AlterType) String() string { return proto.CompactTextString(m) }
 func (*AlterType) ProtoMessage()    {}
 func (*AlterType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{32}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{33}
 }
 func (m *AlterType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1336,7 +1375,7 @@ func (m *RenameType) Reset()         { *m = RenameType{} }
 func (m *RenameType) String() string { return proto.CompactTextString(m) }
 func (*RenameType) ProtoMessage()    {}
 func (*RenameType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{33}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{34}
 }
 func (m *RenameType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1377,7 +1416,7 @@ func (m *CreateStatistics) Reset()         { *m = CreateStatistics{} }
 func (m *CreateStatistics) String() string { return proto.CompactTextString(m) }
 func (*CreateStatistics) ProtoMessage()    {}
 func (*CreateStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{34}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{35}
 }
 func (m *CreateStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1417,7 +1456,7 @@ func (m *UnsafeUpsertDescriptor) Reset()         { *m = UnsafeUpsertDescriptor{}
 func (m *UnsafeUpsertDescriptor) String() string { return proto.CompactTextString(m) }
 func (*UnsafeUpsertDescriptor) ProtoMessage()    {}
 func (*UnsafeUpsertDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{35}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{36}
 }
 func (m *UnsafeUpsertDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1461,7 +1500,7 @@ func (m *UnsafeDeleteDescriptor) Reset()         { *m = UnsafeDeleteDescriptor{}
 func (m *UnsafeDeleteDescriptor) String() string { return proto.CompactTextString(m) }
 func (*UnsafeDeleteDescriptor) ProtoMessage()    {}
 func (*UnsafeDeleteDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{36}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{37}
 }
 func (m *UnsafeDeleteDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1507,7 +1546,7 @@ func (m *UnsafeUpsertNamespaceEntry) Reset()         { *m = UnsafeUpsertNamespac
 func (m *UnsafeUpsertNamespaceEntry) String() string { return proto.CompactTextString(m) }
 func (*UnsafeUpsertNamespaceEntry) ProtoMessage()    {}
 func (*UnsafeUpsertNamespaceEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{37}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{38}
 }
 func (m *UnsafeUpsertNamespaceEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1551,7 +1590,7 @@ func (m *UnsafeDeleteNamespaceEntry) Reset()         { *m = UnsafeDeleteNamespac
 func (m *UnsafeDeleteNamespaceEntry) String() string { return proto.CompactTextString(m) }
 func (*UnsafeDeleteNamespaceEntry) ProtoMessage()    {}
 func (*UnsafeDeleteNamespaceEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ddl_events_7e7f11b9ac9cec04, []int{38}
+	return fileDescriptor_ddl_events_92b10d126f5d7d5a, []int{39}
 }
 func (m *UnsafeDeleteNamespaceEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1581,6 +1620,7 @@ func init() {
 	proto.RegisterType((*DropDatabase)(nil), "cockroach.util.log.eventpb.DropDatabase")
 	proto.RegisterType((*AlterDatabaseAddRegion)(nil), "cockroach.util.log.eventpb.AlterDatabaseAddRegion")
 	proto.RegisterType((*AlterDatabasePrimaryRegion)(nil), "cockroach.util.log.eventpb.AlterDatabasePrimaryRegion")
+	proto.RegisterType((*AlterDatabaseSurvivalGoal)(nil), "cockroach.util.log.eventpb.AlterDatabaseSurvivalGoal")
 	proto.RegisterType((*RenameDatabase)(nil), "cockroach.util.log.eventpb.RenameDatabase")
 	proto.RegisterType((*ConvertToSchema)(nil), "cockroach.util.log.eventpb.ConvertToSchema")
 	proto.RegisterType((*CreateSchema)(nil), "cockroach.util.log.eventpb.CreateSchema")
@@ -1804,7 +1844,7 @@ func (m *AlterDatabasePrimaryRegion) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *RenameDatabase) Marshal() (dAtA []byte, err error) {
+func (m *AlterDatabaseSurvivalGoal) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -1814,7 +1854,7 @@ func (m *RenameDatabase) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *RenameDatabase) MarshalTo(dAtA []byte) (int, error) {
+func (m *AlterDatabaseSurvivalGoal) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1835,6 +1875,52 @@ func (m *RenameDatabase) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n10
+	if len(m.DatabaseName) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintDdlEvents(dAtA, i, uint64(len(m.DatabaseName)))
+		i += copy(dAtA[i:], m.DatabaseName)
+	}
+	if len(m.SurvivalGoal) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintDdlEvents(dAtA, i, uint64(len(m.SurvivalGoal)))
+		i += copy(dAtA[i:], m.SurvivalGoal)
+	}
+	return i, nil
+}
+
+func (m *RenameDatabase) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RenameDatabase) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
+	n11, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n11
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
+	n12, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n12
 	if len(m.DatabaseName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -1868,19 +1954,19 @@ func (m *ConvertToSchema) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n11, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n13, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n11
+	i += n13
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n12, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n14, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n12
+	i += n14
 	if len(m.DatabaseName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -1914,19 +2000,19 @@ func (m *CreateSchema) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n13, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n15, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n15
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n14, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n16, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n16
 	if len(m.SchemaName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -1960,19 +2046,19 @@ func (m *DropSchema) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n15, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n17, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n15
+	i += n17
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n16, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n18, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n16
+	i += n18
 	if len(m.SchemaName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2000,19 +2086,19 @@ func (m *RenameSchema) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n17, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n19, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n17
+	i += n19
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n18, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n20, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n18
+	i += n20
 	if len(m.SchemaName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2046,19 +2132,19 @@ func (m *CreateTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n19, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n21, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n21
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n20, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n22, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n22
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2092,19 +2178,19 @@ func (m *DropTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n21, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n23, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n23
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n22, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n24, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n24
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2147,19 +2233,19 @@ func (m *RenameTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n23, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n25, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n23
+	i += n25
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n24, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n26, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n24
+	i += n26
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2193,19 +2279,19 @@ func (m *TruncateTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n25, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n27, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n25
+	i += n27
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n26, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n28, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n26
+	i += n28
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2233,19 +2319,19 @@ func (m *AlterTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n27, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n29, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n27
+	i += n29
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n28, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n30, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n28
+	i += n30
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2293,19 +2379,19 @@ func (m *CommentOnColumn) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n29, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n31, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n29
+	i += n31
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n30, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n32, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n30
+	i += n32
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2355,19 +2441,19 @@ func (m *CommentOnDatabase) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n31, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n33, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n31
+	i += n33
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n32, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n34, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n32
+	i += n34
 	if len(m.DatabaseName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2411,19 +2497,19 @@ func (m *CommentOnTable) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n33, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n35, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n33
+	i += n35
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n34, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n36, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n34
+	i += n36
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2467,19 +2553,19 @@ func (m *CommentOnIndex) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n35, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n37, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n35
+	i += n37
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n36, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n38, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n36
+	i += n38
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2529,19 +2615,19 @@ func (m *CreateIndex) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n37, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n39, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n37
+	i += n39
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n38, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n40, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n38
+	i += n40
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2580,19 +2666,19 @@ func (m *DropIndex) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n39, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n41, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n39
+	i += n41
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n40, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n42, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n40
+	i += n42
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2646,19 +2732,19 @@ func (m *AlterIndex) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n41, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n43, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n41
+	i += n43
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n42, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n44, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n42
+	i += n44
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2697,19 +2783,19 @@ func (m *CreateView) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n43, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n45, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n43
+	i += n45
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n44, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n46, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n44
+	i += n46
 	if len(m.ViewName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2749,19 +2835,19 @@ func (m *DropView) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n45, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n47, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n45
+	i += n47
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n46, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n48, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n46
+	i += n48
 	if len(m.ViewName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2804,19 +2890,19 @@ func (m *CreateSequence) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n47, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n49, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n47
+	i += n49
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n48, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n50, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n48
+	i += n50
 	if len(m.SequenceName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2850,19 +2936,19 @@ func (m *DropSequence) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n49, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n51, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n49
+	i += n51
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n50, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n52, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n50
+	i += n52
 	if len(m.SequenceName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2890,19 +2976,19 @@ func (m *AlterSequence) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n51, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n53, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n51
+	i += n53
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n52, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n54, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n52
+	i += n54
 	if len(m.SequenceName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -2963,19 +3049,19 @@ func (m *ReverseSchemaChange) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n53, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n55, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n53
+	i += n55
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSchemaChangeEventDetails.Size()))
-	n54, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
+	n56, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n54
+	i += n56
 	if len(m.Error) > 0 {
 		dAtA[i] = 0x22
 		i++
@@ -3009,19 +3095,19 @@ func (m *FinishSchemaChange) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n55, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n57, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n55
+	i += n57
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSchemaChangeEventDetails.Size()))
-	n56, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
+	n58, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n56
+	i += n58
 	return i, nil
 }
 
@@ -3043,19 +3129,19 @@ func (m *FinishSchemaChangeRollback) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n57, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n59, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n57
+	i += n59
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSchemaChangeEventDetails.Size()))
-	n58, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
+	n60, err := m.CommonSchemaChangeEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n58
+	i += n60
 	return i, nil
 }
 
@@ -3077,19 +3163,19 @@ func (m *CreateType) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n59, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n61, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n59
+	i += n61
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n60, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n62, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n60
+	i += n62
 	if len(m.TypeName) > 0 {
 		dAtA[i] = 0x22
 		i++
@@ -3123,19 +3209,19 @@ func (m *DropType) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n61, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n63, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n61
+	i += n63
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n62, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n64, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n62
+	i += n64
 	if len(m.TypeName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -3163,19 +3249,19 @@ func (m *AlterType) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n63, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n65, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n63
+	i += n65
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n64, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n66, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n64
+	i += n66
 	if len(m.TypeName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -3203,19 +3289,19 @@ func (m *RenameType) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n65, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n67, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n65
+	i += n67
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n66, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n68, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n66
+	i += n68
 	if len(m.TypeName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -3249,19 +3335,19 @@ func (m *CreateStatistics) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n67, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n69, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n67
+	i += n69
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n68, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n70, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n68
+	i += n70
 	if len(m.TableName) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -3289,19 +3375,19 @@ func (m *UnsafeUpsertDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n69, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n71, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n69
+	i += n71
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n70, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n72, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n70
+	i += n72
 	if len(m.PreviousDescriptor) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -3351,19 +3437,19 @@ func (m *UnsafeDeleteDescriptor) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n71, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n73, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n71
+	i += n73
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n72, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n74, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n72
+	i += n74
 	if m.ParentID != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -3417,19 +3503,19 @@ func (m *UnsafeUpsertNamespaceEntry) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n73, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n75, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n73
+	i += n75
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n74, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n76, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n74
+	i += n76
 	if m.ParentID != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -3498,19 +3584,19 @@ func (m *UnsafeDeleteNamespaceEntry) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n75, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
+	n77, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n75
+	i += n77
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintDdlEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n76, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
+	n78, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n76
+	i += n78
 	if m.ParentID != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -3631,6 +3717,27 @@ func (m *AlterDatabasePrimaryRegion) Size() (n int) {
 		n += 1 + l + sovDdlEvents(uint64(l))
 	}
 	l = len(m.PrimaryRegionName)
+	if l > 0 {
+		n += 1 + l + sovDdlEvents(uint64(l))
+	}
+	return n
+}
+
+func (m *AlterDatabaseSurvivalGoal) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommonEventDetails.Size()
+	n += 1 + l + sovDdlEvents(uint64(l))
+	l = m.CommonSQLEventDetails.Size()
+	n += 1 + l + sovDdlEvents(uint64(l))
+	l = len(m.DatabaseName)
+	if l > 0 {
+		n += 1 + l + sovDdlEvents(uint64(l))
+	}
+	l = len(m.SurvivalGoal)
 	if l > 0 {
 		n += 1 + l + sovDdlEvents(uint64(l))
 	}
@@ -5047,6 +5154,174 @@ func (m *AlterDatabasePrimaryRegion) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.PrimaryRegionName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipDdlEvents(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthDdlEvents
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AlterDatabaseSurvivalGoal) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowDdlEvents
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AlterDatabaseSurvivalGoal: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AlterDatabaseSurvivalGoal: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDdlEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthDdlEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommonSQLEventDetails", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDdlEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthDdlEvents
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommonSQLEventDetails.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DatabaseName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDdlEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthDdlEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DatabaseName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SurvivalGoal", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowDdlEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthDdlEvents
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SurvivalGoal = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -11209,102 +11484,105 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/ddl_events.proto", fileDescriptor_ddl_events_7e7f11b9ac9cec04)
+	proto.RegisterFile("util/log/eventpb/ddl_events.proto", fileDescriptor_ddl_events_92b10d126f5d7d5a)
 }
 
-var fileDescriptor_ddl_events_7e7f11b9ac9cec04 = []byte{
-	// 1488 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x5a, 0xcd, 0x6f, 0x1b, 0x45,
-	0x14, 0xcf, 0xae, 0xe3, 0xc4, 0x7e, 0xfe, 0x68, 0xb2, 0x69, 0x2b, 0xcb, 0x02, 0x3b, 0xac, 0x7a,
-	0x08, 0x82, 0xda, 0x6a, 0xcb, 0x87, 0x54, 0x54, 0x50, 0x13, 0x07, 0xc9, 0xa8, 0xb4, 0x8d, 0xe3,
-	0x56, 0x88, 0x8b, 0xb5, 0xd9, 0x9d, 0x26, 0x4b, 0xd7, 0x33, 0x9b, 0xdd, 0xb1, 0x4d, 0xfe, 0x00,
-	0x24, 0x24, 0x24, 0x84, 0x10, 0xe2, 0xc2, 0x85, 0x03, 0x52, 0x25, 0x2e, 0x48, 0x5c, 0x90, 0x10,
-	0x37, 0x40, 0xf4, 0x00, 0xa8, 0x82, 0x4b, 0x4f, 0x56, 0xeb, 0x48, 0x54, 0xaa, 0x80, 0x03, 0x42,
-	0xe2, 0x8a, 0x66, 0x66, 0xd7, 0xde, 0xc4, 0x1f, 0x69, 0xa4, 0xe4, 0xe0, 0x4d, 0x6e, 0xb6, 0xe7,
-	0xf7, 0xde, 0xfa, 0xfd, 0xde, 0xe7, 0xcc, 0x2c, 0x3c, 0xd3, 0xa0, 0xa6, 0x55, 0xb4, 0xc8, 0x7a,
-	0x11, 0x35, 0x11, 0xa6, 0xf6, 0x5a, 0xd1, 0x30, 0xac, 0x1a, 0xff, 0xec, 0x16, 0x6c, 0x87, 0x50,
-	0xa2, 0x64, 0x75, 0xa2, 0xdf, 0x76, 0x88, 0xa6, 0x6f, 0x14, 0x18, 0xb8, 0x60, 0x91, 0xf5, 0x82,
-	0x07, 0xce, 0x9e, 0x5c, 0x27, 0xeb, 0x84, 0xc3, 0x8a, 0xec, 0x93, 0x90, 0xc8, 0x3e, 0xdd, 0xa7,
-	0x34, 0xa8, 0x50, 0xfd, 0x5b, 0x82, 0xf4, 0x92, 0x83, 0x34, 0x8a, 0x4a, 0x1a, 0xd5, 0xd6, 0x34,
-	0x17, 0x29, 0x55, 0x98, 0xd2, 0x49, 0xbd, 0x4e, 0x70, 0x46, 0x9a, 0x97, 0x16, 0x12, 0xe7, 0x0b,
-	0x85, 0xe1, 0x0f, 0x2d, 0x2c, 0x71, 0xe4, 0x32, 0xfb, 0x56, 0x42, 0x54, 0x33, 0x2d, 0x77, 0x31,
-	0x79, 0xb7, 0x9d, 0x9f, 0xb8, 0xd7, 0xce, 0x4b, 0x8f, 0xdb, 0xf9, 0x89, 0x8a, 0xa7, 0x4b, 0x59,
-	0x81, 0x88, 0xbb, 0x69, 0x65, 0x64, 0xae, 0xf2, 0xdc, 0xde, 0x2a, 0x57, 0x57, 0xae, 0x8c, 0xd0,
-	0xca, 0x74, 0x29, 0x17, 0x20, 0x65, 0x78, 0x7f, 0xba, 0x86, 0xb5, 0x3a, 0xca, 0x44, 0xe6, 0xa5,
-	0x85, 0xf8, 0x62, 0xfa, 0x71, 0x3b, 0x0f, 0xcf, 0x93, 0xba, 0x49, 0x51, 0xdd, 0xa6, 0x5b, 0x95,
-	0xa4, 0x0f, 0xba, 0xaa, 0xd5, 0x91, 0xfa, 0xb5, 0x0c, 0xc9, 0x92, 0x43, 0xec, 0xa3, 0x61, 0xae,
-	0x52, 0x82, 0xd3, 0x86, 0x43, 0x6c, 0x1b, 0x19, 0x35, 0x57, 0xdf, 0x40, 0x75, 0xad, 0x46, 0xd6,
-	0xde, 0x41, 0x3a, 0x75, 0x33, 0x93, 0xf3, 0x91, 0x01, 0xd2, 0x27, 0x3d, 0xf4, 0x2a, 0x07, 0x5f,
-	0x13, 0x58, 0xf5, 0x8e, 0x0c, 0xa7, 0x2f, 0x5b, 0x14, 0x39, 0x3e, 0x6b, 0x97, 0x0d, 0xa3, 0x82,
-	0xd6, 0x4d, 0x82, 0x43, 0x4e, 0x5f, 0x11, 0x12, 0x0e, 0xb7, 0x53, 0x88, 0x4c, 0x0e, 0x14, 0x01,
-	0x01, 0xe1, 0xe1, 0xf5, 0xad, 0x0c, 0xd9, 0x1d, 0x4c, 0x5d, 0x77, 0xcc, 0xba, 0xe6, 0x6c, 0x1d,
-	0x09, 0xb6, 0x5e, 0x85, 0x39, 0x5b, 0x98, 0x5b, 0xdb, 0x9b, 0xb5, 0x59, 0x3b, 0xc8, 0x0c, 0x27,
-	0xef, 0x4b, 0x19, 0xd2, 0x15, 0xc4, 0x64, 0x8e, 0x48, 0x76, 0x5e, 0x84, 0x59, 0x8c, 0x5a, 0xb5,
-	0x9d, 0x82, 0x83, 0xe9, 0x3a, 0x81, 0x51, 0xab, 0x14, 0x2c, 0x64, 0x5f, 0xc9, 0x70, 0x62, 0x89,
-	0xe0, 0x26, 0x72, 0x68, 0x95, 0x88, 0x74, 0x0d, 0x7f, 0x78, 0xed, 0x60, 0xcb, 0xd6, 0x1c, 0x84,
-	0xe9, 0xb0, 0xf0, 0x0a, 0xf0, 0x75, 0x9d, 0x03, 0xd5, 0x0f, 0x65, 0x48, 0x8a, 0x5e, 0x37, 0x6e,
-	0x74, 0x15, 0x21, 0xe1, 0x55, 0xef, 0x11, 0x64, 0x81, 0x80, 0x70, 0xaa, 0xce, 0x40, 0x94, 0xb4,
-	0x30, 0x72, 0x86, 0x90, 0x23, 0x16, 0xd5, 0x3f, 0x24, 0x00, 0xd6, 0x0b, 0xc3, 0x4e, 0x87, 0xfa,
-	0xb9, 0x0c, 0x49, 0x51, 0x58, 0x42, 0xef, 0xf9, 0x97, 0x80, 0x55, 0x8a, 0x5a, 0x50, 0x68, 0x70,
-	0x0c, 0xa4, 0x30, 0x6a, 0xad, 0xf6, 0x28, 0xfa, 0x40, 0x86, 0x84, 0x48, 0x8e, 0xaa, 0xb6, 0x66,
-	0x8d, 0x51, 0xe1, 0x3d, 0x0b, 0x40, 0xd9, 0x3f, 0x1e, 0x45, 0x50, 0x9c, 0x23, 0xf6, 0x91, 0x19,
-	0x77, 0x64, 0x88, 0xb3, 0xcc, 0x08, 0x37, 0x17, 0x8b, 0x70, 0x4a, 0xd7, 0x5c, 0x5d, 0x33, 0x50,
-	0xcd, 0x1f, 0x12, 0x9b, 0x26, 0x6a, 0x0d, 0x9b, 0x0d, 0xe7, 0x3c, 0x70, 0x49, 0x60, 0x6f, 0x32,
-	0xa8, 0xfa, 0x99, 0x0c, 0x09, 0x91, 0x5a, 0xe1, 0xe6, 0xea, 0x05, 0x48, 0xb3, 0xbc, 0x0a, 0x88,
-	0x0c, 0x0e, 0xa0, 0x24, 0x46, 0xad, 0xaa, 0x2f, 0xa5, 0x3e, 0x92, 0x20, 0x55, 0x75, 0x1a, 0x58,
-	0x0f, 0x7b, 0x5e, 0xa9, 0x8f, 0x64, 0x00, 0x3e, 0xf8, 0x86, 0x3b, 0x0c, 0x2e, 0x41, 0xa2, 0xde,
-	0xa0, 0x1a, 0x65, 0xc3, 0xad, 0x69, 0xf0, 0x18, 0x48, 0x2d, 0x3e, 0xd5, 0x69, 0xe7, 0xe1, 0x4d,
-	0xef, 0xe7, 0x72, 0x69, 0x77, 0x75, 0xf6, 0x05, 0xca, 0xc6, 0xf0, 0x8c, 0x8b, 0x3e, 0x79, 0xc6,
-	0xfd, 0xc7, 0x07, 0xbf, 0x7a, 0x1d, 0x61, 0x7a, 0x0d, 0x2f, 0x11, 0xab, 0x51, 0xc7, 0xa1, 0xa5,
-	0xbb, 0x08, 0x09, 0x9d, 0x5b, 0x38, 0x72, 0xff, 0x25, 0x20, 0x5c, 0x60, 0x01, 0xa6, 0x75, 0xc1,
-	0x4d, 0x26, 0x3a, 0x10, 0xec, 0x2f, 0x2b, 0xe7, 0x20, 0x89, 0x1b, 0x96, 0x55, 0xf3, 0xe1, 0x53,
-	0xf3, 0xd2, 0x42, 0xac, 0x0f, 0x9e, 0x60, 0x18, 0x8f, 0x6d, 0xf5, 0x57, 0x19, 0x66, 0xbb, 0xcc,
-	0x1f, 0x91, 0x2d, 0x4a, 0x80, 0xd0, 0xc9, 0x03, 0x27, 0xf4, 0x47, 0x19, 0xd2, 0x5d, 0x42, 0xc3,
-	0x5d, 0x38, 0x0e, 0x95, 0xc7, 0x7f, 0x83, 0x3c, 0x96, 0xb1, 0x81, 0xde, 0x0d, 0x2d, 0x8f, 0x67,
-	0x01, 0x4c, 0x66, 0xe0, 0xa8, 0x82, 0x10, 0xe7, 0x88, 0xc3, 0xaf, 0x07, 0xbf, 0x77, 0x67, 0xe6,
-	0x63, 0xce, 0x03, 0x9c, 0xef, 0xea, 0x91, 0xd1, 0xfd, 0xf5, 0x48, 0xf5, 0xbd, 0x88, 0x98, 0xbd,
-	0x8f, 0x39, 0x3d, 0x30, 0x4e, 0x95, 0xf3, 0xc3, 0xe6, 0x8e, 0x29, 0x36, 0x77, 0x0c, 0x9e, 0x33,
-	0x7e, 0xf3, 0x27, 0xba, 0x63, 0x47, 0x1c, 0x5c, 0x70, 0x7f, 0x23, 0x03, 0x88, 0x92, 0xc1, 0x48,
-	0x1e, 0x1f, 0x52, 0x9f, 0x83, 0x38, 0x0b, 0x98, 0x51, 0x9c, 0xc6, 0x18, 0xe0, 0xc9, 0xf7, 0xd8,
-	0x8c, 0x78, 0xae, 0x72, 0xb3, 0x81, 0x9c, 0xad, 0x21, 0xd5, 0x99, 0x3f, 0x74, 0x85, 0x01, 0xd4,
-	0x2f, 0x64, 0x88, 0xb1, 0xf8, 0x0c, 0x31, 0x6f, 0x07, 0xb1, 0x1f, 0xff, 0x44, 0xf6, 0x2f, 0xf4,
-	0x56, 0xd1, 0x66, 0x03, 0x61, 0x7d, 0xbc, 0x06, 0x54, 0xd7, 0xfb, 0xd3, 0x23, 0x07, 0x54, 0x1f,
-	0xb4, 0x8f, 0x03, 0x9d, 0x3f, 0x25, 0x71, 0xed, 0x77, 0x34, 0x48, 0x51, 0xff, 0x92, 0x20, 0xc5,
-	0x6b, 0xf7, 0x11, 0xb1, 0x77, 0x5b, 0x82, 0x9c, 0xf7, 0x04, 0x7e, 0xa4, 0xb9, 0xb4, 0xa1, 0xe1,
-	0x75, 0x14, 0x7c, 0x14, 0x2b, 0xdc, 0x26, 0x76, 0xa9, 0xc6, 0xf4, 0x9a, 0x06, 0x67, 0x21, 0x2a,
-	0x0a, 0x77, 0xd9, 0xfb, 0xb9, 0xbf, 0x70, 0xfb, 0x02, 0x65, 0x43, 0x59, 0x82, 0x94, 0x81, 0x5c,
-	0xdd, 0x31, 0x6d, 0x4a, 0x1c, 0xa6, 0x40, 0xe6, 0x95, 0x3f, 0xd7, 0x69, 0xe7, 0x93, 0xa5, 0xee,
-	0x42, 0x9f, 0x8a, 0x64, 0x4f, 0xa8, 0x6c, 0xec, 0x6e, 0x1e, 0x91, 0x7d, 0x36, 0x8f, 0xef, 0x64,
-	0x98, 0xab, 0xa0, 0x26, 0x72, 0x5c, 0x14, 0x34, 0xf3, 0x90, 0x7c, 0xfb, 0x16, 0xc8, 0xae, 0xee,
-	0xb9, 0xf6, 0xe2, 0x13, 0xb8, 0x76, 0x08, 0xf1, 0xbb, 0xb4, 0xcb, 0xae, 0xce, 0x52, 0x16, 0x39,
-	0x0e, 0x19, 0x9a, 0xb2, 0x7c, 0x51, 0xb9, 0x06, 0x31, 0x77, 0xd3, 0x72, 0xa9, 0x46, 0x91, 0xd7,
-	0x1d, 0x2e, 0x74, 0xda, 0xf9, 0xd8, 0xea, 0xca, 0x95, 0xd5, 0xea, 0xe5, 0xea, 0xf2, 0x4e, 0xa1,
-	0x7f, 0xda, 0xf9, 0x53, 0x0e, 0x32, 0x34, 0x9d, 0x5e, 0x54, 0x31, 0xc1, 0x2e, 0xc2, 0xae, 0x49,
-	0xcd, 0x26, 0x52, 0x2b, 0x5d, 0x25, 0xea, 0x0f, 0x12, 0x28, 0xaf, 0x9b, 0xd8, 0x74, 0x37, 0xc6,
-	0x99, 0x3d, 0xf5, 0x67, 0x09, 0xb2, 0xfd, 0x66, 0x54, 0x88, 0x65, 0xad, 0x69, 0xfa, 0xed, 0xb1,
-	0x33, 0xe7, 0xfd, 0xee, 0x44, 0x54, 0xdd, 0xb2, 0xd1, 0x58, 0x75, 0x76, 0xba, 0x65, 0x8f, 0x3c,
-	0x0b, 0x8e, 0x31, 0xc0, 0xce, 0x26, 0x15, 0x1d, 0xd5, 0xa4, 0x1e, 0x48, 0x62, 0xc4, 0x19, 0x63,
-	0x22, 0x22, 0xa3, 0x89, 0x50, 0x1f, 0x4a, 0x10, 0x17, 0xc7, 0xc4, 0xe1, 0xb5, 0xf1, 0x53, 0x19,
-	0xc0, 0xbb, 0x12, 0x09, 0xad, 0x91, 0xca, 0x79, 0x48, 0xf1, 0xfb, 0x90, 0x3d, 0x52, 0x20, 0x81,
-	0x51, 0xab, 0xea, 0x13, 0xf3, 0x58, 0x82, 0x19, 0x6f, 0x36, 0x65, 0x3d, 0xcd, 0xa5, 0xa6, 0xee,
-	0x86, 0xf6, 0x42, 0xe4, 0xe3, 0x08, 0x9c, 0xbe, 0x81, 0x5d, 0xed, 0x16, 0xba, 0x61, 0xbb, 0xc8,
-	0xa1, 0xbd, 0x21, 0x61, 0x7c, 0x4c, 0x7e, 0x0d, 0xe6, 0x6c, 0x07, 0x35, 0x4d, 0xd2, 0x70, 0x6b,
-	0xbd, 0x41, 0x66, 0x88, 0xed, 0x8a, 0x0f, 0x0d, 0x58, 0xfa, 0xa2, 0xb8, 0x35, 0x0b, 0xc8, 0x0e,
-	0xbf, 0x8c, 0x0e, 0x88, 0x9d, 0x81, 0xe8, 0x2d, 0xe2, 0xe8, 0xa2, 0xef, 0xf7, 0x1f, 0xc2, 0x89,
-	0x45, 0xe5, 0x1c, 0x24, 0xf9, 0x87, 0x1a, 0x26, 0xd4, 0xd4, 0x11, 0x3f, 0xb1, 0x1b, 0x10, 0x81,
-	0x1c, 0x73, 0x95, 0x43, 0xd4, 0xef, 0xbb, 0x4e, 0x29, 0x21, 0x0b, 0x51, 0x34, 0x8e, 0x4e, 0x79,
-	0x19, 0xe2, 0xe2, 0xcd, 0x97, 0xde, 0x08, 0x99, 0x65, 0x83, 0x91, 0x78, 0xcb, 0xa5, 0x6f, 0x80,
-	0x8c, 0x09, 0x70, 0xd9, 0x50, 0xde, 0x80, 0x19, 0x4f, 0xd0, 0x7b, 0x3b, 0xa0, 0x7b, 0x81, 0x35,
-	0xdf, 0x69, 0xe7, 0xd3, 0x42, 0x5e, 0x74, 0xee, 0x3e, 0x2d, 0x69, 0x3b, 0xb8, 0x6a, 0x28, 0x2a,
-	0x4c, 0xf2, 0x34, 0x18, 0xdc, 0xcf, 0xf8, 0x5a, 0xcf, 0x8b, 0x53, 0xfb, 0xf1, 0xe2, 0xf4, 0xde,
-	0x5e, 0xfc, 0x65, 0x12, 0xb2, 0xc1, 0xd4, 0x62, 0xf9, 0xe6, 0xda, 0x9a, 0x8e, 0x96, 0x31, 0x75,
-	0xb6, 0x8e, 0x3d, 0x79, 0xe0, 0x9e, 0xbc, 0x04, 0x89, 0x6e, 0x1d, 0x30, 0x0d, 0xee, 0x4f, 0x6f,
-	0xdf, 0x72, 0xdd, 0xfb, 0xb9, 0x7f, 0xdf, 0xe2, 0x0b, 0x94, 0x8d, 0x5e, 0x20, 0x4c, 0x8f, 0x0a,
-	0x84, 0x57, 0x60, 0xf6, 0x96, 0x66, 0x5a, 0xc8, 0xa8, 0x35, 0x35, 0xcb, 0x34, 0xf8, 0xa6, 0x27,
-	0x13, 0x1b, 0x28, 0x31, 0x23, 0x80, 0x37, 0xbb, 0x38, 0x26, 0xdc, 0x93, 0xaa, 0xf1, 0x0d, 0x84,
-	0x9b, 0x89, 0x0f, 0x34, 0x69, 0xa6, 0x07, 0x5c, 0xe6, 0x38, 0xf5, 0xa7, 0x88, 0x1f, 0x4f, 0xa2,
-	0x2a, 0x1c, 0xc7, 0xd3, 0x98, 0x56, 0x86, 0xc5, 0x67, 0xef, 0x3e, 0xcc, 0x4d, 0xdc, 0xed, 0xe4,
-	0xa4, 0x7b, 0x9d, 0x9c, 0x74, 0xbf, 0x93, 0x93, 0x1e, 0x74, 0x72, 0xd2, 0x47, 0xdb, 0xb9, 0x89,
-	0x7b, 0xdb, 0xb9, 0x89, 0xfb, 0xdb, 0xb9, 0x89, 0xb7, 0xa7, 0x3d, 0x56, 0xd7, 0xa6, 0xf8, 0x0b,
-	0xf0, 0x17, 0xfe, 0x0f, 0x00, 0x00, 0xff, 0xff, 0xca, 0xed, 0x63, 0x32, 0x76, 0x2f, 0x00, 0x00,
+var fileDescriptor_ddl_events_92b10d126f5d7d5a = []byte{
+	// 1529 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x5b, 0xcd, 0x6f, 0x1b, 0x45,
+	0x1b, 0xcf, 0xae, 0xf3, 0x61, 0x3f, 0xb6, 0xd3, 0x64, 0xd3, 0x56, 0x79, 0xa3, 0xf7, 0xb5, 0xf3,
+	0xae, 0x7a, 0xc8, 0xab, 0x97, 0xda, 0x6a, 0xc3, 0x87, 0x54, 0x54, 0x50, 0x13, 0x07, 0x64, 0x54,
+	0xda, 0xc6, 0x76, 0x2b, 0xc4, 0x65, 0xb5, 0xd9, 0x9d, 0x3a, 0x4b, 0xd7, 0x33, 0x9b, 0xdd, 0xb1,
+	0x4d, 0xfe, 0x00, 0x24, 0x24, 0x24, 0x84, 0x10, 0xe2, 0xc2, 0x85, 0x03, 0x52, 0x25, 0x0e, 0x20,
+	0x71, 0x41, 0x42, 0xdc, 0x00, 0xd1, 0x03, 0xa0, 0x0a, 0x2e, 0x3d, 0x59, 0xad, 0x23, 0x51, 0xa9,
+	0x02, 0x0e, 0x08, 0x89, 0x2b, 0x9a, 0x99, 0x5d, 0x7b, 0x13, 0x7f, 0xa4, 0x91, 0xd2, 0x83, 0x37,
+	0xb9, 0x39, 0x9e, 0xdf, 0xf3, 0xac, 0x9f, 0xdf, 0xf3, 0x39, 0x33, 0x1b, 0xf8, 0x6f, 0x9d, 0x5a,
+	0x76, 0xde, 0x26, 0xd5, 0x3c, 0x6a, 0x20, 0x4c, 0x9d, 0x8d, 0xbc, 0x69, 0xda, 0x1a, 0xff, 0xec,
+	0xe5, 0x1c, 0x97, 0x50, 0xa2, 0x2c, 0x18, 0xc4, 0xb8, 0xe5, 0x12, 0xdd, 0xd8, 0xcc, 0x31, 0x70,
+	0xce, 0x26, 0xd5, 0x9c, 0x0f, 0x5e, 0x38, 0x59, 0x25, 0x55, 0xc2, 0x61, 0x79, 0xf6, 0x49, 0x48,
+	0x2c, 0xfc, 0xa7, 0x47, 0x69, 0x58, 0xa1, 0xfa, 0x87, 0x04, 0xd3, 0xab, 0x2e, 0xd2, 0x29, 0x2a,
+	0xe8, 0x54, 0xdf, 0xd0, 0x3d, 0xa4, 0x54, 0x60, 0xd2, 0x20, 0xb5, 0x1a, 0xc1, 0xf3, 0xd2, 0xa2,
+	0xb4, 0x94, 0x3c, 0x9f, 0xcb, 0x0d, 0x7e, 0x68, 0x6e, 0x95, 0x23, 0xd7, 0xd8, 0x5f, 0x05, 0x44,
+	0x75, 0xcb, 0xf6, 0x56, 0x52, 0x77, 0x5a, 0xd9, 0xb1, 0xbb, 0xad, 0xac, 0xf4, 0xa8, 0x95, 0x1d,
+	0x2b, 0xf9, 0xba, 0x94, 0x75, 0x88, 0x79, 0x5b, 0xf6, 0xbc, 0xcc, 0x55, 0x9e, 0xdb, 0x5f, 0x65,
+	0x79, 0xfd, 0xf2, 0x10, 0xad, 0x4c, 0x97, 0xb2, 0x0c, 0x69, 0xd3, 0xff, 0xd1, 0x1a, 0xd6, 0x6b,
+	0x68, 0x3e, 0xb6, 0x28, 0x2d, 0x25, 0x56, 0xa6, 0x1f, 0xb5, 0xb2, 0xf0, 0x14, 0xa9, 0x59, 0x14,
+	0xd5, 0x1c, 0xba, 0x5d, 0x4a, 0x05, 0xa0, 0x2b, 0x7a, 0x0d, 0xa9, 0x5f, 0xc8, 0x90, 0x2a, 0xb8,
+	0xc4, 0x39, 0x1a, 0xe6, 0x2a, 0x05, 0x38, 0x6d, 0xba, 0xc4, 0x71, 0x90, 0xa9, 0x79, 0xc6, 0x26,
+	0xaa, 0xe9, 0x1a, 0xd9, 0x78, 0x03, 0x19, 0xd4, 0x9b, 0x1f, 0x5f, 0x8c, 0xf5, 0x91, 0x3e, 0xe9,
+	0xa3, 0xcb, 0x1c, 0x7c, 0x55, 0x60, 0xd5, 0xdb, 0x32, 0x9c, 0xbe, 0x64, 0x53, 0xe4, 0x06, 0xac,
+	0x5d, 0x32, 0xcd, 0x12, 0xaa, 0x5a, 0x04, 0x47, 0x9c, 0xbe, 0x3c, 0x24, 0x5d, 0x6e, 0xa7, 0x10,
+	0x19, 0xef, 0x2b, 0x02, 0x02, 0xc2, 0xc3, 0xeb, 0x2b, 0x19, 0x16, 0x76, 0x31, 0x75, 0xcd, 0xb5,
+	0x6a, 0xba, 0xbb, 0x7d, 0x24, 0xd8, 0x7a, 0x01, 0xe6, 0x1c, 0x61, 0xae, 0xb6, 0x3f, 0x6b, 0xb3,
+	0x4e, 0x98, 0x19, 0x4e, 0xde, 0x67, 0x32, 0xfc, 0x6b, 0x17, 0x79, 0xe5, 0xba, 0xdb, 0xb0, 0x1a,
+	0xba, 0xfd, 0x32, 0xd1, 0xed, 0x88, 0x73, 0xb7, 0x0c, 0x69, 0xcf, 0xb7, 0x56, 0xab, 0x12, 0xdd,
+	0x1e, 0xc0, 0x5a, 0xca, 0x0b, 0x51, 0xa2, 0x7e, 0x2a, 0xc3, 0x74, 0x09, 0xb1, 0x67, 0x1c, 0x91,
+	0x72, 0x76, 0x01, 0x66, 0x31, 0x6a, 0x6a, 0xbb, 0x05, 0xfb, 0x33, 0x75, 0x02, 0xa3, 0x66, 0x21,
+	0x5c, 0xf9, 0x3f, 0x97, 0xe1, 0xc4, 0x2a, 0xc1, 0x0d, 0xe4, 0xd2, 0x0a, 0x11, 0xf5, 0x2d, 0xfa,
+	0xf9, 0xb8, 0x8b, 0x2d, 0x47, 0x77, 0x11, 0xa6, 0x83, 0xf2, 0x31, 0xc4, 0xd7, 0x35, 0x0e, 0x54,
+	0xdf, 0x95, 0x21, 0x25, 0x86, 0x83, 0x51, 0xa3, 0x2b, 0x0f, 0x49, 0xbf, 0xdd, 0x0d, 0x21, 0x0b,
+	0x04, 0x84, 0x53, 0x75, 0x06, 0x26, 0x48, 0x13, 0x23, 0x77, 0x00, 0x39, 0x62, 0x51, 0xfd, 0x55,
+	0x02, 0x60, 0xc3, 0x43, 0xd4, 0xe9, 0x50, 0x3f, 0x96, 0x21, 0x25, 0x0a, 0x4b, 0xe4, 0x3d, 0xff,
+	0x2c, 0xb0, 0x4a, 0xa1, 0x85, 0x85, 0xfa, 0xc7, 0x40, 0x1a, 0xa3, 0x66, 0xb9, 0x4b, 0xd1, 0x3b,
+	0x32, 0x24, 0x45, 0x72, 0x54, 0xf4, 0x0d, 0x7b, 0x84, 0x0a, 0xef, 0x59, 0x00, 0xca, 0x7e, 0xf1,
+	0x30, 0x82, 0x12, 0x1c, 0x71, 0x80, 0xcc, 0xb8, 0x2d, 0x43, 0x82, 0x65, 0x46, 0xb4, 0xb9, 0x58,
+	0x81, 0x53, 0x86, 0xee, 0x19, 0xba, 0x89, 0xb4, 0x60, 0xaa, 0x6e, 0x58, 0xa8, 0x39, 0x68, 0x98,
+	0x9e, 0xf3, 0xc1, 0x05, 0x81, 0xbd, 0xc1, 0xa0, 0xea, 0x47, 0x32, 0x24, 0x45, 0x6a, 0x45, 0x9b,
+	0xab, 0xa7, 0x61, 0x9a, 0xe5, 0x55, 0x48, 0x64, 0xc0, 0x44, 0x83, 0x51, 0xb3, 0x12, 0x48, 0xa9,
+	0x0f, 0x25, 0x48, 0x57, 0xdc, 0x3a, 0x36, 0xa2, 0x9e, 0x57, 0xea, 0x43, 0x19, 0x80, 0x0f, 0xbb,
+	0xd1, 0x0e, 0x83, 0x8b, 0x90, 0xac, 0xd5, 0xa9, 0x4e, 0xd9, 0x6e, 0xc0, 0x32, 0x79, 0x0c, 0xa4,
+	0x57, 0xfe, 0xdd, 0x6e, 0x65, 0xe1, 0x55, 0xff, 0xeb, 0x62, 0x61, 0x6f, 0x75, 0x0e, 0x04, 0x8a,
+	0xe6, 0xe0, 0x8c, 0x9b, 0x78, 0xfc, 0x8c, 0xfb, 0x9b, 0x0f, 0x7e, 0xb5, 0x1a, 0xc2, 0xf4, 0x2a,
+	0x5e, 0x25, 0x76, 0xbd, 0x86, 0x23, 0x4b, 0x77, 0x1e, 0x92, 0x06, 0xb7, 0x70, 0xe8, 0x86, 0x55,
+	0x40, 0xb8, 0xc0, 0x12, 0x4c, 0x19, 0x82, 0x9b, 0xf9, 0x89, 0xbe, 0xe0, 0x60, 0x59, 0x39, 0x07,
+	0x29, 0x5c, 0xb7, 0x6d, 0x2d, 0x80, 0x4f, 0x2e, 0x4a, 0x4b, 0xf1, 0x1e, 0x78, 0x92, 0x61, 0x7c,
+	0xb6, 0xd5, 0x9f, 0x64, 0x98, 0xed, 0x30, 0x7f, 0x44, 0xb6, 0x28, 0x21, 0x42, 0xc7, 0x0f, 0x9d,
+	0xd0, 0xef, 0x64, 0x98, 0xee, 0x10, 0x1a, 0xed, 0xc2, 0xf1, 0x44, 0x79, 0xfc, 0x2b, 0xcc, 0x63,
+	0x11, 0x9b, 0xe8, 0xcd, 0xc8, 0xf2, 0x78, 0x16, 0xc0, 0x62, 0x06, 0x0e, 0x2b, 0x08, 0x09, 0x8e,
+	0x78, 0xf2, 0xf5, 0xe0, 0x97, 0xce, 0xcc, 0x7c, 0xcc, 0x79, 0x88, 0xf3, 0x3d, 0x3d, 0x72, 0xe2,
+	0x60, 0x3d, 0x52, 0x7d, 0x2b, 0x26, 0x66, 0xef, 0x63, 0x4e, 0x0f, 0x8d, 0x53, 0xe5, 0xfc, 0xa0,
+	0xb9, 0x63, 0x92, 0xcd, 0x1d, 0xfd, 0xe7, 0x8c, 0x9f, 0x83, 0x89, 0xee, 0xd8, 0x11, 0x87, 0x17,
+	0xdc, 0x5f, 0xca, 0x00, 0xa2, 0x64, 0x30, 0x92, 0x47, 0x87, 0xd4, 0xff, 0x43, 0x82, 0x05, 0xcc,
+	0x30, 0x4e, 0xe3, 0x0c, 0xf0, 0xf8, 0x7b, 0x6c, 0x46, 0x3c, 0x57, 0xb9, 0x55, 0x47, 0xee, 0xf6,
+	0x80, 0xea, 0xcc, 0x1f, 0xba, 0xce, 0x00, 0xea, 0x27, 0x32, 0xc4, 0x59, 0x7c, 0x46, 0x98, 0xb7,
+	0xc3, 0xd8, 0x8f, 0x7f, 0x20, 0x07, 0x37, 0xa0, 0x65, 0xb4, 0x55, 0x47, 0xd8, 0x18, 0xad, 0x01,
+	0xd5, 0xf3, 0x7f, 0xf4, 0xd0, 0x01, 0x35, 0x00, 0x1d, 0xe0, 0x40, 0xe7, 0x37, 0x49, 0xdc, 0x93,
+	0x1e, 0x0d, 0x52, 0xd4, 0xdf, 0x25, 0x48, 0xf3, 0xda, 0x7d, 0x44, 0xec, 0xdd, 0x91, 0x20, 0xe3,
+	0x3f, 0x81, 0x1f, 0x69, 0xae, 0x6e, 0xea, 0xb8, 0x8a, 0xc2, 0x8f, 0x62, 0x85, 0xdb, 0xc2, 0x1e,
+	0xd5, 0x99, 0x5e, 0xcb, 0xe4, 0x2c, 0x4c, 0x88, 0xc2, 0x5d, 0xf4, 0xbf, 0xee, 0x2d, 0xdc, 0x81,
+	0x40, 0xd1, 0x54, 0x56, 0x21, 0x6d, 0x22, 0xcf, 0x70, 0x2d, 0x87, 0x12, 0x97, 0x29, 0x90, 0x79,
+	0xe5, 0xcf, 0xb4, 0x5b, 0xd9, 0x54, 0xa1, 0xb3, 0xd0, 0xa3, 0x22, 0xd5, 0x15, 0x2a, 0x9a, 0x7b,
+	0x9b, 0x47, 0xec, 0x80, 0xcd, 0xe3, 0x6b, 0x19, 0xe6, 0x4a, 0xa8, 0x81, 0x5c, 0x0f, 0x85, 0xcd,
+	0x7c, 0x42, 0xbe, 0x7d, 0x0d, 0x64, 0xcf, 0xf0, 0x5d, 0x7b, 0xe1, 0x31, 0x5c, 0x3b, 0x80, 0xf8,
+	0x3d, 0xda, 0x65, 0xcf, 0x60, 0x29, 0x8b, 0x5c, 0x97, 0x0c, 0x4c, 0x59, 0xbe, 0xa8, 0x5c, 0x85,
+	0xb8, 0xb7, 0x65, 0x7b, 0x54, 0xa7, 0xc8, 0xef, 0x0e, 0xcb, 0xed, 0x56, 0x36, 0x5e, 0x5e, 0xbf,
+	0x5c, 0xae, 0x5c, 0xaa, 0xac, 0xed, 0x16, 0xfa, 0xb3, 0x95, 0x3d, 0xe5, 0x22, 0x53, 0x37, 0xe8,
+	0x05, 0x15, 0x13, 0xec, 0x21, 0xec, 0x59, 0xd4, 0x6a, 0x20, 0xb5, 0xd4, 0x51, 0xa2, 0x7e, 0x2b,
+	0x81, 0xf2, 0x92, 0x85, 0x2d, 0x6f, 0x73, 0x94, 0xd9, 0x53, 0x7f, 0x90, 0x60, 0xa1, 0xd7, 0x8c,
+	0x12, 0xb1, 0xed, 0x0d, 0xdd, 0xb8, 0x35, 0x72, 0xe6, 0xbc, 0xdd, 0x99, 0x88, 0x2a, 0xdb, 0x0e,
+	0x1a, 0xa9, 0xce, 0x4e, 0xb7, 0x9d, 0xa1, 0x67, 0xc1, 0x71, 0x06, 0xd8, 0xdd, 0xa4, 0x26, 0x86,
+	0x35, 0xa9, 0xfb, 0x92, 0x18, 0x71, 0x46, 0x98, 0x88, 0xd8, 0x70, 0x22, 0xd4, 0x07, 0x12, 0x24,
+	0xc4, 0x31, 0x71, 0x74, 0x6d, 0xfc, 0x50, 0x06, 0xf0, 0xaf, 0x44, 0x22, 0x6b, 0xa4, 0x72, 0x1e,
+	0xd2, 0xfc, 0x3e, 0x64, 0x9f, 0x14, 0x48, 0x62, 0xd4, 0xac, 0x04, 0xc4, 0x3c, 0x92, 0x60, 0xc6,
+	0x9f, 0x4d, 0x59, 0x4f, 0xf3, 0xa8, 0x65, 0x78, 0x91, 0xbd, 0x10, 0x79, 0x3f, 0x06, 0xa7, 0xaf,
+	0x63, 0x4f, 0xbf, 0x89, 0xae, 0x3b, 0x1e, 0x72, 0x69, 0x77, 0x48, 0x18, 0x1d, 0x93, 0x5f, 0x84,
+	0x39, 0xc7, 0x45, 0x0d, 0x8b, 0xd4, 0x3d, 0xad, 0x3b, 0xc8, 0x0c, 0xb0, 0x5d, 0x09, 0xa0, 0x21,
+	0x4b, 0x9f, 0x11, 0xb7, 0x66, 0x21, 0xd9, 0xc1, 0x97, 0xd1, 0x21, 0xb1, 0x33, 0x30, 0x71, 0x93,
+	0xb8, 0x86, 0xe8, 0xfb, 0xbd, 0x87, 0x70, 0x62, 0x51, 0x39, 0x07, 0x29, 0xfe, 0x41, 0xc3, 0x84,
+	0x5a, 0x06, 0xe2, 0x27, 0x76, 0x7d, 0x22, 0x90, 0x63, 0xae, 0x70, 0x88, 0xfa, 0x4d, 0xc7, 0x29,
+	0x05, 0x64, 0x23, 0x8a, 0x46, 0xd1, 0x29, 0xcf, 0x41, 0x42, 0xbc, 0xf9, 0xd2, 0x1d, 0x21, 0x17,
+	0xd8, 0x60, 0x24, 0xde, 0x72, 0xe9, 0x19, 0x20, 0xe3, 0x02, 0x5c, 0x34, 0x95, 0x57, 0x60, 0xc6,
+	0x17, 0xf4, 0xdf, 0x0e, 0xe8, 0x5c, 0x60, 0x2d, 0xb6, 0x5b, 0xd9, 0x69, 0x21, 0x2f, 0x3a, 0x77,
+	0x8f, 0x96, 0x69, 0x27, 0xbc, 0x6a, 0x2a, 0x2a, 0x8c, 0xf3, 0x34, 0xe8, 0xdf, 0xcf, 0xf8, 0x5a,
+	0xd7, 0x8b, 0x93, 0x07, 0xf1, 0xe2, 0xd4, 0xfe, 0x5e, 0xfc, 0x71, 0x1c, 0x16, 0xc2, 0xa9, 0xc5,
+	0xf2, 0xcd, 0x73, 0x74, 0x03, 0xad, 0x61, 0xea, 0x6e, 0x1f, 0x7b, 0xf2, 0xd0, 0x3d, 0x79, 0x11,
+	0x92, 0x9d, 0x3a, 0x60, 0x99, 0xdc, 0x9f, 0xfe, 0xbe, 0xe5, 0x9a, 0xff, 0x75, 0xef, 0xbe, 0x25,
+	0x10, 0x28, 0x9a, 0xdd, 0x40, 0x98, 0x1a, 0x16, 0x08, 0xcf, 0xc3, 0xec, 0x4d, 0xdd, 0xb2, 0x91,
+	0xa9, 0x35, 0x74, 0xdb, 0x32, 0xf9, 0xa6, 0x67, 0x3e, 0xde, 0x57, 0x62, 0x46, 0x00, 0x6f, 0x74,
+	0x70, 0x4c, 0xb8, 0x2b, 0xa5, 0xf1, 0x0d, 0x84, 0x37, 0x9f, 0xe8, 0x6b, 0xd2, 0x4c, 0x17, 0xb8,
+	0xc6, 0x71, 0xea, 0xf7, 0xb1, 0x20, 0x9e, 0x44, 0x55, 0x38, 0x8e, 0xa7, 0x11, 0xad, 0x0c, 0x2b,
+	0xff, 0xbb, 0xf3, 0x20, 0x33, 0x76, 0xa7, 0x9d, 0x91, 0xee, 0xb6, 0x33, 0xd2, 0xbd, 0x76, 0x46,
+	0xba, 0xdf, 0xce, 0x48, 0xef, 0xed, 0x64, 0xc6, 0xee, 0xee, 0x64, 0xc6, 0xee, 0xed, 0x64, 0xc6,
+	0x5e, 0x9f, 0xf2, 0x59, 0xdd, 0x98, 0xe4, 0xff, 0x31, 0xb0, 0xfc, 0x4f, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x9e, 0x47, 0x80, 0x8f, 0xa7, 0x30, 0x00, 0x00,
 }

@@ -326,6 +326,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterDatabaseOwnerNode{}):         "alter database owner",
 	reflect.TypeOf(&alterDatabaseAddRegionNode{}):     "alter database add region",
 	reflect.TypeOf(&alterDatabasePrimaryRegionNode{}): "alter database primary region",
+	reflect.TypeOf(&alterDatabaseSurvivalGoalNode{}):  "alter database survive",
 	reflect.TypeOf(&alterIndexNode{}):                 "alter index",
 	reflect.TypeOf(&alterSequenceNode{}):              "alter sequence",
 	reflect.TypeOf(&alterSchemaNode{}):                "alter schema",

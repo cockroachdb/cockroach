@@ -262,6 +262,11 @@ func (p *planner) AlterDatabaseDropRegion(
 	return nil, unimplemented.New("alter database drop region", "implementation pending")
 }
 
+type alterDatabasePrimaryRegionNode struct {
+	n    *tree.AlterDatabasePrimaryRegion
+	desc *dbdesc.Mutable
+}
+
 // AlterDatabasePrimaryRegion transforms a tree.AlterDatabasePrimaryRegion into a plan node.
 func (p *planner) AlterDatabasePrimaryRegion(
 	ctx context.Context, n *tree.AlterDatabasePrimaryRegion,
@@ -423,8 +428,8 @@ func (n *alterDatabasePrimaryRegionNode) Values() tree.Datums          { return 
 func (n *alterDatabasePrimaryRegionNode) Close(context.Context)        {}
 func (n *alterDatabasePrimaryRegionNode) ReadingOwnWrites()            {}
 
-type alterDatabasePrimaryRegionNode struct {
-	n    *tree.AlterDatabasePrimaryRegion
+type alterDatabaseSurvivalGoalNode struct {
+	n    *tree.AlterDatabaseSurvivalGoal
 	desc *dbdesc.Mutable
 }
 
@@ -439,5 +444,93 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 	); err != nil {
 		return nil, err
 	}
-	return nil, unimplemented.New("alter database survive", "implementation pending")
+	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseSurvivalGoalNode{n: n, desc: dbDesc}, nil
 }
+
+func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
+	// To change the survival goal, the user has to have CREATEDB privileges, or be an admin user.
+	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+		return err
+	}
+
+	// If the database is not a multi-region database, the survival goal cannot be changed.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must have associated regions before a survival goal can be set",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.Name.String(),
+		)
+	}
+
+	// If we're changing to survive a region failure, validate that we have enough regions
+	// in the database.
+	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
+		regions, err := n.desc.Regions()
+		if err != nil {
+			return err
+		}
+		if len(regions) < minNumRegionsForSurviveRegionGoal {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.InvalidName,
+					"at least %d regions are required for surviving a region failure",
+					minNumRegionsForSurviveRegionGoal,
+				),
+				"you must add additional regions to the database using "+
+					"ALTER DATABASE %s ADD REGION <region_name>",
+				n.n.Name.String(),
+			)
+		}
+	}
+
+	// Update the survival goal in the database descriptor
+	survivalGoal, err := translateSurvivalGoal(n.n.SurvivalGoal)
+	if err != nil {
+		return err
+	}
+	n.desc.RegionConfig.SurvivalGoal = survivalGoal
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Update the database's zone configuration.
+	if err := params.p.applyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		tree.Name(n.desc.Name),
+		*n.desc.RegionConfig); err != nil {
+		return err
+	}
+
+	// Update all REGIONAL BY TABLE tables' zone configurations. This is required as replica
+	// placement for REGIONAL BY TABLE tables is dependant on the survival goal.
+	if err := params.p.updateZoneConfigsForAllTables(params.ctx, n.desc); err != nil {
+		return err
+	}
+
+	// Log Alter Database Survival Goal event. This is an auditable log event and is recorded
+	// in the same transaction as the database descriptor, and zone configuration updates.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabaseSurvivalGoal{
+			DatabaseName: n.desc.GetName(),
+			SurvivalGoal: survivalGoal.String(),
+		},
+	)
+}
+
+func (n *alterDatabaseSurvivalGoalNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseSurvivalGoalNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseSurvivalGoalNode) Close(context.Context)        {}
