@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,8 @@ import (
 func TestTestServerArgsForTransientCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	stickyEnginesRegistry := server.NewStickyInMemEnginesRegistry()
 
 	testCases := []struct {
 		nodeID            roachpb.NodeID
@@ -50,6 +53,11 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
 				EnableDemoLoginEndpoint: true,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: stickyEnginesRegistry,
+					},
+				},
 			},
 		},
 		{
@@ -68,6 +76,11 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				NoAutoInitializeCluster: true,
 				TenantAddr:              new(string),
 				EnableDemoLoginEndpoint: true,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyEngineRegistry: stickyEnginesRegistry,
+					},
+				},
 			},
 		},
 	}
@@ -78,7 +91,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
 			demoCtx.cacheSize = tc.cacheSize
 
-			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567)
+			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 

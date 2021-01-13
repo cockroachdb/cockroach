@@ -3571,7 +3571,8 @@ func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
 func TestTenantID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defer server.CloseAllStickyInMemEngines()
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 	ctx := context.Background()
 	// Create a config with a sticky-in-mem engine so we can restart the server.
 	// We also configure the settings to be as robust as possible to problems
@@ -3588,6 +3589,11 @@ func TestTenantID(t *testing.T) {
 			{
 				InMemory:               true,
 				StickyInMemoryEngineID: "1",
+			},
+		},
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				StickyEngineRegistry: stickyEngineRegistry,
 			},
 		},
 	}

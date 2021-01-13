@@ -12,13 +12,16 @@ package testcluster
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestManualReplication(t *testing.T) {
@@ -259,4 +263,71 @@ func TestStopServer(t *testing.T) {
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+
+	const numServers int = 3
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: "TestRestart" + strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEngineRegistry,
+				},
+			},
+		}
+	}
+
+	ctx := context.Background()
+	tc := StartTestCluster(t, numServers,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationAuto,
+			ServerArgsPerNode: stickyServerArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	ids := make([]roachpb.ReplicationTarget, numServers)
+	for i := range tc.Servers {
+		ids[i] = tc.Target(i)
+	}
+
+	incArgs := &roachpb.IncrementRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: roachpb.Key("b"),
+		},
+		Increment: 9,
+	}
+	if _, pErr := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).DB().NonTransactionalSender(), incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
+
+	// First try to restart a single server.
+	tc.StopServer(1)
+	require.NoError(t, tc.RestartServer(1))
+	require.Equal(t, ids[1], tc.Target(1))
+	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
+
+	// Now restart the whole cluster.
+	require.NoError(t, tc.Restart())
+
+	// Validates that the NodeID and StoreID remain the same after a restart.
+	for i := range tc.Servers {
+		require.Equal(t, ids[i], tc.Target(i))
+	}
+
+	// Verify we can still read data.
+	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
 }
