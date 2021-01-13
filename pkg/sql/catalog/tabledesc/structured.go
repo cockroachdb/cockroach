@@ -362,7 +362,7 @@ func (desc *wrapper) AllNonDropColumns() []descpb.ColumnDescriptor {
 func allocateIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) {
 	segments := make([]string, 0, len(idx.ColumnNames)+2)
 	segments = append(segments, tableDesc.Name)
-	segments = append(segments, idx.ColumnNames...)
+	segments = append(segments, idx.ColumnNames[idx.ExplicitColumnStartIdx():]...)
 	if idx.Unique {
 		segments = append(segments, "key")
 	} else {
