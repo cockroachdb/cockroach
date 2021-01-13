@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -666,7 +667,7 @@ func (s *Server) newConnExecutorWithTxn(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	txn *kv.Txn,
-	tcModifier descs.ModifiedCollectionCopier,
+	syntheticDescs []catalog.Descriptor,
 	appStats *appStats,
 ) *connExecutor {
 	ex := s.newConnExecutor(ctx, sd, sdDefaults, stmtBuf, clientComm, memMetrics, srvMetrics, appStats)
@@ -700,9 +701,7 @@ func (s *Server) newConnExecutorWithTxn(
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
-	if tcModifier != nil {
-		tcModifier.CopyModifiedObjects(&ex.extraTxnState.descCollection)
-	}
+	ex.extraTxnState.descCollection.SetSyntheticDescriptors(syntheticDescs)
 	return ex
 }
 
