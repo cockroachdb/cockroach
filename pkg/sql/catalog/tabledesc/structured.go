@@ -239,6 +239,11 @@ func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
+// IsPartitionAllBy returns whether the table has a PARTITION ALL BY clause.
+func (desc *wrapper) IsPartitionAllBy() bool {
+	return desc.PartitionAllBy
+}
+
 // GetParentSchemaID returns the ParentSchemaID if the descriptor has
 // one. If the descriptor was created before the field was added, then the
 // descriptor belongs to a table under the `public` physical schema. The static
