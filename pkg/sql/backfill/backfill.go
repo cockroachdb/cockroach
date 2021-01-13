@@ -167,7 +167,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	if err != nil {
 		return err
 	}
-	computedExprs, err := schemaexpr.MakeComputedExprs(
+	computedExprs, _, err := schemaexpr.MakeComputedExprs(
 		ctx,
 		cb.added,
 		desc,
@@ -210,7 +210,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		if err != nil {
 			return err
 		}
-		computedExprs, err = schemaexpr.MakeComputedExprs(
+		computedExprs, _, err = schemaexpr.MakeComputedExprs(
 			ctx,
 			cb.added,
 			desc,
@@ -395,11 +395,22 @@ type IndexBackfiller struct {
 	types   []*types.T
 	rowVals tree.Datums
 	evalCtx *tree.EvalContext
-	cols    []descpb.ColumnDescriptor
+
+	// cols are all of the writable (PUBLIC and DELETE_AND_WRITE_ONLY) columns in
+	// the descriptor.
+	cols []descpb.ColumnDescriptor
+
+	// addedCols are the columns in DELETE_AND_WRITE_ONLY being added as part of
+	// this backfill.
+	addedCols []descpb.ColumnDescriptor
+
+	// Map of columns which need to be evaluated to their expressions.
+	colExprs map[descpb.ColumnID]tree.TypedExpr
 
 	// predicates is a map of indexes to partial index predicate expressions. It
 	// includes entries for partial indexes only.
 	predicates map[descpb.IndexID]tree.TypedExpr
+
 	// indexesToEncode is a list of indexes to encode entries for a given row.
 	// It is a field of IndexBackfiller to avoid allocating a slice for each row
 	// backfilled.
@@ -436,12 +447,12 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	// Initialize ib.added.
 	valNeededForCol := ib.initIndexes(desc)
 
-	// Convert any partial index predicate strings into expressions.
-	predicates, predicateRefColIDs, err := schemaexpr.MakePartialIndexExprs(
+	predicates, colExprs, referencedColumns, err := constructExprs(
 		ctx,
+		desc,
 		ib.added,
 		ib.cols,
-		desc,
+		ib.addedCols,
 		evalCtx,
 		semaCtx,
 	)
@@ -451,11 +462,79 @@ func (ib *IndexBackfiller) InitForLocalUse(
 
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
-	predicateRefColIDs.ForEach(func(col descpb.ColumnID) {
+	referencedColumns.ForEach(func(col descpb.ColumnID) {
 		valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
+	return ib.init(evalCtx, predicates, colExprs, valNeededForCol, desc, mon)
+}
+
+func constructExprs(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	addedIndexes []*descpb.IndexDescriptor,
+	cols, addedCols []descpb.ColumnDescriptor,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+) (
+	predicates map[descpb.IndexID]tree.TypedExpr,
+	colExprs map[descpb.ColumnID]tree.TypedExpr,
+	referencedColumns catalog.TableColSet,
+	_ error,
+) {
+	// Convert any partial index predicate strings into expressions.
+	predicates, predicateRefColIDs, err := schemaexpr.MakePartialIndexExprs(
+		ctx,
+		addedIndexes,
+		cols,
+		desc,
+		evalCtx,
+		semaCtx,
+	)
+	if err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
+
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(
+		ctx, addedCols, &transform.ExprTransformContext{}, evalCtx, semaCtx,
+	)
+	if err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
+	computedExprs, computedExprRefColIDs, err := schemaexpr.MakeComputedExprs(
+		ctx,
+		addedCols,
+		desc,
+		// TODO(ajwerner): Rethink this table name.
+		tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
+		evalCtx,
+		semaCtx)
+	if err != nil {
+		return nil, nil, catalog.TableColSet{}, err
+	}
+	if len(addedCols) > 0 {
+		colExprs = make(map[descpb.ColumnID]tree.TypedExpr, len(addedCols))
+	}
+	for i := range addedCols {
+		col := &addedCols[i]
+		if col.IsComputed() {
+			colExprs[col.ID] = computedExprs[i]
+		} else if col.DefaultExpr != nil &&
+			// TODO(ajwerner): Decide whether this defensive empty string check
+			// is necessary.
+			*col.DefaultExpr != "" {
+			colExprs[col.ID] = defaultExprs[i]
+		}
+	}
+	for i, expr := range computedExprs {
+		if _, exists := colExprs[addedCols[i].ID]; !exists {
+			colExprs[addedCols[i].ID] = expr
+		}
+	}
+
+	referencedColumns.UnionWith(predicateRefColIDs)
+	referencedColumns.UnionWith(computedExprRefColIDs)
+	return predicates, colExprs, referencedColumns, nil
 }
 
 // InitForDistributedUse initializes an IndexBackfiller for use as part of a
@@ -474,14 +553,17 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
-	var predicateRefColIDs catalog.TableColSet
+	var colExprs map[descpb.ColumnID]tree.TypedExpr
+	var referencedColumns catalog.TableColSet
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
 		// Hydrate all the types present in the table.
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), resolver); err != nil {
+		if err = typedesc.HydrateTypesInTableDescriptor(
+			ctx, desc.TableDesc(), resolver,
+		); err != nil {
 			return err
 		}
 		// Set up a SemaContext to type check the default and computed expressions.
@@ -489,14 +571,16 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		semaCtx.TypeResolver = resolver
 
 		// Convert any partial index predicate strings into expressions.
-		var err error
-		predicates, predicateRefColIDs, err =
-			schemaexpr.MakePartialIndexExprs(ctx, ib.added, ib.cols, desc, evalCtx, &semaCtx)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		predicates, colExprs, referencedColumns, err = constructExprs(
+			ctx,
+			desc,
+			ib.added,
+			ib.cols,
+			ib.addedCols,
+			evalCtx,
+			&semaCtx,
+		)
+		return err
 	}); err != nil {
 		return err
 	}
@@ -507,11 +591,11 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	// Add the columns referenced in the predicate to valNeededForCol so that
 	// columns necessary to evaluate the predicate expression are fetched.
-	predicateRefColIDs.ForEach(func(col descpb.ColumnID) {
+	referencedColumns.ForEach(func(col descpb.ColumnID) {
 		valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	return ib.init(evalCtx, predicates, valNeededForCol, desc, mon)
+	return ib.init(evalCtx, predicates, colExprs, valNeededForCol, desc, mon)
 }
 
 // Close releases the resources used by the IndexBackfiller.
@@ -545,7 +629,7 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
-	ib.cols = desc.Columns
+	ib.cols = append([]descpb.ColumnDescriptor(nil), desc.Columns...)
 
 	// If there are ongoing mutations, add columns that are being added and in
 	// the DELETE_AND_WRITE_ONLY state.
@@ -557,6 +641,7 @@ func (ib *IndexBackfiller) initCols(desc *tabledesc.Immutable) {
 				m.Direction == descpb.DescriptorMutation_ADD &&
 				m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 				ib.cols = append(ib.cols, *column)
+				ib.addedCols = append(ib.addedCols, *column)
 			}
 		}
 	}
@@ -600,12 +685,14 @@ func (ib *IndexBackfiller) initIndexes(desc *tabledesc.Immutable) util.FastIntSe
 func (ib *IndexBackfiller) init(
 	evalCtx *tree.EvalContext,
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
+	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	valNeededForCol util.FastIntSet,
 	desc *tabledesc.Immutable,
 	mon *mon.BytesMonitor,
 ) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
+	ib.colExprs = colExprs
 
 	// Initialize a list of index descriptors to encode entries for. If there
 	// are no partial indexes, the list is equivalent to the list of indexes
@@ -723,6 +810,24 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 
 		iv.CurSourceRow = ib.rowVals
+		if len(ib.colExprs) > 0 {
+			for i := range ib.addedCols {
+				colID := ib.addedCols[i].ID
+				texpr, ok := ib.colExprs[colID]
+				if !ok {
+					continue
+				}
+				val, err := texpr.Eval(ib.evalCtx)
+				if err != nil {
+					return nil, nil, 0, err
+				}
+				colIdx, ok := ib.colIdxMap.Get(colID)
+				if !ok {
+					return nil, nil, 0, errors.AssertionFailedf("failed to find index for column %d in %d", colID, tableDesc.GetID())
+				}
+				ib.rowVals[colIdx] = val
+			}
+		}
 
 		// If there are any partial indexes being added, make a list of the
 		// indexes that the current row should be added to.
