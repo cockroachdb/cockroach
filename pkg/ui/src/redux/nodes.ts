@@ -13,9 +13,9 @@ import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
+import { util } from "@cockroachlabs/admin-ui-components";
 import { Pick } from "src/util/pick";
 import { NoConnection } from "src/views/reports/containers/network";
-import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
 /**
@@ -26,6 +26,9 @@ import { nullOfReturnType } from "src/util/types";
 export import LivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import { cockroach } from "src/js/protos";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import INodeStatus = cockroach.server.status.statuspb.INodeStatus;
+
+const { MetricConstants, BytesUsed } = util;
 
 /**
  * livenessNomenclature resolves a mismatch between the terms used for liveness
