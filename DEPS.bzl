@@ -3003,13 +3003,6 @@ def go_deps():
         version = "v0.0.0-20190308202827-9d24e82272b4",
     )
     go_repository(
-        name = "org_golang_x_tools",
-        build_file_proto_mode = "disable_global",
-        importpath = "golang.org/x/tools",
-        sum = "h1:5xKxdl/RhlelmSPaxyVeq5PYSmJ4H14yeQT58qP1F6o=",
-        version = "v0.0.0-20210104081019-d8d6ddbec6ee",
-    )
-    go_repository(
         name = "org_golang_x_xerrors",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/xerrors",
