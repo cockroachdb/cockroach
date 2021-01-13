@@ -439,6 +439,7 @@ go_test(
         "run_control_test.go",
         "scan_test.go",
         "scatter_test.go",
+        "schema_changer_helpers_test.go",
         "schema_changer_test.go",
         "scrub_test.go",
         "sequence_test.go",
@@ -495,6 +496,7 @@ go_test(
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
+        "//pkg/sql/backfill",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
@@ -586,6 +588,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@org_golang_google_protobuf//proto",
         "@org_golang_x_sync//errgroup",
     ],
 )
