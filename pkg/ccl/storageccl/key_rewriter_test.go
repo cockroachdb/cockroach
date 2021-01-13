@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrefixRewriter(t *testing.T) {
@@ -73,7 +75,7 @@ func TestKeyRewriter(t *testing.T) {
 
 	const notSpan = false
 
-	kr, err := MakeKeyRewriterFromRekeys(rekeys)
+	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +122,7 @@ func TestKeyRewriter(t *testing.T) {
 		desc.ID = oldID + 10
 		desc2 := tabledesc.NewCreatedMutable(desc.TableDescriptor)
 		desc2.ID += 10
-		newKr, err := MakeKeyRewriterFromRekeys([]roachpb.ImportRequest_TableRekey{
+		newKr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, []roachpb.ImportRequest_TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			{OldID: uint32(desc.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
 		})
@@ -141,9 +143,55 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 		if descpb.ID(id) != oldID+10 {
-			t.Fatalf("got %d expected %d", id, desc.ID+1)
+			t.Fatalf("got %d expected %d", id, oldID+10)
 		}
 	})
+
+	t.Run("tenants", func(t *testing.T) {
+		testTenantRekey := func(srcTenant, destTenant roachpb.TenantID) {
+			desc.ID = oldID + 10
+			srcCodec := keys.MakeSQLCodec(srcTenant)
+			destCodec := keys.MakeSQLCodec(destTenant)
+			newKr, err := MakeKeyRewriterFromRekeys(destCodec, []roachpb.ImportRequest_TableRekey{
+				{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
+			})
+			require.NoError(t, err)
+
+			key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable, desc.GetPrimaryIndexID())
+			newKey, ok, err := newKr.RewriteKey(key, notSpan)
+			require.NoError(t, err)
+			if !ok {
+				t.Fatalf("expected rewrite")
+			}
+			noTenantKey, tenantID, err := keys.DecodeTenantPrefix(newKey)
+			require.NoError(t, err)
+			require.Equal(t, destTenant, tenantID)
+			_, id, err := encoding.DecodeUvarintAscending(noTenantKey)
+			require.NoError(t, err)
+			require.Equal(t, oldID+10, descpb.ID(id))
+		}
+
+		systemTenant := roachpb.SystemTenantID
+		tenant3 := roachpb.MakeTenantID(3)
+		tenant4 := roachpb.MakeTenantID(4)
+
+		tcs := []struct {
+			from, to roachpb.TenantID
+		}{
+			{from: systemTenant, to: tenant3},
+			{from: tenant3, to: tenant3},
+			{from: tenant3, to: tenant4},
+			// TODO: Restoring to the system tenant is currently special cased.
+			// {from: tenant3, to: systemTenant},
+		}
+
+		for _, tc := range tcs {
+			t.Run(fmt.Sprintf("from-tenant-%v-to-%v", tc.from, tc.to), func(t *testing.T) {
+				testTenantRekey(tc.from, tc.to)
+			})
+		}
+	})
+
 }
 
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
