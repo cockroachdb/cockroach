@@ -274,7 +274,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		} else {
 			// If the request is a write or a consistent read, it requires the
 			// range lease or permission to serve via follower reads.
-			if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			if status, pErr = r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp); pErr != nil {
 				if nErr := r.canServeFollowerRead(ctx, ba, pErr); nErr != nil {
 					return nil, nErr
 				}
