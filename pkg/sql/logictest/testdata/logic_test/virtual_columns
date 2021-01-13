@@ -132,3 +132,24 @@ SELECT * FROM t_idx
 ----
 1  1  2
 5  2  7
+
+subtest create_index_on_virtual_column
+
+statement ok
+CREATE TABLE t_create_idx (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (a+b) VIRTUAL
+)
+
+statement ok
+INSERT INTO t_create_idx VALUES (1, 1), (5, 2);
+
+statement ok
+CREATE INDEX t_create_index_v_idx ON t_create_idx(v);
+
+query I rowsort
+SELECT v FROM t_create_idx@t_create_index_v_idx
+----
+2
+7

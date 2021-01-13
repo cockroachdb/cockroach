@@ -192,7 +192,7 @@ func MakeComputedExprs(
 	tn *tree.TableName,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-) ([]tree.TypedExpr, error) {
+) (_ []tree.TypedExpr, refColIDs catalog.TableColSet, _ error) {
 	// Check to see if any of the columns have computed expressions. If there
 	// are none, we don't bother with constructing the map as the expressions
 	// are all NULL.
@@ -204,7 +204,7 @@ func MakeComputedExprs(
 		}
 	}
 	if !haveComputed {
-		return nil, nil
+		return nil, catalog.TableColSet{}, nil
 	}
 
 	// Build the computed expressions map from the parsed statement.
@@ -219,7 +219,7 @@ func MakeComputedExprs(
 
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return nil, err
+		return nil, catalog.TableColSet{}, err
 	}
 
 	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(tableDesc.GetPublicColumns()))
@@ -236,19 +236,19 @@ func MakeComputedExprs(
 		}
 		expr, err := nr.resolveNames(exprs[compExprIdx])
 		if err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
 		if err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, err
+			return nil, catalog.TableColSet{}, err
 		}
 		computedExprs = append(computedExprs, typedExpr)
 		compExprIdx++
 		nr.addColumn(col)
 	}
-	return computedExprs, nil
+	return computedExprs, catalog.TableColSet{}, nil
 }
