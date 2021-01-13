@@ -207,6 +207,15 @@ type Collection struct {
 	// hydratedTables is node-level cache of table descriptors which utlize
 	// user-defined types.
 	hydratedTables *hydratedtables.Cache
+
+	// syntheticDescriptors contains in-memory descriptors which override all
+	// other matching descriptors during immutable descriptor resolution (by name
+	// or by ID), but should not be written to disk. These support internal
+	// queries which need to use a special modified descriptor (e.g. validating
+	// non-public schema elements during a schema change). Attempting to resolve
+	// a mutable descriptor by name or ID when a matching synthetic descriptor
+	// exists is illegal.
+	syntheticDescriptors []catalog.Descriptor
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -349,6 +358,13 @@ func (tc *Collection) getDatabaseByName(
 	}
 
 	getDatabaseByName := func() (found bool, _ catalog.Descriptor, err error) {
+		if found, sd := tc.getSyntheticDescriptorByName(
+			keys.RootNamespaceID, keys.RootNamespaceID, name); found {
+			if mutable {
+				return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+			}
+			return true, sd, nil
+		}
 		if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 			keys.RootNamespaceID, keys.RootNamespaceID, name,
 		); refuseFurtherLookup {
@@ -439,6 +455,12 @@ func (tc *Collection) getObjectByName(
 	}
 	schemaID := resolvedSchema.ID
 
+	if found, sd := tc.getSyntheticDescriptorByName(dbID, schemaID, objectName); found {
+		if mutable {
+			return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+		}
+		return true, sd, nil
+	}
 	if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 		dbID, schemaID, objectName,
 	); refuseFurtherLookup {
@@ -621,6 +643,13 @@ func (tc *Collection) getUserDefinedSchemaByName(
 	mutable bool,
 ) (catalog.SchemaDescriptor, error) {
 	getSchemaByName := func() (found bool, _ catalog.Descriptor, err error) {
+		if sdFound, sd := tc.getSyntheticDescriptorByName(
+			dbID, keys.RootNamespaceID, schemaName); sdFound {
+			if mutable {
+				return false, nil, newMutableSyntheticDescriptorAssertionError(sd.GetID())
+			}
+			return true, sd, nil
+		}
 		if refuseFurtherLookup, desc := tc.getUncommittedDescriptor(
 			dbID, keys.RootNamespaceID, schemaName,
 		); refuseFurtherLookup {
@@ -862,6 +891,9 @@ func (tc *Collection) getDescriptorVersionByID(
 		return desc, nil
 	}
 
+	if found, sd := tc.getSyntheticDescriptorByID(id); found {
+		return sd, nil
+	}
 	for _, ud := range tc.uncommittedDescriptors {
 		if immut := ud.immutable; immut.GetID() == id {
 			log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
@@ -929,6 +961,9 @@ func (tc *Collection) GetMutableDescriptorByID(
 ) (catalog.MutableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable descriptor for id %d", id)
 
+	if found, _ := tc.getSyntheticDescriptorByID(id); found {
+		return nil, newMutableSyntheticDescriptorAssertionError(id)
+	}
 	if desc := tc.getUncommittedDescriptorByID(id); desc != nil {
 		log.VEventf(ctx, 2, "found uncommitted descriptor %d", id)
 		return desc, nil
@@ -1147,6 +1182,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommittedDescriptors = nil
+	tc.syntheticDescriptors = nil
 	tc.releaseAllDescriptors()
 }
 
@@ -1341,6 +1377,32 @@ func (tc *Collection) getUncommittedDescriptor(
 		}
 	}
 	return false, nil
+}
+
+func (tc *Collection) getSyntheticDescriptorByName(
+	dbID descpb.ID, schemaID descpb.ID, name string,
+) (found bool, desc catalog.Descriptor) {
+	for _, sd := range tc.syntheticDescriptors {
+		if lease.NameMatchesDescriptor(sd, dbID, schemaID, name) {
+			return true, sd
+		}
+	}
+	return false, nil
+}
+
+func (tc *Collection) getSyntheticDescriptorByID(
+	id descpb.ID,
+) (found bool, desc catalog.Descriptor) {
+	for _, sd := range tc.syntheticDescriptors {
+		if sd.GetID() == id {
+			return true, sd
+		}
+	}
+	return false, nil
+}
+
+func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
+	return errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
 }
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.
@@ -1609,22 +1671,20 @@ func (tc *Collection) releaseAllDescriptors() {
 	tc.allSchemasForDatabase = nil
 }
 
-// CopyModifiedObjects copies the modified schema to the table collection. Used
-// when initializing an InternalExecutor.
-func (tc *Collection) CopyModifiedObjects(to *Collection) {
-	if tc == nil {
-		return
+// SetSyntheticDescriptors sets the provided descriptors as the synthetic
+// descriptors to override all other matching descriptors during immutable
+// access. An immutable copy is made if the descriptor is mutable. See the
+// documentation on syntheticDescriptors.
+func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
+	immutableCopies := make([]catalog.Descriptor, 0, len(descs))
+	for _, desc := range descs {
+		if mut, ok := desc.(catalog.MutableDescriptor); ok {
+			immutableCopies = append(immutableCopies, mut.ImmutableCopy())
+		} else {
+			immutableCopies = append(immutableCopies, desc)
+		}
 	}
-	to.uncommittedDescriptors = tc.uncommittedDescriptors
-	// Do not copy the leased descriptors because we do not want
-	// the leased descriptors to be released by the "to" Collection.
-	// The "to" Collection can re-lease the same descriptors.
-}
-
-// ModifiedCollectionCopier is an interface used to copy modified schema elements
-// to a new Collection.
-type ModifiedCollectionCopier interface {
-	CopyModifiedObjects(to *Collection)
+	tc.syntheticDescriptors = immutableCopies
 }
 
 func (tc *Collection) codec() keys.SQLCodec {
