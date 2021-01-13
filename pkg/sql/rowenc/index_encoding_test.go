@@ -454,10 +454,13 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(left, nil, version)
 		require.NoError(t, err)
 
-		spansSlice, tight, unique, err := EncodeContainingInvertedIndexSpans(
+		spansSlice, tight, unique, ok, err := EncodeContainingInvertedIndexSpans(
 			&evalCtx, right, nil, version, false, /* uniqueOnly */
 		)
 		require.NoError(t, err)
+		if !ok {
+			t.Fatalf("ok should never be false if uniqueOnly is false and there is no error")
+		}
 
 		// Array spans are always tight.
 		if tight != true {

@@ -865,7 +865,7 @@ func EncodeInvertedIndexTableKeys(
 // results of the constrained scan.
 //
 // If the parameter uniqueOnly is true, only unique spans will be returned
-// if possible. If this is not possible, returns unique=false. This is
+// if possible. If this is not possible, returns ok=false. This is
 // useful for building zigzag joins.
 //
 // The spans are not guaranteed to be sorted, so the caller must sort them if
@@ -876,9 +876,9 @@ func EncodeContainingInvertedIndexSpans(
 	inKey []byte,
 	version descpb.IndexDescriptorVersion,
 	uniqueOnly bool,
-) (spans []roachpb.Spans, tight, unique bool, err error) {
+) (spans []roachpb.Spans, tight, unique, ok bool, err error) {
 	if val == tree.DNull {
-		return nil, false, false, nil
+		return nil, false, false, false, nil
 	}
 	datum := tree.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
@@ -887,12 +887,16 @@ func EncodeContainingInvertedIndexSpans(
 	case types.ArrayFamily:
 		spans, unique, err := encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
 		if err != nil {
-			return nil, false, false, err
+			return nil, false, false, false, err
+		}
+		if uniqueOnly && !unique {
+			// It was not possible to find unique spans.
+			return nil, false, false, false, nil
 		}
 		// Spans for array inverted indexes are always tight.
-		return spans, true /* tight */, unique, err
+		return spans, true /* tight */, unique, true, nil
 	}
-	return nil, false, false, errors.AssertionFailedf(
+	return nil, false, false, false, errors.AssertionFailedf(
 		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
 	)
 }

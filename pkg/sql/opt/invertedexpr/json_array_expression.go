@@ -30,14 +30,14 @@ func JSONOrArrayToContainingInvertedExpr(
 	evalCtx *tree.EvalContext, d tree.Datum, uniqueOnly bool,
 ) (InvertedExpression, error) {
 	var b []byte
-	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
+	spansSlice, tight, unique, ok, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion, uniqueOnly,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if uniqueOnly && !unique {
-		// It was not possible to find unique spans.
+	if !ok {
+		// It was not possible to find spans with the given requirements.
 		return NonInvertedColExpression{}, nil
 	}
 	if len(spansSlice) == 0 {

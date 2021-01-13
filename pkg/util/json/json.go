@@ -90,8 +90,8 @@ type JSON interface {
 	// the same time.
 	//
 	// If uniqueOnly is true, only unique spans will be returned if possible. If
-	// this is not possible, returns unique=false. This is useful for building
-	// zigzag joins.
+	// this is not possible, returns unique=false, indicating that the returned
+	// spans should not be used. This mode is useful for building zigzag joins.
 	//
 	// Returns tight=true if the returned spans are tight and cannot produce
 	// false positives. Otherwise, returns tight=false.
@@ -781,17 +781,25 @@ func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
 // results of the constrained scan.
 //
 // If the parameter uniqueOnly is true, only unique spans will be returned
-// if possible. If this is not possible, returns unique=false. This is
+// if possible. If this is not possible, returns ok=false. This is
 // useful for building zigzag joins.
 //
 // The spans are not guaranteed to be sorted, so the caller must sort them if
 // needed.
 func EncodeContainingInvertedIndexSpans(
 	b []byte, json JSON, uniqueOnly bool,
-) (spans []roachpb.Spans, tight, unique bool, err error) {
-	return json.encodeContainingInvertedIndexSpans(
+) (spans []roachpb.Spans, tight, unique, ok bool, err error) {
+	spans, tight, unique, err = json.encodeContainingInvertedIndexSpans(
 		encoding.EncodeJSONAscending(b), true /* isRoot */, false /* isObjectValue */, uniqueOnly,
 	)
+	if err != nil {
+		return nil, false, false, false, err
+	}
+	if uniqueOnly && !unique {
+		// It was not possible to find unique spans.
+		return nil, false, false, false, nil
+	}
+	return spans, tight, unique, true, nil
 }
 
 func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {

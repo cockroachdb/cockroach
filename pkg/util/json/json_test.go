@@ -1428,8 +1428,11 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		require.NoError(t, err)
 
-		spansSlice, tight, unique, err := EncodeContainingInvertedIndexSpans(nil, right, false /* uniqueOnly */)
+		spansSlice, tight, unique, ok, err := EncodeContainingInvertedIndexSpans(nil, right, false /* uniqueOnly */)
 		require.NoError(t, err)
+		if !ok {
+			t.Fatalf("ok should never be false if uniqueOnly is false and there is no error")
+		}
 
 		if unique != expectUnique {
 			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, unique)
@@ -1539,6 +1542,7 @@ func TestEncodeContainingJSONInvertedIndexSpansUniqueOnly(t *testing.T) {
 		expected        bool
 		tight           bool
 		unique          bool
+		ok              bool
 	}{
 		// This test calls EncodeContainingInvertedIndexSpans with uniqueOnly=true
 		// on the first json value (uniqueOnlyTrue) and checks that the result is
@@ -1552,61 +1556,68 @@ func TestEncodeContainingJSONInvertedIndexSpansUniqueOnly(t *testing.T) {
 		// If EncodeContainingInvertedIndexSpans successfully produces spans for
 		// uniqueOnlyTrue that are guaranteed not to contain duplicate primary keys,
 		// unique is true. Otherwise it is false.
-		{uniqueOnlyTrue: `{}`, unique: false},
-		{uniqueOnlyTrue: `[]`, unique: false},
-		{uniqueOnlyTrue: `[[]]`, unique: false},
-		{uniqueOnlyTrue: `{"a": {}}`, unique: false},
-		{uniqueOnlyTrue: `{"a": {}, "b": {}}`, unique: false},
-		{uniqueOnlyTrue: `[{"a": {}, "b": {}}]`, unique: false},
-		{uniqueOnlyTrue: `[{"a": {}, "b": {}}, [], [{}]]`, unique: false},
-		{uniqueOnlyTrue: `[{"bar": {"foo": {}}}, {"a": []}]`, unique: false},
+		{uniqueOnlyTrue: `{}`, ok: false},
+		{uniqueOnlyTrue: `[]`, ok: false},
+		{uniqueOnlyTrue: `[[]]`, ok: false},
+		{uniqueOnlyTrue: `{"a": {}}`, ok: false},
+		{uniqueOnlyTrue: `{"a": {}, "b": {}}`, ok: false},
+		{uniqueOnlyTrue: `[{"a": {}, "b": {}}]`, ok: false},
+		{uniqueOnlyTrue: `[{"a": {}, "b": {}}, [], [{}]]`, ok: false},
+		{uniqueOnlyTrue: `[{"bar": {"foo": {}}}, {"a": []}]`, ok: false},
 
-		{`"a"`, `"a"`, true, true, true},
-		{`"a"`, `["a"]`, false, true, true},
-		{`["a"]`, `"a"`, false, true, true},
-		{`[{"a": "a"}, {"a": "a"}]`, `[{"a": "a"}]`, true, true, true},
-		{`[[[["a"]]]]`, `[[[["a"]]], [[["a"]]]]`, true, true, true},
-		{`{"a": 123.123}`, `{"a": 123.123}`, true, true, true},
-		{`{"a": [1]}`, `{"a": [1]}`, true, true, true},
-		{`{"a": {"b": "c"}}`, `{"a": {"b": "c"}}`, true, true, true},
-		{`{"a": {"b": true}}`, `{"a": {"b": true}}`, true, true, true},
-		{`[1, 2, 3, 4, "foo"]`, `[1, "foo"]`, false, true, true},
-		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, true},
-		{`[[], false, null]`, `[false, null, [1]]`, false, false, true},
-		{`[[[], {}], false, null]`, `[false, null]`, true, false, true},
-		{`[[], null]`, `[null]`, true, false, true},
-		{`[{"a": []}, null]`, `[null]`, true, false, true},
-		{`[{"a": [[]]}, null]`, `[null]`, true, false, true},
-		{`[{"foo": {"bar": "foobar"}}, true]`, `[true]`, false, true, true},
-		{`[{"b": null}, {"bar": "c"}]`, `[{"b": null}, {"bar": "c"}]`, true, true, true},
-		{`[[[[{}], [], false], false], [{}]]`, `[[[false], false]]`, true, false, true},
-		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[{"c": "foo"}], [false]]`, true, false, true},
-		{`{"bar": [["c"]]}`, `{"bar": ["c"]}`, false, true, true},
-		{`{"c": [{"a": "b"}, []]}`, `{"c": [{"a": "b"}]}`, true, false, true},
-		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, true, true, true},
-		{`[[1], [2]]`, `[[1, 2]]`, true, true, true},
+		{`"a"`, `"a"`, true, true, true, true},
+		{`"a"`, `["a"]`, false, true, true, true},
+		{`["a"]`, `"a"`, false, true, true, true},
+		{`[{"a": "a"}, {"a": "a"}]`, `[{"a": "a"}]`, true, true, true, true},
+		{`[[[["a"]]]]`, `[[[["a"]]], [[["a"]]]]`, true, true, true, true},
+		{`{"a": 123.123}`, `{"a": 123.123}`, true, true, true, true},
+		{`{"a": [1]}`, `{"a": [1]}`, true, true, true, true},
+		{`{"a": {"b": "c"}}`, `{"a": {"b": "c"}}`, true, true, true, true},
+		{`{"a": {"b": true}}`, `{"a": {"b": true}}`, true, true, true, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "foo"]`, false, true, true, true},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, true, true},
+		{`[[], false, null]`, `[false, null, [1]]`, false, false, true, true},
+		{`[[[], {}], false, null]`, `[false, null]`, true, false, true, true},
+		{`[[], null]`, `[null]`, true, false, true, true},
+		{`[{"a": []}, null]`, `[null]`, true, false, true, true},
+		{`[{"a": [[]]}, null]`, `[null]`, true, false, true, true},
+		{`[{"foo": {"bar": "foobar"}}, true]`, `[true]`, false, true, true, true},
+		{`[{"b": null}, {"bar": "c"}]`, `[{"b": null}, {"bar": "c"}]`, true, true, true, true},
+		{`[[[[{}], [], false], false], [{}]]`, `[[[false], false]]`, true, false, true, true},
+		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[{"c": "foo"}], [false]]`, true, false, true, true},
+		{`{"bar": [["c"]]}`, `{"bar": ["c"]}`, false, true, true, true},
+		{`{"c": [{"a": "b"}, []]}`, `{"c": [{"a": "b"}]}`, true, false, true, true},
+		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, true, true, true, true},
+		{`[[1], [2]]`, `[[1, 2]]`, true, true, true, true},
 	}
 
 	// Run pre-defined test cases from above.
 	for _, c := range testCases {
 		uniqueOnlyTrue := jsonTestShorthand(c.uniqueOnlyTrue)
-		uniqueOnlyTrueSpans, tight, unique, err := EncodeContainingInvertedIndexSpans(
+		uniqueOnlyTrueSpans, tight, unique, ok, err := EncodeContainingInvertedIndexSpans(
 			nil, uniqueOnlyTrue, true, /* uniqueOnly */
 		)
 		require.NoError(t, err)
 
-		if unique != c.unique {
-			t.Errorf("For %s, expected unique=%v, but got %v", uniqueOnlyTrue, c.unique, unique)
+		if ok != c.ok {
+			t.Errorf("For %s, expected ok=%v, but got %v", uniqueOnlyTrue, c.ok, ok)
 		}
-		if !unique {
+		if !ok {
 			continue
 		}
 
+		if unique != c.unique {
+			t.Errorf("For %s, expected unique=%v, but got %v", uniqueOnlyTrue, c.unique, unique)
+		}
+
 		uniqueOnlyFalse := jsonTestShorthand(c.uniqueOnlyFalse)
-		uniqueOnlyFalseSpans, _, _, err := EncodeContainingInvertedIndexSpans(
+		uniqueOnlyFalseSpans, _, _, ok, err := EncodeContainingInvertedIndexSpans(
 			nil, uniqueOnlyFalse, false, /* uniqueOnly */
 		)
 		require.NoError(t, err)
+		if !ok {
+			t.Fatalf("ok should never be false if uniqueOnly is false and there is no error")
+		}
 
 		// Check that the spans match if they are expected to.
 		actual := reflect.DeepEqual(uniqueOnlyTrueSpans, uniqueOnlyFalseSpans)
