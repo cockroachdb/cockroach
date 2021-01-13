@@ -547,6 +547,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				sliceIdx++
 				if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.ID) {
 					sliceIdx--
+
+					// If this unique constraint is used on the referencing side of any FK
+					// constraints, try to remove the references. Don't bother trying to find
+					// an alternate index or constraint, since all possible matches will
+					// be dropped when the column is dropped.
+					if err := params.p.tryRemoveFKBackReferences(
+						params.ctx, n.tableDesc, constraint, t.DropBehavior, nil,
+					); err != nil {
+						return err
+					}
 				}
 			}
 			n.tableDesc.UniqueWithoutIndexConstraints = n.tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
@@ -1329,4 +1339,53 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 			TableName: tn.String(),
 			Owner:     newOwner.Normalized(),
 		})
+}
+
+// tryRemoveFKBackReferences determines whether the provided unique constraint
+// is used on the referencing side of a FK constraint. If so, it tries to remove
+// the references or find an alternate unique constraint that will suffice.
+func (p *planner) tryRemoveFKBackReferences(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	constraint descpb.UniqueConstraint,
+	behavior tree.DropBehavior,
+	candidateConstraints []descpb.UniqueConstraint,
+) error {
+	// uniqueConstraintHasReplacementCandidate runs
+	// IsValidReferencedUniqueConstraint on the candidateConstraints. Returns true
+	// if at least one constraint satisfies IsValidReferencedUniqueConstraint.
+	uniqueConstraintHasReplacementCandidate := func(
+		referencedColumnIDs []descpb.ColumnID,
+	) bool {
+		for _, uc := range candidateConstraints {
+			if uc.IsValidReferencedUniqueConstraint(referencedColumnIDs) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Index for updating the FK slices in place when removing FKs.
+	sliceIdx := 0
+	for i := range tableDesc.InboundFKs {
+		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
+		sliceIdx++
+		fk := &tableDesc.InboundFKs[i]
+		// The constraint being deleted could potentially be the referenced unique
+		// constraint for this fk.
+		if constraint.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) &&
+			!uniqueConstraintHasReplacementCandidate(fk.ReferencedColumnIDs) {
+			// If we found haven't found a replacement, then we check that the drop
+			// behavior is cascade.
+			if err := p.canRemoveFKBackreference(ctx, constraint.GetName(), fk, behavior); err != nil {
+				return err
+			}
+			sliceIdx--
+			if err := p.removeFKForBackReference(ctx, tableDesc, fk); err != nil {
+				return err
+			}
+		}
+	}
+	tableDesc.InboundFKs = tableDesc.InboundFKs[:sliceIdx]
+	return nil
 }

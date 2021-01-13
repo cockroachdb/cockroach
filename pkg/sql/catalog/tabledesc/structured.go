@@ -1440,7 +1440,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 			}
 			// Determine whether the index on the other table is a unique index that
 			// could support this FK constraint.
-			if !referencedIdx.IsValidReferencedIndex(fk.ReferencedColumnIDs) {
+			if !referencedIdx.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) {
 				return nil
 			}
 			// Now check the backreferences. Backreferences in ReferencedBy only had
@@ -1539,7 +1539,7 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 					fk.Index, desc.Name, backref.Name, originTable.GetName(),
 				)
 			}
-			if originalReferencedIndex.IsValidReferencedIndex(backref.ReferencedColumnIDs) {
+			if originalReferencedIndex.IsValidReferencedUniqueConstraint(backref.ReferencedColumnIDs) {
 				found = true
 			}
 			return nil

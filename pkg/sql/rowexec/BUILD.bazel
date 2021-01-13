@@ -83,6 +83,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stringarena",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_axiomhq_hyperloglog//:hyperloglog",
