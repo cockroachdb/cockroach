@@ -518,8 +518,8 @@ func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdin
 	// Case 1: The input is NULL. This is possible when FoldIndirection has
 	// already folded an Indirection expression with an out-of-bounds index to
 	// Null.
-	if _, ok := input.(*memo.NullExpr); ok {
-		return input
+	if n, ok := input.(*memo.NullExpr); ok {
+		return c.f.ConstructNull(n.Typ.TupleContents()[idx])
 	}
 
 	// Case 2: The input is a static tuple constructor.
