@@ -18,7 +18,7 @@ package vtable
 // https://www.postgresql.org/docs/9.6/static/catalog-pg-am.html.
 const PGCatalogAm = `
 CREATE TABLE pg_catalog.pg_am (
-	oid OID,
+	oid OID NOT VISIBLE,
 	amname NAME,
 	amstrategies INT2,
 	amsupport INT2,
@@ -499,7 +499,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 // https://www.postgresql.org/docs/12/catalog-pg-opclass.html
 const PGCatalogOpclass = `
 CREATE TABLE pg_catalog.pg_opclass (
-	oid OID,
+	oid OID NOT VISIBLE,
 	opcmethod OID,
 	opcname NAME,
 	opcnamespace OID,

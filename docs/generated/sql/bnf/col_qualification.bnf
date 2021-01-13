@@ -1,6 +1,7 @@
 col_qualification ::=
 	'CONSTRAINT' constraint_name 'NOT' 'NULL'
 	| 'CONSTRAINT' constraint_name 'NULL'
+	| 'CONSTRAINT' constraint_name 'NOT' 'VISIBLE'
 	| 'CONSTRAINT' constraint_name 'UNIQUE' opt_without_index
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY'
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
@@ -13,6 +14,7 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' '(' a_expr ')' 'VIRTUAL'
 	| 'NOT' 'NULL'
 	| 'NULL'
+	| 'NOT' 'VISIBLE'
 	| 'UNIQUE' opt_without_index
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
