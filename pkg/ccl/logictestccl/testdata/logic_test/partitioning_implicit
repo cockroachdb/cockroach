@@ -226,13 +226,13 @@ CREATE TABLE public.t (
   d int,
   INDEX (a),
   UNIQUE (b),
+  INDEX (partition_by, c),
   FAMILY (pk, partition_by, a, b, c, d)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN (1),
   PARTITION two VALUES IN (2)
 )
 
-# TODO(#58878): PARTITION BY should be hidden for index definitions.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -244,17 +244,27 @@ CREATE TABLE public.t (
   c INT8 NULL,
   d INT8 NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-  INDEX t_a_idx (a ASC) PARTITION BY LIST (partition_by) (
-    PARTITION one VALUES IN ((1)),
-    PARTITION two VALUES IN ((2))
-  ),
-  UNIQUE INDEX t_b_key (b ASC) PARTITION BY LIST (partition_by) (
-    PARTITION one VALUES IN ((1)),
-    PARTITION two VALUES IN ((2))
-  ),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   FAMILY fam_0_pk_partition_by_a_b_c_d (pk, partition_by, a, b, c, d)
-) PARTITION BY LIST (partition_by) (
+) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
 )
 -- Warning: Partitioned table with no zone configurations.
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+primary               partition_by  true
+primary               pk            false
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
