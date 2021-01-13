@@ -191,7 +191,7 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
 
 # This fails the foreign key checks but passes the uniqueness checks.
-statement error pgcode 23503 pq: insert on table "uniq_fk_child" violates foreign key constraint "fk_b_ref_uniq_fk_parent"\nDETAIL: Key \(b, c\)=\(3, 3\) is not present in table "uniq_fk_parent"\.
+statement error pgcode 23503 pq: insert on table "uniq_fk_child" violates foreign key constraint "fk_b_ref_uniq_fk_parent"\nDETAIL: Key \(b, c\)=\(., .\) is not present in table "uniq_fk_parent"\.
 INSERT INTO uniq_fk_child VALUES (3, 3, 3), (4, 4, 4)
 
 # This fails both types of checks.
