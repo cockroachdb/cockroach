@@ -102,8 +102,8 @@ func MakeKeyRewriterFromRekeys(
 	return makeKeyRewriter(codec, descs)
 }
 
-// MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(
+// makeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
+func makeKeyRewriter(
 	codec keys.SQLCodec, descs map[descpb.ID]catalog.TableDescriptor,
 ) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
