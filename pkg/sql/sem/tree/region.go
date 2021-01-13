@@ -52,7 +52,7 @@ func (node *Locality) Format(ctx *FmtCtx) {
 	case LocalityLevelRow:
 		ctx.WriteString("REGIONAL BY ROW")
 		if node.RegionalByRowColumn != "" {
-			ctx.WriteString(" ON ")
+			ctx.WriteString(" AS ")
 			node.RegionalByRowColumn.Format(ctx)
 		}
 	default:

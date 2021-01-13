@@ -2022,8 +2022,8 @@ func NewTableDesc(
 			}
 			if n.Locality.RegionalByRowColumn != "" {
 				return nil, unimplemented.New(
-					"REGIONAL BY ROW ON name",
-					"REGIONAL BY ROW ON name is not yet supported",
+					"REGIONAL BY ROW AS",
+					"REGIONAL BY ROW AS is not yet supported",
 				)
 			}
 		default:
