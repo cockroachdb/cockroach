@@ -97,6 +97,10 @@ type SpanMeta struct {
 	Baggage map[string]string
 }
 
+func (s *SpanMeta) String() string {
+	return fmt.Sprintf("[spanID: %d, traceID: %d]", s.traceID, s.spanID)
+}
+
 func (s *Span) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }

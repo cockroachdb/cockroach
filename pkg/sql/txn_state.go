@@ -156,6 +156,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
+	//
+	// XXX: We'll need do address the above with always-on tracing; we're
+	// leaking spans.
 	opName := sqlTxnName
 	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
 	if txnType == implicitTxn {
