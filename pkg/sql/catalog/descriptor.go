@@ -117,7 +117,6 @@ type TableDescriptor interface {
 	GetPrimaryIndex() Index
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
@@ -333,6 +332,7 @@ type Index interface {
 	ContainsColumnID(colID descpb.ColumnID) bool
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
+	FirstExplicitColumnOrdinal() int
 
 	NumStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID

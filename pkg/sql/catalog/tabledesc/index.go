@@ -273,6 +273,11 @@ func (w index) ForEachColumnID(fn func(colID descpb.ColumnID) error) error {
 	return w.desc.RunOverAllColumns(fn)
 }
 
+// FirstExplicitColumnOrdinal returns the first ordinal of any explicit columns.
+func (w index) FirstExplicitColumnOrdinal() int {
+	return w.desc.FirstExplicitColumnOrdinal()
+}
+
 // NumStoredColumns returns the number of columns which the index stores in
 // addition to the columns which are explicitly part of the index (STORING
 // clause). Only used for secondary indexes.

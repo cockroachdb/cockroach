@@ -1443,26 +1443,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					isMutation, isWriteOnly :=
-						table.GetIndexMutationCapabilities(index.GetID())
-					isReady := isMutation && isWriteOnly
-
-					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
-						colIDs = append(colIDs, index.GetColumnID(i))
-					}
-					indkey, err := colIDArrayToVector(colIDs)
-					if err != nil {
-						return err
-					}
 					// Get the collations for all of the columns. To do this we require
 					// the type of the column.
 					// Also fill in indoption for each column to indicate if the index
 					// is ASC/DESC and if nulls appear first/last.
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
-
-					for i, columnID := range colIDs {
+					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
+					for i := index.FirstExplicitColumnOrdinal(); i < index.NumColumns(); i++ {
+						columnID := index.GetColumnID(i)
+						colIDs = append(colIDs, columnID)
 						col, err := table.FindColumnByID(columnID)
 						if err != nil {
 							return err
@@ -1482,6 +1472,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 							return err
 						}
 					}
+					indkey, err := colIDArrayToVector(colIDs)
+					if err != nil {
+						return err
+					}
 					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
 					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
 					// TODO(bram): #27763 indclass still needs to be populated but it
@@ -1491,25 +1485,25 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						return err
 					}
 					return addRow(
-						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
-						tableOid,                                     // indrelid
-						tree.NewDInt(tree.DInt(index.NumColumns())),  // indnatts
-						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
-						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
-						tree.DBoolFalse,                              // indisexclusion
-						tree.MakeDBool(tree.DBool(index.IsUnique())), // indimmediate
-						tree.DBoolFalse,                              // indisclustered
-						tree.MakeDBool(tree.DBool(!isMutation)),      // indisvalid
-						tree.DBoolFalse,                              // indcheckxmin
-						tree.MakeDBool(tree.DBool(isReady)),          // indisready
-						tree.DBoolTrue,                               // indislive
-						tree.DBoolFalse,                              // indisreplident
-						indkey,                                       // indkey
-						collationOidVector,                           // indcollation
-						indclass,                                     // indclass
-						indoptionIntVector,                           // indoption
-						tree.DNull,                                   // indexprs
-						tree.DNull,                                   // indpred
+						h.IndexOid(table.GetID(), index.GetID()),               // indexrelid
+						tableOid,                                               // indrelid
+						tree.NewDInt(tree.DInt(index.NumColumns())),            // indnatts
+						tree.MakeDBool(tree.DBool(index.IsUnique())),           // indisunique
+						tree.MakeDBool(tree.DBool(index.Primary())),            // indisprimary
+						tree.DBoolFalse,                                        // indisexclusion
+						tree.MakeDBool(tree.DBool(index.IsUnique())),           // indimmediate
+						tree.DBoolFalse,                                        // indisclustered
+						tree.MakeDBool(tree.DBool(index.Public())),             // indisvalid
+						tree.DBoolFalse,                                        // indcheckxmin
+						tree.MakeDBool(tree.DBool(index.WriteAndDeleteOnly())), // indisready
+						tree.DBoolTrue,                                         // indislive
+						tree.DBoolFalse,                                        // indisreplident
+						indkey,                                                 // indkey
+						collationOidVector,                                     // indcollation
+						indclass,                                               // indclass
+						indoptionIntVector,                                     // indoption
+						tree.DNull,                                             // indexprs
+						tree.DNull,                                             // indpred
 					)
 				})
 			})
@@ -1527,7 +1521,7 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, table, index.IndexDesc(), tableLookup)
+					def, err := indexDefFromDescriptor(ctx, p, db, table, index, tableLookup)
 					if err != nil {
 						return err
 					}
@@ -1552,35 +1546,34 @@ func indexDefFromDescriptor(
 	p *planner,
 	db *dbdesc.Immutable,
 	table catalog.TableDescriptor,
-	index *descpb.IndexDescriptor,
+	index catalog.Index,
 	tableLookup tableLookupFn,
 ) (string, error) {
-	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
-
 	indexDef := tree.CreateIndex{
-		Name:     tree.Name(index.Name),
+		Name:     tree.Name(index.GetName()),
 		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
-		Unique:   index.Unique,
-		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
-		Inverted: index.Type == descpb.IndexDescriptor_INVERTED,
+		Unique:   index.IsUnique(),
+		Columns:  make(tree.IndexElemList, 0, index.NumColumns()),
+		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
-	for i, name := range colNames {
+	for i := index.FirstExplicitColumnOrdinal(); i < index.NumColumns(); i++ {
+		name := index.GetColumnName(i)
 		elem := tree.IndexElem{
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.ColumnDirections[i] == descpb.IndexDescriptor_DESC {
+		if index.GetColumnDirection(i) == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
-		indexDef.Columns[i] = elem
+		indexDef.Columns = append(indexDef.Columns, elem)
 	}
-	for i, name := range index.StoreColumnNames {
-		indexDef.Storing[i] = tree.Name(name)
+	for i := 0; i < index.NumStoredColumns(); i++ {
+		indexDef.Storing[i] = tree.Name(index.GetStoredColumnName(i))
 	}
-	if len(index.Interleave.Ancestors) > 0 {
-		intl := index.Interleave
-		parentTable, err := tableLookup.getTableByID(intl.Ancestors[len(intl.Ancestors)-1].TableID)
+	if index.NumInterleaveAncestors() > 0 {
+		lastAncestorTableID := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1).TableID
+		parentTable, err := tableLookup.getTableByID(lastAncestorTableID)
 		if err != nil {
 			return "", err
 		}
@@ -1589,10 +1582,14 @@ func indexDefFromDescriptor(
 			return "", err
 		}
 		var sharedPrefixLen int
-		for _, ancestor := range intl.Ancestors {
+		for i := 0; i < index.NumInterleaveAncestors(); i++ {
+			ancestor := index.GetInterleaveAncestor(i)
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
 		}
-		fields := colNames[:sharedPrefixLen]
+		fields := make([]string, sharedPrefixLen)
+		for i := range fields {
+			fields[i] = index.GetColumnName(index.FirstExplicitColumnOrdinal() + i)
+		}
 		intlDef := &tree.InterleaveDef{
 			Parent: tree.MakeTableName(tree.Name(parentDb.GetName()),
 				tree.Name(parentTable.GetName())),
@@ -1609,7 +1606,7 @@ func indexDefFromDescriptor(
 		//
 		// TODO(mgartner): Avoid parsing the predicate expression twice. It is
 		// parsed in schemaexpr.FormatExprForDisplay and again here.
-		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.GetPredicate(), p.SemaCtx(), tree.FmtPGCatalog)
 		if err != nil {
 			return "", err
 		}

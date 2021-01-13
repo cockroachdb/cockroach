@@ -67,8 +67,8 @@ func (desc *IndexDescriptor) IsPartial() bool {
 	return desc.Predicate != ""
 }
 
-// ExplicitColumnStartIdx returns the start index of any explicit columns.
-func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
+// FirstExplicitColumnOrdinal returns the start index of any explicit columns.
+func (desc *IndexDescriptor) FirstExplicitColumnOrdinal() int {
 	start := int(desc.Partitioning.NumImplicitColumns)
 	// We do not currently handle implicit columns along with hash sharded indexes.
 	// Thus, safe to override this to 1.
@@ -81,9 +81,9 @@ func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 // ColNamesFormat writes a string describing the column names and directions
 // in this index to the given buffer.
 func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtx) {
-	startIdx := desc.ExplicitColumnStartIdx()
-	for i := startIdx; i < len(desc.ColumnNames); i++ {
-		if i > startIdx {
+	firstOrdinal := desc.FirstExplicitColumnOrdinal()
+	for i := firstOrdinal; i < len(desc.ColumnNames); i++ {
+		if i > firstOrdinal {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNameP(&desc.ColumnNames[i])

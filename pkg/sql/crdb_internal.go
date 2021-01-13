@@ -2111,38 +2111,38 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
 
-				reportIndex := func(idxI catalog.Index) error {
-					idx := idxI.IndexDesc()
-					idxID := tree.NewDInt(tree.DInt(idx.ID))
-					idxName := tree.NewDString(idx.Name)
+				reportIndex := func(index catalog.Index) error {
+					idxID := tree.NewDInt(tree.DInt(index.GetID()))
+					idxName := tree.NewDString(index.GetName())
 
 					// Report the main (key) columns.
-					for i, c := range idx.ColumnIDs {
+					for i := 0; i < index.NumColumns(); i++ {
+						c := index.GetColumnID(i)
 						colName := tree.DNull
 						colDir := tree.DNull
-						if i >= len(idx.ColumnNames) {
+						if i >= len(index.IndexDesc().ColumnNames) {
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
-								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
-								len(idx.ColumnIDs), len(idx.ColumnNames))
+								table.GetID(), index.GetID(), parentName, table.GetName(), index.GetName(),
+								index.NumColumns(), len(index.IndexDesc().ColumnNames))
 						} else {
-							colName = tree.NewDString(idx.ColumnNames[i])
+							colName = tree.NewDString(index.GetColumnName(i))
 						}
-						if i >= len(idx.ColumnDirections) {
+						if i >= len(index.IndexDesc().ColumnDirections) {
 							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
-								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
-								len(idx.ColumnIDs), len(idx.ColumnDirections))
+								table.GetID(), index.GetID(), parentName, table.GetName(), index.GetName(),
+								index.NumColumns(), len(index.IndexDesc().ColumnDirections))
 						} else {
-							colDir = idxDirMap[idx.ColumnDirections[i]]
+							colDir = idxDirMap[index.GetColumnDirection(i)]
 						}
 
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							key, tree.NewDInt(tree.DInt(c)), colName, colDir,
-							tree.MakeDBool(i < idx.ExplicitColumnStartIdx()),
+							tree.MakeDBool(i < index.FirstExplicitColumnOrdinal()),
 						); err != nil {
 							return err
 						}
@@ -2151,7 +2151,8 @@ CREATE TABLE crdb_internal.index_columns (
 					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
-					for _, c := range idx.StoreColumnIDs {
+					for i := 0; i < index.NumStoredColumns(); i++ {
+						c := index.GetStoredColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2162,7 +2163,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the extra columns.
-					for _, c := range idx.ExtraColumnIDs {
+					for i := 0; i < index.NumExtraColumns(); i++ {
+						c := index.GetExtraColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2173,7 +2175,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the composite columns
-					for _, c := range idx.CompositeColumnIDs {
+					for i := 0; i < index.NumCompositeColumns(); i++ {
+						c := index.GetCompositeColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,

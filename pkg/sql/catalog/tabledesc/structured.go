@@ -288,11 +288,11 @@ func (desc *wrapper) AllNonDropColumns() []descpb.ColumnDescriptor {
 // of tableDesc's indexes. allocateName roughly follows PostgreSQL's
 // convention for automatically-named indexes.
 func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
-	idx := index.IndexDesc()
-	segments := make([]string, 0, len(idx.ColumnNames)+2)
+	colNames := index.IndexDesc().ColumnNames[index.FirstExplicitColumnOrdinal():]
+	segments := make([]string, 0, len(colNames)+2)
 	segments = append(segments, tableDesc.Name)
-	segments = append(segments, idx.ColumnNames[idx.ExplicitColumnStartIdx():]...)
-	if idx.Unique {
+	segments = append(segments, colNames...)
+	if index.IsUnique() {
 		segments = append(segments, "key")
 	} else {
 		segments = append(segments, "idx")
@@ -3192,21 +3192,6 @@ func (desc *wrapper) FindIndexByIndexIdx(
 	}
 
 	return &desc.PrimaryIndex, false, nil
-}
-
-// GetIndexMutationCapabilities returns:
-// 1. Whether the index is a mutation
-// 2. if so, is it in state DELETE_AND_WRITE_ONLY
-func (desc *wrapper) GetIndexMutationCapabilities(id descpb.IndexID) (bool, bool) {
-	for _, mutation := range desc.Mutations {
-		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
-			if mutationIndex.ID == id {
-				return true,
-					mutation.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-			}
-		}
-	}
-	return false, false
 }
 
 // FindFKByName returns the FK constraint on the table with the given name.
