@@ -172,10 +172,16 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 	return !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).HasPrefix(originColIDs)
 }
 
-// IsValidReferencedIndex returns whether the index can serve as a referenced index for a foreign
+// IsValidReferencedUniqueConstraint  is part of the UniqueConstraint interface.
+// It returns whether the index can serve as a referenced index for a foreign
 // key constraint with the provided set of referencedColumnIDs.
-func (desc *IndexDescriptor) IsValidReferencedIndex(referencedColIDs ColumnIDs) bool {
+func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique && !desc.IsPartial() && ColumnIDs(desc.ColumnIDs).Equals(referencedColIDs)
+}
+
+// GetName is part of the UniqueConstraint interface.
+func (desc *IndexDescriptor) GetName() string {
+	return desc.Name
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old

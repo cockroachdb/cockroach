@@ -1942,9 +1942,18 @@ type SchemaChangerTestingKnobs struct {
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
 
-	// TwoVersionLeaseViolation is called whenever a schema change
-	// transaction is unable to commit because it is violating the two
-	// version lease invariant.
+	// AlwaysUpdateIndexBackfillDetails indicates whether the index backfill
+	// schema change job details should be updated everytime the coordinator
+	// receives an update from the backfill processor.
+	AlwaysUpdateIndexBackfillDetails bool
+
+	// AlwaysUpdateIndexBackfillProgress indicates whether the index backfill
+	// schema change job fraction completed should be updated everytime the
+	// coordinator receives an update from the backfill processor.
+	AlwaysUpdateIndexBackfillProgress bool
+
+	// TwoVersionLeaseViolation is called whenever a schema change transaction is
+	// unable to commit because it is violating the two version lease invariant.
 	TwoVersionLeaseViolation func()
 }
 

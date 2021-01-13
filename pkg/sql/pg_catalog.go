@@ -788,10 +788,13 @@ func populateTableConstraints(
 			if err != nil {
 				return err
 			}
-			if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
-				// We couldn't find an index that matched. This shouldn't happen.
+			if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+				referencedTable, con.FK.ReferencedColumnIDs,
+			); err != nil {
+				// We couldn't find a unique constraint that matched. This shouldn't
+				// happen.
 				log.Warningf(ctx, "broken fk reference: %v", err)
-			} else {
+			} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
 				conindid = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 			}
 			confrelid = tableOid(con.ReferencedTable.ID)
@@ -1218,10 +1221,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					return err
 				}
 				refObjID := oidZero
-				if idx, err := tabledesc.FindFKReferencedIndex(referencedTable, con.FK.ReferencedColumnIDs); err != nil {
-					// We couldn't find an index that matched. This shouldn't happen.
+				if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(
+					referencedTable, con.FK.ReferencedColumnIDs,
+				); err != nil {
+					// We couldn't find a unique constraint that matched. This shouldn't
+					// happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
-				} else {
+				} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
 				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)

@@ -204,6 +204,19 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			}
 		}
 
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			var fkCols opt.ColSet
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				fkCols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
+			if fkCols.Intersects(updateCols) {
+				cols.UnionWith(fkCols)
+			}
+		}
+
 	case opt.DeleteOp:
 		// Add in all strict key columns from all indexes, since these are needed
 		// to compose the keys of rows to delete. Include mutation indexes, since
@@ -211,6 +224,15 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		// or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
 			cols.UnionWith(tabMeta.IndexKeyColumnsMapVirtual(i))
+		}
+
+		// Add inbound foreign keys that may require a check or cascade.
+		for i, n := 0, tabMeta.Table.InboundForeignKeyCount(); i < n; i++ {
+			inboundFK := tabMeta.Table.InboundForeignKey(i)
+			for j, m := 0, inboundFK.ColumnCount(); j < m; j++ {
+				ord := inboundFK.ReferencedColumnOrdinal(tabMeta.Table, j)
+				cols.Add(tabMeta.MetaID.ColumnID(ord))
+			}
 		}
 	}
 

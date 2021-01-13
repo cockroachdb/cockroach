@@ -13,6 +13,8 @@
 package execinfra
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -164,16 +166,30 @@ type TestingKnobs struct {
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the
 	// current span and returns an error which eventually is returned to the
-	// caller of SchemaChanger.exec(). It is called at the start of the
-	// backfill function passed into the transaction executing the chunk.
+	// caller of SchemaChanger.exec(). In the case of a column backfill, it is
+	// called at the start of the backfill function passed into the transaction
+	// executing the chunk.
 	RunBeforeBackfillChunk func(sp roachpb.Span) error
 
-	// RunAfterBackfillChunk is called after executing each chunk of a
-	// backfill during a schema change operation. It is called just before
-	// returning from the backfill function passed into the transaction
-	// executing the chunk. It is always called even when the backfill
+	// RunAfterBackfillChunk is called after executing each chunk of a backfill
+	// during a schema change operation. In the case of a column backfill, it is
+	// called just before returning from the backfill function passed into the
+	// transaction executing the chunk. It is always called even when the backfill
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
+
+	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
+	// created during an index backfill is also ingested before moving on to the
+	// next batch or returning.
+	// Ingesting does not mean that the index entries are necessarily written to
+	// storage but instead that they are buffered in the index backfillers' bulk
+	// adder.
+	SerializeIndexBackfillCreationAndIngestion chan struct{}
+
+	// IndexBackfillProgressReportInterval is the periodic interval at which the
+	// processor pushes the spans for which it has successfully backfilled the
+	// indexes.
+	IndexBackfillProgressReportInterval time.Duration
 
 	// ForceDiskSpill forces any processors/operators that can fall back to disk
 	// to fall back to disk immediately.

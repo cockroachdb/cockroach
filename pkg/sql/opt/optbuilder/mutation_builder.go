@@ -1287,7 +1287,7 @@ func (mb *mutationBuilder) makeCheckInputScan(
 			inputCols[i] = mb.fetchColIDs[tabOrd]
 		}
 		if inputCols[i] == 0 {
-			panic(errors.AssertionFailedf("no value for FK column (tabOrd=%d)", tabOrd))
+			panic(errors.AssertionFailedf("no value for check input column (tabOrd=%d)", tabOrd))
 		}
 
 		// Synthesize new column.

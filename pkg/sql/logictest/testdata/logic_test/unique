@@ -35,21 +35,23 @@ CREATE TABLE uniq_hidden_pk (
   UNIQUE WITHOUT INDEX (a)
 )
 
-# TODO(rytaft): make this table use UNIQUE WITHOUT INDEX constraints once
-# we allow foreign keys to reference them (see #57977).
 statement ok
 CREATE TABLE uniq_fk_parent (
   a INT UNIQUE,
   b INT,
   c INT,
-  UNIQUE (b, c)
+  d INT UNIQUE WITHOUT INDEX,
+  e INT UNIQUE WITHOUT INDEX,
+  UNIQUE WITHOUT INDEX (b, c)
 )
 
 statement ok
 CREATE TABLE uniq_fk_child (
-  a INT REFERENCES uniq_fk_parent (a),
+  a INT,
   b INT,
   c INT,
+  d INT REFERENCES uniq_fk_parent (d),
+  e INT REFERENCES uniq_fk_parent (e) ON DELETE SET NULL,
   FOREIGN KEY (b, c) REFERENCES uniq_fk_parent (b, c) ON UPDATE CASCADE,
   UNIQUE WITHOUT INDEX (c)
 )
@@ -181,8 +183,8 @@ a  b  c  d
 
 # Combine unique checks with foreign keys.
 statement ok
-INSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2);
-INSERT INTO uniq_fk_child VALUES (1, 1, 1), (2, 2, 2)
+INSERT INTO uniq_fk_parent VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2);
+INSERT INTO uniq_fk_child VALUES (1, 1, 1, 1, 1), (2, 2, 2, 2, 2)
 
 # This passes the foreign key checks but fails the uniqueness checks.
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(1\) already exists\.
@@ -196,12 +198,12 @@ INSERT INTO uniq_fk_child VALUES (3, 3, 3), (4, 4, 4)
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(2\) already exists\.
 INSERT INTO uniq_fk_child VALUES (1, 1, 2), (4, 2, 2)
 
-query III colnames,rowsort
+query IIIII colnames,rowsort
 SELECT * FROM uniq_fk_child
 ----
-a  b  c
-1  1  1
-2  2  2
+a  b  c  d  e
+1  1  1  1  1
+2  2  2  2  2
 
 
 # Insert into a table in which the unique constraints are the suffix of an
@@ -298,17 +300,21 @@ a  b  c  d
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(1\) already exists\.
 UPDATE uniq_fk_parent SET c = 1
 
+# Inbound foreign key check should fail.
+statement error pgcode 23503 pq: update on table "uniq_fk_parent" violates foreign key constraint "fk_d_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
+UPDATE uniq_fk_parent SET d = 3 WHERE a = 2
+
 # Combine unique checks with foreign keys.
 # This passes the foreign key checks but fails the uniqueness check.
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(2\) already exists\.
 UPDATE uniq_fk_child SET b = 2, c = 2
 
-query III colnames,rowsort
+query IIIII colnames,rowsort
 SELECT * FROM uniq_fk_child
 ----
-a  b  c
-1  1  1
-2  2  2
+a  b  c  d  e
+1  1  1  1  1
+2  2  2  2  2
 
 
 # Update a table in which the unique constraints are the suffix of an
@@ -466,12 +472,12 @@ INSERT INTO uniq_fk_parent VALUES (2, 1) ON CONFLICT (a) DO UPDATE SET c = 1
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_c"\nDETAIL: Key \(c\)=\(1\) already exists\.
 UPSERT INTO uniq_fk_child VALUES (2, 1, 1)
 
-query III colnames,rowsort
+query IIIII colnames,rowsort
 SELECT * FROM uniq_fk_child
 ----
-a  b  c
-1  1  1
-2  2  2
+a  b  c  d  e
+1  1  1  1  1
+2  2  2  2  2
 
 
 # Upsert  into a table in which the unique constraints are the suffix of an
@@ -486,3 +492,34 @@ SELECT * FROM uniq_enum
 r        s    i  j
 us-west  foo  1  1
 eu-west  bar  2  2
+
+# -- Tests with DELETE --
+subtest Delete
+
+# We don't need unique checks with DELETE, but make sure that foreign key
+# checks still work.
+
+# Inbound foreign key check should fail.
+statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "fk_b_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(b, c\)=\(2, 2\) is still referenced from table "uniq_fk_child"\.
+DELETE FROM uniq_fk_parent WHERE a = 2
+
+statement ok
+UPDATE uniq_fk_child SET b = NULL WHERE a = 2
+
+# Inbound foreign key check should still fail.
+statement error pgcode 23503 pq: delete on table "uniq_fk_parent" violates foreign key constraint "fk_d_ref_uniq_fk_parent" on table "uniq_fk_child"\nDETAIL: Key \(d\)=\(2\) is still referenced from table "uniq_fk_child"\.
+DELETE FROM uniq_fk_parent WHERE a = 2
+
+statement ok
+UPDATE uniq_fk_child SET d = NULL WHERE a = 2
+
+# Now this should succeed and set e to NULL due to ON DELETE SET NULL.
+statement ok
+DELETE FROM uniq_fk_parent WHERE a = 2
+
+query IIIII colnames,rowsort
+SELECT * FROM uniq_fk_child
+----
+a  b     c  d     e
+1  1     1  1     1
+2  NULL  2  NULL  NULL

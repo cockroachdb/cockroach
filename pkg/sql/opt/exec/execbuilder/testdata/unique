@@ -37,14 +37,12 @@ CREATE TABLE uniq_hidden_pk (
   UNIQUE WITHOUT INDEX (a)
 )
 
-# TODO(rytaft): make this table use UNIQUE WITHOUT INDEX constraints once
-# we allow foreign keys to reference them (see #57977).
 statement ok
 CREATE TABLE uniq_fk_parent (
-  a INT UNIQUE,
+  a INT UNIQUE WITHOUT INDEX,
   b INT,
   c INT,
-  UNIQUE (b, c),
+  UNIQUE WITHOUT INDEX (b, c),
   FAMILY (rowid, a, b, c)
 )
 
@@ -352,23 +350,56 @@ vectorized: true
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
-# TODO(rytaft): This currently isn't testing anything, since uniq_fk_parent
-# doesn't have any UNIQUE WITHOUT INDEX constraints. See comment above where
-# uniq_fk_parent is created.
 query T
 EXPLAIN INSERT INTO uniq_fk_parent VALUES (1, 1, 1), (2, 2, 2)
 ----
 distribution: local
 vectorized: true
 ·
-• insert
-│ into: uniq_fk_parent(a, b, c, rowid)
-│ auto commit
+• root
 │
-└── • render
+├── • insert
+│   │ into: uniq_fk_parent(a, b, c, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 3 columns, 2 rows
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a) = (column1)
+│           │ pred: column10 != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
     │
-    └── • values
-          size: 3 columns, 2 rows
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (b, c) = (column2, column3)
+            │ pred: column10 != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_fk_parent@primary
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  label: buffer 1
 
 # Combine unique checks with foreign keys. There should be two foreign key
 # checks and one uniqueness check.
@@ -411,10 +442,13 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (anti)
-│           │ table: uniq_fk_parent@uniq_fk_parent_b_c_key
-│           │ equality: (column2, column3) = (b,c)
-│           │ equality cols are key
+│       └── • hash join (right anti)
+│           │ equality: (b, c) = (column2, column3)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@primary
+│           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
 │                 label: buffer 1
@@ -423,10 +457,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (anti)
-            │ table: uniq_fk_parent@uniq_fk_parent_a_key
-            │ equality: (column1) = (a)
-            │ equality cols are key
+        └── • hash join (right anti)
+            │ equality: (a) = (column1)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_fk_parent@primary
+            │     spans: FULL SCAN
             │
             └── • scan buffer
                   label: buffer 1
@@ -898,9 +935,25 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
-└── • fk-cascade
-      fk: fk_b_ref_uniq_fk_parent
-      input: buffer 1
+├── • fk-cascade
+│     fk: fk_b_ref_uniq_fk_parent
+│     input: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (semi)
+            │ equality: (b, c_new) = (b, c)
+            │ pred: rowid != rowid
+            │
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_fk_parent@primary
+                  spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
 # There is no uniquness check since column c is not updated.
@@ -936,7 +989,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: uniq_fk_parent@uniq_fk_parent_b_c_key
+│           │     table: uniq_fk_parent@primary
 │           │     spans: FULL SCAN
 │           │
 │           └── • filter
@@ -957,7 +1010,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_fk_parent@uniq_fk_parent_a_key
+                  table: uniq_fk_parent@primary
                   spans: FULL SCAN
 
 # Combine unique checks with foreign keys.
@@ -1013,7 +1066,7 @@ vectorized: true
             │
             └── • scan
                   missing stats
-                  table: uniq_fk_parent@uniq_fk_parent_b_c_key
+                  table: uniq_fk_parent@primary
                   spans: FULL SCAN
 
 # Test that we use the index when available for the update checks.
@@ -1607,24 +1660,58 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • lookup join (left outer)
-│           │ table: uniq_fk_parent@primary
-│           │ equality: (column10) = (rowid)
-│           │ equality cols are key
+│       └── • render
 │           │
-│           └── • distinct
-│               │ distinct on: column10
-│               │ nulls are distinct
-│               │ error on duplicate
+│           └── • lookup join (left outer)
+│               │ table: uniq_fk_parent@primary
+│               │ equality: (column10) = (rowid)
+│               │ equality cols are key
 │               │
-│               └── • render
+│               └── • distinct
+│                   │ distinct on: column10
+│                   │ nulls are distinct
+│                   │ error on duplicate
 │                   │
-│                   └── • values
-│                         size: 3 columns, 2 rows
+│                   └── • render
+│                       │
+│                       └── • values
+│                             size: 3 columns, 2 rows
 │
 ├── • fk-cascade
 │     fk: fk_b_ref_uniq_fk_parent
 │     input: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a) = (column1)
+│           │ pred: upsert_rowid != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (column2, column3)
+│           │ pred: upsert_rowid != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@primary
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
 │
 └── • constraint-check
     │
@@ -1687,10 +1774,13 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • lookup join (anti)
-│           │ table: uniq_fk_parent@uniq_fk_parent_b_c_key
-│           │ equality: (column2, column3) = (b,c)
-│           │ equality cols are key
+│       └── • hash join (right anti)
+│           │ equality: (b, c) = (column2, column3)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: uniq_fk_parent@primary
+│           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
 │                 label: buffer 1
@@ -1699,10 +1789,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (anti)
-            │ table: uniq_fk_parent@uniq_fk_parent_a_key
-            │ equality: (column1) = (a)
-            │ equality cols are key
+        └── • hash join (right anti)
+            │ equality: (a) = (column1)
+            │
+            ├── • scan
+            │     missing stats
+            │     table: uniq_fk_parent@primary
+            │     spans: FULL SCAN
             │
             └── • scan buffer
                   label: buffer 1

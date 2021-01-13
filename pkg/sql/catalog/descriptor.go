@@ -240,6 +240,7 @@ type TableDescriptor interface {
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint
 	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
 	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
@@ -312,7 +313,7 @@ type Index interface {
 	GetShardColumnName() string
 
 	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
-	IsValidReferencedIndex(referencedColIDs descpb.ColumnIDs) bool
+	IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool
 
 	GetPartitioning() descpb.PartitioningDescriptor
 	FindPartitionByName(name string) descpb.PartitioningDescriptor

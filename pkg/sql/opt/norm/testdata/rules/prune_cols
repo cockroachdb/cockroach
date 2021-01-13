@@ -79,7 +79,43 @@ CREATE TABLE uniq (
   x INT,
   y INT,
   z INT UNIQUE,
-  UNIQUE WITHOUT INDEX (x, y)
+  UNIQUE WITHOUT INDEX (x, y),
+  FAMILY (k),
+  FAMILY (v),
+  FAMILY (w),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+
+exec-ddl
+CREATE TABLE uniq_fk_parent (
+  k INT PRIMARY KEY,
+  a INT UNIQUE WITHOUT INDEX,
+  b INT,
+  c INT,
+  d INT,
+  UNIQUE WITHOUT INDEX (b, c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+----
+
+exec-ddl
+CREATE TABLE uniq_fk_child (
+  a INT REFERENCES uniq_fk_parent (a),
+  b INT,
+  c INT,
+  d INT,
+  FOREIGN KEY (b, c) REFERENCES uniq_fk_parent (b, c) ON UPDATE CASCADE,
+  UNIQUE WITHOUT INDEX (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
 )
 ----
 
@@ -3067,7 +3103,7 @@ UPDATE uniq SET w = 1, x = 2 WHERE k = 3
 ----
 update uniq
  ├── columns: <none>
- ├── fetch columns: uniq.k:8 v:9 w:10 x:11 uniq.y:12 z:13
+ ├── fetch columns: uniq.k:8 w:10 x:11
  ├── update-mapping:
  │    ├── w_new:15 => w:3
  │    └── x_new:16 => x:4
@@ -3075,19 +3111,19 @@ update uniq
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null w:10 x:11 uniq.y:12
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(8-13,15,16)
+ │    ├── fd: ()-->(8,10-12,15,16)
  │    ├── select
- │    │    ├── columns: uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    │    ├── columns: uniq.k:8!null w:10 x:11 uniq.y:12
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(8-13)
+ │    │    ├── fd: ()-->(8,10-12)
  │    │    ├── scan uniq
- │    │    │    ├── columns: uniq.k:8!null v:9 w:10 x:11 uniq.y:12 z:13
+ │    │    │    ├── columns: uniq.k:8!null w:10 x:11 uniq.y:12
  │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9-13), (13)~~>(8-12)
+ │    │    │    └── fd: (8)-->(10-12)
  │    │    └── filters
  │    │         └── uniq.k:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
  │    └── projections
@@ -3138,6 +3174,268 @@ update uniq
                      ├── x_new:26 = x:32 [outer=(26,32), constraints=(/26: (/NULL - ]; /32: (/NULL - ]), fd=(26)==(32), (32)==(26)]
                      ├── y:27 = uniq.y:33 [outer=(27,33), constraints=(/27: (/NULL - ]; /33: (/NULL - ]), fd=(27)==(33), (33)==(27)]
                      └── k:28 != uniq.k:29 [outer=(28,29), constraints=(/28: (/NULL - ]; /29: (/NULL - ])]
+
+# Do not prune columns that are needed for foreign key checks or cascades.
+norm expect=PruneMutationInputCols
+INSERT INTO uniq_fk_parent VALUES (2, 1) ON CONFLICT (k) DO UPDATE SET c = 1
+----
+upsert uniq_fk_parent
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: k:10
+ ├── fetch columns: k:10 b:12 c:13
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => a:2
+ │    ├── column9:9 => b:3
+ │    ├── column9:9 => c:4
+ │    └── column9:9 => d:5
+ ├── update-mapping:
+ │    └── upsert_c:20 => c:4
+ ├── input binding: &1
+ ├── cascades
+ │    └── fk_b_ref_uniq_fk_parent
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_k:17 upsert_a:18 upsert_b:19 upsert_c:20 column1:7!null column2:8!null column9:9 k:10 b:12 c:13
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-10,12,13,17-20)
+ │    ├── left-join (cross)
+ │    │    ├── columns: column1:7!null column2:8!null column9:9 k:10 a:11 b:12 c:13
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(7-13)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null column9:9
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(7-9)
+ │    │    │    └── (2, 1, NULL)
+ │    │    ├── select
+ │    │    │    ├── columns: k:10!null a:11 b:12 c:13
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(10-13)
+ │    │    │    ├── scan uniq_fk_parent
+ │    │    │    │    ├── columns: k:10!null a:11 b:12 c:13
+ │    │    │    │    ├── key: (10)
+ │    │    │    │    └── fd: (10)-->(11-13)
+ │    │    │    └── filters
+ │    │    │         └── k:10 = 2 [outer=(10), constraints=(/10: [/2 - /2]; tight), fd=()-->(10)]
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── CASE WHEN k:10 IS NULL THEN column1:7 ELSE k:10 END [as=upsert_k:17, outer=(7,10)]
+ │         ├── CASE WHEN k:10 IS NULL THEN column2:8 ELSE a:11 END [as=upsert_a:18, outer=(8,10,11)]
+ │         ├── CASE WHEN k:10 IS NULL THEN column9:9 ELSE b:12 END [as=upsert_b:19, outer=(9,10,12)]
+ │         └── CASE WHEN k:10 IS NULL THEN column9:9 ELSE 1 END [as=upsert_c:20, outer=(9,10)]
+ └── unique-checks
+      ├── unique-checks-item: uniq_fk_parent(a)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_a:22 upsert_k:23
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(22,23)
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_a:22 upsert_k:23
+      │         │    ├── mapping:
+      │         │    │    ├──  upsert_a:18 => upsert_a:22
+      │         │    │    └──  upsert_k:17 => upsert_k:23
+      │         │    ├── cardinality: [1 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(22,23)
+      │         ├── scan uniq_fk_parent
+      │         │    ├── columns: k:24!null a:25
+      │         │    ├── key: (24)
+      │         │    └── fd: (24)-->(25)
+      │         └── filters
+      │              ├── upsert_a:22 = a:25 [outer=(22,25), constraints=(/22: (/NULL - ]; /25: (/NULL - ]), fd=(22)==(25), (25)==(22)]
+      │              └── upsert_k:23 != k:24 [outer=(23,24), constraints=(/23: (/NULL - ]; /24: (/NULL - ])]
+      └── unique-checks-item: uniq_fk_parent(b,c)
+           └── semi-join (hash)
+                ├── columns: upsert_b:30 upsert_c:31 upsert_k:32
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(30-32)
+                ├── with-scan &1
+                │    ├── columns: upsert_b:30 upsert_c:31 upsert_k:32
+                │    ├── mapping:
+                │    │    ├──  upsert_b:19 => upsert_b:30
+                │    │    ├──  upsert_c:20 => upsert_c:31
+                │    │    └──  upsert_k:17 => upsert_k:32
+                │    ├── cardinality: [1 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(30-32)
+                ├── scan uniq_fk_parent
+                │    ├── columns: k:33!null b:35 c:36
+                │    ├── key: (33)
+                │    └── fd: (33)-->(35,36)
+                └── filters
+                     ├── upsert_b:30 = b:35 [outer=(30,35), constraints=(/30: (/NULL - ]; /35: (/NULL - ]), fd=(30)==(35), (35)==(30)]
+                     ├── upsert_c:31 = c:36 [outer=(31,36), constraints=(/31: (/NULL - ]; /36: (/NULL - ]), fd=(31)==(36), (36)==(31)]
+                     └── upsert_k:32 != k:33 [outer=(32,33), constraints=(/32: (/NULL - ]; /33: (/NULL - ])]
+
+# Prune inbound foreign key columns when they are not updated.
+norm expect=PruneMutationInputCols
+INSERT INTO uniq_fk_parent VALUES (1) ON CONFLICT (k) DO UPDATE SET d = 1
+----
+upsert uniq_fk_parent
+ ├── columns: <none>
+ ├── arbiter indexes: primary
+ ├── canary column: k:9
+ ├── fetch columns: k:9 d:13
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column8:8 => a:2
+ │    ├── column8:8 => b:3
+ │    ├── column8:8 => c:4
+ │    └── column8:8 => d:5
+ ├── update-mapping:
+ │    └── upsert_d:20 => d:5
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── project
+ │    ├── columns: upsert_k:16 upsert_a:17 upsert_b:18 upsert_c:19 upsert_d:20 column1:7!null column8:8 k:9 d:13
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-9,13,16-20)
+ │    ├── left-join (cross)
+ │    │    ├── columns: column1:7!null column8:8 k:9 a:10 b:11 c:12 d:13
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(7-13)
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column8:8
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(7,8)
+ │    │    │    └── (1, NULL)
+ │    │    ├── select
+ │    │    │    ├── columns: k:9!null a:10 b:11 c:12 d:13
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(9-13)
+ │    │    │    ├── scan uniq_fk_parent
+ │    │    │    │    ├── columns: k:9!null a:10 b:11 c:12 d:13
+ │    │    │    │    ├── key: (9)
+ │    │    │    │    └── fd: (9)-->(10-13)
+ │    │    │    └── filters
+ │    │    │         └── k:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── CASE WHEN k:9 IS NULL THEN column1:7 ELSE k:9 END [as=upsert_k:16, outer=(7,9)]
+ │         ├── CASE WHEN k:9 IS NULL THEN column8:8 ELSE a:10 END [as=upsert_a:17, outer=(8-10)]
+ │         ├── CASE WHEN k:9 IS NULL THEN column8:8 ELSE b:11 END [as=upsert_b:18, outer=(8,9,11)]
+ │         ├── CASE WHEN k:9 IS NULL THEN column8:8 ELSE c:12 END [as=upsert_c:19, outer=(8,9,12)]
+ │         └── CASE WHEN k:9 IS NULL THEN column8:8 ELSE 1 END [as=upsert_d:20, outer=(8,9)]
+ └── unique-checks
+      ├── unique-checks-item: uniq_fk_parent(a)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_a:21 upsert_k:22
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(21,22)
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_a:21 upsert_k:22
+      │         │    ├── mapping:
+      │         │    │    ├──  upsert_a:17 => upsert_a:21
+      │         │    │    └──  upsert_k:16 => upsert_k:22
+      │         │    ├── cardinality: [1 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(21,22)
+      │         ├── scan uniq_fk_parent
+      │         │    ├── columns: k:23!null a:24
+      │         │    ├── key: (23)
+      │         │    └── fd: (23)-->(24)
+      │         └── filters
+      │              ├── upsert_a:21 = a:24 [outer=(21,24), constraints=(/21: (/NULL - ]; /24: (/NULL - ]), fd=(21)==(24), (24)==(21)]
+      │              └── upsert_k:22 != k:23 [outer=(22,23), constraints=(/22: (/NULL - ]; /23: (/NULL - ])]
+      └── unique-checks-item: uniq_fk_parent(b,c)
+           └── semi-join (hash)
+                ├── columns: upsert_b:29 upsert_c:30 upsert_k:31
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(29-31)
+                ├── with-scan &1
+                │    ├── columns: upsert_b:29 upsert_c:30 upsert_k:31
+                │    ├── mapping:
+                │    │    ├──  upsert_b:18 => upsert_b:29
+                │    │    ├──  upsert_c:19 => upsert_c:30
+                │    │    └──  upsert_k:16 => upsert_k:31
+                │    ├── cardinality: [1 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(29-31)
+                ├── scan uniq_fk_parent
+                │    ├── columns: k:32!null b:34 c:35
+                │    ├── key: (32)
+                │    └── fd: (32)-->(34,35)
+                └── filters
+                     ├── upsert_b:29 = b:34 [outer=(29,34), constraints=(/29: (/NULL - ]; /34: (/NULL - ]), fd=(29)==(34), (34)==(29)]
+                     ├── upsert_c:30 = c:35 [outer=(30,35), constraints=(/30: (/NULL - ]; /35: (/NULL - ]), fd=(30)==(35), (35)==(30)]
+                     └── upsert_k:31 != k:32 [outer=(31,32), constraints=(/31: (/NULL - ]; /32: (/NULL - ])]
+
+# Do not prune columns that are needed for foreign key checks or cascades.
+norm expect=PruneMutationInputCols
+DELETE FROM uniq_fk_parent WHERE k = 1
+----
+delete uniq_fk_parent
+ ├── columns: <none>
+ ├── fetch columns: k:7 uniq_fk_parent.a:8 uniq_fk_parent.b:9 uniq_fk_parent.c:10
+ ├── input binding: &1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── select
+ │    ├── columns: k:7!null uniq_fk_parent.a:8 uniq_fk_parent.b:9 uniq_fk_parent.c:10
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(7-10)
+ │    ├── scan uniq_fk_parent
+ │    │    ├── columns: k:7!null uniq_fk_parent.a:8 uniq_fk_parent.b:9 uniq_fk_parent.c:10
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8-10)
+ │    └── filters
+ │         └── k:7 = 1 [outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ └── f-k-checks
+      ├── f-k-checks-item: uniq_fk_child(b,c) -> uniq_fk_parent(b,c)
+      │    └── semi-join (hash)
+      │         ├── columns: b:13 c:14
+      │         ├── cardinality: [0 - 1]
+      │         ├── key: ()
+      │         ├── fd: ()-->(13,14)
+      │         ├── with-scan &1
+      │         │    ├── columns: b:13 c:14
+      │         │    ├── mapping:
+      │         │    │    ├──  uniq_fk_parent.b:9 => b:13
+      │         │    │    └──  uniq_fk_parent.c:10 => c:14
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(13,14)
+      │         ├── scan uniq_fk_child
+      │         │    └── columns: uniq_fk_child.b:16 uniq_fk_child.c:17
+      │         └── filters
+      │              ├── b:13 = uniq_fk_child.b:16 [outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
+      │              └── c:14 = uniq_fk_child.c:17 [outer=(14,17), constraints=(/14: (/NULL - ]; /17: (/NULL - ]), fd=(14)==(17), (17)==(14)]
+      └── f-k-checks-item: uniq_fk_child(a) -> uniq_fk_parent(a)
+           └── semi-join (hash)
+                ├── columns: a:21
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(21)
+                ├── with-scan &1
+                │    ├── columns: a:21
+                │    ├── mapping:
+                │    │    └──  uniq_fk_parent.a:8 => a:21
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(21)
+                ├── scan uniq_fk_child
+                │    └── columns: uniq_fk_child.a:22
+                └── filters
+                     └── a:21 = uniq_fk_child.a:22 [outer=(21,22), constraints=(/21: (/NULL - ]; /22: (/NULL - ]), fd=(21)==(22), (22)==(21)]
 
 # We should be pruning the virtual column.
 norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
