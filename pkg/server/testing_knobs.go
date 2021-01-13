@@ -77,6 +77,9 @@ type TestingKnobs struct {
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(livenesspb.Liveness)
+	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
+	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
+	StickyEngineRegistry StickyInMemEnginesRegistry
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
