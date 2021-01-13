@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
@@ -6198,8 +6199,64 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
+	tmp, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+	const badHeadResponse = "bad-head-response"
+	// This test uses this mock HTTP server to pass the backup files between tenants.
+	makeServer := func() (*url.URL, func() int, func()) {
+		var files int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
+			switch r.Method {
+			case "PUT":
+				f, err := os.Create(localfile)
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				defer f.Close()
+				if _, err := io.Copy(f, r.Body); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				files++
+				w.WriteHeader(201)
+			case "GET", "HEAD":
+				if filepath.Base(localfile) == badHeadResponse {
+					http.Error(w, "HEAD not implemented", 500)
+					return
+				}
+				http.ServeFile(w, r, localfile)
+			case "DELETE":
+				if err := os.Remove(localfile); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				w.WriteHeader(204)
+			default:
+				http.Error(w, "unsupported method "+r.Method, 400)
+			}
+		}))
+
+		cleanup := func() {
+			srv.Close()
+		}
+
+		t.Logf("Mock HTTP Storage %q", srv.URL)
+		uri, err := url.Parse(srv.URL)
+		if err != nil {
+			srv.Close()
+			t.Fatal(err)
+		}
+		uri.Path = filepath.Join(uri.Path, "testing")
+		return uri, func() int { return files }, cleanup
+	}
+	httpServer, _, cleanup := makeServer()
+	defer cleanup()
+
 	const numAccounts = 1
 	ctx, tc, systemDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
 
@@ -6247,7 +6304,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
 
 	t.Run("inside-tenant", func(t *testing.T) {
-		tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
+		httpAddr := httpServer.String() + "/test"
+		tenant10.Exec(t, `BACKUP DATABASE foo TO $1`, httpAddr)
+		tenant11.Exec(t, `CREATE DATABASE foo2`)
+		tenant11.Exec(t, `RESTORE foo.bar FROM $1 WITH into_db='foo2'`, httpAddr)
+		tenant11.CheckQueryResults(t, `SELECT * FROM foo2.bar`, tenant10.QueryStr(t, `SELECT * FROM foo.bar`))
 	})
 
 	t.Run("non-existent", func(t *testing.T) {
