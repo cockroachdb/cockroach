@@ -22,12 +22,15 @@ func NewStreamClient() Client {
 
 // GetTopology implements the Client interface.
 func (m *client) GetTopology(address StreamAddress) (Topology, error) {
-	panic("unimplemented mock method")
+	return Topology{
+		Partitions: []PartitionAddress{"some://address"},
+	}, nil
 }
 
 // ConsumePartition implements the Client interface.
 func (m *client) ConsumePartition(
 	address PartitionAddress, startTime time.Time,
 ) (chan Event, error) {
-	panic("unimplemented mock method")
+	eventCh := make(chan Event)
+	return eventCh, nil
 }
