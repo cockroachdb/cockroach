@@ -130,6 +130,44 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	})
 }
 
+func TestClosedTimestampCanServeOnVoterIncoming(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Limiting how long transactions can run does not work well with race unless
+	// we're extremely lenient, which drives up the test duration.
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	dbName, tableName := "cttest", "kv"
+	clusterArgs := aggressiveResolvedTimestampClusterArgs
+	clusterArgs.ReplicationMode = base.ReplicationManual
+	knobs, ltk := makeReplicationTestKnobs()
+	clusterArgs.ServerArgs.Knobs = knobs
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, testingCloseFraction,
+		clusterArgs, dbName, tableName)
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	// Add a new voting replica, which should get the range into a joint config.
+	// It will stay in that state because of the `ReplicaAddStopAfterJointConfig`
+	// testing knob `makeReplicationTestKnobs()`.
+	ltk.withStopAfterJointConfig(func() {
+		tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+	})
+
+	reqTS := tc.Server(0).Clock().Now()
+	// Sleep for a sufficiently long time so that reqTS can be closed.
+	time.Sleep(3 * testingTargetDuration)
+	baRead := makeReadBatchRequestForDesc(desc, reqTS)
+	repls := replsForRange(ctx, t, tc, desc, numNodes)
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+	})
+}
+
 // TestClosedTimestampCanServerThroughoutLeaseTransfer verifies that lease
 // transfers does not prevent reading a value from a follower that was
 // previously readable.
