@@ -121,7 +121,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 			}
 			eventChs[partitionAddress] = eventCh
 		}
-		eventCh := merge(eventChs)
+		eventCh := merge(sip.Ctx, eventChs)
 
 		if err := sip.startIngestion(eventCh); err != nil {
 			sip.ingestionErr = err
@@ -241,7 +241,7 @@ func (sip *streamIngestionProcessor) flush() error {
 // merge takes events from all the streams and merges them into a single
 // channel.
 func merge(
-	partitionStreams map[streamclient.PartitionAddress]chan streamclient.Event,
+	ctx context.Context, partitionStreams map[streamclient.PartitionAddress]chan streamclient.Event,
 ) chan partitionEvent {
 	merged := make(chan partitionEvent)
 
@@ -250,13 +250,21 @@ func merge(
 
 	for partition, eventCh := range partitionStreams {
 		go func(partition streamclient.PartitionAddress, eventCh <-chan streamclient.Event) {
-			for event := range eventCh {
-				merged <- partitionEvent{
-					Event:     event,
-					partition: partition,
+			defer wg.Done()
+			for {
+				select {
+				case event, ok := <-eventCh:
+					if !ok {
+						return
+					}
+					merged <- partitionEvent{
+						Event:     event,
+						partition: partition,
+					}
+				case <-ctx.Done():
+					return
 				}
 			}
-			wg.Done()
 		}(partition, eventCh)
 	}
 	go func() {

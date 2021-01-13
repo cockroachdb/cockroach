@@ -81,6 +81,12 @@ message StreamIngestionDetails {
   // StreamAddress is the location of the stream which the ingestion job will
   // read from.
   string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.StreamAddress"];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+}
+
+message StreamIngestionProgress {
+
 }
 
 message BackupDetails {
@@ -567,6 +573,7 @@ message Payload {
     CreateStatsDetails createStats = 15;
     SchemaChangeGCDetails schemaChangeGC = 21;
     TypeSchemaChangeDetails typeSchemaChange = 22;
+    StreamIngestionDetails streamIngestion = 23;
   }
 }
 
@@ -587,6 +594,7 @@ message Progress {
     CreateStatsProgress createStats = 15;
     SchemaChangeGCProgress schemaChangeGC = 16;
     TypeSchemaChangeProgress typeSchemaChange = 17;
+    StreamIngestionProgress streamIngest = 18;
   }
 }
 
