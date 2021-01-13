@@ -95,7 +95,7 @@ func NewReplicaSlice(
 	case OnlyPotentialLeaseholders:
 		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
 	case AllExtantReplicas:
-		replicas = desc.Replicas().VoterFullAndNonVoterDescriptors()
+		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
 	default:
 		log.Fatalf(ctx, "unknown ReplicaSliceFilter %s", filter)
 	}

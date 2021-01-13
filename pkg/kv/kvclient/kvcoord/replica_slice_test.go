@@ -47,9 +47,9 @@ func TestNewReplicaSlice(t *testing.T) {
 	ctx := context.Background()
 	rd := &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1},
-			{NodeID: 2, StoreID: 2},
-			{NodeID: 3, StoreID: 3},
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
 		},
 	}
 	ns := &mockNodeStore{
@@ -94,7 +94,7 @@ func TestNewReplicaSlice(t *testing.T) {
 
 	// Check that, if the leaseholder points to a learner, that learner is
 	// included.
-	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3}
+	leaseholder := &roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
 	rs, err = NewReplicaSlice(ctx, ns, rd, leaseholder, OnlyPotentialLeaseholders)
 	require.NoError(t, err)
 	require.Equal(t, 3, rs.Len())
