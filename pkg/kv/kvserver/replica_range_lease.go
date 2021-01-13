@@ -635,13 +635,17 @@ func (r *Replica) LeaseStatusAt(
 func (r *Replica) leaseStatusAtRLocked(
 	ctx context.Context, now hlc.ClockTimestamp,
 ) kvserverpb.LeaseStatus {
-	reqTS := now.ToTimestamp() // assume a req ts equal to now
-	return r.leaseStatusForRequestRLocked(ctx, now, reqTS)
+	return r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
 }
 
 func (r *Replica) leaseStatusForRequestRLocked(
 	ctx context.Context, now hlc.ClockTimestamp, reqTS hlc.Timestamp,
 ) kvserverpb.LeaseStatus {
+	if reqTS.IsEmpty() {
+		// If the request timestamp is empty, return the status that
+		// would be given to a request with a timestamp of now.
+		reqTS = now.ToTimestamp()
+	}
 	return r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS, reqTS)
 }
 
@@ -898,12 +902,12 @@ func newNotLeaseHolderError(
 }
 
 // leaseGoodToGo is a fast-path for lease checks which verifies that an
-// existing lease is valid and owned by the current store. This method should
-// not be called directly. Use redirectOnOrAcquireLease instead.
-func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bool) {
-	// TODO(nvanbenschoten): this should take the request timestamp and forward
-	// now by that timestamp. Should we limit how far in the future this timestamp
-	// can lead clock.Now()? Something to do with < now + RangeLeaseRenewalDuration()?
+// existing lease is valid, owned by the current store, and usable to
+// serve requests at the specified timestamp. This method should not be
+// called directly. Use redirectOnOrAcquireLease instead.
+func (r *Replica) leaseGoodToGo(
+	ctx context.Context, reqTS hlc.Timestamp,
+) (kvserverpb.LeaseStatus, bool) {
 	now := r.store.Clock().NowAsClockTimestamp()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -913,8 +917,7 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 		return kvserverpb.LeaseStatus{}, false
 	}
 
-	// TODO(nvanbenschoten): pass the request timestamp here.
-	status := r.leaseStatusForRequestRLocked(ctx, now, now.ToTimestamp())
+	status := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 	if status.IsValid() && status.Lease.OwnedBy(r.store.StoreID()) {
 		// We own the lease...
 		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
@@ -927,43 +930,86 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (kvserverpb.LeaseStatus, bo
 	return kvserverpb.LeaseStatus{}, false
 }
 
+// checkRequestTimeRLocked checks that the provided request timestamp is not
+// too far in the future. We define "too far" as a time that would require a
+// lease extension even if we were perfectly proactive about extending our
+// lease asynchronously to always ensure at least a "leaseRenewal" duration
+// worth of runway. Doing so ensures that we detect client behavior that
+// will inevitably run into frequent synchronous lease extensions.
+//
+// This serves as a stricter version of a check that if we were to perform
+// a lease extension at now, the request would be contained within the new
+// lease's expiration (and stasis period).
+func (r *Replica) checkRequestTimeRLocked(
+	now hlc.ClockTimestamp, reqTS hlc.Timestamp,
+) *roachpb.Error {
+	var leaseRenewal time.Duration
+	if r.requiresExpiringLeaseRLocked() {
+		_, leaseRenewal = r.store.cfg.RangeLeaseDurations()
+	} else {
+		_, leaseRenewal = r.store.cfg.NodeLivenessDurations()
+	}
+	leaseRenewalMinusStasis := leaseRenewal - r.store.Clock().MaxOffset()
+	if leaseRenewalMinusStasis < 0 {
+		// If maxOffset > leaseRenewal, such that present time operations risk
+		// ending up in the stasis period, allow requests up to clock.Now(). Can
+		// happen in tests.
+		leaseRenewalMinusStasis = 0
+	}
+	maxReqTS := now.ToTimestamp().Add(leaseRenewalMinusStasis.Nanoseconds(), 0)
+	if maxReqTS.Less(reqTS) {
+		return roachpb.NewErrorf("request timestamp %s too far in future (> %s)", reqTS, maxReqTS)
+	}
+	return nil
+}
+
 // redirectOnOrAcquireLease checks whether this replica has the lease at the
 // current timestamp. If it does, returns the lease and its status. If
 // another replica currently holds the lease, redirects by returning
 // NotLeaseHolderError. If the lease is expired, a renewal is synchronously
 // requested. Leases are eagerly renewed when a request with a timestamp
-// within rangeLeaseRenewalDuration of the lease expiration is served.
+// within RangeLeaseRenewalDuration of the lease expiration is served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
 //  the range lease. If the lease acquisition fails, the write cmd
 //  will fail as well. If it succeeds, as is likely, then the write
 //  will not incur latency waiting for the command to complete.
 //  Reads, however, must wait.
-//
-// TODO(rangeLeaseRenewalDuration): what is rangeLeaseRenewalDuration
-//  referring to? It appears to have rotted.
-//
-// TODO(nvanbenschoten): reword comment to account for request timestamp.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
-	if status, ok := r.leaseGoodToGo(ctx); ok {
+	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{})
+}
+
+// redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
+// but it accepts a specific request timestamp instead of assuming that
+// the request is operating at the current time.
+func (r *Replica) redirectOnOrAcquireLeaseForRequest(
+	ctx context.Context, reqTS hlc.Timestamp,
+) (kvserverpb.LeaseStatus, *roachpb.Error) {
+	// Try fast-path.
+	if status, ok := r.leaseGoodToGo(ctx, reqTS); ok {
 		return status, nil
 	}
 
-	// Loop until the lease is held or the replica ascertains the actual
-	// lease holder. Returns also on context.Done() (timeout or cancellation).
+	// If fast-path fails, loop until the lease is held or the replica
+	// ascertains the actual lease holder. Returns also on context.Done()
+	// (timeout or cancellation).
 	var status kvserverpb.LeaseStatus
 	for attempt := 1; ; attempt++ {
-		// TODO(nvanbenschoten): this should take the request timestamp and
-		// forward now by that timestamp. See TODO in leaseGoodToGo.
 		now := r.store.Clock().NowAsClockTimestamp()
 		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
-			// TODO(nvanbenschoten): pass the request timestamp here.
-			status = r.leaseStatusForRequestRLocked(ctx, now, now.ToTimestamp())
+			// Check to make sure we aren't trying to perform a request at an
+			// invalid timestamp too far in the future. If so, reject instead
+			// of trying to acquire a lease to satisfy the request.
+			if pErr := r.checkRequestTimeRLocked(now, reqTS); pErr != nil {
+				return nil, pErr
+			}
+
+			status = r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.

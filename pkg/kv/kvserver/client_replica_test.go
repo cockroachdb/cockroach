@@ -633,6 +633,9 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 
 	cfg := kvserver.TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableReplicateQueue = true
+	// TODO(andrei): remove this knob once #59179 is fixed. It should only be
+	// needed by TestLeaseExpirationBelowFutureTimeRequest.
+	cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true
 	cfg.Clock = nil // manual clock
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
@@ -1017,6 +1020,69 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	}
 }
 
+// TestLeaseExpirationBelowFutureTimeRequest tests two cases where a
+// request is sent to a range with a future-time timestamp that is past
+// the current expiration time of the range's lease. In the first case,
+// the request timestamp is close enough to present time to be allowed
+// to evaluate on the range after a lease expiration. In the second
+// case, the request timestamp is too far in the future, so it is
+// rejected.
+func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "tooFarInFuture", func(t *testing.T, tooFarInFuture bool) {
+		ctx := context.Background()
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
+
+		// Ensure that replica1 has the lease.
+		require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID))
+		l.checkHasLease(t, 1)
+		preLease, _ := l.replica1.GetLease()
+
+		// Move the clock up near (but below) the lease expiration.
+		l.mtc.manualClock.Set(preLease.Expiration.WallTime - 10)
+		now := l.mtc.clocks[0].Now()
+
+		// Construct a future-time request timestamp past the current lease's
+		// expiration. Remember to set the synthetic bit so that it is not used
+		// to update the store's clock. See Replica.checkRequestTimeRLocked for
+		// the exact determination of whether a request timestamp is too far in
+		// the future or not.
+		leaseRenewal := l.mtc.storeConfig.RangeLeaseRenewalDuration()
+		leaseRenewalMinusStasis := leaseRenewal - l.mtc.clocks[0].MaxOffset()
+		reqTime := now.Add(leaseRenewalMinusStasis.Nanoseconds()-10, 0)
+		if tooFarInFuture {
+			reqTime = reqTime.Add(20, 0)
+		}
+		reqTime = reqTime.WithSynthetic(true)
+
+		// Issue a get with the request timestamp.
+		args := getArgs(l.leftKey)
+		_, pErr := kv.SendWrappedWith(ctx, l.mtc.senders[1], roachpb.Header{
+			RangeID: l.replica0.RangeID, Replica: l.replica1Desc, Timestamp: reqTime,
+		}, args)
+
+		if tooFarInFuture {
+			// The request should have been rejected.
+			require.NotNil(t, pErr)
+			require.Regexp(t, "request timestamp .* too far in future", pErr)
+
+			// Checking that the lease hasn't been extended is flaky, because it
+			// may end up being extended by some other request. That fact that
+			// our request was rejected is good enough.
+		} else {
+			// The request should have been rejected.
+			require.Nil(t, pErr)
+
+			// The lease should have been extended.
+			l.checkHasLease(t, 1)
+			postLease, _ := l.replica1.GetLease()
+			require.True(t, preLease.Expiration.Less(*postLease.Expiration), "expected extension")
+		}
+	})
+}
+
 // TestRangeLimitTxnMaxTimestamp verifies that on lease transfer, the
 // normal limiting of a txn's max timestamp to the first observed
 // timestamp on a node is extended to include the lease start
@@ -1394,25 +1460,16 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	}
 }
 
-// LeaseInfo runs a LeaseInfoRequest using the specified server.
-func LeaseInfo(
-	t *testing.T,
-	db *kv.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	readConsistency roachpb.ReadConsistencyType,
-) roachpb.LeaseInfoResponse {
-	leaseInfoReq := &roachpb.LeaseInfoRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: rangeDesc.StartKey.AsRawKey(),
-		},
-	}
-	reply, pErr := kv.SendWrappedWith(context.Background(), db.NonTransactionalSender(), roachpb.Header{
-		ReadConsistency: readConsistency,
-	}, leaseInfoReq)
+func getLeaseInfo(
+	ctx context.Context, db *kv.DB, key roachpb.Key,
+) (*roachpb.LeaseInfoResponse, error) {
+	header := roachpb.Header{ReadConsistency: roachpb.INCONSISTENT}
+	leaseInfoReq := &roachpb.LeaseInfoRequest{RequestHeader: roachpb.RequestHeader{Key: key}}
+	reply, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, leaseInfoReq)
 	if pErr != nil {
-		t.Fatal(pErr)
+		return nil, pErr.GoError()
 	}
-	return *(reply.(*roachpb.LeaseInfoResponse))
+	return reply.(*roachpb.LeaseInfoResponse), nil
 }
 
 func TestLeaseInfoRequest(t *testing.T) {
@@ -1437,6 +1494,13 @@ func TestLeaseInfoRequest(t *testing.T) {
 			t.Fatalf("expected to find replica in server %d", i)
 		}
 	}
+	mustGetLeaseInfo := func(db *kv.DB) *roachpb.LeaseInfoResponse {
+		resp, err := getLeaseInfo(context.Background(), db, rangeDesc.StartKey.AsRawKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
 
 	// Transfer the lease to Servers[0] so we start in a known state. Otherwise,
 	// there might be already a lease owned by a random node.
@@ -1448,7 +1512,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// Now test the LeaseInfo. We might need to loop until the node we query has
 	// applied the lease.
 	testutils.SucceedsSoon(t, func() error {
-		leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
 		if leaseHolderReplica != replicas[0] {
 			return fmt.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[0], leaseHolderReplica)
@@ -1465,7 +1529,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 	// An inconsistent LeaseInfoReqeust on the old lease holder should give us the
 	// right answer immediately, since the old holder has definitely applied the
 	// transfer before TransferRangeLease returned.
-	leaseHolderReplica := LeaseInfo(t, kvDB0, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+	leaseHolderReplica := mustGetLeaseInfo(kvDB0).Lease.Replica
 	if !leaseHolderReplica.Equal(replicas[1]) {
 		t.Fatalf("lease holder should be replica %+v, but is: %+v",
 			replicas[1], leaseHolderReplica)
@@ -1478,7 +1542,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		// from the supposed lease holder, because this node might initially be
 		// unaware of the new lease and so the request might bounce around for a
 		// while (see #8816).
-		leaseHolderReplica = LeaseInfo(t, kvDB1, rangeDesc, roachpb.INCONSISTENT).Lease.Replica
+		leaseHolderReplica = mustGetLeaseInfo(kvDB1).Lease.Replica
 		if !leaseHolderReplica.Equal(replicas[1]) {
 			return errors.Errorf("lease holder should be replica %+v, but is: %+v",
 				replicas[1], leaseHolderReplica)
