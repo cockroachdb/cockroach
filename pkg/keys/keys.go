@@ -478,7 +478,7 @@ func DecodeLockTableSingleKey(key roachpb.Key) (lockedKey roachpb.Key, err error
 // opposed to "user") keys, but unfortunately that name has already been
 // claimed by a related (but not identical) concept.
 func IsLocal(k roachpb.Key) bool {
-	return bytes.HasPrefix(k, localPrefix)
+	return bytes.HasPrefix(k, LocalPrefix)
 }
 
 // IsLocalStoreKey performs a cheap check that returns true iff the parameter
