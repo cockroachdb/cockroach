@@ -1364,13 +1364,14 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 	includeEmpty bool,
-	indexBoundAccount mon.BoundAccount,
-) ([]IndexEntry, error) {
+	indexBoundAccount *mon.BoundAccount,
+) ([]IndexEntry, int64, error) {
+	var memUsedEncodingSecondaryIdxs int64
 	if len(secondaryIndexEntries) > 0 {
 		panic(errors.AssertionFailedf("length of secondaryIndexEntries was non-zero"))
 	}
 
-	if indexBoundAccount.Monitor() == nil {
+	if indexBoundAccount == nil || indexBoundAccount.Monitor() == nil {
 		panic(errors.AssertionFailedf("memory monitor passed to EncodeSecondaryIndexes was nil"))
 	}
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(IndexEntry{}))
@@ -1378,7 +1379,7 @@ func EncodeSecondaryIndexes(
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
-			return secondaryIndexEntries, err
+			return secondaryIndexEntries, 0, err
 		}
 		// Normally, each index will have exactly one entry. However, inverted
 		// indexes can have 0 or >1 entries, as well as secondary indexes which
@@ -1390,22 +1391,32 @@ func EncodeSecondaryIndexes(
 		// in capacity. Therefore, we must account for another
 		// cap(secondaryIndexEntries) in the index memory account.
 		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
-			if err := indexBoundAccount.Grow(ctx, sizeOfIndexEntry*int64(cap(secondaryIndexEntries))); err != nil {
-				return nil, errors.Wrap(err, "failed to re-slice index entries buffer")
+			resliceSize := sizeOfIndexEntry * int64(cap(secondaryIndexEntries))
+			if err := indexBoundAccount.Grow(ctx, resliceSize); err != nil {
+				return nil, 0, errors.Wrap(err,
+					"failed to re-slice index entries buffer")
 			}
+			memUsedEncodingSecondaryIdxs += resliceSize
 		}
 
 		// The index keys can be large and so we must account for them in the index
 		// memory account.
+		// In some cases eg: STORING indexes, the size of the value can also be
+		// non-trivial.
 		for _, index := range entries {
 			if err := indexBoundAccount.Grow(ctx, int64(len(index.Key))); err != nil {
-				return nil, errors.Wrap(err, "failed to allocate space for index keys")
+				return nil, 0, errors.Wrap(err, "failed to allocate space for index keys")
 			}
+			memUsedEncodingSecondaryIdxs += int64(len(index.Key))
+			if err := indexBoundAccount.Grow(ctx, int64(len(index.Value.RawBytes))); err != nil {
+				return nil, 0, errors.Wrap(err, "failed to allocate space for index values")
+			}
+			memUsedEncodingSecondaryIdxs += int64(len(index.Value.RawBytes))
 		}
 
 		secondaryIndexEntries = append(secondaryIndexEntries, entries...)
 	}
-	return secondaryIndexEntries, nil
+	return secondaryIndexEntries, memUsedEncodingSecondaryIdxs, nil
 }
 
 // IndexKeyEquivSignature parses an index key if and only if the index key
