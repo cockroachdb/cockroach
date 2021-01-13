@@ -109,8 +109,9 @@ func (ib *indexBackfiller) OutputTypes() []*types.T {
 // serves for better progress reporting as explained in the ingestIndexEntries
 // method.
 type indexEntryBatch struct {
-	indexEntries  []rowenc.IndexEntry
-	completedSpan roachpb.Span
+	indexEntries         []rowenc.IndexEntry
+	completedSpan        roachpb.Span
+	memUsedBuildingBatch int64
 }
 
 // constructIndexEntries is responsible for constructing the index entries of
@@ -119,6 +120,7 @@ type indexEntryBatch struct {
 func (ib *indexBackfiller) constructIndexEntries(
 	ctx context.Context, indexEntriesCh chan indexEntryBatch,
 ) error {
+	var memUsedBuildingBatch int64
 	var err error
 	var entries []rowenc.IndexEntry
 	for i := range ib.spec.Spans {
@@ -127,7 +129,8 @@ func (ib *indexBackfiller) constructIndexEntries(
 		todo := ib.spec.Spans[i].Span
 		for todo.Key != nil {
 			startKey := todo.Key
-			todo.Key, entries, err = ib.buildIndexEntryBatch(ctx, todo, ib.spec.ReadAsOf)
+			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo,
+				ib.spec.ReadAsOf)
 			if err != nil {
 				return err
 			}
@@ -141,7 +144,8 @@ func (ib *indexBackfiller) constructIndexEntries(
 			}
 
 			log.VEventf(ctx, 2, "index entries built for span %s", completedSpan)
-			indexBatch := indexEntryBatch{completedSpan: completedSpan, indexEntries: entries}
+			indexBatch := indexEntryBatch{completedSpan: completedSpan, indexEntries: entries,
+				memUsedBuildingBatch: memUsedBuildingBatch}
 			// Send index entries to be ingested into storage.
 			select {
 			case indexEntriesCh <- indexBatch:
@@ -259,7 +263,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			// free the memory which was accounted when building the index entries of the
 			// current chunk.
 			indexBatch.indexEntries = nil
-			ib.Clear(ctx)
+			ib.ShrinkBoundAccount(ctx, indexBatch.memUsedBuildingBatch)
 
 			knobs := &ib.flowCtx.Cfg.TestingKnobs
 			if knobs.BulkAdderFlushesEveryBatch {
@@ -340,6 +344,7 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 	defer span.Finish()
 	defer ib.output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, ib.output)
+	defer ib.Close(ctx)
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
@@ -405,11 +410,12 @@ func (ib *indexBackfiller) getProgressReportInterval() time.Duration {
 // buildIndexEntryBatch constructs the index entries for a single indexBatch.
 func (ib *indexBackfiller) buildIndexEntryBatch(
 	tctx context.Context, sp roachpb.Span, readAsOf hlc.Timestamp,
-) (roachpb.Key, []rowenc.IndexEntry, error) {
+) (roachpb.Key, []rowenc.IndexEntry, int64, error) {
 	knobs := &ib.flowCtx.Cfg.TestingKnobs
+	var memUsedBuildingBatch int64
 	if knobs.RunBeforeBackfillChunk != nil {
 		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 	}
 	var key roachpb.Key
@@ -423,15 +429,15 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp,
+		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp,
 			ib.spec.ChunkSize, false /*traceKV*/)
 		return err
 	}); err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	prepTime := timeutil.Now().Sub(start)
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 
-	return key, entries, nil
+	return key, entries, memUsedBuildingBatch, nil
 }
