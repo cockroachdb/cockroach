@@ -64,7 +64,7 @@ func newRestoreDataProcessor(
 	}
 
 	var err error
-	rd.kr, err = storageccl.MakeKeyRewriterFromRekeys(rd.spec.Rekeys)
+	rd.kr, err = storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
 	if err != nil {
 		return nil, err
 	}

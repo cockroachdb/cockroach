@@ -267,7 +267,7 @@ func (ssp *splitAndScatterProcessor) runSplitAndScatter(
 	scatterer splitAndScatterer,
 ) error {
 	db := flowCtx.Cfg.DB
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(spec.Rekeys)
+	kr, err := storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
 	if err != nil {
 		return err
 	}
