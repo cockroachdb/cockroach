@@ -57,13 +57,13 @@ CREATE TABLE public.t (
   c INT8 NULL,
   d INT8 NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-  INDEX t_a_b_idx (b ASC) PARTITION BY LIST (a) (
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
     PARTITION b_implicit VALUES IN ((2))
   ),
-  UNIQUE INDEX t_a_c_key (c ASC) PARTITION BY LIST (a) (
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
     PARTITION c_implicit VALUES IN ((3))
   ),
-  INDEX t_d_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
     PARTITION a_b_c_implicit VALUES IN ((4))
   ),
   FAMILY fam_0_pk_a_b_c_d (pk, a, b, c, d)
@@ -87,13 +87,13 @@ CREATE TABLE public.t (
   c INT8 NULL,
   d INT8 NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
-  INDEX t_a_b_idx (b ASC) PARTITION BY LIST (a) (
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
     PARTITION b_implicit VALUES IN ((2))
   ),
-  UNIQUE INDEX t_a_c_key (c ASC) PARTITION BY LIST (a) (
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
     PARTITION c_implicit VALUES IN ((3))
   ),
-  INDEX t_d_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
     PARTITION a_b_c_implicit VALUES IN ((4))
   ),
   INDEX new_idx (d ASC) PARTITION BY LIST (a) (
@@ -124,19 +124,19 @@ SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
 WHERE descriptor_name = 't' AND column_type = 'key'
 ORDER BY 1, 2
 ----
-index_name     column_name  implicit
-new_idx        a            true
-new_idx        d            false
-primary        a            true
-primary        pk           false
-t_a_b_idx      a            true
-t_a_b_idx      b            false
-t_a_c_key      a            true
-t_a_c_key      c            false
-t_d_a_b_c_idx  a            false
-t_d_a_b_c_idx  b            false
-t_d_a_b_c_idx  c            false
-t_d_a_b_c_idx  d            true
+index_name   column_name  implicit
+new_idx      a            true
+new_idx      d            false
+primary      a            true
+primary      pk           false
+t_a_b_c_idx  a            false
+t_a_b_c_idx  b            false
+t_a_b_c_idx  c            false
+t_a_b_c_idx  d            true
+t_b_idx      a            true
+t_b_idx      b            false
+t_c_key      a            true
+t_c_key      c            false
 
 query TTT colnames
 SELECT
@@ -145,12 +145,12 @@ FROM pg_indexes
 WHERE tablename = 't'
 ORDER BY 1, 2, 3
 ----
-tablename  indexname      indexdef
-t          new_idx        CREATE INDEX new_idx ON test.public.t USING btree (d ASC)
-t          primary        CREATE UNIQUE INDEX "primary" ON test.public.t USING btree (pk ASC)
-t          t_a_b_idx      CREATE INDEX t_a_b_idx ON test.public.t USING btree (b ASC)
-t          t_a_c_key      CREATE UNIQUE INDEX t_a_c_key ON test.public.t USING btree (c ASC)
-t          t_d_a_b_c_idx  CREATE INDEX t_d_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
+tablename  indexname    indexdef
+t          new_idx      CREATE INDEX new_idx ON test.public.t USING btree (d ASC)
+t          primary      CREATE UNIQUE INDEX "primary" ON test.public.t USING btree (pk ASC)
+t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON test.public.t USING btree (a ASC, b ASC, c ASC)
+t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC)
+t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
 
 statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
 ALTER INDEX new_idx PARTITION BY LIST (a) (

@@ -572,13 +572,13 @@ t  CREATE TABLE public.t (
    y INT8 NOT NULL,
    z INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_crdb_internal_x_shard_5_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
    INDEX i (z ASC),
    FAMILY fam_0_x_y_z_crdb_internal_x_shard_5 (x, y, z, crdb_internal_x_shard_5)
 )
 
 query III
-SELECT * FROM t@t_crdb_internal_x_shard_5_x_key
+SELECT * FROM t@t_x_key
 ----
 1 2 3
 
@@ -1187,7 +1187,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
-   UNIQUE INDEX t_crdb_internal_x_shard_2_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
    FAMILY fam_0_x_y_crdb_internal_x_shard_2 (x, y, crdb_internal_x_shard_2, crdb_internal_y_shard_2)
 )
 
