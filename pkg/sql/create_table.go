@@ -1511,6 +1511,21 @@ func NewTableDesc(
 		}
 		return nil
 	}
+
+	var partitionByAll *tree.PartitionBy
+	if n.PartitionByTable != nil && n.PartitionByTable.All {
+		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+			return nil, errors.WithHint(
+				pgerror.New(
+					pgcode.FeatureNotSupported,
+					"PARTITION ALL BY LIST/RANGE is currently experimental",
+				),
+				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
+			)
+		}
+		partitionByAll = n.PartitionByTable.PartitionBy
+	}
+
 	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
@@ -1561,14 +1576,23 @@ func NewTableDesc(
 					idx.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 				}
 			}
-			if d.PartitionByIndex.ContainsPartitions() {
+			if d.PartitionByIndex.ContainsPartitions() || partitionByAll != nil {
+				partitionBy := partitionByAll
+				if partitionByAll == nil {
+					partitionBy = d.PartitionByIndex.PartitionBy
+				} else if d.PartitionByIndex.ContainsPartitions() {
+					return nil, pgerror.New(
+						pgcode.FeatureNotSupported,
+						"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
+					)
+				}
 				var numImplicitColumns int
 				var err error
 				idx, numImplicitColumns, err = detectImplicitPartitionColumns(
 					evalCtx,
 					&desc,
 					idx,
-					d.PartitionByIndex.PartitionBy,
+					partitionBy,
 				)
 				if err != nil {
 					return nil, err
@@ -1580,7 +1604,7 @@ func NewTableDesc(
 					&desc,
 					&idx,
 					numImplicitColumns,
-					d.PartitionByIndex.PartitionBy,
+					partitionBy,
 				)
 				if err != nil {
 					return nil, err
@@ -1633,14 +1657,24 @@ func NewTableDesc(
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return nil, err
 			}
-			if d.PartitionByIndex.ContainsPartitions() {
+			if d.PartitionByIndex.ContainsPartitions() || partitionByAll != nil {
+				partitionBy := partitionByAll
+				if partitionByAll == nil {
+					partitionBy = d.PartitionByIndex.PartitionBy
+				} else if d.PartitionByIndex.ContainsPartitions() {
+					return nil, pgerror.New(
+						pgcode.FeatureNotSupported,
+						"cannot define PARTITION BY on an unique constraint if the table has a PARTITION ALL BY definition",
+					)
+				}
+
 				var numImplicitColumns int
 				var err error
 				idx, numImplicitColumns, err = detectImplicitPartitionColumns(
 					evalCtx,
 					&desc,
 					idx,
-					d.PartitionByIndex.PartitionBy,
+					partitionBy,
 				)
 				if err != nil {
 					return nil, err
@@ -1652,7 +1686,7 @@ func NewTableDesc(
 					&desc,
 					&idx,
 					numImplicitColumns,
-					d.PartitionByIndex.PartitionBy,
+					partitionBy,
 				)
 				if err != nil {
 					return nil, err
@@ -1759,37 +1793,30 @@ func NewTableDesc(
 		}
 	}
 
-	// Do not use ContainsPartitions() for this check, as we may have to do something special for
-	// PARTITION BY NOTHING.
-	if n.PartitionByTable != nil {
-		if n.PartitionByTable.All {
-			return nil, unimplemented.New("CREATE TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
+	if n.PartitionByTable.ContainsPartitions() {
+		newPrimaryIndex, numImplicitColumns, err := detectImplicitPartitionColumns(
+			evalCtx,
+			&desc,
+			*desc.GetPrimaryIndex().IndexDesc(),
+			n.PartitionByTable.PartitionBy,
+		)
+		if err != nil {
+			return nil, err
 		}
-		if n.PartitionByTable.PartitionBy != nil {
-			newPrimaryIndex, numImplicitColumns, err := detectImplicitPartitionColumns(
-				evalCtx,
-				&desc,
-				*desc.GetPrimaryIndex().IndexDesc(),
-				n.PartitionByTable.PartitionBy,
-			)
-			if err != nil {
-				return nil, err
-			}
-			partitioning, err := CreatePartitioning(
-				ctx,
-				st,
-				evalCtx,
-				&desc,
-				&newPrimaryIndex,
-				numImplicitColumns,
-				n.PartitionByTable.PartitionBy,
-			)
-			if err != nil {
-				return nil, err
-			}
-			newPrimaryIndex.Partitioning = partitioning
-			desc.SetPrimaryIndex(newPrimaryIndex)
+		partitioning, err := CreatePartitioning(
+			ctx,
+			st,
+			evalCtx,
+			&desc,
+			&newPrimaryIndex,
+			numImplicitColumns,
+			n.PartitionByTable.PartitionBy,
+		)
+		if err != nil {
+			return nil, err
 		}
+		newPrimaryIndex.Partitioning = partitioning
+		desc.SetPrimaryIndex(newPrimaryIndex)
 	}
 
 	// Once all the IDs have been allocated, we can add the Sequence dependencies
