@@ -1838,6 +1838,7 @@ func TestLint(t *testing.T) {
 			"../../sql/colconv",
 			"../../sql/colexec",
 			"../../sql/colexec/colexecagg",
+			"../../sql/colfetcher",
 		); err != nil {
 			t.Fatal(err)
 		}

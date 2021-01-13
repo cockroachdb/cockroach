@@ -276,8 +276,7 @@ func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdes
 	for _, region := range desc.RegionConfig.Regions {
 		regionLabels = append(regionLabels, tree.EnumValue(region.Name))
 	}
-	// TODO(#multiregion): See github issue:
-	// https://github.com/cockroachdb/cockroach/issues/56877.
+
 	if err := p.createEnumWithID(
 		p.RunParams(ctx),
 		desc.RegionConfig.RegionEnumID,
