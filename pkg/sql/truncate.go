@@ -132,8 +132,9 @@ func (t *truncateNode) startExec(params runParams) error {
 				return err
 			}
 		}
-		for _, idx := range tableDesc.AllNonDropIndexes() {
-			for _, ref := range idx.InterleavedBy {
+		for _, idx := range tableDesc.NonDropIndexes() {
+			for i := 0; i < idx.NumInterleavedBy(); i++ {
+				ref := idx.GetInterleavedBy(i)
 				if err := maybeEnqueue(ref.Table, "interleaved by"); err != nil {
 					return err
 				}
@@ -193,24 +194,19 @@ func (p *planner) truncateTable(
 		return err
 	}
 
-	// Collect all of the old indexes.
-	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.GetPublicNonPrimaryIndexes())+1)
-	oldIndexes[0] = *protoutil.Clone(tableDesc.GetPrimaryIndex()).(*descpb.IndexDescriptor)
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		oldIndexes[i+1] = *protoutil.Clone(&tableDesc.GetPublicNonPrimaryIndexes()[i]).(*descpb.IndexDescriptor)
+	// Collect all of the old indexes and reset all of the index IDs.
+	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.ActiveIndexes()))
+	for _, idx := range tableDesc.ActiveIndexes() {
+		oldIndexes[idx.Ordinal()] = idx.IndexDescDeepCopy()
+		newIndex := *idx.IndexDesc()
+		newIndex.ID = descpb.IndexID(0)
+		if idx.Primary() {
+			tableDesc.SetPrimaryIndex(newIndex)
+		} else {
+			tableDesc.SetPublicNonPrimaryIndex(idx.Ordinal(), newIndex)
+		}
 	}
 
-	// Reset all of the index IDs.
-	{
-		primaryIndex := *tableDesc.GetPrimaryIndex()
-		primaryIndex.ID = descpb.IndexID(0)
-		tableDesc.SetPrimaryIndex(primaryIndex)
-	}
-
-	for i, index := range tableDesc.GetPublicNonPrimaryIndexes() {
-		index.ID = descpb.IndexID(0)
-		tableDesc.SetPublicNonPrimaryIndex(i+1, index)
-	}
 	// Create new ID's for all of the indexes in the table.
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
@@ -218,9 +214,8 @@ func (p *planner) truncateTable(
 
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
-	indexIDMapping[oldIndexes[0].ID] = tableDesc.GetPrimaryIndexID()
-	for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-		indexIDMapping[oldIndexes[i+1].ID] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
+	for _, idx := range tableDesc.ActiveIndexes() {
+		indexIDMapping[oldIndexes[idx.Ordinal()].ID] = idx.GetID()
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -288,9 +283,9 @@ func (p *planner) truncateTable(
 	for i := range oldIndexIDs {
 		oldIndexIDs[i] = oldIndexes[i+1].ID
 	}
-	newIndexIDs := make([]descpb.IndexID, len(tableDesc.GetPublicNonPrimaryIndexes()))
+	newIndexIDs := make([]descpb.IndexID, len(tableDesc.PublicNonPrimaryIndexes()))
 	for i := range newIndexIDs {
-		newIndexIDs[i] = tableDesc.GetPublicNonPrimaryIndexes()[i].ID
+		newIndexIDs[i] = tableDesc.PublicNonPrimaryIndexes()[i].GetID()
 	}
 	swapInfo := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId: oldIndexes[0].ID,
@@ -381,7 +376,8 @@ func (p *planner) reassignInterleaveIndexReferences(
 ) error {
 	for _, table := range tables {
 		changed := false
-		if err := table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+		if err := catalog.ForEachNonDropIndex(table, func(indexI catalog.Index) error {
+			index := indexI.IndexDesc()
 			for j, a := range index.Interleave.Ancestors {
 				if a.TableID == truncatedID {
 					index.Interleave.Ancestors[j].IndexID = indexIDMapping[index.Interleave.Ancestors[j].IndexID]

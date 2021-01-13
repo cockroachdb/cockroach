@@ -49,11 +49,11 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 	// different copy than the one in the tableDesc. To make it easier for the
 	// code below, get a pointer to the index descriptor that's actually in
 	// tableDesc.
-	indexDesc, err = tableDesc.FindIndexByID(indexDesc.ID)
+	index, err := tableDesc.FindIndexWithID(indexDesc.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: indexDesc}, nil
+	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: index.IndexDesc()}, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -72,7 +72,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
-			if n.tableDesc.GetPrimaryIndex().Partitioning.NumImplicitColumns > 0 {
+			if n.tableDesc.GetPrimaryIndex().GetPartitioning().NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning",

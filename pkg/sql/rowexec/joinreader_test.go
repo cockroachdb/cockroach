@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1273,18 +1274,14 @@ func BenchmarkJoinReader(b *testing.B) {
 							// Get the table descriptor and find the index that will provide us with
 							// the expected match ratio.
 							tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
-							indexIdx := uint32(0)
-							for i := range tableDesc.GetPublicNonPrimaryIndexes() {
-								require.Equal(b, 1, len(tableDesc.GetPublicNonPrimaryIndexes()[i].ColumnNames), "all indexes created in this benchmark should only contain one column")
-								if tableDesc.GetPublicNonPrimaryIndexes()[i].ColumnNames[0] == columnDef.name {
-									// Found indexIdx.
-									indexIdx = uint32(i + 1)
-									break
-								}
-							}
-							if indexIdx == 0 {
+							foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
+								require.Equal(b, 1, idx.NumColumns(), "all indexes created in this benchmark should only contain one column")
+								return idx.GetColumnName(0) == columnDef.name
+							})
+							if foundIndex == nil {
 								b.Fatalf("failed to find secondary index for column %s", columnDef.name)
 							}
+							indexIdx := uint32(foundIndex.Ordinal())
 							input := newRowGeneratingSource(rowenc.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
 								// Convert to 0-based.
 								return tree.NewDInt(tree.DInt(rowIdx - 1))

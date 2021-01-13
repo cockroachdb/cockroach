@@ -246,9 +246,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					idx.Partitioning = partitioning
 				}
-				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
+				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
 				if err == nil {
-					if dropped {
+					if foundIndex.Dropped() {
 						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 							"index %q being dropped, try again later", d.Name)
 					}
@@ -459,7 +459,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"column %q is referenced by the primary key", colToDrop.Name)
 			}
 			var idxNamesToDelete []string
-			for _, idx := range n.tableDesc.AllNonDropIndexes() {
+			for _, idx := range n.tableDesc.NonDropIndexes() {
 				// We automatically drop indexes that reference the column
 				// being dropped.
 
@@ -468,14 +468,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				containsThisColumn := false
 
 				// Analyze the index.
-				for _, id := range idx.ColumnIDs {
-					if id == colToDrop.ID {
+				for j := 0; j < idx.NumColumns(); j++ {
+					if idx.GetColumnID(j) == colToDrop.ID {
 						containsThisColumn = true
 						break
 					}
 				}
 				if !containsThisColumn {
-					for _, id := range idx.ExtraColumnIDs {
+					for j := 0; j < idx.NumExtraColumns(); j++ {
+						id := idx.GetExtraColumnID(j)
 						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
@@ -494,8 +495,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for _, id := range idx.StoreColumnIDs {
-						if id == colToDrop.ID {
+					for j := 0; j < idx.NumStoredColumns(); j++ {
+						if idx.GetStoredColumnID(j) == colToDrop.ID {
 							containsThisColumn = true
 							break
 						}
@@ -505,7 +506,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// If the column being dropped is referenced in the partial
 				// index predicate, then the index should be dropped.
 				if !containsThisColumn && idx.IsPartial() {
-					expr, err := parser.ParseExpr(idx.Predicate)
+					expr, err := parser.ParseExpr(idx.GetPredicate())
 					if err != nil {
 						return err
 					}
@@ -522,7 +523,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					idxNamesToDelete = append(idxNamesToDelete, idx.Name)
+					idxNamesToDelete = append(idxNamesToDelete, idx.GetName())
 				}
 			}
 
@@ -760,36 +761,37 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if t.All {
 				return unimplemented.New("ALTER TABLE PARTITION ALL BY", "PARTITION ALL BY not yet implemented")
 			}
-			if n.tableDesc.GetPrimaryIndex().Partitioning.NumImplicitColumns > 0 {
+			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
+			if oldPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER TABLE PARTITION BY",
 					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
 				)
 			}
-			partitioning, err := CreatePartitioning(
+			newPartitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				n.tableDesc.GetPrimaryIndex(),
+				n.tableDesc.GetPrimaryIndex().IndexDesc(),
 				0, /* numImplicitColumns */
 				t.PartitionBy,
 			)
 			if err != nil {
 				return err
 			}
-			descriptorChanged = descriptorChanged || !n.tableDesc.GetPrimaryIndex().Partitioning.Equal(&partitioning)
+			descriptorChanged = descriptorChanged || !oldPartitioning.Equal(&newPartitioning)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, n.tableDesc.GetPrimaryIndex(), &n.tableDesc.GetPrimaryIndex().Partitioning,
-				&partitioning, params.extendedEvalCtx.ExecCfg,
+				n.tableDesc, n.tableDesc.GetPrimaryIndex().IndexDesc(), &oldPartitioning,
+				&newPartitioning, params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
 				return err
 			}
 			{
-				primaryIndex := *n.tableDesc.GetPrimaryIndex()
-				primaryIndex.Partitioning = partitioning
-				n.tableDesc.SetPrimaryIndex(primaryIndex)
+				newPrimaryIndex := *n.tableDesc.GetPrimaryIndex().IndexDesc()
+				newPrimaryIndex.Partitioning = newPartitioning
+				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
 			}
 
 		case *tree.AlterTableSetAudit:
@@ -844,16 +846,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// new name exists. This is what postgres does.
 			switch details.Kind {
 			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
-				if err := n.tableDesc.ForeachNonDropIndex(func(
-					descriptor *descpb.IndexDescriptor,
-				) error {
-					if descriptor.Name == string(t.NewName) {
-						return pgerror.Newf(pgcode.DuplicateRelation,
-							"relation %v already exists", t.NewName)
-					}
-					return nil
-				}); err != nil {
-					return err
+				if catalog.FindNonDropIndex(n.tableDesc, func(idx catalog.Index) bool {
+					return idx.GetName() == string(t.NewName)
+				}) != nil {
+					return pgerror.Newf(pgcode.DuplicateRelation,
+						"relation %v already exists", t.NewName)
 				}
 			}
 

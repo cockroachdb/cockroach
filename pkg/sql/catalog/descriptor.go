@@ -13,6 +13,7 @@ package catalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,13 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
-// IndexOpts configures the behavior of TableDescriptor.ForeachIndex.
+// IndexOpts configures the behavior of catalog.ForEachIndex and
+// catalog.FindIndex.
 type IndexOpts struct {
 	// NonPhysicalPrimaryIndex should be included.
 	NonPhysicalPrimaryIndex bool
@@ -112,22 +114,79 @@ type TableDescriptor interface {
 	GetFormatVersion() descpb.FormatVersion
 
 	GetPrimaryIndexID() descpb.IndexID
-	GetPrimaryIndex() *descpb.IndexDescriptor
+	GetPrimaryIndex() Index
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
-	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor
-	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error
-	AllNonDropIndexes() []*descpb.IndexDescriptor
-	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
-	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
-	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
-	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
-	PartialIndexOrds() util.FastIntSet
-	WritableIndexes() []descpb.IndexDescriptor
-	DeletableIndexes() []descpb.IndexDescriptor
-	DeleteOnlyIndexes() []descpb.IndexDescriptor
+
+	// AllIndexes returns a slice with all indexes, public and non-public,
+	// in the underlying proto, in their canonical order:
+	// - the primary index,
+	// - the public non-primary indexes in the Indexes array, in order,
+	// - the non-public indexes present in the Mutations array, in order.
+	//
+	// See also Index.Ordinal().
+	AllIndexes() []Index
+
+	// ActiveIndexes returns a slice with all public indexes in the underlying
+	// proto, in their canonical order:
+	// - the primary index,
+	// - the public non-primary indexes in the Indexes array, in order.
+	//
+	// See also Index.Ordinal().
+	ActiveIndexes() []Index
+
+	// NonDropIndexes returns a slice of all non-drop indexes in the underlying
+	// proto, in their canonical order. This means:
+	// - the primary index, if the table is a physical table,
+	// - the public non-primary indexes in the Indexes array, in order,
+	// - the non-public indexes present in the Mutations array, in order,
+	//   if the mutation is not a drop.
+	//
+	// See also Index.Ordinal().
+	NonDropIndexes() []Index
+
+	// NonDropIndexes returns a slice of all partial indexes in the underlying
+	// proto, in their canonical order. This is equivalent to taking the slice
+	// produced by AllIndexes and removing indexes with empty expressions.
+	PartialIndexes() []Index
+
+	// PublicNonPrimaryIndexes returns a slice of all active secondary indexes,
+	// in their canonical order. This is equivalent to the Indexes array in the
+	// proto.
+	PublicNonPrimaryIndexes() []Index
+
+	// WritableNonPrimaryIndexes returns a slice of all non-primary indexes which
+	// allow being written to: public + delete-and-write-only, in their canonical
+	// order. This is equivalent to taking the slice produced by
+	// DeletableNonPrimaryIndexes and removing the indexes which are in mutations
+	// in the delete-only state.
+	WritableNonPrimaryIndexes() []Index
+
+	// DeletableNonPrimaryIndexes returns a slice of all non-primary indexes
+	// which allow being deleted from: public + delete-and-write-only +
+	// delete-only, in  their canonical order. This is equivalent to taking
+	// the slice produced by AllIndexes and removing the primary index.
+	DeletableNonPrimaryIndexes() []Index
+
+	// DeleteOnlyNonPrimaryIndexes returns a slice of all non-primary indexes
+	// which allow only being deleted from, in their canonical order. This is
+	// equivalent to taking the slice produced by DeletableNonPrimaryIndexes and
+	// removing the indexes which are not in mutations or not in the delete-only
+	// state.
+	DeleteOnlyNonPrimaryIndexes() []Index
+
+	// FindIndexWithID returns the first catalog.Index that matches the id
+	// in the set of all indexes, or an error if none was found. The order of
+	// traversal is the canonical order, see Index.Ordinal().
+	FindIndexWithID(id descpb.IndexID) (Index, error)
+
+	// FindIndexWithName returns the first catalog.Index that matches the name in
+	// the set of all indexes, excluding the primary index of non-physical
+	// tables, or an error if none was found. The order of traversal is the
+	// canonical order, see Index.Ordinal().
+	FindIndexWithName(name string) (Index, error)
 
 	HasPrimaryKey() bool
 	PrimaryKeyString() string
@@ -185,6 +244,106 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor
+}
+
+// Index is an interface around the index descriptor types.
+type Index interface {
+
+	// IndexDesc returns the underlying protobuf descriptor.
+	// Ideally, this method should be called as rarely as possible.
+	IndexDesc() *descpb.IndexDescriptor
+
+	// IndexDescDeepCopy returns a deep copy of the underlying proto.
+	IndexDescDeepCopy() descpb.IndexDescriptor
+
+	// Ordinal returns the ordinal of the index in its parent table descriptor.
+	//
+	// The ordinal of an index in a `tableDesc descpb.TableDescriptor` is
+	// defined as follows:
+	// - 0 is the ordinal of the primary index,
+	// - [1:1+len(tableDesc.Indexes)] is the range of public non-primary indexes,
+	// - [1+len(tableDesc.Indexes):] is the range of non-public indexes.
+	//
+	// In terms of a `table catalog.TableDescriptor` interface, it is defined
+	// as the catalog.Index object's position in the table.AllIndexes() slice.
+	Ordinal() int
+
+	// Primary returns true iff the index is the primary index for the table
+	// descriptor.
+	Primary() bool
+
+	// Public returns true iff the index is active, i.e. readable, in the table
+	// descriptor.
+	Public() bool
+
+	// WriteAndDeleteOnly returns true iff the index is a mutation in the
+	// delete-and-write-only state in the table descriptor.
+	WriteAndDeleteOnly() bool
+
+	// DeleteOnly returns true iff the index is a mutation in the delete-only
+	// state in the table descriptor.
+	DeleteOnly() bool
+
+	// Adding returns true iff the index is an add mutation in the table
+	// descriptor.
+	Adding() bool
+
+	// Dropped returns true iff the index is a drop mutation in the table
+	// descriptor.
+	Dropped() bool
+
+	// The remaining methods operate on the underlying descpb.IndexDescriptor object.
+
+	GetID() descpb.IndexID
+	GetName() string
+	IsInterleaved() bool
+	IsPartial() bool
+	IsUnique() bool
+	IsDisabled() bool
+	IsSharded() bool
+	IsCreatedExplicitly() bool
+	GetPredicate() string
+	GetType() descpb.IndexDescriptor_Type
+	GetGeoConfig() geoindex.Config
+	GetVersion() descpb.IndexDescriptorVersion
+	GetEncodingType() descpb.IndexDescriptorEncodingType
+
+	GetSharded() descpb.ShardedDescriptor
+	GetShardColumnName() string
+
+	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
+	IsValidReferencedIndex(referencedColIDs descpb.ColumnIDs) bool
+
+	GetPartitioning() descpb.PartitioningDescriptor
+	FindPartitionByName(name string) descpb.PartitioningDescriptor
+	PartitionNames() []string
+
+	NumInterleaveAncestors() int
+	GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor
+
+	NumInterleavedBy() int
+	GetInterleavedBy(interleavedByOrdinal int) descpb.ForeignKeyReference
+
+	NumColumns() int
+	GetColumnID(columnOrdinal int) descpb.ColumnID
+	GetColumnName(columnOrdinal int) string
+	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
+
+	ForEachColumnID(func(id descpb.ColumnID) error) error
+	ContainsColumnID(colID descpb.ColumnID) bool
+	InvertedColumnID() descpb.ColumnID
+	InvertedColumnName() string
+
+	NumStoredColumns() int
+	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
+	GetStoredColumnName(storedColumnOrdinal int) string
+	HasOldStoredColumns() bool
+
+	NumExtraColumns() int
+	GetExtraColumnID(extraColumnOrdinal int) descpb.ColumnID
+
+	NumCompositeColumns() int
+	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
@@ -281,4 +440,152 @@ func FormatSafeDescriptorProperties(w *redact.StringBuilder, desc Descriptor) {
 	if drainingNames := desc.GetDrainingNames(); len(drainingNames) > 0 {
 		w.Printf(", NumDrainingNames: %d", len(drainingNames))
 	}
+}
+
+func isIndexInSearchSet(desc TableDescriptor, opts IndexOpts, idx Index) bool {
+	if !opts.NonPhysicalPrimaryIndex && idx.Primary() && !desc.IsPhysicalTable() {
+		return false
+	}
+	if !opts.AddMutations && idx.Adding() {
+		return false
+	}
+	if !opts.DropMutations && idx.Dropped() {
+		return false
+	}
+	return true
+}
+
+// ForEachIndex runs f over each index in the table descriptor according to
+// filter parameters in opts. Indexes are visited in their canonical order,
+// see Index.Ordinal(). ForEachIndex supports iterutil.StopIteration().
+func ForEachIndex(desc TableDescriptor, opts IndexOpts, f func(idx Index) error) error {
+	for _, idx := range desc.AllIndexes() {
+		if !isIndexInSearchSet(desc, opts, idx) {
+			continue
+		}
+		if err := f(idx); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func forEachIndex(slice []Index, f func(idx Index) error) error {
+	for _, idx := range slice {
+		if err := f(idx); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachActiveIndex is like ForEachIndex over ActiveIndexes().
+func ForEachActiveIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.ActiveIndexes(), f)
+}
+
+// ForEachNonDropIndex is like ForEachIndex over NonDropIndexes().
+func ForEachNonDropIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.NonDropIndexes(), f)
+}
+
+// ForEachPartialIndex is like ForEachIndex over PartialIndexes().
+func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.PartialIndexes(), f)
+}
+
+// ForEachPublicNonPrimaryIndex is like ForEachIndex over
+// PublicNonPrimaryIndexes().
+func ForEachPublicNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.PublicNonPrimaryIndexes(), f)
+}
+
+// ForEachWritableNonPrimaryIndex is like ForEachIndex over
+// WritableNonPrimaryIndexes().
+func ForEachWritableNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.WritableNonPrimaryIndexes(), f)
+}
+
+// ForEachDeletableNonPrimaryIndex is like ForEachIndex over
+// DeletableNonPrimaryIndexes().
+func ForEachDeletableNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.DeletableNonPrimaryIndexes(), f)
+}
+
+// ForEachDeleteOnlyNonPrimaryIndex is like ForEachIndex over
+// DeleteOnlyNonPrimaryIndexes().
+func ForEachDeleteOnlyNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.DeleteOnlyNonPrimaryIndexes(), f)
+}
+
+// FindIndex returns the first index for which test returns true, nil otherwise,
+// according to the parameters in opts just like ForEachIndex.
+// Indexes are visited in their canonical order, see Index.Ordinal().
+func FindIndex(desc TableDescriptor, opts IndexOpts, test func(idx Index) bool) Index {
+	for _, idx := range desc.AllIndexes() {
+		if !isIndexInSearchSet(desc, opts, idx) {
+			continue
+		}
+		if test(idx) {
+			return idx
+		}
+	}
+	return nil
+}
+
+func findIndex(slice []Index, test func(idx Index) bool) Index {
+	for _, idx := range slice {
+		if test(idx) {
+			return idx
+		}
+	}
+	return nil
+}
+
+// FindActiveIndex returns the first index in ActiveIndex() for which test
+// returns true.
+func FindActiveIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.ActiveIndexes(), test)
+}
+
+// FindNonDropIndex returns the first index in NonDropIndex() for which test
+// returns true.
+func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.NonDropIndexes(), test)
+}
+
+// FindPartialIndex returns the first index in PartialIndex() for which test
+// returns true.
+func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()
+// for which test returns true.
+func FindPublicNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.PublicNonPrimaryIndexes(), test)
+}
+
+// FindWritableNonPrimaryIndex returns the first index in
+// WritableNonPrimaryIndex() for which test returns true.
+func FindWritableNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.WritableNonPrimaryIndexes(), test)
+}
+
+// FindDeletableNonPrimaryIndex returns the first index in
+// DeletableNonPrimaryIndex() for which test returns true.
+func FindDeletableNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.DeletableNonPrimaryIndexes(), test)
+}
+
+// FindDeleteOnlyNonPrimaryIndex returns the first index in
+// DeleteOnlyNonPrimaryIndex() for which test returns true.
+func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
 }

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tabledesc",
     srcs = [
+        "index.go",
         "safe_format.go",
         "structured.go",
         "table.go",
@@ -11,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -43,6 +45,7 @@ go_test(
     name = "tabledesc_test",
     srcs = [
         "helpers_test.go",
+        "index_test.go",
         "main_test.go",
         "safe_format_test.go",
         "structured_test.go",
@@ -52,6 +55,7 @@ go_test(
     embed = [":tabledesc"],
     deps = [
         "//pkg/base",
+        "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/security",
         "//pkg/security/securitytest",

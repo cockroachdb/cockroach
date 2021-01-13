@@ -140,6 +140,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/backfill",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/colinfo",
