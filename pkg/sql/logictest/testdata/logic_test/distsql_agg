@@ -643,3 +643,14 @@ query FI
 SELECT corr(DISTINCT y, x), count(y) FROM t55837
 ----
 0.866025403784439 4
+
+# Regression test for incorrectly populating the type schema produced by the
+# final stage of aggregators (#58683).
+statement ok
+CREATE TABLE table58683_1 (col1 INT8 PRIMARY KEY);
+INSERT INTO table58683_1 SELECT i FROM generate_series(1, 5) AS g(i);
+ALTER TABLE table58683_1 SPLIT AT SELECT i FROM generate_series(1, 5) AS g(i);
+ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) AS g(i);
+CREATE TABLE table58683_2 (col2 BOOL);
+ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
+SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
