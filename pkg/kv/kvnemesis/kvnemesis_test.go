@@ -55,6 +55,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 58624, "flaky test")
 	skip.UnderRace(t)
 
 	defer log.Scope(t).Close(t)
