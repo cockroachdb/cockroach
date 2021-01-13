@@ -174,7 +174,7 @@ var _ = [...]interface{}{
 	//	  - Store keys all share `localStorePrefix`.
 	//
 	// `LocalRangeIDPrefix`, `localRangePrefix`, `LocalRangeLockTablePrefix`,
-	// and `localStorePrefix` all in turn share `localPrefix`. `localPrefix` was
+	// and `localStorePrefix` all in turn share `LocalPrefix`. `LocalPrefix` was
 	// chosen arbitrarily. Local keys would work just as well with a different
 	// prefix, like 0xff, or even with a suffix.
 

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -367,6 +369,27 @@ func (ts *TestServer) NodeLiveness() interface{} {
 		return ts.nodeLiveness
 	}
 	return nil
+}
+
+// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
+func (ts *TestServer) HeartbeatNodeLiveness() error {
+	if ts == nil {
+		return errors.New("no node liveness instance")
+	}
+	nl := ts.nodeLiveness
+	l, ok := nl.Self()
+	if !ok {
+		return errors.New("liveness not found")
+	}
+
+	var err error
+	ctx := context.Background()
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, liveness.ErrEpochIncremented) {
+			break
+		}
+	}
+	return err
 }
 
 // RPCContext returns the rpc context used by the TestServer.

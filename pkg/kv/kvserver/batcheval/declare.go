@@ -82,6 +82,20 @@ func DeclareKeysForBatch(
 	}
 }
 
+// declareAllKeys declares a non-MVCC write over every addressable key. This
+// guarantees that the caller conflicts with any other command because every
+// command must declare at least one addressable key, which is tested against
+// in TestRequestsSerializeWithAllKeys.
+func declareAllKeys(latchSpans *spanset.SpanSet) {
+	// NOTE: we don't actually know what the end key of the Range will
+	// be at the time of request evaluation (see ImmutableRangeState),
+	// so we simply declare a latch over the entire keyspace. This may
+	// extend beyond the Range, but this is ok for the purpose of
+	// acquiring latches.
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.LocalPrefix, EndKey: keys.LocalMax})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey})
+}
+
 // CommandArgs contains all the arguments to a command.
 // TODO(bdarnell): consider merging with kvserverbase.FilterArgs (which
 // would probably require removing the EvalCtx field due to import order

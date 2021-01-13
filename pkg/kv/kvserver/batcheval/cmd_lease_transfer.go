@@ -13,7 +13,6 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,13 +27,26 @@ func init() {
 func declareKeysTransferLease(
 	rs ImmutableRangeState, _ roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
 ) {
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
-	// Cover the entire addressable key space with a latch to prevent any writes
-	// from overlapping with lease transfers. In principle we could just use the
-	// current range descriptor (desc) but it could potentially change due to an
-	// as of yet unapplied merge.
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey})
+	// TransferLease must not run concurrently with any other request so it uses
+	// latches to synchronize with all other reads and writes on the outgoing
+	// leaseholder. Additionally, it observes the state of the timestamp cache
+	// and so it uses latches to wait for all in-flight requests to complete.
+	//
+	// Because of this, it declares a non-MVCC write over every addressable key
+	// in the range, even through the only key the TransferLease actually writes
+	// to is the RangeLeaseKey. This guarantees that it conflicts with any other
+	// request because every request must declare at least one addressable key.
+	//
+	// We could, in principle, declare these latches as MVCC writes at the time
+	// of the new lease. Doing so would block all concurrent writes but would
+	// allow reads below the new lease timestamp through. However, doing so
+	// would only be safe if we also accounted for clock uncertainty in all read
+	// latches so that any read that may need to observe state on the new
+	// leaseholder gets blocked. We actually already do this for transactional
+	// reads (see DefaultDeclareIsolatedKeys), but not for non-transactional
+	// reads. We'd need to be careful here, so we should only pull on this if we
+	// decide that doing so is important.
+	declareAllKeys(latchSpans)
 }
 
 // TransferLease sets the lease holder for the range.
