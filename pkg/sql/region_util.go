@@ -26,6 +26,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+const minNumRegionsForSurviveRegionGoal = 3
+
 type liveClusterRegions map[descpb.RegionName]struct{}
 
 func (s *liveClusterRegions) isActive(region descpb.RegionName) bool {
