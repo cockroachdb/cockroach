@@ -140,8 +140,9 @@ type Tracer struct {
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
 
-	// activeSpans is a map that references all non-Finish'ed local root spans
-	// (i.e. those for which no WithLocalParent(<non-nil>) option was supplied).
+	// activeSpans is a map that references all non-Finish'ed local root spans,
+	// i.e. those for which no WithLocalParent(<non-nil>) option was supplied.
+	// It also elides spans created using WithBypassRegistry.
 	//
 	// In normal operation, a local root Span is inserted on creation and
 	// removed on .Finish().
@@ -426,11 +427,13 @@ func (t *Tracer) startSpanGeneric(
 			opts.Parent.crdb.mu.Unlock()
 		}
 	} else {
-		// Local root span - put it into the registry of active local root spans.
-		// `Span.Finish` takes care of deleting it again.
-		t.activeSpans.Lock()
-		t.activeSpans.m[s] = struct{}{}
-		t.activeSpans.Unlock()
+		if !opts.BypassRegistry {
+			// Local root span - put it into the registry of active local root
+			// spans. `Span.Finish` takes care of deleting it again.
+			t.activeSpans.Lock()
+			t.activeSpans.m[s] = struct{}{}
+			t.activeSpans.Unlock()
+		}
 
 		if opts.RemoteParent != nil {
 			for k, v := range opts.RemoteParent.Baggage {
