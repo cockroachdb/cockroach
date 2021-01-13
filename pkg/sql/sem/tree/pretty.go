@@ -1473,7 +1473,7 @@ func (node *Locality) doc(p *PrettyCfg) pretty.Doc {
 			return pretty.ConcatSpace(
 				ret,
 				pretty.ConcatSpace(
-					pretty.Keyword("ON"),
+					pretty.Keyword("AS"),
 					p.Doc(&node.RegionalByRowColumn),
 				),
 			)

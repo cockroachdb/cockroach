@@ -7264,7 +7264,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| LOCALITY REGIONAL BY ROW ON name
+| LOCALITY REGIONAL BY ROW AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7296,7 +7296,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-|  REGIONAL AFFINITY AT ROW LEVEL ON name
+|  REGIONAL AFFINITY AT ROW LEVEL AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7328,7 +7328,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| REGIONAL AFFINITY ROW LEVEL ON name
+| REGIONAL AFFINITY ROW LEVEL AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7360,7 +7360,7 @@ locality:
       LocalityLevel: tree.LocalityLevelRow,
     }
   }
-| ROW LEVEL REGIONAL AFFINITY ON name
+| ROW LEVEL REGIONAL AFFINITY AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,

@@ -289,8 +289,8 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
-statement error REGIONAL BY ROW ON name is not yet supported
-CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW ON a
+statement error REGIONAL BY ROW AS is not yet supported
+CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW AS a
 
 statement ok
 CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
