@@ -2301,51 +2301,54 @@ func TestLeaseConcurrent(t *testing.T) {
 	})
 }
 
-// TestReplicaUpdateTSCache verifies that reads and writes update the
-// timestamp cache.
+// TestReplicaUpdateTSCache verifies that reads and ranged writes update the
+// timestamp cache. The test performs the operations with and without the use
+// of synthetic timestamps.
 func TestReplicaUpdateTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.Background())
+		tc.Start(t, stopper)
 
-	startNanos := tc.Clock().Now().WallTime
+		startNanos := tc.Clock().Now().WallTime
 
-	// Set clock to time 1s and do the read.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
-	gArgs := getArgs([]byte("a"))
+		// Set clock to time 1s and do the read.
+		tc.manualClock.Set(1 * time.Second.Nanoseconds())
+		ts1 := tc.Clock().Now().WithSynthetic(synthetic)
+		gArgs := getArgs([]byte("a"))
 
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: tc.Clock().Now()}, &gArgs); pErr != nil {
-		t.Error(pErr)
-	}
-	// Set clock to time 2s for write.
-	t1 := 2 * time.Second
-	key := roachpb.Key([]byte("b"))
-	tc.manualClock.Set(t1.Nanoseconds())
-	drArgs := roachpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts1}, &gArgs); pErr != nil {
+			t.Error(pErr)
+		}
+		// Set clock to time 2s for write.
+		tc.manualClock.Set(2 * time.Second.Nanoseconds())
+		ts2 := tc.Clock().Now().WithSynthetic(synthetic)
+		key := roachpb.Key([]byte("b"))
+		drArgs := roachpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
 
-	if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: tc.Clock().Now()}, drArgs); pErr != nil {
-		t.Error(pErr)
-	}
-	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	noID := uuid.UUID{}
-	rTS, rTxnID := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil)
-	if rTS.WallTime != t0.Nanoseconds() || rTxnID != noID {
-		t.Errorf("expected rTS=1s but got %s; rTxnID=%s", rTS, rTxnID)
-	}
-	// Verify the timestamp cache has rTS=2s for "b".
-	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("b"), nil)
-	if rTS.WallTime != t1.Nanoseconds() || rTxnID != noID {
-		t.Errorf("expected rTS=2s but got %s; rTxnID=%s", rTS, rTxnID)
-	}
-	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("c"), nil)
-	if rTS.WallTime != startNanos || rTxnID != noID {
-		t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
-	}
+		if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts2}, drArgs); pErr != nil {
+			t.Error(pErr)
+		}
+		// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
+		noID := uuid.UUID{}
+		rTS, rTxnID := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		if rTS != ts1 || rTxnID != noID {
+			t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts1, rTS, rTxnID)
+		}
+		// Verify the timestamp cache has rTS=2s for "b".
+		rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		if rTS != ts2 || rTxnID != noID {
+			t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts2, rTS, rTxnID)
+		}
+		// Verify another key ("c") has 0sec in timestamp cache.
+		rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		if rTS.WallTime != startNanos || rTxnID != noID {
+			t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
+		}
+	})
 }
 
 // TestReplicaLatching verifies that reads/writes must wait for
@@ -2836,36 +2839,39 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
-// TestReplicaUseTSCache verifies that write timestamps are upgraded
-// based on the timestamp cache.
+// TestReplicaUseTSCache verifies that write timestamps are upgraded based on
+// the timestamp cache. The test performs the operations with and without the
+// use of synthetic timestamps.
 func TestReplicaUseTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	tc.Start(t, stopper)
-	// Set clock to time 1s and do the read.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
-	args := getArgs([]byte("a"))
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		ctx := context.Background()
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.Start(t, stopper)
+		startTS := tc.Clock().Now()
 
-	_, pErr := tc.SendWrapped(&args)
+		// Set clock to time 1s and do the read.
+		tc.manualClock.Increment(1)
+		readTS := tc.Clock().Now().WithSynthetic(synthetic)
+		args := getArgs([]byte("a"))
 
-	if pErr != nil {
-		t.Error(pErr)
-	}
-	pArgs := putArgs([]byte("a"), []byte("value"))
+		_, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: readTS}, &args)
+		require.Nil(t, pErr)
 
-	var ba roachpb.BatchRequest
-	ba.Add(&pArgs)
-	br, pErr := tc.Sender().Send(context.Background(), ba)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if br.Timestamp.WallTime != tc.Clock().Now().WallTime {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Timestamp)
-	}
+		// Perform a conflicting write. Should get bumped.
+		pArgs := putArgs([]byte("a"), []byte("value"))
+		var ba roachpb.BatchRequest
+		ba.Add(&pArgs)
+		ba.Timestamp = startTS
+
+		br, pErr := tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotEqual(t, startTS, br.Timestamp)
+		require.Equal(t, readTS.Next(), br.Timestamp)
+	})
 }
 
 // TestReplicaTSCacheForwardsIntentTS verifies that the timestamp cache affects
@@ -2873,64 +2879,68 @@ func TestReplicaUseTSCache(t *testing.T) {
 // write is forwarded by the timestamp cache due to a more recent read, the
 // written intents must be left at the forwarded timestamp. See the comment on
 // the enginepb.TxnMeta.Timestamp field for rationale.
+//
+// The test performs the operations with and without the use of synthetic
+// timestamps.
 func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		ctx := context.Background()
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.Start(t, stopper)
 
-	ctx := context.Background()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	tc.Start(t, stopper)
+		tsOld := tc.Clock().Now()
+		tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0).WithSynthetic(synthetic)
 
-	tsOld := tc.Clock().Now()
-	tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0)
+		// Read at tNew to populate the timestamp cache.
+		// DeleteRange at tNew to populate the timestamp cache.
+		txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+		txnNew.ReadTimestamp = tsNew
+		txnNew.WriteTimestamp = tsNew
+		keyGet := roachpb.Key("get")
+		keyDeleteRange := roachpb.Key("delete-range")
+		gArgs := getArgs(keyGet)
+		drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
+		assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
+		var ba roachpb.BatchRequest
+		ba.Header.Txn = txnNew
+		ba.Add(&gArgs, &drArgs)
+		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// Read at tNew to populate the timestamp cache.
-	// DeleteRange at tNew to populate the timestamp cache.
-	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnNew.ReadTimestamp = tsNew
-	txnNew.WriteTimestamp = tsNew
-	keyGet := roachpb.Key("get")
-	keyDeleteRange := roachpb.Key("delete-range")
-	gArgs := getArgs(keyGet)
-	drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
-	assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
-	var ba roachpb.BatchRequest
-	ba.Header.Txn = txnNew
-	ba.Add(&gArgs, &drArgs)
-	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Write under the timestamp cache within the transaction, and verify that
-	// the intents are written above the timestamp cache.
-	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-	txnOld.ReadTimestamp = tsOld
-	txnOld.WriteTimestamp = tsOld
-	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
-		t.Run(string(key), func(t *testing.T) {
-			pArgs := putArgs(key, []byte("foo"))
-			assignSeqNumsForReqs(txnOld, &pArgs)
-			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
-			iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
-			defer iter.Close()
-			mvccKey := storage.MakeMVCCMetadataKey(key)
-			iter.SeekGE(mvccKey)
-			var keyMeta enginepb.MVCCMetadata
-			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
-				t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
-			} else if err := iter.ValueProto(&keyMeta); err != nil {
-				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
-			}
-			if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
-				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
-					key, tsNext, keyMeta.Timestamp)
-			}
-		})
-	}
+		// Write under the timestamp cache within the transaction, and verify that
+		// the intents are written above the timestamp cache.
+		txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+		txnOld.ReadTimestamp = tsOld
+		txnOld.WriteTimestamp = tsOld
+		for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
+			t.Run(string(key), func(t *testing.T) {
+				pArgs := putArgs(key, []byte("foo"))
+				assignSeqNumsForReqs(txnOld, &pArgs)
+				if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
+					t.Fatal(pErr)
+				}
+				iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+				defer iter.Close()
+				mvccKey := storage.MakeMVCCMetadataKey(key)
+				iter.SeekGE(mvccKey)
+				var keyMeta enginepb.MVCCMetadata
+				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
+					t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
+				} else if err := iter.ValueProto(&keyMeta); err != nil {
+					t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
+				}
+				if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
+					t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
+						key, tsNext, keyMeta.Timestamp)
+				}
+			})
+		}
+	})
 }
 
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
@@ -3206,10 +3216,10 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 	}
 }
 
-// TestReplicaNoTimestampIncrementWithinTxn verifies that successive
+// TestReplicaNoTSCacheIncrementWithinTxn verifies that successive
 // read and write commands within the same transaction do not cause
 // the write to receive an incremented timestamp.
-func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
+func TestReplicaNoTSCacheIncrementWithinTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
