@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -127,6 +128,21 @@ type TestClusterInterface interface {
 	// new lease holder).
 	TransferRangeLease(
 		rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget,
+	) error
+
+	// MoveRangeLeaseNonCooperatively performs a non-cooperative transfer of the
+	// lease for a range from whoever has it to a particular store. That store
+	// must already have a replica of the range. If that replica already has the
+	// (active) lease, this method is a no-op.
+	//
+	// The transfer is non-cooperative in that the lease is made to expire by
+	// advancing the manual clock. The target is then instructed to acquire the
+	// ownerless lease. Most tests should use the cooperative version of this
+	// method, TransferRangeLease.
+	MoveRangeLeaseNonCooperatively(
+		rangeDesc roachpb.RangeDescriptor,
+		dest roachpb.ReplicationTarget,
+		manual *hlc.HybridManualClock,
 	) error
 
 	// LookupRange returns the descriptor of the range containing key.

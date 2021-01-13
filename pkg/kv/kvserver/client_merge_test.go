@@ -1457,7 +1457,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 
 	// Manually heartbeat the liveness on the first store to ensure it's
 	// considered live. The automatic heartbeat might not come for a while.
-	require.NoError(t, tc.HeartbeatLiveness(ctx, 0))
+	require.NoError(t, tc.HeartbeatNodeLiveness(0))
 
 	// Send several get and put requests to the RHS. The first of these to
 	// arrive will acquire the lease; the remaining requests will wait for that

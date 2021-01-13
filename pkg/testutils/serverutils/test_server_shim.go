@@ -128,6 +128,9 @@ type TestServerInterface interface {
 	// interface{}.
 	NodeLiveness() interface{}
 
+	// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
+	HeartbeatNodeLiveness() error
+
 	// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL inside the
 	// server's executor. The argument must be a physicalplan.SpanResolver
 	// instance.

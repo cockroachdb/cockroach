@@ -86,7 +86,7 @@ var allSpans = func() spanset.SpanSet {
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
 	})
-	// Local keys (see `keys.localPrefix`).
+	// Local keys (see `keys.LocalPrefix`).
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
 		Key:    append([]byte("\x01"), roachpb.KeyMin...),
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
@@ -1458,12 +1458,10 @@ func TestReplicaDrainLease(t *testing.T) {
 	// expired already.
 
 	// Stop n1's heartbeats and wait for the lease to expire.
-
 	log.Infof(ctx, "test: suspending heartbeats for n1")
 	cleanup := s1.NodeLiveness().(*liveness.NodeLiveness).PauseAllHeartbeatsForTest()
 	defer cleanup()
 
-	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
 		status := r1.CurrentLeaseStatus(ctx)
 		require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
