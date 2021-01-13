@@ -97,6 +97,10 @@ type SpanMeta struct {
 	Baggage map[string]string
 }
 
+func (sm *SpanMeta) String() string {
+	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
+}
+
 func (s *Span) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }
@@ -172,8 +176,8 @@ func (s *Span) IsBlackHole() bool {
 // isNilOrNoop returns true if the Span context is either nil
 // or corresponds to a "no-op" Span. If this is true, any Span
 // derived from this context will be a "black hole Span".
-func (sc *SpanMeta) isNilOrNoop() bool {
-	return sc == nil || (sc.recordingType == RecordingOff && sc.shadowTracerType == "")
+func (sm *SpanMeta) isNilOrNoop() bool {
+	return sm == nil || (sm.recordingType == RecordingOff && sm.shadowTracerType == "")
 }
 
 // SpanStats are stats that can be added to a Span.

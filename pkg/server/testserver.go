@@ -1264,6 +1264,11 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
 }
 
+// Tracer is part of the TestServerInterface
+func (ts *TestServer) Tracer() interface{} {
+	return ts.node.storeCfg.AmbientCtx.Tracer
+}
+
 // GCSystemLog deletes entries in the given system log table between
 // timestamp and timestampUpperBound if the server is the lease holder
 // for range 1.

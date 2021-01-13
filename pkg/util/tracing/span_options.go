@@ -20,12 +20,13 @@ import (
 // field comment below are invoked as arguments to `Tracer.StartSpan`.
 // See the SpanOption interface for a synopsis.
 type spanOptions struct {
-	Parent        *Span                         // see WithParentAndAutoCollection
-	RemoteParent  *SpanMeta                     // see WithParentAndManualCollection
-	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
-	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
-	ForceRealSpan bool                          // see WithForceRealSpan
+	Parent         *Span                         // see WithParentAndAutoCollection
+	RemoteParent   *SpanMeta                     // see WithParentAndManualCollection
+	RefType        opentracing.SpanReferenceType // see WithFollowsFrom
+	LogTags        *logtags.Buffer               // see WithLogTags
+	Tags           map[string]interface{}        // see WithTags
+	ForceRealSpan  bool                          // see WithForceRealSpan
+	BypassRegistry bool                          // See WithBypassRegistry
 }
 
 func (opts *spanOptions) parentTraceID() uint64 {
@@ -201,5 +202,24 @@ func WithForceRealSpan() SpanOption {
 
 func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 	opts.ForceRealSpan = true
+	return opts
+}
+
+type bypassRegistryOption struct{}
+
+// WithBypassRegistry instructs StartSpan to no record the span in the top-level
+// registry. Spans started with this option are not inspectable. This was
+// introduced as a stop-gap for long-lived Span objects that are never
+// explicitly Finish()-ed (#58721). Recording these Spans in our registry would
+// cause us to OOM.
+//
+// TODO(irfansharif,asubiotto): Purge all instances of this option; we should be
+// recording all spans.
+func WithBypassRegistry() SpanOption {
+	return bypassRegistryOption{}
+}
+
+func (bypassRegistryOption) apply(opts spanOptions) spanOptions {
+	opts.BypassRegistry = true
 	return opts
 }

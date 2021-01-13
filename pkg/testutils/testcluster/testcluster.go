@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -56,6 +57,8 @@ type TestCluster struct {
 	}
 	serverArgs  []base.TestServerArgs
 	clusterArgs base.TestClusterArgs
+
+	t testing.TB
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -105,11 +108,33 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	}
 	wg.Wait()
 
-	for i := range tc.mu.serverStoppers {
-		if tc.mu.serverStoppers[i] != nil {
-			tc.mu.serverStoppers[i].Stop(context.TODO())
-			tc.mu.serverStoppers[i] = nil
-		}
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.stopServerLocked(i)
+	}
+
+	// TODO(irfansharif): Instead of checking for empty tracing registries after
+	// shutting down each node, we're doing it after shutting down all nodes.
+	// This is because TestCluster share the same Tracer object. Perhaps a saner
+	// thing to do is to separate out individual TestServers entirely. The
+	// component sharing within TestCluster has bitten in the past as well, and
+	// it's not clear why it has to be this way.
+	for i := 0; i < tc.NumServers(); i++ {
+		// Wait until a server's span registry is emptied out. This helps us check
+		// to see that there are no un-Finish()ed spans. We need to wrap this in a
+		// SucceedsSoon block because it's possible for us to issue requests during
+		// server shut down, where the requests in turn would create (registered)
+		// spans. Cleaning up temporary objects created by the session[1] is one
+		// example of this.
+		//
+		// [1]: cleanupSessionTempObjects
+		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		testutils.SucceedsSoon(tc.t, func() error {
+			var err error
+			tracer.VisitSpans(func(span *tracing.Span) {
+				err = errors.Newf("expected to find no active spans, found %s", span.Meta())
+			})
+			return err
+		})
 	}
 }
 
@@ -117,6 +142,11 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 func (tc *TestCluster) StopServer(idx int) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	tc.stopServerLocked(idx)
+}
+
+func (tc *TestCluster) stopServerLocked(idx int) {
 	if tc.mu.serverStoppers[idx] != nil {
 		tc.mu.serverStoppers[idx].Stop(context.TODO())
 		tc.mu.serverStoppers[idx] = nil
@@ -155,6 +185,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 	tc := &TestCluster{
 		stopper:     stop.NewStopper(),
 		clusterArgs: clusterArgs,
+		t:           t,
 	}
 
 	// Check if any of the args have a locality set.
@@ -409,8 +440,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	thisStopper := s.Stopper()
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, thisStopper)
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, s.Stopper())
 	return s, nil
 }
 
