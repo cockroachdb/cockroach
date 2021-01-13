@@ -70,7 +70,7 @@ var (
 
 	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
 	KeyDict = KeyComprehensionTable{
-		{Name: "/Local", start: localPrefix, end: LocalMax, Entries: []DictEntry{
+		{Name: "/Local", start: LocalPrefix, end: LocalMax, Entries: []DictEntry{
 			{Name: "/Store", prefix: roachpb.Key(LocalStorePrefix),
 				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
 			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),

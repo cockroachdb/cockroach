@@ -21,37 +21,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// TestRequestsSerializeWithSubsume ensures that no request can be evaluated
-// concurrently with a Subsume request. For more details, refer to the big
-// comment block at the end of Subsume() in cmd_subsume.go.
-//
-// NB: This test is broader than it really needs to be. A more precise statement
-// of the condition necessary to uphold the invariant mentioned in Subsume() is:
-// No request that bumps the lease applied index of a range can be evaluated
-// concurrently with a Subsume request.
-func TestRequestsSerializeWithSubsume(t *testing.T) {
+// TestRequestsSerializeWithAllKeys ensures that no request can be evaluated
+// concurrently with either a Subsume request or a TransferLease request, both
+// of which declare latches using declareAllKeys to guarantee mutual exclusion
+// over the leaseholder.
+func TestRequestsSerializeWithAllKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var subsumeLatchSpans, subsumeLockSpans, otherLatchSpans, otherLockSpans spanset.SpanSet
-	startKey := []byte(`a`)
-	endKey := []byte(`b`)
-	desc := &roachpb.RangeDescriptor{
-		RangeID:  0,
-		StartKey: startKey,
-		EndKey:   endKey,
-	}
-	testTxn := &roachpb.Transaction{
-		TxnMeta: enginepb.TxnMeta{
-			ID:             uuid.FastMakeV4(),
-			Key:            startKey,
-			WriteTimestamp: hlc.Timestamp{WallTime: 1},
-		},
-		Name: "test txn",
-	}
-	header := roachpb.Header{Txn: testTxn}
-	subsumeRequest := &roachpb.SubsumeRequest{RightDesc: *desc}
-	declareKeysSubsume(desc, header, subsumeRequest, &subsumeLatchSpans, &subsumeLockSpans)
+
+	var allLatchSpans spanset.SpanSet
+	declareAllKeys(&allLatchSpans)
+
 	for method, command := range cmds {
 		t.Run(method.String(), func(t *testing.T) {
+			var otherLatchSpans, otherLockSpans spanset.SpanSet
+
+			startKey := []byte(`a`)
+			endKey := []byte(`b`)
+			desc := &roachpb.RangeDescriptor{
+				RangeID:  0,
+				StartKey: startKey,
+				EndKey:   endKey,
+			}
+			testTxn := &roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{
+					ID:             uuid.FastMakeV4(),
+					Key:            startKey,
+					WriteTimestamp: hlc.Timestamp{WallTime: 1},
+				},
+				Name: "test txn",
+			}
+			header := roachpb.Header{Txn: testTxn}
 			otherRequest := roachpb.CreateRequest(method)
 			if queryTxnReq, ok := otherRequest.(*roachpb.QueryTxnRequest); ok {
 				// QueryTxnRequest declares read-only access over the txn record of the txn
@@ -60,7 +59,6 @@ func TestRequestsSerializeWithSubsume(t *testing.T) {
 				// falling outside our test range's keyspace.
 				queryTxnReq.Txn = testTxn.TxnMeta
 			}
-
 			otherRequest.SetHeader(roachpb.RequestHeader{
 				Key:      startKey,
 				EndKey:   endKey,
@@ -68,8 +66,8 @@ func TestRequestsSerializeWithSubsume(t *testing.T) {
 			})
 
 			command.DeclareKeys(desc, header, otherRequest, &otherLatchSpans, &otherLockSpans)
-			if !subsumeLatchSpans.Intersects(&otherLatchSpans) {
-				t.Errorf("%s does not serialize with Subsume", method)
+			if !allLatchSpans.Intersects(&otherLatchSpans) {
+				t.Errorf("%s does not serialize with declareAllKeys", method)
 			}
 		})
 	}

@@ -200,7 +200,7 @@ message MVCCStats {
   // This tracks the same quantity as (key_bytes + val_bytes), but
   // for system-local metadata keys (which aren't counted in either
   // key_bytes or val_bytes). Each of the keys falling into this group
-  // is documented in keys/constants.go under the localPrefix constant
+  // is documented in keys/constants.go under the LocalPrefix constant
   // and is prefixed by either LocalRangeIDPrefix or LocalRangePrefix.
   optional sfixed64 sys_bytes = 12 [(gogoproto.nullable) = false];
   // sys_count is the number of meta keys tracked under sys_bytes.
