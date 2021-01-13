@@ -829,6 +829,15 @@ func init() {
 
 		stringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 		varFlag(f, &startCtx.logDir, cliflags.LogDir)
+		varFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFilesCombinedMaxSizeName)).Value,
+			cliflags.LogDirMaxSize)
+		varFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileMaxSizeName)).Value,
+			cliflags.LogFileMaxSize)
+		varFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileVerbosityThresholdName)).Value,
+			cliflags.LogFileVerbosity)
 	}
 }
 
