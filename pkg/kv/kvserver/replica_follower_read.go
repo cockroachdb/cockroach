@@ -62,8 +62,9 @@ func (r *Replica) canServeFollowerRead(
 		return roachpb.NewError(err)
 	}
 
-	typ := repDesc.GetType()
-	if typ != roachpb.VOTER_FULL && typ != roachpb.NON_VOTER {
+	switch typ := repDesc.GetType(); typ {
+	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
+	default:
 		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
 		return pErr
 	}

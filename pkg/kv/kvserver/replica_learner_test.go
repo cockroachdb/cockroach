@@ -842,9 +842,6 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)
 	require.Len(t, scratchDesc.Replicas().FilterToDescriptors(predIncoming), 1)
 
-	// Can't serve follower read from the VOTER_INCOMING.
-	check()
-
 	// Remove the voter and remain in joint config.
 	scratchDesc = tc.RemoveVotersOrFatal(t, scratchStartKey, tc.Target(1))
 	require.True(t, scratchDesc.Replicas().InAtomicReplicationChange(), scratchDesc)

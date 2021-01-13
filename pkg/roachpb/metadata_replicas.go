@@ -259,10 +259,17 @@ func (d ReplicaSet) NonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predNonVoter)
 }
 
-// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
+// VoterFullAndNonVoterDescriptors returns the descriptors of VOTER_FULL/NON_VOTER
 // replicas in the set. This set will not contain learners or, during an atomic
 // replication change, incoming or outgoing voters. Notably, this set must
 // encapsulate all replicas of a range for a range merge to proceed.
+func (d ReplicaSet) VoterFullAndNonVoterDescriptors() []ReplicaDescriptor {
+	return d.FilterToDescriptors(predVoterOrNonVoter)
+}
+
+// VoterAndNonVoterDescriptors returns the descriptors of VOTER_FULL,
+// VOTER_INCOMING and NON_VOTER replicas in the set. Notably, this is the set of
+// replicas the DistSender will consider routing follower read requests to.
 func (d ReplicaSet) VoterAndNonVoterDescriptors() []ReplicaDescriptor {
 	return d.FilterToDescriptors(predVoterOrNonVoter)
 }
