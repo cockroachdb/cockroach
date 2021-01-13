@@ -210,13 +210,12 @@ func (c *transientCluster) start(
 			<-servReadyFnCh
 			errCh <- nil
 		}
-
-		// Ensure we close all sticky stores we've created.
-		c.stopper.AddCloser(stop.CloserFn(func() {
-			c.stickyEngineRegistry.CloseAllStickyInMemEngines()
-		}))
 	}
 
+	// Ensure we close all sticky stores we've created.
+	c.stopper.AddCloser(stop.CloserFn(func() {
+		c.stickyEngineRegistry.CloseAllStickyInMemEngines()
+	}))
 	c.servers = servers
 
 	if demoCtx.simulateLatency {
