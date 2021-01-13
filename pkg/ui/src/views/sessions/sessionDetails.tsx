@@ -30,7 +30,7 @@ import {TimestampToMoment} from "src/util/convert";
 import {Bytes, DATE_FORMAT} from "src/util/format";
 import {Col, Row} from "antd";
 import {nodeDisplayNameByIDSelector} from "src/redux/nodes";
-import {NodeLink, StatementLinkTarget} from "src/views/statements/statementsTableContent";
+import {NodeLink, StatementLinkTarget} from "@cockroachlabs/admin-ui-components";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
 import { Button } from "@cockroachlabs/admin-ui-components";

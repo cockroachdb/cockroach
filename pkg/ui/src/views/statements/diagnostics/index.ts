@@ -8,7 +8,5 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import DiagnosticsView from "./diagnosticsView";
-
-export default DiagnosticsView;
-export * from "./diagnosticsUtils";
+export * from "./activateDiagnosticsModal";
+export * from "./diagnosticStatusBadge";
