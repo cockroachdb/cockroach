@@ -61,7 +61,7 @@ func (x *TenantInfo_State) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (TenantInfo_State) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_tenant_407090f618c5ec30, []int{0, 0}
+	return fileDescriptor_tenant_44277a2e609258db, []int{0, 0}
 }
 
 // TenantInfo represents a tenant in a multi-tenant cluster and is
@@ -76,7 +76,7 @@ func (m *TenantInfo) Reset()         { *m = TenantInfo{} }
 func (m *TenantInfo) String() string { return proto.CompactTextString(m) }
 func (*TenantInfo) ProtoMessage()    {}
 func (*TenantInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_tenant_407090f618c5ec30, []int{0}
+	return fileDescriptor_tenant_44277a2e609258db, []int{0}
 }
 func (m *TenantInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -383,10 +383,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/tenant.proto", fileDescriptor_tenant_407090f618c5ec30)
+	proto.RegisterFile("sql/catalog/descpb/tenant.proto", fileDescriptor_tenant_44277a2e609258db)
 }
 
-var fileDescriptor_tenant_407090f618c5ec30 = []byte{
+var fileDescriptor_tenant_44277a2e609258db = []byte{
 	// 249 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0x2f,

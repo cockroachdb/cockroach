@@ -68,7 +68,7 @@ func (x AuthFailReason) String() string {
 	return proto.EnumName(AuthFailReason_name, int32(x))
 }
 func (AuthFailReason) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{0}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{0}
 }
 
 // CommonConnectionDetails are payload fields common to all
@@ -91,7 +91,7 @@ func (m *CommonConnectionDetails) Reset()         { *m = CommonConnectionDetails
 func (m *CommonConnectionDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonConnectionDetails) ProtoMessage()    {}
 func (*CommonConnectionDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{0}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{0}
 }
 func (m *CommonConnectionDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -133,7 +133,7 @@ func (m *CommonSessionDetails) Reset()         { *m = CommonSessionDetails{} }
 func (m *CommonSessionDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSessionDetails) ProtoMessage()    {}
 func (*CommonSessionDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{1}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{1}
 }
 func (m *CommonSessionDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -173,7 +173,7 @@ func (m *ClientConnectionStart) Reset()         { *m = ClientConnectionStart{} }
 func (m *ClientConnectionStart) String() string { return proto.CompactTextString(m) }
 func (*ClientConnectionStart) ProtoMessage()    {}
 func (*ClientConnectionStart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{2}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{2}
 }
 func (m *ClientConnectionStart) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -215,7 +215,7 @@ func (m *ClientConnectionEnd) Reset()         { *m = ClientConnectionEnd{} }
 func (m *ClientConnectionEnd) String() string { return proto.CompactTextString(m) }
 func (*ClientConnectionEnd) ProtoMessage()    {}
 func (*ClientConnectionEnd) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{3}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{3}
 }
 func (m *ClientConnectionEnd) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -257,7 +257,7 @@ func (m *ClientSessionEnd) Reset()         { *m = ClientSessionEnd{} }
 func (m *ClientSessionEnd) String() string { return proto.CompactTextString(m) }
 func (*ClientSessionEnd) ProtoMessage()    {}
 func (*ClientSessionEnd) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{4}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{4}
 }
 func (m *ClientSessionEnd) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -303,7 +303,7 @@ func (m *ClientAuthenticationFailed) Reset()         { *m = ClientAuthentication
 func (m *ClientAuthenticationFailed) String() string { return proto.CompactTextString(m) }
 func (*ClientAuthenticationFailed) ProtoMessage()    {}
 func (*ClientAuthenticationFailed) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{5}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{5}
 }
 func (m *ClientAuthenticationFailed) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -345,7 +345,7 @@ func (m *ClientAuthenticationOk) Reset()         { *m = ClientAuthenticationOk{}
 func (m *ClientAuthenticationOk) String() string { return proto.CompactTextString(m) }
 func (*ClientAuthenticationOk) ProtoMessage()    {}
 func (*ClientAuthenticationOk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{6}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{6}
 }
 func (m *ClientAuthenticationOk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -389,7 +389,7 @@ func (m *ClientAuthenticationInfo) Reset()         { *m = ClientAuthenticationIn
 func (m *ClientAuthenticationInfo) String() string { return proto.CompactTextString(m) }
 func (*ClientAuthenticationInfo) ProtoMessage()    {}
 func (*ClientAuthenticationInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_events_c72e6f577bb945ef, []int{7}
+	return fileDescriptor_session_events_b1678b19750b168c, []int{7}
 }
 func (m *ClientAuthenticationInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2268,10 +2268,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/session_events.proto", fileDescriptor_session_events_c72e6f577bb945ef)
+	proto.RegisterFile("util/log/eventpb/session_events.proto", fileDescriptor_session_events_b1678b19750b168c)
 }
 
-var fileDescriptor_session_events_c72e6f577bb945ef = []byte{
+var fileDescriptor_session_events_b1678b19750b168c = []byte{
 	// 745 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0xb1, 0x4f, 0xdb, 0x5a,
 	0x14, 0xc6, 0xe3, 0x24, 0x24, 0x8f, 0x9b, 0xf7, 0x22, 0xeb, 0x12, 0x1e, 0x51, 0xf4, 0x9e, 0x83,

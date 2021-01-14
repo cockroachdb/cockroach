@@ -67,7 +67,7 @@ func (x RangeLogEventType) String() string {
 	return proto.EnumName(RangeLogEventType_name, int32(x))
 }
 func (RangeLogEventType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_log_5c85c87c8c818051, []int{0}
+	return fileDescriptor_log_a9bcb61d63001828, []int{0}
 }
 
 type RangeLogEvent struct {
@@ -83,7 +83,7 @@ func (m *RangeLogEvent) Reset()         { *m = RangeLogEvent{} }
 func (m *RangeLogEvent) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent) ProtoMessage()    {}
 func (*RangeLogEvent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_5c85c87c8c818051, []int{0}
+	return fileDescriptor_log_a9bcb61d63001828, []int{0}
 }
 func (m *RangeLogEvent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -122,7 +122,7 @@ func (m *RangeLogEvent_Info) Reset()         { *m = RangeLogEvent_Info{} }
 func (m *RangeLogEvent_Info) String() string { return proto.CompactTextString(m) }
 func (*RangeLogEvent_Info) ProtoMessage()    {}
 func (*RangeLogEvent_Info) Descriptor() ([]byte, []int) {
-	return fileDescriptor_log_5c85c87c8c818051, []int{0, 0}
+	return fileDescriptor_log_a9bcb61d63001828, []int{0, 0}
 }
 func (m *RangeLogEvent_Info) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -942,10 +942,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_log_5c85c87c8c818051)
+	proto.RegisterFile("kv/kvserver/kvserverpb/log.proto", fileDescriptor_log_a9bcb61d63001828)
 }
 
-var fileDescriptor_log_5c85c87c8c818051 = []byte{
+var fileDescriptor_log_a9bcb61d63001828 = []byte{
 	// 678 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x94, 0xc1, 0x4e, 0xdb, 0x4a,
 	0x14, 0x86, 0x63, 0x48, 0x08, 0x1e, 0x02, 0x37, 0xcc, 0x85, 0xab, 0xdc, 0xe8, 0xca, 0x8e, 0xd0,

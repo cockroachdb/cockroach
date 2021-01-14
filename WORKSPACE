@@ -82,6 +82,11 @@ go_rules_dependencies()
 
 go_register_toolchains(go_version = "1.15.6")
 
+# NB: @bazel_skylib comes from go_rules_dependencies().
+load("@bazel_skylib//lib:versions.bzl", "versions")
+
+versions.check(minimum_bazel_version = "3.5.0")
+
 # Load gazelle dependencies.
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
@@ -93,8 +98,8 @@ gazelle_dependencies()
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
 git_repository(
     name = "com_google_protobuf",
-    commit = "09745575a923640154bcf307fba8aedff47f240a",
-    remote = "https://github.com/protocolbuffers/protobuf",
+    commit = "9b23a34c7275aa0ceb2fc69ed1ae6737b34656a3",
+    remote = "https://github.com/cockroachdb/protobuf",
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
