@@ -13,13 +13,13 @@ run
 start
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
@@ -28,13 +28,13 @@ run
 start-single-node
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
@@ -98,13 +98,13 @@ start
 --store=path=/pathB
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/pathA/logs,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA/logs,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA/logs,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA/logs,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/pathA/logs)>}
 
@@ -115,13 +115,13 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/mypath)>}
 
@@ -133,13 +133,13 @@ start
 --log=file-defaults: {dir: /pathA/logs}
 ----
 config: {<stdFileDefaults(/pathA/logs)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/pathA/logs,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/pathA/logs,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/pathA/logs,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA/logs,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA/logs,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA/logs,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA/logs,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA/logs,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA/logs,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA/logs,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/pathA/logs)>}
 
@@ -156,13 +156,13 @@ start
 --log=file-defaults: {dir: /mypath}
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/mypath)>}
 
@@ -172,13 +172,13 @@ start
 --log=sinks: {stderr: {filter: ERROR}}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrCfg(ERROR,true)>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
@@ -189,13 +189,13 @@ start
 --log=capture-stray-errors: {enable: false}
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrDisabled>}}
 
 # Logging to stderr without stderr capture causes an error in the default config.
@@ -236,13 +236,13 @@ start
 --log-dir=/mypath
 ----
 config: {<stdFileDefaults(/mypath)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/mypath,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/mypath,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/mypath,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/mypath,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/mypath,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/mypath,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/mypath,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/mypath,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/mypath,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/mypath,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/mypath,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/mypath)>}
 
@@ -254,13 +254,13 @@ start
 --log-dir=/pathA
 ----
 config: {<stdFileDefaults(/pathA)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],/pathA,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],/pathA,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],/pathA,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],/pathA,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],/pathA,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],/pathA,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],/pathA,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],/pathA,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],/pathA,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],/pathA,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],/pathA,true,crdb-v1)>},
 <stderrDisabled>},
 <stdCaptureFd2(/pathA)>}
 
@@ -274,7 +274,7 @@ init
 config: {<fileDefaultsNoMaxSize(/mypath)>,
 sinks: {file-groups: {default: {channels: all,
 dir: /mypath,
-sync-writes: false,
+buffered-writes: true,
 filter: INFO,
 format: crdb-v1,
 redactable: true}},
@@ -287,13 +287,13 @@ start
 --logtostderr=INFO
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrCfg(INFO,true)>},
 <stdCaptureFd2(<defaultLogDir>)>}
 
@@ -303,13 +303,13 @@ start
 --logtostderr
 ----
 config: {<stdFileDefaults(<defaultLogDir>)>,
-sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,false,crdb-v1)>,
-pebble: <fileCfg([STORAGE],<defaultLogDir>,false,crdb-v1)>,
-sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,true,crdb-v1-count)>,
-sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,false,crdb-v1)>,
-sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,false,crdb-v1)>,
-sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,false,crdb-v1)>},
+sinks: {file-groups: {default: <fileCfg(['DEV,OPS,HEALTH,SQL_SCHEMA,USER_ADMIN,PRIVILEGES'],<defaultLogDir>,true,crdb-v1)>,
+pebble: <fileCfg([STORAGE],<defaultLogDir>,true,crdb-v1)>,
+sql-audit: <fileCfg([SENSITIVE_ACCESS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-auth: <fileCfg([SESSIONS],<defaultLogDir>,false,crdb-v1-count)>,
+sql-exec: <fileCfg([SQL_EXEC],<defaultLogDir>,true,crdb-v1)>,
+sql-slow: <fileCfg([SQL_PERF],<defaultLogDir>,true,crdb-v1)>,
+sql-slow-internal-only: <fileCfg([SQL_INTERNAL_PERF],<defaultLogDir>,true,crdb-v1)>},
 <stderrCfg(INFO,true)>},
 <stdCaptureFd2(<defaultLogDir>)>}
 

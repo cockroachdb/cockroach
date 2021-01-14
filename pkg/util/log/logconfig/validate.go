@@ -50,6 +50,10 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	if c.FileDefaults.Auditable == nil {
 		c.FileDefaults.Auditable = &bf
 	}
+	// File sinks are buffered by default.
+	if c.FileDefaults.BufferedWrites == nil {
+		c.FileDefaults.BufferedWrites = &bt
+	}
 	// No format -> populate defaults.
 	if c.FileDefaults.Format == nil {
 		s := DefaultFileFormat
@@ -229,8 +233,8 @@ func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error
 	if fc.MaxGroupSize == nil {
 		fc.MaxGroupSize = &c.FileDefaults.MaxGroupSize
 	}
-	if fc.SyncWrites == nil {
-		fc.SyncWrites = &c.FileDefaults.SyncWrites
+	if fc.BufferedWrites == nil {
+		fc.BufferedWrites = c.FileDefaults.BufferedWrites
 	}
 
 	// Set up the directory.
@@ -253,8 +257,8 @@ func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error
 
 	// Apply the auditable flag if set.
 	if *fc.Auditable {
-		bt := true
-		fc.SyncWrites = &bt
+		bf, bt := false, true
+		fc.BufferedWrites = &bf
 		fc.Criticality = &bt
 		if *fc.Format == DefaultFileFormat {
 			s := DefaultFileFormat + "-count"
