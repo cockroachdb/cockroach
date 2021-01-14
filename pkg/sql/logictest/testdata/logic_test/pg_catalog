@@ -3031,3 +3031,22 @@ SELECT tablename FROM pg_catalog.pg_tables
 
 statement ok
 SET DATABASE = test;
+
+subtest 58945
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true
+
+statement ok
+CREATE TABLE t_hash (
+  a INT,
+  INDEX t_hash_a_idx (a DESC) USING HASH WITH BUCKET_COUNT=8
+);
+
+query T colnames
+SELECT indoption
+FROM pg_catalog.pg_index
+WHERE indexrelid IN (SELECT crdb_oid FROM pg_catalog.pg_indexes WHERE indexname = 't_hash_a_idx')
+----
+indoption
+1

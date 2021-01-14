@@ -74,6 +74,10 @@ func TestExamineDescriptors(t *testing.T) {
 	descpb.TableFromDescriptor(droppedValidTableDesc, hlc.Timestamp{WallTime: 1}).
 		State = descpb.DescriptorState_DROP
 
+	inSchemaValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
+	descpb.TableFromDescriptor(inSchemaValidTableDesc, hlc.Timestamp{WallTime: 1}).
+		UnexposedParentSchemaID = 3
+
 	tests := []struct {
 		descTable      doctor.DescriptorTable
 		namespaceTable doctor.NamespaceTable
@@ -194,6 +198,48 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
     Type   1: ParentID   0, ParentSchemaID  0, Name 'type': invalid parentID 0
+`,
+		},
+		{
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 1,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
+						Type: &descpb.TypeDescriptor{Name: "type", ID: 1, ParentSchemaID: 2},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentSchemaID: 2, Name: "type"}, ID: 1},
+			},
+			expected: `Examining 1 descriptors and 1 namespace entries...
+    Type   1: ParentID   0, ParentSchemaID  2, Name 'type': invalid parentID 0
+    Type   1: ParentID   0, ParentSchemaID  2, Name 'type': invalid parent schema id 2
+`,
+		},
+		{
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(t, inSchemaValidTableDesc)},
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+				{
+					ID: 3,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 3, ParentID: 0},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 3, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentID: 0, Name: "schema"}, ID: 3},
+			},
+			expected: `Examining 3 descriptors and 3 namespace entries...
+   Table   1: ParentID   2, ParentSchemaID  3, Name 't': invalid parent id of parent schema, expected 2, found 0
 `,
 		},
 		{
