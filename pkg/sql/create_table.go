@@ -1960,9 +1960,15 @@ func NewTableDesc(
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				if err := computedColValidator.Validate(d); err != nil {
+				serializedExpr, err := computedColValidator.Validate(d)
+				if err != nil {
 					return nil, err
 				}
+				col, _, err := desc.FindColumnByName(d.Name)
+				if err != nil {
+					return nil, err
+				}
+				col.ComputeExpr = &serializedExpr
 			}
 		}
 	}
