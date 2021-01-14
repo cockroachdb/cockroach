@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // UncachedPhysicalAccessor implements direct access to sql object descriptors
@@ -68,13 +69,13 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 	// NB: Take care to actually return nil here rather than a typed nil which
 	// will not compare to nil when wrapped in the returned interface.
-	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
+	untypedDesc, err := GetDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable), DatabaseDescriptorKind, true /* required */)
 	if err != nil {
 		return nil, err
 	}
 	db, ok := untypedDesc.(catalog.DatabaseDescriptor)
 	if !ok {
-		return nil, nil
+		return nil, errors.Newf("descriptor with id %d is not a database descriptor", descID)
 	}
 	if err := catalog.FilterDescriptorState(db, flags); err != nil {
 		if flags.Required {
@@ -131,13 +132,13 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 
 	// Get the descriptor from disk.
-	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, schemaID, Mutability(flags.RequireMutable))
+	untypedDesc, err := GetDescriptorByID(ctx, txn, codec, schemaID, Mutability(flags.RequireMutable), DatabaseDescriptorKind, true /* required */)
 	if err != nil {
 		return false, catalog.ResolvedSchema{}, err
 	}
 	sc, ok := untypedDesc.(catalog.SchemaDescriptor)
 	if !ok {
-		return false, catalog.ResolvedSchema{}, nil
+		return false, catalog.ResolvedSchema{}, errors.Newf("descriptor with id %d is not a schema descriptor", schemaID)
 	}
 	if err := catalog.FilterDescriptorState(sc, flags); err != nil {
 		if flags.Required {
@@ -310,8 +311,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		}
 	}
 
-	// Look up the object using the discovered database descriptor.
-	desc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
+	// Look up the descriptor using the discovered ID.
+	desc, err := GetDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable), AnyDescriptorKind, true /* required */)
 	if err != nil {
 		return nil, err
 	}
