@@ -1396,9 +1396,6 @@ func (dsp *DistSQLPlanner) addAggregators(
 	var finalAggsSpec execinfrapb.AggregatorSpec
 	var finalAggsPost execinfrapb.PostProcessSpec
 
-	// planToStreamMapSet keeps track of whether or not
-	// p.PlanToStreamColMap has been set to its desired mapping or not.
-	planToStreamMapSet := false
 	if !multiStage {
 		finalAggsSpec = execinfrapb.AggregatorSpec{
 			Type:             aggType,
@@ -1694,16 +1691,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 			finalAggsPost.RenderExprs = renderExprs
 		} else if len(finalAggs) < len(aggregations) {
-			// We want to ensure we map the streams properly now
-			// that we've potential reduced the number of final
-			// aggregation output streams. We use finalIdxMap to
-			// create a 1-1 mapping from the final aggregators to
-			// their corresponding column index in the map.
-			p.PlanToStreamColMap = p.PlanToStreamColMap[:0]
-			for _, idx := range finalIdxMap {
-				p.PlanToStreamColMap = append(p.PlanToStreamColMap, int(idx))
-			}
-			planToStreamMapSet = true
+			// We have removed some duplicates, so we need to add a projection.
+			finalAggsPost.Projection = true
+			finalAggsPost.OutputColumns = finalIdxMap
 		}
 	}
 
@@ -1729,9 +1719,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	// Update p.PlanToStreamColMap; we will have a simple 1-to-1 mapping of
 	// planNode columns to stream columns because the aggregator
 	// has been programmed to produce the same columns as the groupNode.
-	if !planToStreamMapSet {
-		p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(aggregations))
-	}
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(aggregations))
 
 	if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
 		// No GROUP BY, or we have a single stream. Use a single final aggregator.
