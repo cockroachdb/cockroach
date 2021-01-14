@@ -88,7 +88,7 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (op *unorderedDistinct) ExportBuffered(colexecbase.Operator) coldata.Batch {
+func (op *unorderedDistinct) ExportBuffered(context.Context, colexecbase.Operator) coldata.Batch {
 	if op.lastInputBatch != nil {
 		batch := op.lastInputBatch
 		op.lastInputBatch = nil

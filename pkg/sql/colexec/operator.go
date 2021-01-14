@@ -183,15 +183,15 @@ func (c *oneInputCloserHelper) Close(ctx context.Context) error {
 }
 
 type noopOperator struct {
-	OneInputNode
+	oneInputCloserHelper
 	NonExplainable
 }
 
 var _ colexecbase.Operator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
-func NewNoop(input colexecbase.Operator) colexecbase.Operator {
-	return &noopOperator{OneInputNode: NewOneInputNode(input)}
+func NewNoop(input colexecbase.Operator) ResettableOperator {
+	return &noopOperator{oneInputCloserHelper: makeOneInputCloserHelper(input)}
 }
 
 func (n *noopOperator) Init() {
