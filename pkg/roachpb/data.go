@@ -2052,17 +2052,6 @@ func (s Span) Equal(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
-// Compare returns an integer comparing two Spans lexicographically.
-// The result will be 0 if s==o, -1 if s starts before o or if the starts
-// are equal and s ends before o, and +1 otherwise.
-func (s Span) Compare(o Span) int {
-	cmp := bytes.Compare(s.Key, o.Key)
-	if cmp == 0 {
-		return bytes.Compare(s.EndKey, o.EndKey)
-	}
-	return cmp
-}
-
 // Overlaps returns true WLOG for span A and B iff:
 // 1. Both spans contain one key (just the start key) and they are equal; or
 // 2. The span with only one key is contained inside the other span; or

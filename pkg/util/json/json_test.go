@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -1428,36 +1428,23 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		require.NoError(t, err)
 
-		spansSlice, tight, unique, err := EncodeContainingInvertedIndexSpans(nil, right)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(nil, right)
 		require.NoError(t, err)
 
-		if unique != expectUnique {
-			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, unique)
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
 		}
 
-		// The spans returned by EncodeContainingInvertedIndexSpans represent the intersection
-		// of unions. So the below logic is performing a union on the inner loop
-		// (any span in the slice can contain any of the keys), and an intersection
-		// on the outer loop (all of the span slices must contain at least one key).
-		actual := true
-		for _, spans := range spansSlice {
-			found := false
-			for _, span := range spans {
-				for _, key := range keys {
-					if span.ContainsKey(key) {
-						found = true
-						break
-					}
-				}
-				if found == true {
-					break
-				}
-			}
-			actual = actual && found
+		if spanExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, spanExpr.Unique)
 		}
+
+		actual, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
 
 		// There may be some false positives, so filter those out.
-		if actual && !tight {
+		if actual && !spanExpr.Tight {
 			actual, err = Contains(left, right)
 			require.NoError(t, err)
 		}
@@ -1470,7 +1457,7 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 			}
 		}
 
-		return tight
+		return spanExpr.Tight
 	}
 
 	// Run pre-defined test cases from above.

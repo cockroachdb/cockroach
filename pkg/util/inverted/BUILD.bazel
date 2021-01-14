@@ -4,10 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "inverted",
-    srcs = [
-        "expression.go",
-        "span_expression.go",
-    ],
+    srcs = ["expression.go"],
     embed = [":inverted_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/inverted",
     visibility = ["//visibility:public"],
@@ -20,14 +17,10 @@ go_library(
 
 go_test(
     name = "inverted_test",
-    srcs = [
-        "expression_test.go",
-        "span_expression_test.go",
-    ],
+    srcs = ["expression_test.go"],
     data = glob(["testdata/**"]),
     embed = [":inverted"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/treeprinter",
