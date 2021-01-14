@@ -46,19 +46,19 @@ func MakeComputedColumnValidator(
 }
 
 // Validate verifies that an expression is a valid computed column expression.
-// If it is not valid, an error is returned.
+// It returns the serialized expression if valid, and an error otherwise.
 //
 // A computed column expression is valid if all of the following are true:
 //
 //   - It does not have a default value.
 //   - It does not reference other computed columns.
 //
-// It additionally updates the target computed column with the serialized
-// typed expression.
 // TODO(mgartner): Add unit tests for Validate.
-func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
+func (v *ComputedColumnValidator) Validate(
+	d *tree.ColumnTableDef,
+) (serializedExpr string, _ error) {
 	if d.HasDefaultExpr() {
-		return pgerror.New(
+		return "", pgerror.New(
 			pgcode.InvalidTableDefinition,
 			"computed columns cannot have default values",
 		)
@@ -76,7 +76,7 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
@@ -103,13 +103,13 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		}
 		return nil
 	}); err != nil {
-		return err
+		return "", err
 	}
 
 	// Resolve the type of the computed column expression.
 	defType, err := tree.ResolveType(v.ctx, d.Type, v.semaCtx.GetTypeResolver())
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Check that the type of the expression is of type defType and that there
@@ -127,18 +127,9 @@ func (v *ComputedColumnValidator) Validate(d *tree.ColumnTableDef) error {
 		v.tableName,
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	// Get the column that this definition points to and assign the serialized
-	// expression.
-	targetCol, _, err := v.desc.FindColumnByName(d.Name)
-	if err != nil {
-		return err
-	}
-	targetCol.ComputeExpr = &expr
-
-	return nil
+	return expr, nil
 }
 
 // ValidateNoDependents verifies that the input column is not dependent on a
