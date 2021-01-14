@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "base",
@@ -14,6 +15,7 @@ go_library(
         "testclusterreplicationmode_string.go",
         "testing_knobs.go",
         "zone.go",
+        ":gen-clusterreplication-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/base",
     visibility = ["//visibility:public"],
@@ -63,4 +65,10 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-clusterreplication-stringer",
+    file = "test_server_args.go",
+    typ = "TestClusterReplicationMode",
 )

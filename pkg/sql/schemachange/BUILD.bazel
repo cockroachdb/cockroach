@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "alter_column_type.go",
         "columnconversionkind_string.go",
+        ":gen-columnconversionkind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachange",
     visibility = ["//visibility:public"],
@@ -40,5 +41,22 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
+    ],
+)
+
+# Keep this genrule and not ussing common string function due to extra flags eg: trimprefix
+genrule(
+    name = "gen-columnconversionkind-stringer",
+    srcs = [
+        "alter_column_type.go",
+    ],
+    outs = ["columnconversionkind_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=ColumnConversionKind -trimprefix ColumnConversion $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "colfetcher",
@@ -6,6 +7,7 @@ go_library(
         "cfetcher.go",
         "colbatch_scan.go",
         "fetcherstate_string.go",
+        ":gen-fetcherstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colfetcher",
     visibility = ["//visibility:public"],
@@ -37,4 +39,10 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
     ],
+)
+
+stringer(
+    name = "gen-fetcherstate-stringer",
+    file = "cfetcher.go",
+    typ = "fetcherState",
 )
