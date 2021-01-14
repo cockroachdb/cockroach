@@ -658,7 +658,9 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	})
 }
 
-func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
+func (hj *hashJoiner) ExportBuffered(
+	ctx context.Context, input colexecbase.Operator,
+) coldata.Batch {
 	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which

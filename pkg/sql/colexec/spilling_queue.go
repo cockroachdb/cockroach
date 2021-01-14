@@ -89,26 +89,30 @@ type spillingQueue struct {
 // of the spilling queues (memory limit permitting).
 const spillingQueueInitialItemsLen = int64(64)
 
+// NewSpillingQueueArgs encompasses all necessary arguments to newSpillingQueue.
+type NewSpillingQueueArgs struct {
+	UnlimitedAllocator *colmem.Allocator
+	Types              []*types.T
+	MemoryLimit        int64
+	DiskQueueCfg       colcontainer.DiskQueueCfg
+	FDSemaphore        semaphore.Semaphore
+	DiskAcc            *mon.BoundAccount
+}
+
 // newSpillingQueue creates a new spillingQueue. An unlimited allocator must be
 // passed in. The spillingQueue will use this allocator to check whether memory
 // usage exceeds the given memory limit and use disk if so.
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
-func newSpillingQueue(
-	unlimitedAllocator *colmem.Allocator,
-	typs []*types.T,
-	memoryLimit int64,
-	cfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-) *spillingQueue {
+func newSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
 	// Reduce the memory limit by what the DiskQueue may need to buffer
 	// writes/reads.
-	memoryLimit -= int64(cfg.BufferSizeBytes)
+	memoryLimit := args.MemoryLimit
+	memoryLimit -= int64(args.DiskQueueCfg.BufferSizeBytes)
 	if memoryLimit < 0 {
 		memoryLimit = 0
 	}
-	perItemMem := int64(colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
+	perItemMem := int64(colmem.EstimateBatchSizeBytes(args.Types, coldata.BatchSize()))
 	// Account for the size of items slice.
 	perItemMem += int64(unsafe.Sizeof(coldata.Batch(nil)))
 	maxItemsLen := memoryLimit / perItemMem
@@ -124,14 +128,14 @@ func newSpillingQueue(
 		itemsLen = maxItemsLen
 	}
 	return &spillingQueue{
-		unlimitedAllocator: unlimitedAllocator,
+		unlimitedAllocator: args.UnlimitedAllocator,
 		maxMemoryLimit:     memoryLimit,
-		typs:               typs,
+		typs:               args.Types,
 		items:              make([]coldata.Batch, itemsLen),
 		maxItemsLen:        int(maxItemsLen),
-		diskQueueCfg:       cfg,
-		fdSemaphore:        fdSemaphore,
-		diskAcc:            diskAcc,
+		diskQueueCfg:       args.DiskQueueCfg,
+		fdSemaphore:        args.FDSemaphore,
+		diskAcc:            args.DiskAcc,
 	}
 }
 
@@ -139,15 +143,8 @@ func newSpillingQueue(
 // in order to dequeue all enqueued batches all over again. An unlimited
 // allocator must be passed in. The queue will use this allocator to check
 // whether memory usage exceeds the given memory limit and use disk if so.
-func newRewindableSpillingQueue(
-	unlimitedAllocator *colmem.Allocator,
-	typs []*types.T,
-	memoryLimit int64,
-	cfg colcontainer.DiskQueueCfg,
-	fdSemaphore semaphore.Semaphore,
-	diskAcc *mon.BoundAccount,
-) *spillingQueue {
-	q := newSpillingQueue(unlimitedAllocator, typs, memoryLimit, cfg, fdSemaphore, diskAcc)
+func newRewindableSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
+	q := newSpillingQueue(args)
 	q.rewindable = true
 	return q
 }

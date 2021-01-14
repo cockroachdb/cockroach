@@ -264,13 +264,31 @@ func newCrossJoinerBase(
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 leftTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(leftTypes),
-			tuples:                newSpillingQueue(unlimitedAllocator, leftTypes, memoryLimit, cfg, fdSemaphore, diskAcc),
+			tuples: newSpillingQueue(
+				&NewSpillingQueueArgs{
+					UnlimitedAllocator: unlimitedAllocator,
+					Types:              leftTypes,
+					MemoryLimit:        memoryLimit,
+					DiskQueueCfg:       cfg,
+					FDSemaphore:        fdSemaphore,
+					DiskAcc:            diskAcc,
+				},
+			),
 		},
 		right: cjState{
 			unlimitedAllocator:    unlimitedAllocator,
 			types:                 rightTypes,
 			canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(rightTypes),
-			tuples:                newRewindableSpillingQueue(unlimitedAllocator, rightTypes, memoryLimit, cfg, fdSemaphore, diskAcc),
+			tuples: newRewindableSpillingQueue(
+				&NewSpillingQueueArgs{
+					UnlimitedAllocator: unlimitedAllocator,
+					Types:              rightTypes,
+					MemoryLimit:        memoryLimit,
+					DiskQueueCfg:       cfg,
+					FDSemaphore:        fdSemaphore,
+					DiskAcc:            diskAcc,
+				},
+			),
 		},
 	}
 	if joinType.ShouldIncludeLeftColsInOutput() {

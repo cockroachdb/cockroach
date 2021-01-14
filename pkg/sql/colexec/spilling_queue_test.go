@@ -94,13 +94,25 @@ func TestSpillingQueue(t *testing.T) {
 			var q *spillingQueue
 			if rewindable {
 				q = newRewindableSpillingQueue(
-					testAllocator, typs, memoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(2), testDiskAcc,
+					&NewSpillingQueueArgs{
+						UnlimitedAllocator: testAllocator,
+						Types:              typs,
+						MemoryLimit:        memoryLimit,
+						DiskQueueCfg:       queueCfg,
+						FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+						DiskAcc:            testDiskAcc,
+					},
 				)
 			} else {
 				q = newSpillingQueue(
-					testAllocator, typs, memoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(2), testDiskAcc,
+					&NewSpillingQueueArgs{
+						UnlimitedAllocator: testAllocator,
+						Types:              typs,
+						MemoryLimit:        memoryLimit,
+						DiskQueueCfg:       queueCfg,
+						FDSemaphore:        colexecbase.NewTestingSemaphore(2),
+						DiskAcc:            testDiskAcc,
+					},
 				)
 			}
 
