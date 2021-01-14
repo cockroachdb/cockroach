@@ -282,7 +282,10 @@ func descriptorsMatchingTargets(
 			return nil
 		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
-			schemaDesc := resolver.descByID[id]
+			schemaDesc, ok := resolver.descByID[id]
+			if !ok {
+				return catalog.ErrDescriptorNotFound
+			}
 			if err := catalog.FilterDescriptorState(
 				schemaDesc, tree.CommonLookupFlags{},
 			); err != nil {
