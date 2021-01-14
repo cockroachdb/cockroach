@@ -181,7 +181,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			resultsCh := make(chan tree.Datums)
-			job, _, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
+			job, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
