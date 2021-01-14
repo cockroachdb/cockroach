@@ -27,7 +27,6 @@ go_library(
         "constants.go",
         "copy.go",
         "create.go",
-        "createtypevariety_string.go",
         "datum.go",
         "decimal.go",
         "delete.go",
@@ -74,7 +73,6 @@ go_library(
         "set.go",
         "show.go",
         "split.go",
-        "statementtype_string.go",
         "stmt.go",
         "survival_goal.go",
         "table_name.go",
@@ -96,6 +94,8 @@ go_library(
         "window_funcs_util.go",
         "with.go",
         "zone.go",
+        ":gen-createtypevariety-stringer", # keep
+        ":gen-statementtype-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
@@ -225,5 +225,37 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+genrule(
+    name = "gen-createtypevariety-stringer",
+    srcs = [
+        "create.go",
+    ],
+    outs = ["createtypevariety_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=CreateTypeVariety $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-statementtype-stringer",
+    srcs = [
+        "stmt.go",
+    ],
+    outs = ["statementtype_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=StatementType $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

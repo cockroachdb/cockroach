@@ -27,7 +27,7 @@ go_library(
         "txn_interceptor_span_refresher.go",
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
-        "txnstate_string.go",
+        ":gen-txnstate-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
     visibility = ["//visibility:public"],
@@ -147,5 +147,21 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+genrule(
+    name = "gen-txnstate-stringer",
+    srcs = [
+        "txn_coord_sender.go",
+    ],
+    outs = ["txnstate_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=txnState $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

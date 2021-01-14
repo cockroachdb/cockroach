@@ -7,10 +7,11 @@ go_library(
     srcs = [
         "clusterversion.go",
         "cockroach_versions.go",
-        "key_string.go",
         "keyed_versions.go",
         "setting.go",
         "testutils.go",
+        ":gen-key-stringer", # keep
+
     ],
     embed = [":clusterversion_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
@@ -59,5 +60,21 @@ go_proto_library(
     deps = [
         "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+genrule(
+    name = "gen-key-stringer",
+    srcs = [
+        "cockroach_versions.go",
+    ],
+    outs = ["key_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Key $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

@@ -8,14 +8,14 @@ go_library(
         "column.go",
         "constraint.go",
         "descriptor.go",
-        "formatversion_string.go",
         "index.go",
         "join_type.go",
         "locking.go",
         "privilege.go",
-        "privilegedescversion_string.go",
         "region_name.go",
         "structured.go",
+        ":gen-privilegedescversion-stringer", # keep
+        ":gen-formatversion-stringer", # keep
     ],
     embed = [":descpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
@@ -81,5 +81,37 @@ go_proto_library(
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
+    ],
+)
+
+genrule(
+    name = "gen-privilegedescversion-stringer",
+    srcs = [
+        "privilege.go",
+    ],
+    outs = ["privilegedescversion_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=PrivilegeDescVersion $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-formatversion-stringer",
+    srcs = [
+        "structured.go",
+    ],
+    outs = ["formatversion_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=FormatVersion $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

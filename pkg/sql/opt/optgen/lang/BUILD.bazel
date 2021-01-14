@@ -10,9 +10,10 @@ go_library(
         "operator_string.go",
         "parser.go",
         "scanner.go",
-        "token_string.go",
         ":gen-expr",  # keep
         ":gen-operator",  # keep
+        ":gen-token-stringer", # keep
+        # ":gen-operator-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
@@ -78,3 +79,35 @@ genrule(
     """,
     tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
 )
+
+genrule(
+    name = "gen-token-stringer",
+    srcs = [
+        "scanner.go",
+    ],
+    outs = ["token_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Token $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+# genrule(
+#     name = "gen-operator-stringer",
+#     srcs = [
+#         "expr.go",
+#     ],
+#     outs = ["operator_string.go"],
+#     cmd = """
+#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Operator $<
+#     """,
+#     tools = [
+#         "@go_sdk//:bin/go",
+#         "@org_golang_x_tools//cmd/stringer",
+#     ],
+# )

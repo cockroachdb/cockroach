@@ -4,7 +4,6 @@ go_library(
     name = "execinfra",
     srcs = [
         "base.go",
-        "consumerstatus_string.go",
         "flow_context.go",
         "metadata_test_receiver.go",
         "metadata_test_sender.go",
@@ -12,12 +11,13 @@ go_library(
         "operator.go",
         "outboxbase.go",
         "processorsbase.go",
-        "procstate_string.go",
         "readerbase.go",
         "scanbase.go",
         "server_config.go",
         "testutils.go",
         "version.go",
+        ":gen-procstate-stringer", # keep
+        ":gen-consumerstatus-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra",
     visibility = ["//visibility:public"],
@@ -87,5 +87,37 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+    ],
+)
+
+genrule(
+    name = "gen-procstate-stringer",
+    srcs = [
+        "processorsbase.go",
+    ],
+    outs = ["procstate_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=procState $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-consumerstatus-stringer",
+    srcs = [
+        "base.go",
+    ],
+    outs = ["consumerstatus_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=ConsumerStatus $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

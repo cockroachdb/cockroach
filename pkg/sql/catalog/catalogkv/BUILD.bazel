@@ -4,9 +4,9 @@ go_library(
     name = "catalogkv",
     srcs = [
         "catalogkv.go",
-        "descriptorkind_string.go",
         "namespace.go",
         "test_utils.go",
+        ":gen-descriptorkind-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
     visibility = ["//visibility:public"],
@@ -47,5 +47,21 @@ go_test(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-descriptorkind-stringer",
+    srcs = [
+        "catalogkv.go",
+    ],
+    outs = ["descriptorkind_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type DescriptorKind $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

@@ -9,6 +9,7 @@ go_library(
         "encoding.go",
         "float.go",
         "type_string.go",
+        # ":gen-type-stringer",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
     visibility = ["//visibility:public"],
@@ -58,3 +59,19 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+# genrule(
+#     name = "gen-type-stringer",
+#     srcs = [
+#         "encoding.go",
+#     ],
+#     outs = ["type_string.go"],
+#     cmd = """
+#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type $<
+#     """,
+#     tools = [
+#         "@go_sdk//:bin/go",
+#         "@org_golang_x_tools//cmd/stringer",
+#     ],
+# )

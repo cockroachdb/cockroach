@@ -4,7 +4,6 @@ go_library(
     name = "sql",
     srcs = [
         "add_column.go",
-        "advancecode_string.go",
         "alter_column_type.go",
         "alter_database.go",
         "alter_index.go",
@@ -112,7 +111,6 @@ go_library(
         "lookup_join.go",
         "max_one_row.go",
         "mem_metrics.go",
-        "nodestatus_string.go",
         "notice.go",
         "opaque.go",
         "opt_catalog.go",
@@ -196,8 +194,6 @@ go_library(
         "testutils.go",
         "truncate.go",
         "txn_state.go",
-        "txnevent_string.go",
-        "txntype_string.go",
         "type_change.go",
         "unary.go",
         "union.go",
@@ -216,6 +212,10 @@ go_library(
         "zero.go",
         "zigzag_join.go",
         "zone_config.go",
+        ":gen-txnevent-stringer", # keep
+        ":gen-txntype-stringer", # keep
+        ":gen-advancecode-stringer", # keep
+        ":gen-nodestatus-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql",
     visibility = ["//visibility:public"],
@@ -582,5 +582,69 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_sync//errgroup",
+    ],
+)
+
+genrule(
+    name = "gen-txnevent-stringer",
+    srcs = [
+        "txn_state.go",
+    ],
+    outs = ["txnevent_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=txnEvent $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-txntype-stringer",
+    srcs = [
+        "txn_state.go",
+    ],
+    outs = ["txntype_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=txnType $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-advancecode-stringer",
+    srcs = [
+        "txn_state.go",
+    ],
+    outs = ["advancecode_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=advanceCode $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+genrule(
+    name = "gen-nodestatus-stringer",
+    srcs = [
+        "distsql_physical_planner.go",
+    ],
+    outs = ["nodestatus_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=NodeStatus $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "roleoption",
     srcs = [
-        "option_string.go",
         "role_option.go",
+        ":gen-option-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/roleoption",
     visibility = ["//visibility:public"],
@@ -13,5 +13,21 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqltelemetry",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+genrule(
+    name = "gen-option-stringer",
+    srcs = [
+        "role_option.go",
+    ],
+    outs = ["option_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Option $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

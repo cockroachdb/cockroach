@@ -30,7 +30,6 @@ go_library(
         "import.go",
         "init.go",
         "initial_sql.go",
-        "keytype_string.go",
         "log_flags.go",
         "mt.go",
         "mt_cert.go",
@@ -51,6 +50,7 @@ go_library(
         "tsdump.go",
         "userfile.go",
         "zip.go",
+        ":gen-keytype-stringer", # keep
     ],
     # keep
     cdeps = [
@@ -334,5 +334,21 @@ go_test(
         "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-keytype-stringer",
+    srcs = [
+        "flags_util.go",
+    ],
+    outs = ["keytype_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=keyType $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

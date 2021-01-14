@@ -11,9 +11,9 @@ go_library(
         "node_id.go",
         "store_spec.go",
         "test_server_args.go",
-        "testclusterreplicationmode_string.go",
         "testing_knobs.go",
         "zone.go",
+        ":gen-testclusterreplicationmode-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/base",
     visibility = ["//visibility:public"],
@@ -62,5 +62,21 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+genrule(
+    name = "gen-testclusterreplicationmode-stringer",
+    srcs = [
+        "test_server_args.go",
+    ],
+    outs = ["testclusterreplicationmode_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=TestClusterReplicationMode $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

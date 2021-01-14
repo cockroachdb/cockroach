@@ -3,8 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "privilege",
     srcs = [
-        "kind_string.go",
+        # "kind_string.go",
         "privilege.go",
+        ":gen-kind-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
     visibility = ["//visibility:public"],
@@ -25,5 +26,21 @@ go_test(
         ":privilege",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+    ],
+)
+
+genrule(
+    name = "gen-kind-stringer",
+    srcs = [
+        "privilege.go",
+    ],
+    outs = ["kind_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Kind $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
     ],
 )

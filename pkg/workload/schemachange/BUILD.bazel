@@ -7,10 +7,11 @@ go_library(
         "error_code_set.go",
         "error_screening.go",
         "operation_generator.go",
-        "optype_string.go",
         "schemachange.go",
         "txstatus_string.go",
         "type_resolver.go",
+        # ":gen-txstatus-stringer", # keep
+        ":gen-optype-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
     visibility = ["//visibility:public"],
@@ -34,3 +35,35 @@ go_library(
         "@com_github_spf13_pflag//:pflag",
     ],
 )
+
+genrule(
+    name = "gen-optype-stringer",
+    srcs = [
+        "operation_generator.go",
+    ],
+    outs = ["optype_string.go"],
+    cmd = """
+       env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=opType $<
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
+
+# genrule(
+#     name = "gen-txstatus-stringer",
+#     srcs = [
+#         "schemachange.go",
+#     ],
+#     outs = ["txstatus_string.go"],
+#     cmd = """
+#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type TxStatus $<
+#     """,
+#     tools = [
+#         "@go_sdk//:bin/go",
+#         "@org_golang_x_tools//cmd/stringer",
+#     ],
+# )
