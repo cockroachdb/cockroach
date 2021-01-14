@@ -255,6 +255,45 @@ func TestEvaluateBatch(t *testing.T) {
 		// Test suite for KeyLocking.
 		//
 		{
+			// Two gets, one of which finds a key, one of which does not. An
+			// unreplicated lock should be acquired on the key that existed.
+			name: "gets with key locking",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanA := getArgsString("a")
+				scanA.KeyLocking = lock.Exclusive
+				d.ba.Add(scanA)
+				scanG := getArgsString("g")
+				scanG.KeyLocking = lock.Exclusive
+				d.ba.Add(scanG)
+				d.ba.Txn = &txn
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, "a")
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
+			// Two gets, one of which finds a key, one of which does not. No
+			// transaction set, so no locks should be acquired.
+			name: "gets with key locking without txn",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEFAt(t, d, ts.Prev())
+				scanA := getArgsString("a")
+				scanA.KeyLocking = lock.Exclusive
+				d.ba.Add(scanA)
+				scanG := getArgsString("g")
+				scanG.KeyLocking = lock.Exclusive
+				d.ba.Add(scanG)
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, nil)
+				verifyAcquiredLocks(t, r, lock.Unreplicated, []string(nil)...)
+				verifyAcquiredLocks(t, r, lock.Replicated, []string(nil)...)
+			},
+		},
+		{
 			// Three scans that observe 3, 1, and 0 keys, respectively. An
 			// unreplicated lock should be acquired on each key that is scanned.
 			name: "scans with key locking",
@@ -651,10 +690,12 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 			rows = req.Rows
 		case *roachpb.GetResponse:
 			isGet = true
-			rows = []roachpb.KeyValue{{
-				Key:   r.d.ba.Requests[i].GetGet().Key,
-				Value: *req.Value,
-			}}
+			if req.Value != nil {
+				rows = []roachpb.KeyValue{{
+					Key:   r.d.ba.Requests[i].GetGet().Key,
+					Value: *req.Value,
+				}}
+			}
 		default:
 		}
 

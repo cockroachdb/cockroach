@@ -963,7 +963,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	db := kv.NewDB(ambient, factory, clock, stopper)
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
-	// Acquire locks on a-b, c, u-w before the final batch.
+	// Acquire locks on a-b, c, m, u-w before the final batch.
 	_, pErr := txn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -972,23 +972,30 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
+	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"))
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
 	pErr = txn.DelRange(ctx, roachpb.Key("u"), roachpb.Key("w"))
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	// The final batch overwrites key c and overlaps part of the a-b and u-w ranges.
+	// The final batch overwrites key c, reads key n, and overlaps part of the a-b and u-w ranges.
 	b := txn.NewBatch()
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
 	b.Put(roachpb.Key("d"), []byte("value"))
+	b.GetForUpdate(roachpb.Key("n"))
 	b.ReverseScanForUpdate(roachpb.Key("v"), roachpb.Key("z"))
 
-	// The expected locks are a-b, c, and u-z.
+	// The expected locks are a-b, c, m, n, and u-z.
 	expectedLockSpans = []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()},
 		{Key: roachpb.Key("c"), EndKey: nil},
 		{Key: roachpb.Key("d"), EndKey: nil},
+		{Key: roachpb.Key("m"), EndKey: nil},
+		{Key: roachpb.Key("n"), EndKey: nil},
 		{Key: roachpb.Key("u"), EndKey: roachpb.Key("z")},
 	}
 

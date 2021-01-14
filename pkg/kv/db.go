@@ -317,6 +317,20 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 	return getOneRow(db.Run(ctx, b), b)
 }
 
+// GetForUpdate retrieves the value for a key, returning the retrieved key/value
+// or an error. An unreplicated, exclusive lock is acquired on the key, if it
+// exists. It is not considered an error for the key not to exist.
+//
+//   r, err := db.GetForUpdate("a")
+//   // string(r.Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (db *DB) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
+	b := &Batch{}
+	b.GetForUpdate(key)
+	return getOneRow(db.Run(ctx, b), b)
+}
+
 // GetProto retrieves the value for a key and decodes the result as a proto
 // message. If the key doesn't exist, the proto will simply be reset.
 //

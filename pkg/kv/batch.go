@@ -335,21 +335,37 @@ func (b *Batch) AddRawRequest(reqs ...roachpb.Request) {
 	}
 }
 
-// Get retrieves the value for a key. A new result will be appended to the
-// batch which will contain a single row.
+func (b *Batch) get(key interface{}, forUpdate bool) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	b.appendReqs(roachpb.NewGet(k, forUpdate))
+	b.initResult(1, 1, notRaw, nil)
+}
+
+// Get retrieves the value for a key. A new result will be appended to the batch
+// which will contain a single row.
 //
 //   r, err := db.Get("a")
 //   // string(r.Rows[0].Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Get(key interface{}) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewGet(k))
-	b.initResult(1, 1, notRaw, nil)
+	b.get(key, false /* forUpdate */)
+}
+
+// GetForUpdate retrieves the value for a key. An unreplicated, exclusive lock
+// is acquired on the key, if it exists. A new result will be appended to the
+// batch which will contain a single row.
+//
+//   r, err := db.GetForUpdate("a")
+//   // string(r.Rows[0].Key) == "a"
+//
+// key can be either a byte slice or a string.
+func (b *Batch) GetForUpdate(key interface{}) {
+	b.get(key, true /* forUpdate */)
 }
 
 func (b *Batch) put(key, value interface{}, inline bool) {
