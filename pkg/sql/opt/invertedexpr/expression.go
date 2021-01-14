@@ -362,8 +362,9 @@ type SpanExpression struct {
 
 	// Unique is true if the spans are guaranteed not to produce duplicate
 	// primary keys. Otherwise, Unique is false. Unique may be true for certain
-	// JSON or Array SpanExpressions, but it does not hold when these
-	// SpanExpressions are combined with And or Or.
+	// JSON or Array SpanExpressions, and it holds when SpanExpressions are
+	// combined with And. It does not hold when these SpanExpressions are
+	// combined with Or.
 	Unique bool
 
 	// SpansToRead are the spans to read from the inverted index
@@ -672,6 +673,7 @@ func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
 	// TODO(sumeer): tighten the SpansToRead for this case.
 	expr := &SpanExpression{
 		Tight:              left.Tight && right.Tight,
+		Unique:             left.Unique && right.Unique,
 		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
 		FactoredUnionSpans: intersectSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
 		Operator:           SetIntersection,
