@@ -198,6 +198,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/oidext",
         "//pkg/sql/opt/exec/execbuilder",
         "//pkg/sql/opt/optbuilder",
