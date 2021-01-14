@@ -12,6 +12,7 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -106,4 +107,23 @@ func (j JoinType) IsLeftAntiOrExceptAll() bool {
 // join type.
 func (j JoinType) IsRightSemiOrRightAnti() bool {
 	return j == RightSemiJoin || j == RightAntiJoin
+}
+
+// MakeOutputTypes computes the output types for this join type.
+func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
+	numOutputTypes := 0
+	if j.ShouldIncludeLeftColsInOutput() {
+		numOutputTypes += len(left)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		numOutputTypes += len(right)
+	}
+	outputTypes := make([]*types.T, 0, numOutputTypes)
+	if j.ShouldIncludeLeftColsInOutput() {
+		outputTypes = append(outputTypes, left...)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		outputTypes = append(outputTypes, right...)
+	}
+	return outputTypes
 }

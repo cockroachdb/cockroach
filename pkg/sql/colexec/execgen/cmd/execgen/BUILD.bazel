@@ -12,6 +12,7 @@ go_library(
         "concat_agg_gen.go",
         "const_gen.go",
         "count_agg_gen.go",
+        "crossjoiner_gen.go",
         "data_manipulation_gen.go",
         "datum_to_vec_gen.go",
         "default_agg_gen.go",

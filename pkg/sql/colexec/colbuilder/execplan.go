@@ -227,15 +227,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		if !spec.Core.HashJoiner.OnExpr.Empty() && spec.Core.HashJoiner.Type != descpb.InnerJoin {
 			return errors.Newf("can't plan vectorized non-inner hash joins with ON expressions")
 		}
-		leftInput, rightInput := spec.Input[0], spec.Input[1]
-		if len(leftInput.ColumnTypes) == 0 || len(rightInput.ColumnTypes) == 0 {
-			// We have a cross join of two inputs, and at least one of them has
-			// zero-length schema. However, the hash join operators (both
-			// external and in-memory) have a built-in assumption of non-empty
-			// inputs, so we will fallback to row execution in such cases.
-			// TODO(yuzefovich): implement specialized cross join operator.
-			return errors.Newf("can't plan vectorized hash joins with an empty input schema")
-		}
 		return nil
 
 	case spec.Core.MergeJoiner != nil:
@@ -905,76 +896,93 @@ func NewColOperator(
 			rightTypes := make([]*types.T, len(spec.Input[1].ColumnTypes))
 			copy(rightTypes, spec.Input[1].ColumnTypes)
 
-			hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
-			var hashJoinerMemAccount *mon.BoundAccount
-			var hashJoinerUnlimitedAllocator *colmem.Allocator
-			if useStreamingMemAccountForBuffering {
-				hashJoinerMemAccount = streamingMemAccount
-				hashJoinerUnlimitedAllocator = streamingAllocator
+			if len(core.HashJoiner.LeftEqColumns) == 0 {
+				// We are performing a cross-join, so we need to plan a
+				// specialized operator.
+				crossJoinerMemMonitorName := fmt.Sprintf("cross-joiner-%d", spec.ProcessorID)
+				crossJoinerMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, crossJoinerMemMonitorName)
+				crossJoinerDiskAcc := result.createDiskAccount(ctx, flowCtx, crossJoinerMemMonitorName)
+				unlimitedAllocator := colmem.NewAllocator(ctx, crossJoinerMemAccount, factory)
+				// TODO(yuzefovich): audit all usages of GetWorkMemLimit to see
+				// whether we should be paying attention to ForceDiskSpill knob
+				// there too.
+				memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+				if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
+					memoryLimit = 1
+				}
+				result.Op = colexec.NewCrossJoiner(
+					unlimitedAllocator,
+					memoryLimit,
+					args.DiskQueueCfg,
+					args.FDSemaphore,
+					core.HashJoiner.Type,
+					inputs[0], inputs[1],
+					leftTypes, rightTypes,
+					crossJoinerDiskAcc,
+				)
+				result.ToClose = append(result.ToClose, result.Op.(colexecbase.Closer))
 			} else {
-				hashJoinerMemAccount = result.createMemAccountForSpillStrategy(
-					ctx, flowCtx, hashJoinerMemMonitorName,
+				hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
+				var hashJoinerMemAccount *mon.BoundAccount
+				var hashJoinerUnlimitedAllocator *colmem.Allocator
+				if useStreamingMemAccountForBuffering {
+					hashJoinerMemAccount = streamingMemAccount
+					hashJoinerUnlimitedAllocator = streamingAllocator
+				} else {
+					hashJoinerMemAccount = result.createMemAccountForSpillStrategy(
+						ctx, flowCtx, hashJoinerMemMonitorName,
+					)
+					hashJoinerUnlimitedAllocator = colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, hashJoinerMemMonitorName), factory,
+					)
+				}
+				hjSpec := colexec.MakeHashJoinerSpec(
+					core.HashJoiner.Type,
+					core.HashJoiner.LeftEqColumns,
+					core.HashJoiner.RightEqColumns,
+					leftTypes,
+					rightTypes,
+					core.HashJoiner.RightEqColumnsAreKey,
 				)
-				hashJoinerUnlimitedAllocator = colmem.NewAllocator(
-					ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, hashJoinerMemMonitorName), factory,
-				)
-			}
-			// It is valid for empty set of equality columns to be considered as
-			// "key" (for example, the input has at most 1 row). However, hash
-			// joiner, in order to handle NULL values correctly, needs to think
-			// that an empty set of equality columns doesn't form a key.
-			rightEqColsAreKey := core.HashJoiner.RightEqColumnsAreKey && len(core.HashJoiner.RightEqColumns) > 0
-			hjSpec := colexec.MakeHashJoinerSpec(
-				core.HashJoiner.Type,
-				core.HashJoiner.LeftEqColumns,
-				core.HashJoiner.RightEqColumns,
-				leftTypes,
-				rightTypes,
-				rightEqColsAreKey,
-			)
 
-			inMemoryHashJoiner := colexec.NewHashJoiner(
-				colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
-				hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
-				colexec.HashJoinerInitialNumBuckets,
-			)
-			if args.TestingKnobs.DiskSpillingDisabled {
-				// We will not be creating a disk-backed hash joiner because
-				// we're running a test that explicitly asked for only in-memory
-				// hash joiner.
-				result.Op = inMemoryHashJoiner
-			} else {
-				diskAccount := result.createDiskAccount(ctx, flowCtx, hashJoinerMemMonitorName)
-				result.Op = colexec.NewTwoInputDiskSpiller(
-					inputs[0], inputs[1], inMemoryHashJoiner.(colexecbase.BufferingInMemoryOperator),
-					hashJoinerMemMonitorName,
-					func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator {
-						monitorNamePrefix := "external-hash-joiner"
-						unlimitedAllocator := colmem.NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
-						)
-						ehj := colexec.NewExternalHashJoiner(
-							unlimitedAllocator,
-							flowCtx,
-							args,
-							hjSpec,
-							inputOne, inputTwo,
-							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
-							diskAccount,
-						)
-						result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))
-						return ehj
-					},
-					args.TestingKnobs.SpillingCallbackFn,
+				inMemoryHashJoiner := colexec.NewHashJoiner(
+					colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
+					hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
+					colexec.HashJoinerInitialNumBuckets,
 				)
+				if args.TestingKnobs.DiskSpillingDisabled {
+					// We will not be creating a disk-backed hash joiner because
+					// we're running a test that explicitly asked for only
+					// in-memory hash joiner.
+					result.Op = inMemoryHashJoiner
+				} else {
+					diskAccount := result.createDiskAccount(ctx, flowCtx, hashJoinerMemMonitorName)
+					result.Op = colexec.NewTwoInputDiskSpiller(
+						inputs[0], inputs[1], inMemoryHashJoiner.(colexecbase.BufferingInMemoryOperator),
+						hashJoinerMemMonitorName,
+						func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator {
+							monitorNamePrefix := "external-hash-joiner"
+							unlimitedAllocator := colmem.NewAllocator(
+								ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
+							)
+							ehj := colexec.NewExternalHashJoiner(
+								unlimitedAllocator,
+								flowCtx,
+								args,
+								hjSpec,
+								inputOne, inputTwo,
+								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, monitorNamePrefix, factory),
+								diskAccount,
+							)
+							result.ToClose = append(result.ToClose, ehj.(colexecbase.Closer))
+							return ehj
+						},
+						args.TestingKnobs.SpillingCallbackFn,
+					)
+				}
 			}
-			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
-			if core.HashJoiner.Type.ShouldIncludeLeftColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
-			}
-			if core.HashJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
-			}
+
+			result.ColumnTypes = core.HashJoiner.Type.MakeOutputTypes(leftTypes, rightTypes)
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err = result.planAndMaybeWrapFilter(
@@ -1028,13 +1036,7 @@ func NewColOperator(
 
 			result.Op = mj
 			result.ToClose = append(result.ToClose, mj.(colexecbase.Closer))
-			result.ColumnTypes = make([]*types.T, 0, len(leftTypes)+len(rightTypes))
-			if core.MergeJoiner.Type.ShouldIncludeLeftColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, leftTypes...)
-			}
-			if core.MergeJoiner.Type.ShouldIncludeRightColsInOutput() {
-				result.ColumnTypes = append(result.ColumnTypes, rightTypes...)
-			}
+			result.ColumnTypes = core.MergeJoiner.Type.MakeOutputTypes(leftTypes, rightTypes)
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapFilter(
