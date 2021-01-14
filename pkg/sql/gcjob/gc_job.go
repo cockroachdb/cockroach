@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -81,9 +80,7 @@ func performGC(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r schemaChangeGCResumer) Resume(
-	ctx context.Context, execCtx interface{}, _ chan<- tree.Datums,
-) error {
+func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	// TODO(pbardea): Wait for no versions.
 	execCfg := p.ExecCfg()

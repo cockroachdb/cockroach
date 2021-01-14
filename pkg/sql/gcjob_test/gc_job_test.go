@@ -185,7 +185,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			resultsCh := make(chan tree.Datums)
-			job, _, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
+			job, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -344,9 +344,9 @@ func TestGCResumer(t *testing.T) {
 		}
 
 		resultsCh := make(chan tree.Datums)
-		sj, errCh, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
 		require.NoError(t, err)
-		require.NoError(t, <-errCh)
+		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
 		require.NoError(t, err)
 		st, err := job.CurrentStatus(ctx)
@@ -371,12 +371,12 @@ func TestGCResumer(t *testing.T) {
 		}
 
 		resultsCh := make(chan tree.Datums)
-		sj, errCh, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		require.NoError(t, err)
-		require.NoError(t, <-errCh)
+		require.NoError(t, sj.AwaitCompletion(ctx))
 
 		job, err := jobRegistry.LoadJob(ctx, *sj.ID())
 		require.NoError(t, err)
@@ -406,8 +406,8 @@ func TestGCResumer(t *testing.T) {
 		}
 
 		resultsCh := make(chan tree.Datums)
-		_, errCh, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
+		sj, err := jobRegistry.CreateAndStartJob(ctx, resultsCh, record)
 		require.NoError(t, err)
-		require.Error(t, <-errCh)
+		require.Error(t, sj.AwaitCompletion(ctx))
 	})
 }

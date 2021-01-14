@@ -369,7 +369,8 @@ func (b *backupResumer) releaseProtectedTimestamp(
 }
 
 type backupResumer struct {
-	job *jobs.Job
+	job         *jobs.Job
+	backupStats RowCount
 
 	testingKnobs struct {
 		ignoreProtectedTimestamps bool
@@ -377,9 +378,7 @@ type backupResumer struct {
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (b *backupResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
@@ -501,14 +500,7 @@ func (b *backupResumer) Resume(
 		}
 	}
 
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*b.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
+	b.backupStats = res
 
 	// Collect telemetry.
 	{
@@ -535,6 +527,23 @@ func (b *backupResumer) Resume(
 
 	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
 	return nil
+}
+
+// ReportResults implements JobResultsReporter interface.
+func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*b.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(b.backupStats.Rows)),
+		tree.NewDInt(tree.DInt(b.backupStats.IndexEntries)),
+		tree.NewDInt(tree.DInt(b.backupStats.DataSize)),
+	}:
+		return nil
+	}
 }
 
 func (b *backupResumer) readManifestOnResume(

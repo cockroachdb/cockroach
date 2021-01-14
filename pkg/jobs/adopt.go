@@ -186,28 +186,17 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 		return err
 	}
 	resumeCtx, cancel := r.makeCtx()
-	resultsCh := make(chan tree.Datums)
 
-	errCh := make(chan error, 1)
 	aj := &adoptedJob{sid: s.ID(), cancel: cancel}
 	r.addAdoptedJob(jobID, aj)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
-		r.runJob(resumeCtx, resumer, resultsCh, errCh, job, status, job.taskName(), nil)
+		// Wait for the job to finish. No need to print the error because if there
+		// was one it's been set in the job status already.
+		_ = r.runJob(resumeCtx, resumer, job, status, job.taskName())
 	}); err != nil {
 		r.removeAdoptedJob(jobID)
 		return err
 	}
-	go func() {
-		// Drain and ignore results.
-		for range resultsCh {
-		}
-	}()
-	go func() {
-		// Wait for the job to finish. No need to print the error because if there
-		// was one it's been set in the job status already.
-		<-errCh
-		close(resultsCh)
-	}()
 	return nil
 }
 
@@ -224,19 +213,8 @@ func (r *Registry) addAdoptedJob(jobID int64, aj *adoptedJob) {
 }
 
 func (r *Registry) runJob(
-	ctx context.Context,
-	resumer Resumer,
-	resultsCh chan<- tree.Datums,
-	errCh chan<- error,
-	job *Job,
-	status Status,
-	taskName string,
-	onDone func(),
-) {
-	if onDone != nil {
-		defer onDone()
-	}
-
+	ctx context.Context, resumer Resumer, job *Job, status Status, taskName string,
+) error {
 	job.mu.Lock()
 	var finalResumeError error
 	if job.mu.payload.FinalResumeError != nil {
@@ -255,7 +233,7 @@ func (r *Registry) runJob(
 	defer span.Finish()
 
 	// Run the actual job.
-	err := r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
+	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
 	// If the context has been canceled, disregard errors for the sake of logging
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
@@ -263,7 +241,7 @@ func (r *Registry) runJob(
 		log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 	}
 	r.unregister(*job.ID())
-	errCh <- err
+	return err
 }
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {

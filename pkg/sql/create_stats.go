@@ -135,12 +135,12 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
-	job, errCh, err := n.p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, *record)
+	job, err := n.p.ExecCfg().JobRegistry.CreateAndStartJob(ctx, resultsCh, *record)
 	if err != nil {
 		return err
 	}
 
-	if err = <-errCh; err != nil {
+	if err := job.AwaitCompletion(ctx); err != nil {
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
@@ -150,8 +150,9 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
 		}
+		return err
 	}
-	return err
+	return nil
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and
@@ -473,9 +474,7 @@ type createStatsResumer struct {
 var _ jobs.Resumer = &createStatsResumer{}
 
 // Resume is part of the jobs.Resumer interface.
-func (r *createStatsResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
 	if details.Name == stats.AutoStatsName {
