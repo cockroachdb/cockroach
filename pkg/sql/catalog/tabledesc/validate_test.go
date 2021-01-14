@@ -111,6 +111,7 @@ var validationMap = []struct {
 			"UniqueWithoutIndexConstraints": {status: iSolemnlySwearThisFieldIsValidated},
 			"Temporary":                     {status: thisFieldReferencesNoObjects},
 			"LocalityConfig":                {status: iSolemnlySwearThisFieldIsValidated},
+			"PartitionAllBy":                {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
