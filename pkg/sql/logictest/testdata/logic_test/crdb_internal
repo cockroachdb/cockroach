@@ -772,3 +772,17 @@ testdb         root      ALL
 
 statement ok
 SET DATABASE = test
+
+subtest regression_57639
+
+statement ok
+CREATE TABLE t57639();
+
+statement ok
+SELECT crdb_internal.unsafe_delete_descriptor(id) FROM system.namespace WHERE name = 't57639'
+
+statement error pq: relation "t57639" does not exist
+SELECT count(*) FROM t57639;
+
+statement ok
+SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM (SELECT * FROM system.namespace WHERE name = 't57639');

@@ -310,9 +310,9 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		}
 	}
 
-	// Look up the object using the discovered database descriptor.
-	desc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
-	if err != nil {
+	// Look up the descriptor using the discovered ID.
+	desc, err := GetDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable), AnyDescriptorKind, flags.Required)
+	if err != nil || desc == nil {
 		return nil, err
 	}
 	// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
