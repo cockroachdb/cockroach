@@ -72,6 +72,12 @@ message ChangeReplicasOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+message TransferLeaseOperation {
+  bytes key = 1;
+  int32 target = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -90,6 +96,7 @@ message Operation {
   SplitOperation split = 10;
   MergeOperation merge = 11;
   ChangeReplicasOperation change_replicas = 12;
+  TransferLeaseOperation transfer_lease = 13;
 }
 
 enum ResultType {
