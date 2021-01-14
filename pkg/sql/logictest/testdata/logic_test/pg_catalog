@@ -2777,3 +2777,16 @@ SELECT oid FROM pg_type WHERE oid IN (19,20,24) ORDER BY oid
 
 statement ok
 SELECT * FROM pg_class WHERE oid = 10 OR oid BETWEEN 20 AND 30 OR oid = 40
+
+# pg_catalog is explicitly disallowed for use with the anonymous database.
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM "".pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = "";
+
+query error cannot access virtual schema in anonymous database
+SELECT tablename FROM pg_catalog.pg_tables
+
+statement ok
+SET DATABASE = test;
