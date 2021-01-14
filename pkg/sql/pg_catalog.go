@@ -1453,14 +1453,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						table.GetIndexMutationCapabilities(index.GetID())
 					isReady := isMutation && isWriteOnly
 
-					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
-						colIDs = append(colIDs, index.GetColumnID(i))
-					}
-					indkey, err := colIDArrayToVector(colIDs)
-					if err != nil {
-						return err
-					}
 					// Get the collations for all of the columns. To do this we require
 					// the type of the column.
 					// Also fill in indoption for each column to indicate if the index
@@ -1468,7 +1460,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
 
-					for i, columnID := range colIDs {
+					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
+					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
+						columnID := index.GetColumnID(i)
+						colIDs = append(colIDs, columnID)
 						col, err := table.FindColumnByID(columnID)
 						if err != nil {
 							return err
@@ -1487,6 +1482,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						if err := indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
 							return err
 						}
+					}
+					indkey, err := colIDArrayToVector(colIDs)
+					if err != nil {
+						return err
 					}
 					collationOidVector := tree.NewDOidVectorFromDArray(collationOids)
 					indoptionIntVector := tree.NewDIntVectorFromDArray(indoption)
@@ -1562,7 +1561,6 @@ func indexDefFromDescriptor(
 	tableLookup tableLookupFn,
 ) (string, error) {
 	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
-
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
 		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
@@ -1576,7 +1574,7 @@ func indexDefFromDescriptor(
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.ColumnDirections[i] == descpb.IndexDescriptor_DESC {
+		if index.ColumnDirections[index.ExplicitColumnStartIdx()+i] == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
 		indexDef.Columns[i] = elem
