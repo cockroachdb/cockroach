@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/treeprinter",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -20,6 +21,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":inverted"],
     deps = [
+        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",
