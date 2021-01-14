@@ -1834,3 +1834,89 @@ project
  │    └── key: (1)
  └── projections
       └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotDisjoint
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE g1
+(
+    id1 INT PRIMARY KEY,
+    geom1 GEOMETRY,
+    INVERTED INDEX (geom1)
+)
+----
+
+exec-ddl
+CREATE TABLE g2
+(
+    id2 INT PRIMARY KEY,
+    geom2 GEOMETRY,
+    INVERTED INDEX (geom2)
+)
+----
+
+norm expect=SimplifyNotDisjoint
+SELECT NOT st_disjoint(geom1, geom2) FROM g1, g2;
+----
+project
+ ├── columns: "?column?":9
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: geom1:2 geom2:6
+ │    ├── scan g1
+ │    │    └── columns: geom1:2
+ │    ├── scan g2
+ │    │    └── columns: geom2:6
+ │    └── filters (true)
+ └── projections
+      └── st_intersects(geom1:2, geom2:6) [as="?column?":9, outer=(2,6), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT st_disjoint(geom1, geom2) FROM g1, g2;
+----
+project
+ ├── columns: st_disjoint:9
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: geom1:2 geom2:6
+ │    ├── scan g1
+ │    │    └── columns: geom1:2
+ │    ├── scan g2
+ │    │    └── columns: geom2:6
+ │    └── filters (true)
+ └── projections
+      └── st_disjoint(geom1:2, geom2:6) [as=st_disjoint:9, outer=(2,6), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT st_intersects(geom1, geom2) FROM g1, g2;
+----
+project
+ ├── columns: st_intersects:9
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: geom1:2 geom2:6
+ │    ├── scan g1
+ │    │    └── columns: geom1:2
+ │    ├── scan g2
+ │    │    └── columns: geom2:6
+ │    └── filters (true)
+ └── projections
+      └── st_intersects(geom1:2, geom2:6) [as=st_intersects:9, outer=(2,6), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT NOT st_intersects(geom1, geom2) FROM g1, g2;
+----
+project
+ ├── columns: "?column?":9
+ ├── immutable
+ ├── inner-join (cross)
+ │    ├── columns: geom1:2 geom2:6
+ │    ├── scan g1
+ │    │    └── columns: geom1:2
+ │    ├── scan g2
+ │    │    └── columns: geom2:6
+ │    └── filters (true)
+ └── projections
+      └── NOT st_intersects(geom1:2, geom2:6) [as="?column?":9, outer=(2,6), immutable]
