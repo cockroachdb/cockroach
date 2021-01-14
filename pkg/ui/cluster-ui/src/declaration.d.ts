@@ -18,3 +18,6 @@ type Tuple<T> = [T, T];
 type Dictionary<V> = {
   [key: string]: V;
 };
+
+declare module "highlight.js/lib/core";
+declare module "highlight.js/lib/languages/pgsql";
