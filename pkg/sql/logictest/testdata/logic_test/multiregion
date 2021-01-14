@@ -289,31 +289,6 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
-statement error REGIONAL BY ROW AS is not yet supported
-CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW AS a
-
-statement ok
-CREATE TABLE regional_by_row_table (a int) LOCALITY REGIONAL BY ROW
-
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
-----
-CREATE TABLE public.regional_by_row_table (
-                            a INT8 NULL,
-                            FAMILY "primary" (a, rowid)
-) LOCALITY REGIONAL BY ROW
-
-query TT
-SHOW ZONE CONFIGURATION FOR TABLE regional_by_row_table
-----
-TABLE regional_by_row_table  ALTER TABLE regional_by_row_table CONFIGURE ZONE USING
-                             range_min_bytes = 134217728,
-                             range_max_bytes = 536870912,
-                             gc.ttlseconds = 90000,
-                             num_replicas = 3,
-                             constraints = '[]',
-                             lease_preferences = '[]'
-
 statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
 
@@ -341,7 +316,6 @@ SHOW TABLES
 ----
 schema_name  table_name                              type   owner  estimated_row_count  locality
 public       global_table                            table  root   0                    GLOBAL
-public       regional_by_row_table                   table  root   0                    REGIONAL BY ROW
 public       regional_implicit_primary_region_table  table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
 public       regional_primary_region_table           table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
 public       regional_us-east-1_table                table  root   0                    REGIONAL BY TABLE IN "us-east-1"
@@ -436,9 +410,6 @@ ALTER DATABASE new_db ADD REGION "us-west-1"
 
 statement error implementation pending
 ALTER DATABASE new_db DROP REGION "us-west-1"
-
-statement error implementation pending
-ALTER TABLE a SET LOCALITY REGIONAL BY ROW
 
 statement ok
 CREATE DATABASE primary_region_db

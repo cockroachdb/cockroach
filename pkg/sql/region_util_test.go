@@ -225,7 +225,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 					{Name: "region_d"},
 				},
 				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas:               proto.Int32(4),
@@ -250,9 +250,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
-			},
+			expected: nil,
 		},
 		{
 			desc: "4-region regional by row table with region survival",
@@ -271,9 +269,7 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(4),
-			},
+			expected: nil,
 		},
 		{
 			desc: "4-region regional by table with zone survival on primary region",
@@ -379,6 +375,111 @@ func TestZoneConfigFromTableLocalityConfig(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			zc, err := zoneConfigFromTableLocalityConfig(tc.localityConfig, tc.regionConfig)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, zc)
+		})
+	}
+}
+
+func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		desc         string
+		region       descpb.DatabaseDescriptor_RegionConfig_Region
+		regionConfig descpb.DatabaseDescriptor_RegionConfig
+		expected     *zonepb.ZoneConfig
+	}{
+		{
+			desc: "4-region table with zone survivability",
+			region: descpb.DatabaseDescriptor_RegionConfig_Region{
+				Name: "region_a",
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+				Constraints: []zonepb.ConstraintsConjunction{
+					{
+						NumReplicas: 4,
+						Constraints: []zonepb.Constraint{
+							{
+								Type:  zonepb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "region_a",
+							},
+						},
+					},
+				},
+				InheritedConstraints: false,
+				LeasePreferences: []zonepb.LeasePreference{
+					{
+						Constraints: []zonepb.Constraint{
+							{
+								Type:  zonepb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "region_a",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "4-region global table with region survivaability",
+			region: descpb.DatabaseDescriptor_RegionConfig_Region{
+				Name: "region_a",
+			},
+			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
+				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
+					{Name: "region_b"},
+					{Name: "region_c"},
+					{Name: "region_a"},
+					{Name: "region_d"},
+				},
+				PrimaryRegion: "region_b",
+				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+			},
+			expected: &zonepb.ZoneConfig{
+				NumReplicas: proto.Int32(4),
+				Constraints: []zonepb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []zonepb.Constraint{
+							{
+								Type:  zonepb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "region_a",
+							},
+						},
+					},
+				},
+				InheritedConstraints: false,
+				LeasePreferences: []zonepb.LeasePreference{
+					{
+						Constraints: []zonepb.Constraint{
+							{
+								Type:  zonepb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "region_a",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			zc, err := zoneConfigFromRegionConfigForPartition(tc.region, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})
