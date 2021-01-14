@@ -88,8 +88,9 @@ type StartableJob struct {
 	resumer    Resumer
 	resumerCtx context.Context
 	cancel     context.CancelFunc
-	resultsCh  chan<- tree.Datums
 	span       *tracing.Span
+	execDone   chan struct{}
+	execErr    error
 	starts     int64 // used to detect multiple calls to Start()
 }
 
@@ -121,7 +122,7 @@ var _ redact.SafeFormatter = Status("")
 type RunningStatus string
 
 const (
-	// StatusPending is for jobs that have been created but on which work has
+	// StatusPending is `for jobs that have been created but on which work has
 	// not yet started.
 	StatusPending Status = "pending"
 	// StatusRunning is for jobs that are currently in progress.
@@ -827,13 +828,14 @@ func (j *Job) CurrentStatus(ctx context.Context) (Status, error) {
 // must be committed. If a non-nil error is returned, the job was not started
 // and nothing will be send on errCh. Clients must not start jobs more than
 // once.
-func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err error) {
+func (sj *StartableJob) Start(ctx context.Context) (err error) {
 	if starts := atomic.AddInt64(&sj.starts, 1); starts != 1 {
-		return nil, errors.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started more than once", *sj.ID())
 	}
+
 	if sj.registry.startUsingSQLLivenessAdoption(ctx) && sj.sessionID == "" {
-		return nil, errors.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started without sqlliveness session", *sj.ID())
 	}
 
@@ -843,92 +845,56 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 		}
 	}()
 	if !sj.txn.IsCommitted() {
-		return nil, fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
+		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 	if err := sj.started(ctx); err != nil {
-		return nil, err
-	}
-	ec := make(chan error, 1)
-	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
-		sj.registry.runJob(
-			sj.resumerCtx, sj.resumer, sj.resultsCh, ec, sj.Job, StatusRunning, sj.taskName(), sj.cleanup,
-		)
-	}); err != nil {
-		sj.cleanup()
-		return nil, err
-	}
-	return ec, nil
-}
-
-// Run will resume the job and wait for it to finish or the context to be
-// canceled. The transaction used to create the StartableJob must be committed.
-// Results will be copied to the channel used to create this StartableJob
-// even if job is canceled.
-func (sj *StartableJob) Run(ctx context.Context) error {
-	resultsFromJob := make(chan tree.Datums)
-	resultsCh := sj.resultsCh
-	sj.resultsCh = resultsFromJob
-	errCh, err := sj.Start(ctx)
-	if err != nil {
 		return err
 	}
-	jobCompletedOk := false
 
-	var r tree.Datums // stores a row if we've received one.
-	for {
-		// Alternate between receiving rows and sending them. Nil channels block.
-		var fromJob <-chan tree.Datums
-		var toClient chan<- tree.Datums
-		if r == nil {
-			fromJob = resultsFromJob
-		} else {
-			toClient = resultsCh
-		}
-		var ok bool
-		select {
-		case r, ok = <-fromJob:
-			// If the results channel is closed, set it to nil so that we don't
-			// loop infinitely. We still want to wait for the job to notify us on
-			// errCh.
-			if !ok {
-				close(resultsCh)
-				resultsCh, resultsFromJob = nil, nil
-			}
-		case toClient <- r:
-			r = nil
-			if jobCompletedOk {
-				return nil
-			}
-		case <-ctx.Done():
-			// Launch a goroutine to continue consuming results from the job.
-			if resultsFromJob != nil {
-				// TODO(ajwerner): ctx is done; we shouldn't pass it to RunAsyncTask.
-				_ = sj.registry.stopper.RunAsyncTask(ctx, "job-results", func(ctx context.Context) {
-					for {
-						select {
-						case <-errCh:
-							return
-						case _, ok := <-resultsFromJob:
-							if !ok {
-								return
-							}
-						case <-sj.registry.stopper.ShouldQuiesce():
-							return
-						}
-					}
-				})
-			}
-			return ctx.Err()
-		case err := <-errCh:
-			// The job has completed, return its final error.
-			if err == nil && r != nil {
-				// We still have data to send to the client.
-				jobCompletedOk = true
-				continue
-			}
-			return err
+	finishSpan := func() {
+		if sj.span != nil {
+			sj.span.Finish()
 		}
 	}
+
+	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
+		sj.execErr = sj.registry.runJob(sj.resumerCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
+		close(sj.execDone)
+		finishSpan()
+	}); err != nil {
+		finishSpan()
+		return err
+	}
+
+	return nil
+}
+
+// AwaitCompletion waits for the job to finish execution, or context cancellation.
+// Requires Start() has been called.
+// The returned error code is the error code returned by the job execution itself.
+// Nil error code implies successful completion. The non-nil value does not
+// imply the job failed -- it just means that this registry encountered an error
+// while executing this job.  The job may still be running (on another node), and
+// may complete successfully.
+func (sj *StartableJob) AwaitCompletion(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-sj.execDone:
+		return sj.execErr
+	}
+}
+
+// ReportExecutionResults sends execution results to the specified channel.
+// The method should be called after the job completes successfully.
+// Calling this method prior to completion may return partial results.
+func (sj *StartableJob) ReportExecutionResults(
+	ctx context.Context, resultsCh chan<- tree.Datums,
+) error {
+	if reporter, ok := sj.resumer.(JobResultsReporter); ok {
+		return reporter.ReportResults(ctx, resultsCh)
+	}
+	return errors.AssertionFailedf("job does not produce results")
 }
 
 // CleanupOnRollback will unregister the job in the case that the creating
@@ -951,11 +917,4 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(*sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, *sj.ID())
-}
-
-// cleanup is passed to registry.resume
-func (sj *StartableJob) cleanup() {
-	if sj.span != nil {
-		sj.span.Finish()
-	}
 }

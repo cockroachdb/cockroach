@@ -159,7 +159,7 @@ type registryTestSuite struct {
 	registry        *jobs.Registry
 	done            chan struct{}
 	mockJob         jobs.Record
-	job             *jobs.Job
+	job             *jobs.StartableJob
 	mu              struct {
 		syncutil.Mutex
 		a counters
@@ -200,7 +200,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				t.Log("Starting resume")
 				rts.mu.Lock()
 				rts.mu.a.ResumeStart = true
@@ -315,7 +315,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -337,7 +337,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, err := rts.registry.CreateJobWithTxn(rts.ctx, rts.mockJob, nil)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -358,7 +358,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -392,7 +392,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -430,7 +430,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -457,7 +457,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -483,7 +483,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -513,7 +513,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -552,7 +552,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts := registryTestSuite{}
 		rts.setUp(t)
 		defer rts.tearDown()
-		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -658,7 +658,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -689,7 +689,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		// Make marking success fail.
 		rts.successErr = errors.New("injected failure at marking as succeeded")
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -722,7 +722,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		// Make marking success fail.
 		rts.successErr = errors.New("resume failed")
-		j, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		j, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -758,7 +758,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			return nil
 		}
 
-		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		require.NoError(t, err)
 		rts.job = job
 
@@ -793,7 +793,7 @@ func TestRegistryLifecycle(t *testing.T) {
 			return errors.New("boom")
 		}
 
-		job, _, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
+		job, err := rts.registry.CreateAndStartJob(rts.ctx, nil, rts.mockJob)
 		require.NoError(t, err)
 		rts.job = job
 
@@ -858,7 +858,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -869,9 +869,9 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
-	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.Job, expectation) {
+	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.StartableJob, expectation) {
 		beforeTime := timeutil.Now()
-		job, _, err := registry.CreateAndStartJob(ctx, nil, record)
+		job, err := registry.CreateAndStartJob(ctx, nil, record)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1822,7 +1822,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	jobs.RegisterConstructor(
 		jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
-				OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				OnResume: func(ctx context.Context) error {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -1842,7 +1842,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	t.Run("show job", func(t *testing.T) {
 		// Start a job and cancel it so it is in state finished and then query it with
 		// SHOW JOB WHEN COMPLETE.
-		job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
+		job, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1878,9 +1878,9 @@ func TestShowJobWhenComplete(t *testing.T) {
 	t.Run("show jobs", func(t *testing.T) {
 		// Start two jobs and cancel the first one to make sure the
 		// query still blocks until the second job is also canceled.
-		var jobs [2]*jobs.Job
+		var jobs [2]*jobs.StartableJob
 		for i := range jobs {
-			job, _, err := registry.CreateAndStartJob(ctx, nil, mockJob)
+			job, err := registry.CreateAndStartJob(ctx, nil, mockJob)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1979,7 +1979,7 @@ func TestJobInTxn(t *testing.T) {
 	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				t.Logf("Resuming job: %+v", job.Payload())
 				atomic.AddInt32(&hasRun, 1)
 				return nil
@@ -2014,7 +2014,7 @@ func TestJobInTxn(t *testing.T) {
 	)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(_ context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(_ context.Context) error {
 				return errors.New("RESTORE failed")
 			},
 		}
@@ -2119,14 +2119,13 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		j, err = jr.CreateStartableJobWithTxn(ctx, jobs.Record{
 			Details:  jobspb.ImportDetails{},
 			Progress: jobspb.ImportProgress{},
-		}, txn, nil)
+		}, txn)
 		return err
 	}))
 	_, err = sqlDB.Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 	require.NoError(t, err)
-	errCh, err := j.Start(ctx)
-	require.NoError(t, err)
-	require.NoError(t, <-errCh)
+	require.NoError(t, j.Start(ctx))
+	require.NoError(t, j.AwaitCompletion(ctx))
 }
 
 // TestStartableJobErrors tests that the StartableJob returns the expected
@@ -2142,18 +2141,18 @@ func TestStartableJob(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
 	var resumeFunc atomic.Value
-	resumeFunc.Store(func(ctx context.Context, _ chan<- tree.Datums) error {
+	resumeFunc.Store(func(ctx context.Context) error {
 		return nil
 	})
-	setResumeFunc := func(f func(ctx context.Context, _ chan<- tree.Datums) error) (cleanup func()) {
+	setResumeFunc := func(f func(ctx context.Context) error) (cleanup func()) {
 		prev := resumeFunc.Load()
 		resumeFunc.Store(f)
 		return func() { resumeFunc.Store(prev) }
 	}
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-				return resumeFunc.Load().(func(ctx context.Context, _ chan<- tree.Datums) error)(ctx, resultsCh)
+			OnResume: func(ctx context.Context) error {
+				return resumeFunc.Load().(func(ctx context.Context) error)(ctx)
 			},
 		}
 	})
@@ -2167,35 +2166,35 @@ func TestStartableJob(t *testing.T) {
 	}
 	createStartableJob := func(t *testing.T) (sj *jobs.StartableJob) {
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn)
 			return err
 		}))
 		return sj
 	}
 	t.Run("Start called more than once", func(t *testing.T) {
 		sj := createStartableJob(t)
-		errCh, err := sj.Start(ctx)
+		err := sj.Start(ctx)
 		require.NoError(t, err)
-		_, err = sj.Start(ctx)
+		err = sj.Start(ctx)
 		require.Regexp(t, `StartableJob \d+ cannot be started more than once`, err)
-		require.NoError(t, <-errCh)
+		require.NoError(t, sj.AwaitCompletion(ctx))
 	})
 	t.Run("Start called with active txn", func(t *testing.T) {
 		txn := db.NewTxn(ctx, "test")
 		defer func() {
 			require.NoError(t, txn.Rollback(ctx))
 		}()
-		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn)
 		require.NoError(t, err)
-		_, err = sj.Start(ctx)
+		err = sj.Start(ctx)
 		require.Regexp(t, `cannot resume .* job which is not committed`, err)
 	})
 	t.Run("Start called with aborted txn", func(t *testing.T) {
 		txn := db.NewTxn(ctx, "test")
-		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn)
 		require.NoError(t, err)
 		require.NoError(t, txn.Rollback(ctx))
-		_, err = sj.Start(ctx)
+		err = sj.Start(ctx)
 		require.Regexp(t, `cannot resume .* job which is not committed`, err)
 	})
 	t.Run("CleanupOnRollback called with active txn", func(t *testing.T) {
@@ -2203,7 +2202,7 @@ func TestStartableJob(t *testing.T) {
 		defer func() {
 			require.NoError(t, txn.Rollback(ctx))
 		}()
-		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn)
 		require.NoError(t, err)
 		err = sj.CleanupOnRollback(ctx)
 		require.Regexp(t, `cannot call CleanupOnRollback for a StartableJob with a non-finalized transaction`, err)
@@ -2215,7 +2214,7 @@ func TestStartableJob(t *testing.T) {
 	})
 	t.Run("CleanupOnRollback positive case", func(t *testing.T) {
 		txn := db.NewTxn(ctx, "test")
-		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn)
 		require.NoError(t, err)
 		require.NoError(t, txn.Rollback(ctx))
 		require.NoError(t, sj.CleanupOnRollback(ctx))
@@ -2225,7 +2224,7 @@ func TestStartableJob(t *testing.T) {
 	})
 	t.Run("Cancel", func(t *testing.T) {
 		txn := db.NewTxn(ctx, "test")
-		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn, nil)
+		sj, err := jr.CreateStartableJobWithTxn(ctx, rec, txn)
 		require.NoError(t, err)
 		require.NoError(t, txn.Commit(ctx))
 		require.NoError(t, sj.Cancel(ctx))
@@ -2235,37 +2234,35 @@ func TestStartableJob(t *testing.T) {
 		for _, id := range jr.CurrentlyRunningJobs() {
 			require.NotEqual(t, id, *sj.ID())
 		}
-		_, err = sj.Start(ctx)
+		err = sj.Start(ctx)
 		require.Regexp(t, "job with status cancel-requested cannot be marked started", err)
 	})
 	setUpRunTest := func(t *testing.T) (
 		sj *jobs.StartableJob,
 		resultCh <-chan tree.Datums,
-		blockResume func() (waitForBlocked func() (resultsCh chan<- tree.Datums, unblockWithError func(error))),
+		blockResume func() (waitForBlocked func() (unblockWithError func(error))),
 		cleanup func(),
 	) {
 		type blockResp struct {
-			errCh     chan error
-			resultsCh chan<- tree.Datums
+			errCh chan error
 		}
 		blockCh := make(chan chan blockResp, 1)
-		blockResume = func() (waitForBlocked func() (resultsCh chan<- tree.Datums, unblockWithError func(error))) {
+		blockResume = func() (waitForBlocked func() (unblockWithError func(error))) {
 			blockRequest := make(chan blockResp, 1)
 			blockCh <- blockRequest // from test to resumer
-			return func() (resultsCh chan<- tree.Datums, unblockWithError func(error)) {
+			return func() (unblockWithError func(error)) {
 				blocked := <-blockRequest // from resumer to test
-				return blocked.resultsCh, func(err error) {
+				return func(err error) {
 					blocked.errCh <- err // from test to resumer
 				}
 			}
 		}
-		cleanup = setResumeFunc(func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+		cleanup = setResumeFunc(func(ctx context.Context) error {
 			select {
 			case blockRequest := <-blockCh:
 				unblock := make(chan error)
 				blockRequest <- blockResp{
-					errCh:     unblock,
-					resultsCh: resultsCh,
+					errCh: unblock,
 				}
 				if err := <-unblock; err != nil {
 					return err
@@ -2276,7 +2273,7 @@ func TestStartableJob(t *testing.T) {
 		})
 		clientResults := make(chan tree.Datums)
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn, clientResults)
+			sj, err = jr.CreateStartableJobWithTxn(ctx, rec, txn)
 			return err
 		}))
 		return sj, clientResults, blockResume, cleanup
@@ -2286,8 +2283,9 @@ func TestStartableJob(t *testing.T) {
 		defer cleanup()
 		waitForBlocked := blockResume()
 		runErr := make(chan error)
-		go func() { runErr <- sj.Run(ctx) }()
-		_, unblock := waitForBlocked()
+		require.NoError(t, sj.Start(ctx))
+		go func() { runErr <- sj.AwaitCompletion(ctx) }()
+		unblock := waitForBlocked()
 		unblock(errors.New("boom"))
 		require.Regexp(t, "boom", <-runErr)
 	})
@@ -2297,11 +2295,11 @@ func TestStartableJob(t *testing.T) {
 		ctxToCancel, cancel := context.WithCancel(ctx)
 		runErr := make(chan error)
 		waitForBlocked := blockResume()
-		go func() { runErr <- sj.Run(ctxToCancel) }()
-		resultsCh, unblock := waitForBlocked()
+		require.NoError(t, sj.Start(ctx))
+		go func() { runErr <- sj.AwaitCompletion(ctxToCancel) }()
+		unblock := waitForBlocked()
 		cancel()
 		require.Regexp(t, context.Canceled, <-runErr)
-		resultsCh <- tree.Datums{}
 		unblock(nil)
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, *sj.ID())
@@ -2313,24 +2311,6 @@ func TestStartableJob(t *testing.T) {
 			}
 			return nil
 		})
-	})
-	t.Run("Run - results chan closed", func(t *testing.T) {
-		sj, clientResultsChan, blockResume, cleanup := setUpRunTest(t)
-		defer cleanup()
-		runErr := make(chan error)
-		waitForBlocked := blockResume()
-		go func() { runErr <- sj.Run(ctx) }()
-		resultsCh, unblock := waitForBlocked()
-		go func() {
-			_, ok := <-clientResultsChan
-			assert.True(t, ok)
-			_, ok = <-clientResultsChan
-			assert.False(t, ok)
-			unblock(nil)
-		}()
-		resultsCh <- tree.Datums{}
-		close(resultsCh)
-		require.NoError(t, <-runErr)
 	})
 }
 
@@ -2362,7 +2342,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 		resuming := make(chan struct{})
 		jobs.RegisterConstructor(jobspb.TypeSchemaChange, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
-				OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				OnResume: func(ctx context.Context) error {
 					resuming <- struct{}{}
 					return nil
 				},
@@ -2422,7 +2402,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	resuming := make(chan struct{})
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				resuming <- struct{}{}
 				return nil
 			},
@@ -2487,7 +2467,7 @@ func TestMetrics(t *testing.T) {
 		})
 	}
 	res := jobs.FakeResumer{
-		OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+		OnResume: func(ctx context.Context) error {
 			return waitForErr(ctx)
 		},
 		FailOrCancel: func(ctx context.Context) error {
@@ -2675,7 +2655,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	resumed := make(chan error, 1)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				defer close(resumed)
 				_, err := s.InternalExecutor().(sqlutil.InternalExecutor).Exec(
 					ctx, "set-claim-null", nil, /* txn */

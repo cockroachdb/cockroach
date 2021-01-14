@@ -264,28 +264,21 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			return errors.Wrap(err, "unable to acquire lease")
 		}
 
-		resultsCh := make(chan tree.Datums)
 		resumer, err := r.createResumer(job, r.settings)
 		if err != nil {
 			r.unregister(*id)
 			return err
 		}
 		log.Infof(ctx, "job %d: resuming execution", *id)
-		errCh, err := r.deprecatedResume(resumeCtx, resumer, resultsCh, job, nil)
+		errCh, err := r.deprecatedResume(resumeCtx, resumer, job, nil)
 		if err != nil {
 			r.unregister(*id)
 			return err
 		}
 		go func() {
-			// Drain and ignore results.
-			for range resultsCh {
-			}
-		}()
-		go func() {
 			// Wait for the job to finish. No need to print the error because if there
 			// was one it's been set in the job status already.
 			<-errCh
-			close(resultsCh)
 		}()
 
 		adopted++
@@ -343,7 +336,7 @@ func (r *Registry) deprecatedCancelAll(ctx context.Context) {
 // a value. The onDone function is called when the async task completes or if
 // an error is returned.
 func (r *Registry) deprecatedResume(
-	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job, onDone func(),
+	ctx context.Context, resumer Resumer, job *Job, onDone func(),
 ) (<-chan error, error) {
 	errCh := make(chan error, 1)
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
@@ -366,7 +359,7 @@ func (r *Registry) deprecatedResume(
 			if job.Payload().FinalResumeError != nil {
 				finalResumeError = errors.DecodeError(ctx, *job.Payload().FinalResumeError)
 			}
-			err = r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, status, finalResumeError)
+			err = r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
 			if err != nil {
 				log.Errorf(ctx, "job %d: adoption completed with error %v", *job.ID(), err)
 			}
