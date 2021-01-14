@@ -140,4 +140,10 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		`db1.AdminSplit(ctx, "foo") // context canceled`)
 	checkErr(t, step(merge(`foo`)),
 		`db0.AdminMerge(ctx, "foo") // context canceled`)
+
+	// Lease transfers
+	check(t, step(transferLease(`foo`, 1)),
+		`db1.TransferLeaseOperation(ctx, "foo", 1) // nil`)
+	checkErr(t, step(transferLease(`foo`, 1)),
+		`db0.TransferLeaseOperation(ctx, "foo", 1) // context canceled`)
 }

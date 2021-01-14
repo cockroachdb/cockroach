@@ -33,6 +33,10 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *MergeOperation:
 		return &o.Result
+	case *ChangeReplicasOperation:
+		return &o.Result
+	case *TransferLeaseOperation:
+		return &o.Result
 	case *BatchOperation:
 		return &o.Result
 	case *ClosureTxnOperation:
@@ -103,6 +107,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *MergeOperation:
 		o.format(w, fctx)
 	case *ChangeReplicasOperation:
+		o.format(w, fctx)
+	case *TransferLeaseOperation:
 		o.format(w, fctx)
 	case *BatchOperation:
 		newFctx := fctx
@@ -228,6 +234,11 @@ func (op BatchOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.AdminChangeReplicas(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Changes)
+	op.Result.format(w)
+}
+
+func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, roachpb.Key(op.Key), op.Target)
 	op.Result.format(w)
 }
 

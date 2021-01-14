@@ -169,6 +169,8 @@ func TestRandStep(t *testing.T) {
 			} else if adds == 1 && removes == 1 {
 				counts.ChangeReplicas.AtomicSwapReplica++
 			}
+		case *TransferLeaseOperation:
+			counts.ChangeLease.TransferLease++
 		}
 		updateKeys(step.Op)
 

@@ -42,6 +42,7 @@ type OperationConfig struct {
 	Split          SplitConfig
 	Merge          MergeConfig
 	ChangeReplicas ChangeReplicasConfig
+	ChangeLease    ChangeLeaseConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -129,6 +130,13 @@ type ChangeReplicasConfig struct {
 	AtomicSwapReplica int
 }
 
+// ChangeLeaseConfig configures the relative probability of generating an
+// operation that causes a leaseholder change.
+type ChangeLeaseConfig struct {
+	// Transfer the lease to a random replica.
+	TransferLease int
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -169,6 +177,9 @@ func newAllOperationsConfig() GeneratorConfig {
 			AddReplica:        1,
 			RemoveReplica:     1,
 			AtomicSwapReplica: 1,
+		},
+		ChangeLease: ChangeLeaseConfig{
+			TransferLease: 1,
 		},
 	}}
 }
@@ -324,6 +335,8 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 		removeReplicaFn := makeRemoveReplicaFn(key, current)
 		addOpGen(&allowed, removeReplicaFn, g.Config.Ops.ChangeReplicas.RemoveReplica)
 	}
+	transferLeaseFn := makeTransferLeaseFn(key, current)
+	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -473,6 +486,13 @@ func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwa
 	}
 }
 
+func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		target := current[rng.Intn(len(current))]
+		return transferLease(key, target.StoreID)
+	}
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
@@ -599,4 +619,8 @@ func merge(key string) Operation {
 
 func changeReplicas(key string, changes ...roachpb.ReplicationChange) Operation {
 	return Operation{ChangeReplicas: &ChangeReplicasOperation{Key: []byte(key), Changes: changes}}
+}
+
+func transferLease(key string, target roachpb.StoreID) Operation {
+	return Operation{TransferLease: &TransferLeaseOperation{Key: []byte(key), Target: target}}
 }
