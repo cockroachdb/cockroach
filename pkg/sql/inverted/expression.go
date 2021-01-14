@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 // EncVal is the encoded form of a value in the inverted column. This library
@@ -91,10 +92,6 @@ type EncVal []byte
 // starts with an expression with two unspecified rows, and after the left
 // side row is bound (partial application), this library needs to be used to
 // construct the Expression.
-//
-// TODO(sumeer): work out how this will change when we have partitioned
-// inverted indexes, where some columns of the primary key will appear before
-// the inverted column.
 
 // Span is a span of the inverted index. Represents [start, end).
 type Span struct {
@@ -123,6 +120,11 @@ func (s Span) Equals(other Span) bool {
 
 // Spans is a slice of Span objects.
 type Spans []Span
+
+// ContainsKey returns whether the span contains the given key.
+func (s Span) ContainsKey(key EncVal) bool {
+	return bytes.Compare(key, s.Start) >= 0 && bytes.Compare(key, s.End) < 0
+}
 
 // Equals returns true if this Spans has the same spans as the given
 // Spans, in the same order.
@@ -297,8 +299,8 @@ type SpanExpression struct {
 
 	// Unique is true if the spans are guaranteed not to produce duplicate
 	// primary keys. Otherwise, Unique is false. Unique may be true for certain
-	// JSON or Array SpanExpressions, and it holds when SpanExpressions are
-	// combined with And. It does not hold when these SpanExpressions are
+	// JSON or Array SpanExpressions, and it holds when unique SpanExpressions
+	// are combined with And. It does not hold when these SpanExpressions are
 	// combined with Or.
 	Unique bool
 
@@ -505,6 +507,52 @@ func ExprForSpan(span Span, tight bool) *SpanExpression {
 		Tight:              tight,
 		SpansToRead:        []Span{span},
 		FactoredUnionSpans: []Span{span},
+	}
+}
+
+// ContainsKeys traverses the SpanExpression to determine whether the span
+// expression contains the given keys. It is primarily used for testing.
+func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
+	if s.Operator == None && len(s.FactoredUnionSpans) == 0 {
+		return false, nil
+	}
+
+	// FactoredUnionSpans represents a union over the spans, so any span in the slice
+	// can contain any of the keys.
+	if len(s.FactoredUnionSpans) > 0 {
+		for _, span := range s.FactoredUnionSpans {
+			for _, key := range keys {
+				if span.ContainsKey(key) {
+					return true, nil
+				}
+			}
+		}
+	}
+
+	if s.Operator == None {
+		return false, nil
+	}
+
+	// This is either a UNION or INTERSECTION.
+	leftRes, err := s.Left.(*SpanExpression).ContainsKeys(keys)
+	if err != nil {
+		return false, err
+	}
+	if leftRes && s.Operator == SetUnion {
+		return true, nil
+	}
+
+	rightRes, err := s.Right.(*SpanExpression).ContainsKeys(keys)
+	if err != nil {
+		return false, err
+	}
+	switch s.Operator {
+	case SetIntersection:
+		return leftRes && rightRes, nil
+	case SetUnion:
+		return leftRes || rightRes, nil
+	default:
+		return false, errors.AssertionFailedf("invalid operator %v", s.Operator)
 	}
 }
 
