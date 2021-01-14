@@ -152,9 +152,11 @@ func (p *planner) addColumnImpl(
 			&params.p.semaCtx,
 			tn,
 		)
-		if err := computedColValidator.Validate(d); err != nil {
+		serializedExpr, err := computedColValidator.Validate(d)
+		if err != nil {
 			return err
 		}
+		col.ComputeExpr = &serializedExpr
 	}
 
 	return nil
