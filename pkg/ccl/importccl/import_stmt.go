@@ -884,7 +884,7 @@ func importPlanHook(
 
 		var sj *jobs.StartableJob
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+			sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
 			if err != nil {
 				return err
 			}
@@ -907,13 +907,14 @@ func importPlanHook(
 			return err
 		}
 
-		err = sj.Run(ctx)
-		if err != nil {
+		if err := sj.Start(ctx); err != nil {
 			return err
 		}
 		addToFileFormatTelemetry(format.Format.String(), "started")
-
-		return nil
+		if err := sj.AwaitCompletion(ctx); err != nil {
+			return err
+		}
+		return sj.ReportExecutionResults(ctx, resultsCh)
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
@@ -1231,6 +1232,23 @@ func (r *importResumer) prepareTableDescsForIngestion(
 	return err
 }
 
+// ReportResults implements JobResultsReporter interface.
+func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(r.res.Rows)),
+		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
+		tree.NewDInt(tree.DInt(r.res.DataSize)),
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // parseAndCreateBundleTableDescs parses and creates the table
 // descriptors for bundle formats.
 func parseAndCreateBundleTableDescs(
@@ -1353,9 +1371,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r *importResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	if err := r.parseBundleSchemaIfNeeded(ctx, p); err != nil {
 		return err
@@ -1491,15 +1507,6 @@ func (r *importResumer) Resume(
 	// Tiny imports may skew throughput numbers due to overhead.
 	if sizeMb > 10 {
 		telemetry.CountBucketed("import.speed-mbps.over10mb", mbps)
-	}
-
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(r.res.Rows)),
-		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.res.DataSize)),
 	}
 
 	return nil

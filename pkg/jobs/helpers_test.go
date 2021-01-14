@@ -15,13 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
-	OnResume     func(context.Context, chan<- tree.Datums) error
+	OnResume     func(context.Context) error
 	FailOrCancel func(context.Context) error
 	Success      func() error
 	PauseRequest onPauseRequestFunc
@@ -29,11 +28,9 @@ type FakeResumer struct {
 
 var _ Resumer = FakeResumer{}
 
-func (d FakeResumer) Resume(
-	ctx context.Context, _ interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (d FakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if d.OnResume != nil {
-		if err := d.OnResume(ctx, resultsCh); err != nil {
+		if err := d.OnResume(ctx); err != nil {
 			return err
 		}
 	}

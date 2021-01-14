@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -152,7 +151,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		hookCallCount++
 		lock.Unlock()
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -178,7 +177,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 			Details:  jobspb.BackupDetails{},
 			Progress: jobspb.BackupProgress{},
 		}
-		job, _, err := newRegistry(nodeid).CreateAndStartJob(ctx, nil, rec)
+		job, err := newRegistry(nodeid).CreateAndStartJob(ctx, nil, rec)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,7 +267,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
