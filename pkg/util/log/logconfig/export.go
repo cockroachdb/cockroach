@@ -121,10 +121,10 @@ func (c *Config) Export(onlyChans ChannelList) (string, string) {
 		target := fileKey
 
 		var syncproc, synclink []string
-		if *fc.SyncWrites {
-			skey := fmt.Sprintf("sync%d", fileNum)
+		if *fc.BufferedWrites {
+			skey := fmt.Sprintf("buffer%d", fileNum)
 			fileNum++
-			syncproc = append(syncproc, fmt.Sprintf("card %s as \"sync\"", skey))
+			syncproc = append(syncproc, fmt.Sprintf("card %s as \"buffer\"", skey))
 			synclink = append(synclink, fmt.Sprintf("%s --> %s", skey, target))
 			fileNum++
 			target = skey

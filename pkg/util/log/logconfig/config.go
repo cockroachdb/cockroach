@@ -43,6 +43,7 @@ file-defaults:
     max-file-size: 10mib
     max-group-size: 100mib
     exit-on-error: true
+    buffered-writes: true
 sinks:
   stderr:
     filter: NONE
@@ -188,9 +189,10 @@ type FileDefaults struct {
 	// If zero, old files are not removed.
 	MaxGroupSize ByteSize `yaml:"max-group-size,omitempty"`
 
-	// SyncWrites stores the default setting for sync-writes on file
-	// sinks, which implies synchronization on every log write.
-	SyncWrites bool `yaml:"sync-writes,omitempty"`
+	// BufferedWrites stores the default setting for buffered-writes on
+	// file sinks, which implies keeping a buffer of log entries in memory.
+	// Conversely, setting this to false flushes log writes upon every entry.
+	BufferedWrites *bool `yaml:"buffered-writes,omitempty"`
 
 	// CommonSinkConfig is the configuration common to all sinks. Note
 	// that although the idiom in Go is to place embedded fields at the
@@ -220,8 +222,8 @@ type FileConfig struct {
 	// beyond this specified size.
 	MaxGroupSize *ByteSize `yaml:"max-group-size,omitempty"`
 
-	// SyncWrites specifies whether to sync on every log write.
-	SyncWrites *bool `yaml:"sync-writes,omitempty"`
+	// BufferedWrites specifies whether to flush on every log write.
+	BufferedWrites *bool `yaml:"buffered-writes,omitempty"`
 
 	// CommonSinkConfig is the configuration common to all sinks. Note
 	// that although the idiom in Go is to place embedded fields at the
