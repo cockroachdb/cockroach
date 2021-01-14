@@ -64,9 +64,8 @@ func (l *loggerT) writeToFileLocked(data []byte) error {
 	if _, err := l.mu.file.Write(data); err != nil {
 		return err
 	}
-	if l.mu.syncWrites {
+	if l.mu.flushWrites {
 		_ = l.mu.file.Flush()
-		_ = l.mu.file.Sync()
 	}
 	return nil
 }
