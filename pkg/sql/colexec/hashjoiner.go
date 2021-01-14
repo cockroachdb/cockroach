@@ -796,19 +796,12 @@ func NewHashJoiner(
 	leftSource, rightSource colexecbase.Operator,
 	initialNumBuckets uint64,
 ) ResettableOperator {
-	var outputTypes []*types.T
-	if spec.joinType.ShouldIncludeLeftColsInOutput() {
-		outputTypes = append(outputTypes, spec.left.sourceTypes...)
-	}
-	if spec.joinType.ShouldIncludeRightColsInOutput() {
-		outputTypes = append(outputTypes, spec.right.sourceTypes...)
-	}
 	return &hashJoiner{
 		twoInputNode:               newTwoInputNode(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,
 		outputUnlimitedAllocator:   outputUnlimitedAllocator,
 		spec:                       spec,
-		outputTypes:                outputTypes,
+		outputTypes:                spec.joinType.MakeOutputTypes(spec.left.sourceTypes, spec.right.sourceTypes),
 		hashTableInitialNumBuckets: initialNumBuckets,
 	}
 }

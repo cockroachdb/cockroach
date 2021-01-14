@@ -38,9 +38,9 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 	if batch.Length() == 0 {
 		return true
 	}
-	bufferedGroup := o.proberState.lBufferedGroup
+	bufferedGroup := o.bufferedGroup.left
 	if input == &o.right {
-		bufferedGroup = o.proberState.rBufferedGroup
+		bufferedGroup = o.bufferedGroup.right
 	}
 	tupleToLookAtIdx := rowIdx
 	sel := batch.Selection()

@@ -168,8 +168,7 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
         └ *rowexec.filtererProcessor
           └ *colfetcher.ColBatchScan
 
-# Regression test for #46122 (checking that we gracefully fallback to row
-# execution on cross joins).
+# Regression test for #46122.
 statement ok
 CREATE TABLE t46122_0(c0 STRING); CREATE TABLE t46122_1(c0 STRING)
 
@@ -178,7 +177,7 @@ EXPLAIN (VEC) SELECT t46122_0.c0 FROM t46122_0, t46122_1
 ----
 │
 └ Node 1
-  └ *rowexec.hashJoiner
+  └ *colexec.crossJoiner
     ├ *colfetcher.ColBatchScan
     └ *colfetcher.ColBatchScan
 
@@ -193,7 +192,7 @@ EXPLAIN (VEC) SELECT stddev((t46404_1.c0 > ANY (0, 0))::INT) FROM t46404_0, t464
   └ *colexec.hashAggregator
     └ *colexec.castBoolInt64Op
       └ *colexec.defaultCmpRConstProjOp
-        └ *colexec.hashJoiner
+        └ *colexec.crossJoiner
           ├ *colfetcher.ColBatchScan
           └ *colfetcher.ColBatchScan
 
