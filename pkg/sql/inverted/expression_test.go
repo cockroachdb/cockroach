@@ -12,9 +12,11 @@ package inverted
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
@@ -322,4 +324,164 @@ func TestSetSubtraction(t *testing.T) {
 		),
 	)
 
+}
+
+// spanExprForTest is used to easily create SpanExpressions
+// for testing purposes.
+type spanExprForTest struct {
+	unionSpans [][]string
+	children   []spanExprForTest
+	operator   SetOperator
+}
+
+// makeSpanExpression converts a spanExprForTest to a SpanExpression.
+func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
+	var invertedExpr Expression
+
+	for i := range expr.unionSpans {
+		spanExpr := ExprForSpan(Span{
+			Start: EncVal(expr.unionSpans[i][0]),
+			End:   EncVal(expr.unionSpans[i][1]),
+		}, true /* tight */)
+		if invertedExpr == nil {
+			invertedExpr = spanExpr
+		} else {
+			invertedExpr = Or(invertedExpr, spanExpr)
+		}
+	}
+
+	for i := range expr.children {
+		child := expr.children[i].makeSpanExpression()
+		if invertedExpr == nil {
+			invertedExpr = child
+		} else {
+			switch expr.operator {
+			case SetIntersection:
+				invertedExpr = And(invertedExpr, child)
+			case SetUnion:
+				invertedExpr = Or(invertedExpr, child)
+			default:
+				panic(fmt.Sprintf("invalid operator %v", expr.operator))
+			}
+		}
+	}
+
+	if invertedExpr == nil {
+		return nil
+	}
+	return invertedExpr.(*SpanExpression)
+}
+
+// permute randomly changes the order of the nodes in the span expression tree.
+func (expr spanExprForTest) permute() {
+	// Recursively permute the children.
+	for i := range expr.children {
+		expr.children[i].permute()
+	}
+
+	// Add a random permutation of the union spans.
+	rand.Shuffle(len(expr.unionSpans), func(i, j int) {
+		expr.unionSpans[i], expr.unionSpans[j] = expr.unionSpans[j], expr.unionSpans[i]
+	})
+
+	// Add a random permutation of the children.
+	rand.Shuffle(len(expr.children), func(i, j int) {
+		expr.children[i], expr.children[j] = expr.children[j], expr.children[i]
+	})
+}
+
+func TestContainsKeys(t *testing.T) {
+	tests := []struct {
+		input    spanExprForTest
+		keys     []string
+		expected bool
+	}{
+		{
+			// The start key of a span is inclusive.
+			input:    spanExprForTest{unionSpans: [][]string{{"a", "b"}}},
+			keys:     []string{"a"},
+			expected: true,
+		},
+		{
+			// The end key of a span is exclusive.
+			input:    spanExprForTest{unionSpans: [][]string{{"a", "b"}}},
+			keys:     []string{"b"},
+			expected: false,
+		},
+		{
+			// At least one of the keys is contained in the span.
+			input:    spanExprForTest{unionSpans: [][]string{{"a", "c"}}},
+			keys:     []string{"b", "c"},
+			expected: true,
+		},
+		{
+			// Key falls between the spans.
+			input:    spanExprForTest{unionSpans: [][]string{{"a", "b"}, {"d", "e"}}},
+			keys:     []string{"c"},
+			expected: false,
+		},
+		{
+			// Key is contained in one of the spans.
+			input:    spanExprForTest{unionSpans: [][]string{{"a", "b"}, {"d", "e"}}},
+			keys:     []string{"dog"},
+			expected: true,
+		},
+		{
+			// Key is contained in one of the spans.
+			input: spanExprForTest{operator: SetUnion,
+				children: []spanExprForTest{
+					{unionSpans: [][]string{{"a", "b"}}},
+					{unionSpans: [][]string{{"d", "e"}}},
+				},
+			},
+			keys:     []string{"dog"},
+			expected: true,
+		},
+		{
+			// Key is only contained in one of the spans, but intersection requires
+			// both.
+			input: spanExprForTest{operator: SetIntersection,
+				children: []spanExprForTest{
+					{unionSpans: [][]string{{"a", "b"}}},
+					{unionSpans: [][]string{{"d", "e"}}},
+				},
+			},
+			keys:     []string{"dog"},
+			expected: false,
+		},
+		{
+			// At least one key is contained in each span.
+			input: spanExprForTest{operator: SetIntersection,
+				children: []spanExprForTest{
+					{unionSpans: [][]string{{"a", "b"}}},
+					{unionSpans: [][]string{{"d", "e"}}},
+				},
+			},
+			keys:     []string{"dog", "apple"},
+			expected: true,
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+
+			// Add random permutations to the input.
+			tt.input.permute()
+
+			// Build span expressions from the test case.
+			input := tt.input.makeSpanExpression()
+
+			// Build keys from the test case.
+			keys := make([][]byte, len(tt.keys))
+			for i := range tt.keys {
+				keys[i] = encoding.UnsafeConvertStringToBytes(tt.keys[i])
+			}
+
+			actual, err := input.ContainsKeys(keys)
+			require.NoError(t, err)
+			if actual != tt.expected {
+				t.Errorf("for ContainsKeys() got %v, expected %v", actual, tt.expected)
+			}
+		})
+	}
 }
