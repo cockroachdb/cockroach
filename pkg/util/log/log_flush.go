@@ -31,12 +31,12 @@ type flushSyncWriter interface {
 // flushes, and signalFlusher() that manages flushes in reaction to a
 // user signal.
 func Flush() {
-	mainLog.lockAndFlushAndSync(true /*doSync*/)
+	mainLog.lockAndFlushAndMaybeSync(false /*doSync*/)
 	secondaryLogRegistry.mu.Lock()
 	defer secondaryLogRegistry.mu.Unlock()
 	for _, l := range secondaryLogRegistry.mu.loggers {
 		// Some loggers (e.g. the audit log) want to keep all the files.
-		l.logger.lockAndFlushAndSync(true /*doSync*/)
+		l.logger.lockAndFlushAndMaybeSync(false /*doSync*/)
 	}
 }
 
@@ -80,12 +80,12 @@ func flushDaemon() {
 
 		// Flush the main log.
 		if !disableDaemons {
-			mainLog.lockAndFlushAndSync(doSync)
+			mainLog.lockAndFlushAndMaybeSync(doSync)
 
 			// Flush the secondary logs.
 			secondaryLogRegistry.mu.Lock()
 			for _, l := range secondaryLogRegistry.mu.loggers {
-				l.logger.lockAndFlushAndSync(doSync)
+				l.logger.lockAndFlushAndMaybeSync(doSync)
 			}
 			secondaryLogRegistry.mu.Unlock()
 		}
@@ -102,43 +102,43 @@ func signalFlusher() {
 	}
 }
 
-// lockAndFlushAndSync is like flushAndSync but locks l.mu first.
-func (l *loggerT) lockAndFlushAndSync(doSync bool) {
+// lockAndFlushAndMaybeSync is like flushAndMaybeSyncLocked but locks l.mu first.
+func (l *loggerT) lockAndFlushAndMaybeSync(doSync bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.flushAndSyncLocked(doSync)
+	l.flushAndMaybeSyncLocked(doSync)
 }
 
-// SetSync configures whether logging synchronizes all writes.
-// This overrides the synchronization setting for both primary
+// SetAlwaysFlush configures whether logging flushes all writes.
+// This overrides the flush setting for both primary
 // and secondary loggers.
 // This is used e.g. in `cockroach start` when an error occurs,
 // to ensure that all log writes from the point the error
 // occurs are flushed to logs (in case the error degenerates
 // into a panic / segfault on the way out).
-func SetSync(sync bool) {
-	mainLog.lockAndSetSync(sync)
+func SetAlwaysFlush(alwaysFlush bool) {
+	mainLog.lockAndSetFlush(alwaysFlush)
 	func() {
 		secondaryLogRegistry.mu.Lock()
 		defer secondaryLogRegistry.mu.Unlock()
 		for _, l := range secondaryLogRegistry.mu.loggers {
-			if !sync && l.forceSyncWrites {
+			if !alwaysFlush && l.forceFlushWrites {
 				// We're not changing this.
 				continue
 			}
-			l.logger.lockAndSetSync(sync)
+			l.logger.lockAndSetFlush(alwaysFlush)
 		}
 	}()
-	if sync {
+	if alwaysFlush {
 		// There may be something in the buffers already; flush it.
 		Flush()
 	}
 }
 
 // lockAndSetSync configures syncWrites.
-func (l *loggerT) lockAndSetSync(sync bool) {
+func (l *loggerT) lockAndSetFlush(alwaysFlush bool) {
 	l.mu.Lock()
-	l.mu.syncWrites = sync
+	l.mu.flushWrites = alwaysFlush
 	l.mu.Unlock()
 }
 
@@ -146,7 +146,7 @@ func (l *loggerT) lockAndSetSync(sync bool) {
 // attempts to sync its data to disk.
 //
 // l.mu is held.
-func (l *loggerT) flushAndSyncLocked(doSync bool) {
+func (l *loggerT) flushAndMaybeSyncLocked(doSync bool) {
 	if l.mu.file == nil {
 		return
 	}

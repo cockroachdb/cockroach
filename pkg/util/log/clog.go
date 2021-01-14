@@ -127,8 +127,8 @@ type loggerT struct {
 		// file holds the log file writer.
 		file flushSyncWriter
 
-		// syncWrites if true calls file.Flush and file.Sync on every log write.
-		syncWrites bool
+		// flushWrites if true calls file.Flush on every log write.
+		flushWrites bool
 
 		// redirectInternalStderrWrites, when set, causes this logger to
 		// capture writes to system-wide file descriptor 2 (the standard
@@ -397,7 +397,7 @@ func (l *loggerT) outputLogEntry(entry Entry) {
 	}
 	// Flush and exit on fatal logging.
 	if entry.Severity == Severity_FATAL {
-		l.flushAndSyncLocked(true /*doSync*/)
+		l.flushAndMaybeSyncLocked(false /*doSync*/)
 		close(fatalTrigger)
 		// Note: although it seems like the function is allowed to return
 		// below when s == Severity_FATAL, this is not so, because the

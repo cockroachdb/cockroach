@@ -110,5 +110,5 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 		// here, we can't do anything but raise our hands in the air.
 		_, _ = w.Write(buf.Bytes())
 	}
-	l.flushAndSyncLocked(true /*doSync*/)
+	l.flushAndMaybeSyncLocked(false /*doSync*/)
 }
