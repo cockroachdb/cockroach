@@ -1,0 +1,106 @@
+statement ok
+CREATE SCHEMA s;
+CREATE VIEW vx AS SELECT 1;
+CREATE VIEW s.vx AS SELECT 1;
+CREATE MATERIALIZED VIEW mvx AS SELECT 1;
+CREATE USER testuser2
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER VIEW vx OWNER TO fake_user
+
+# Superusers can alter owner to any user which has CREATE privileges on the
+# parent schema (or in the case of the public schema on the parent database.)
+statement error pq: user testuser does not have CREATE privilege on database test
+ALTER VIEW vx OWNER TO testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema s
+ALTER VIEW s.vx OWNER TO testuser
+
+# ALTER VIEW IF EXISTS OWNER succeeds if the view does not exist.
+statement ok
+ALTER VIEW IF EXISTS does_not_exist OWNER TO testuser
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser, testuser2;
+GRANT CREATE ON SCHEMA s TO testuser, testuser2
+
+# ALTER TABLE can be used for views.
+statement ok
+ALTER TABLE vx OWNER TO testuser
+
+statement ok
+ALTER TABLE vx OWNER TO root
+
+# ALTER TABLE can be used for materialized views.
+statement ok
+ALTER TABLE mvx OWNER TO testuser
+
+statement ok
+ALTER TABLE mvx OWNER TO root
+
+# ALTER SEQUENCE cannot be used for views.
+statement error pq: "vx" is not a sequence
+ALTER SEQUENCE vx OWNER TO testuser
+
+# MATERIALIZED keyword can only be present for materialized views.
+statement error pq: "vx" is not a materialized view
+ALTER MATERIALIZED VIEW vx OWNER TO testuser;
+
+# MATERIALIZED keyword must be present to change the owner of materialized views.
+statement error pq: "mvx" is a materialized view
+ALTER VIEW mvx OWNER TO testuser;
+
+statement ok
+ALTER VIEW vx OWNER TO testuser;
+ALTER MATERIALIZED VIEW mvx OWNER TO testuser;
+ALTER VIEW s.vx OWNER TO testuser;
+ALTER VIEW vx OWNER TO root;
+ALTER MATERIALIZED VIEW mvx OWNER TO root;
+ALTER VIEW s.vx OWNER TO root;
+
+# Other users must be owner to alter the owner.
+user testuser
+
+statement error pq: must be owner of table vx
+ALTER VIEW vx OWNER TO testuser2
+
+statement error pq: must be owner of table mvx
+ALTER MATERIALIZED VIEW mvx OWNER TO testuser2
+
+# Non-superusers also must be a member of the new owning role.
+user root
+
+statement ok
+ALTER VIEW vx OWNER TO testuser
+
+statement ok
+ALTER MATERIALIZED VIEW mvx OWNER TO testuser
+
+user testuser
+
+statement error must be member of role "testuser2"
+ALTER VIEW vx OWNER TO testuser2
+
+statement error must be member of role "testuser2"
+ALTER MATERIALIZED VIEW mvx OWNER TO testuser2
+
+user root
+
+statement ok
+GRANT testuser2 TO testuser
+
+user testuser
+
+statement ok
+ALTER VIEW vx OWNER TO testuser2
+
+statement ok
+ALTER MATERIALIZED VIEW mvx OWNER TO testuser2
+
+user root
+
+query T
+SELECT viewowner FROM pg_views WHERE schemaname = 'public' AND viewname = 'vx'
+----
+testuser2
