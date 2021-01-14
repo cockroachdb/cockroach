@@ -8,13 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as hljs from "highlight.js";
+import hljs from "highlight.js/lib/core";
+import sqlLangSyntax from "highlight.js/lib/languages/pgsql";
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./sqlhighlight.module.scss";
 import { SqlBoxProps } from "./box";
 
 const cx = classNames.bind(styles);
+
+hljs.registerLanguage("sql", sqlLangSyntax);
+hljs.configure({
+  tabReplace: "  ",
+});
 
 export class Highlight extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
@@ -24,9 +30,6 @@ export class Highlight extends React.Component<SqlBoxProps> {
   }
 
   componentDidMount() {
-    hljs.configure({
-      tabReplace: "  ",
-    });
     hljs.highlightBlock(this.preNode.current);
   }
 
