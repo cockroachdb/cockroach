@@ -424,8 +424,6 @@ func readPostgresStmt(
 				}
 			case *tree.AlterTableValidateConstraint:
 				// ignore
-			case *tree.AlterTableOwner:
-				// ignore
 			default:
 				return errors.Errorf("unsupported statement: %s", stmt)
 			}
@@ -541,6 +539,8 @@ func readPostgresStmt(
 	case *tree.Analyze:
 		// ANALYZE is syntatictic sugar for CreateStatistics. It can be ignored because
 		// the auto stats stuff will pick up the changes and run if needed.
+	case *tree.AlterTableOwner:
+		// ignore
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
