@@ -887,7 +887,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		Lease: cachedLease,
 	})
 
-	get := roachpb.NewGet(roachpb.Key("a"))
+	get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 
@@ -1768,7 +1768,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 
 			// Send a request that's going to receive a response with a RangeInfo.
 			k := roachpb.Key("a")
-			get := roachpb.NewGet(k)
+			get := roachpb.NewGet(k, false /* forUpdate */)
 			var ba roachpb.BatchRequest
 			ba.Add(get)
 			_, pErr := ds.Send(ctx, ba)
@@ -1879,7 +1879,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds = NewDistSender(cfg)
-	get := roachpb.NewGet(roachpb.Key("b"))
+	get := roachpb.NewGet(roachpb.Key("b"), false /* forUpdate */)
 	_, err := kv.SendWrapped(ctx, ds, get)
 	if err != nil {
 		t.Fatal(err)
@@ -3488,19 +3488,19 @@ func TestCanSendToFollower(t *testing.T) {
 			roachpb.Header{
 				Txn: &roachpb.Transaction{},
 			},
-			roachpb.NewGet(roachpb.Key("a")),
+			roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
 			1,
 		},
 		{
 			true,
 			roachpb.Header{},
-			roachpb.NewGet(roachpb.Key("a")),
+			roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
 			1,
 		},
 		{
 			false,
 			roachpb.Header{},
-			roachpb.NewGet(roachpb.Key("a")),
+			roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
 			2,
 		},
 	} {

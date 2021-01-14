@@ -225,12 +225,14 @@ func TestLockSpanIterate(t *testing.T) {
 		resume Span
 	}
 	testReqs := []testReq{
-		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
-		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("d", "f"), sp("d", "e")},
-		{&PutRequest{}, &PutResponse{}, sp("m", ""), sp("", "")},
-		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("n", "p"), sp("o", "p")},
-		{&ScanRequest{KeyLocking: lock.Exclusive}, &ScanResponse{}, sp("g", "i"), sp("h", "i")},
-		{&ReverseScanRequest{KeyLocking: lock.Exclusive}, &ReverseScanResponse{}, sp("j", "l"), sp("k", "l")},
+		{&GetRequest{}, &GetResponse{}, sp("a", ""), sp("", "")},
+		{&ScanRequest{}, &ScanResponse{}, sp("b", "d"), sp("c", "d")},
+		{&ReverseScanRequest{}, &ReverseScanResponse{}, sp("e", "g"), sp("f", "g")},
+		{&PutRequest{}, &PutResponse{}, sp("h", ""), sp("", "")},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{}, sp("i", "k"), sp("j", "k")},
+		{&GetRequest{KeyLocking: lock.Exclusive}, &GetResponse{}, sp("l", ""), sp("", "")},
+		{&ScanRequest{KeyLocking: lock.Exclusive}, &ScanResponse{}, sp("m", "o"), sp("n", "o")},
+		{&ReverseScanRequest{KeyLocking: lock.Exclusive}, &ReverseScanResponse{}, sp("p", "r"), sp("q", "r")},
 	}
 
 	// NB: can't import testutils for RunTrueAndFalse.
@@ -267,10 +269,10 @@ func TestLockSpanIterate(t *testing.T) {
 			}
 
 			// The intent writes are replicated locking request.
-			require.Equal(t, toExpSpans(testReqs[2], testReqs[3]), spans[lock.Replicated])
+			require.Equal(t, toExpSpans(testReqs[3], testReqs[4]), spans[lock.Replicated])
 
 			// The scans with KeyLocking are unreplicated locking requests.
-			require.Equal(t, toExpSpans(testReqs[4], testReqs[5]), spans[lock.Unreplicated])
+			require.Equal(t, toExpSpans(testReqs[5], testReqs[6], testReqs[7]), spans[lock.Unreplicated])
 		})
 	}
 }

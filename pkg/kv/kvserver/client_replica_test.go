@@ -3530,7 +3530,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	require.NoError(t, <-err4C)
 }
 
-// getRangeInfo retreives range info by performing a get against the provided
+// getRangeInfo retrieves range info by performing a get against the provided
 // key and setting the ReturnRangeInfo flag to true.
 func getRangeInfo(
 	ctx context.Context, db *kv.DB, key roachpb.Key,
@@ -3538,7 +3538,7 @@ func getRangeInfo(
 	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		b.Header.ReturnRangeInfo = true
-		b.AddRawRequest(roachpb.NewGet(key))
+		b.AddRawRequest(roachpb.NewGet(key, false /* forUpdate */))
 		if err = db.Run(ctx, b); err != nil {
 			return err
 		}
