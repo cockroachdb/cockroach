@@ -1696,6 +1696,10 @@ Bottom Left.</p>
 <p>Smaller densify_frac gives a more accurate Fréchet distance. However, the computation time and memory usage increases with the square of the number of subsegments.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_generatepoints"></a><code>st_generatepoints(geometry: geometry, npoints: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Generates pseudo-random points until the requested number are found within the input area. Uses system time as a seed.</p>
+</span></td></tr>
+<tr><td><a name="st_generatepoints"></a><code>st_generatepoints(geometry: geometry, npoints: int4, seed: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Generates pseudo-random points until the requested number are found within the input area.</p>
+</span></td></tr>
 <tr><td><a name="st_geogfromewkb"></a><code>st_geogfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKB representation.</p>
 </span></td></tr>
 <tr><td><a name="st_geogfromewkt"></a><code>st_geogfromewkt(val: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns the Geography from an EWKT representation.</p>

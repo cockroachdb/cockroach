@@ -16,6 +16,7 @@ extern "C" {
 
 // Data Types adapted from `capi/geos_c.h.in` in GEOS.
 typedef void* CR_GEOS_Geometry;
+typedef void* CR_GEOS_PreparedInternalGeometry;
 
 // NB: Both CR_GEOS_Slice and CR_GEOS_String can contain non-printable
 // data, so neither is necessarily compatible with a NUL character
@@ -36,6 +37,13 @@ typedef struct {
   char* data;
   size_t len;
 } CR_GEOS_String;
+
+// CR_GEOS_PreparedGeometry is a wrapper containing GEOS PreparedGeometry and it's source Geometry.
+// This allows us to free the memory for both at the same time.
+typedef struct {
+  CR_GEOS_Geometry g;
+  CR_GEOS_PreparedInternalGeometry p;
+} CR_GEOS_PreparedGeometry;
 
 // CR_GEOS_BufferParams are parameters that will be passed to buffer.
 typedef struct {
@@ -146,6 +154,15 @@ CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, C
                                                 double densifyFrac, double* ret);
 CR_GEOS_Status CR_GEOS_EqualsExact(CR_GEOS* lib, CR_GEOS_Slice lhs, CR_GEOS_Slice rhs,
                                       double tolerance, char* ret);
+
+//
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_Prepare(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry** ret);
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry* g);
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry* a, CR_GEOS_Slice b, char* ret);
 
 //
 // Binary predicates.

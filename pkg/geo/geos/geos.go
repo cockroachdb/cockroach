@@ -59,6 +59,9 @@ var geosOnce struct {
 	once sync.Once
 }
 
+// PreparedGeometry is an instance of a GEOS PreparedGeometry.
+type PreparedGeometry *C.CR_GEOS_PreparedGeometry
+
 // EnsureInit attempts to start GEOS if it has not been opened already
 // and returns the location if found, and an error if the CR_GEOS is not valid.
 func EnsureInit(
@@ -635,6 +638,41 @@ func ClipByRect(
 	return cStringToSafeGoBytes(cEWKB), nil
 }
 
+//
+// PreparedGeometry
+//
+
+// PrepareGeometry prepares a geometry in GEOS.
+func PrepareGeometry(a geopb.EWKB) (PreparedGeometry, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var ret *C.CR_GEOS_PreparedGeometry
+	if err := statusToError(C.CR_GEOS_Prepare(g, goToCSlice(a), &ret)); err != nil {
+		return nil, err
+	}
+	return PreparedGeometry(ret), nil
+}
+
+// PreparedGeomDestroy destroyed a prepared geometry.
+func PreparedGeomDestroy(a PreparedGeometry) error {
+	// Double check - since PreparedGeometry is actually a pointer to C type.
+	if a == nil {
+		return errors.New("provided PreparedGeometry is nil")
+	}
+	g, err := ensureInitInternal()
+	if err != nil {
+		return err
+	}
+	ap := (*C.CR_GEOS_PreparedGeometry)(unsafe.Pointer(a))
+	return statusToError(C.CR_GEOS_PreparedGeometryDestroy(g, ap))
+}
+
+//
+// Binary predicates.
+//
+
 // Covers returns whether the EWKB provided by A covers the EWKB provided by B.
 func Covers(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	g, err := ensureInitInternal()
@@ -708,6 +746,24 @@ func Equals(a geopb.EWKB, b geopb.EWKB) (bool, error) {
 	}
 	var ret C.char
 	if err := statusToError(C.CR_GEOS_Equals(g, goToCSlice(a), goToCSlice(b), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
+// PreparedIntersects returns whether the EWKB provided by A intersects the EWKB provided by B.
+func PreparedIntersects(a PreparedGeometry, b geopb.EWKB) (bool, error) {
+	// Double check - since PreparedGeometry is actually a pointer to C type.
+	if a == nil {
+		return false, errors.New("provided PreparedGeometry is nil")
+	}
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	ap := (*C.CR_GEOS_PreparedGeometry)(unsafe.Pointer(a))
+	if err := statusToError(C.CR_GEOS_PreparedIntersects(g, ap, goToCSlice(b), &ret)); err != nil {
 		return false, err
 	}
 	return ret == 1, nil
