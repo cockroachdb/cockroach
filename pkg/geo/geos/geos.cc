@@ -129,6 +129,11 @@ typedef int (*CR_GEOS_HausdorffDistance_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_
 typedef int (*CR_GEOS_HausdorffDistanceDensify_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
                                                   CR_GEOS_Geometry, double, double*);
 
+typedef CR_GEOS_PreparedInternalGeometry (*CR_GEOS_Prepare_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef void (*CR_GEOS_PreparedGeom_destroy_r)(CR_GEOS_Handle, CR_GEOS_PreparedInternalGeometry);
+
+typedef char (*CR_GEOS_PreparedIntersects_r)(CR_GEOS_Handle, CR_GEOS_PreparedInternalGeometry, CR_GEOS_Geometry);
+
 typedef char (*CR_GEOS_Covers_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_CoveredBy_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_Contains_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
@@ -242,6 +247,11 @@ struct CR_GEOS {
   CR_GEOS_HausdorffDistance_r GEOSHausdorffDistance_r;
   CR_GEOS_HausdorffDistanceDensify_r GEOSHausdorffDistanceDensify_r;
 
+  CR_GEOS_Prepare_r GEOSPrepare_r;
+  CR_GEOS_PreparedGeom_destroy_r GEOSPreparedGeom_destroy_r;
+
+  CR_GEOS_PreparedIntersects_r GEOSPreparedIntersects_r;
+
   CR_GEOS_Covers_r GEOSCovers_r;
   CR_GEOS_CoveredBy_r GEOSCoveredBy_r;
   CR_GEOS_Contains_r GEOSContains_r;
@@ -341,6 +351,9 @@ struct CR_GEOS {
     INIT(GEOSFrechetDistanceDensify_r);
     INIT(GEOSHausdorffDistance_r);
     INIT(GEOSHausdorffDistanceDensify_r);
+    INIT(GEOSPrepare_r);
+    INIT(GEOSPreparedGeom_destroy_r);
+    INIT(GEOSPreparedIntersects_r);
     INIT(GEOSCovers_r);
     INIT(GEOSCoveredBy_r);
     INIT(GEOSContains_r);
@@ -1161,6 +1174,70 @@ CR_GEOS_Status CR_GEOS_HausdorffDistanceDensify(CR_GEOS* lib, CR_GEOS_Slice a, C
 }
 
 //
+// PreparedGeometry
+//
+
+CR_GEOS_Status CR_GEOS_Prepare(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_PreparedGeometry** ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geom = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+  if (geom != nullptr) {
+    auto preparedGeom = lib->GEOSPrepare_r(handle, geom);
+    auto tmp = new CR_GEOS_PreparedGeometry();
+    tmp->g = geom;
+    tmp->p = preparedGeom;
+    *ret = tmp;
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_PreparedGeometryDestroy(CR_GEOS* lib, CR_GEOS_PreparedGeometry* a) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  lib->GEOSPreparedGeom_destroy_r(handle, a->p);
+  lib->GEOSGeom_destroy_r(handle, a->g);
+  lib->GEOS_finish_r(handle);
+  delete a;
+  return toGEOSString(error.data(), error.length());
+}
+
+template <typename T>
+CR_GEOS_Status CR_GEOS_PreparedBinaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_PreparedInternalGeometry a, CR_GEOS_Slice b,
+                                       char* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+
+  if (geomB != nullptr) {
+    auto r = fn(handle, a, geomB);
+    // ret == 2 indicates an exception.
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    } else {
+      *ret = r;
+    }
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_PreparedGeometry* a, CR_GEOS_Slice b, char* ret) {
+  return CR_GEOS_PreparedBinaryPredicate(lib, lib->GEOSPreparedIntersects_r, a->p, b, ret);
+}
+
+//
 // Binary predicates
 //
 
@@ -1226,6 +1303,10 @@ CR_GEOS_Status CR_GEOS_Intersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b
 
 CR_GEOS_Status CR_GEOS_Overlaps(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
   return CR_GEOS_BinaryPredicate(lib, lib->GEOSOverlaps_r, a, b, ret);
+}
+
+CR_GEOS_Status CR_GEOS_PreparedIntersects(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
+  return CR_GEOS_BinaryPredicate(lib, lib->GEOSPreparedIntersects_r, a, b, ret);
 }
 
 CR_GEOS_Status CR_GEOS_Touches(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, char* ret) {
