@@ -120,13 +120,13 @@ test                                          {}                   NULL
 statement ok
 USE multi_region_test_db
 
-query TTBBT colnames
+query TTBT colnames
 SHOW REGIONS FROM DATABASE
 ----
-database              region          primary  is_region_active  zones
-multi_region_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-multi_region_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
-multi_region_test_db  us-east-1       false    true              {us-az1,us-az2,us-az3}
+database              region          primary  zones
+multi_region_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+multi_region_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+multi_region_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
 SHOW REGIONS
@@ -141,11 +141,11 @@ SHOW SURVIVAL GOAL FROM DATABASE
 ----
 multi_region_test_db  region
 
-query TTBBT colnames
+query TTBT colnames
 SHOW REGIONS FROM DATABASE region_test_db
 ----
-database        region          primary  is_region_active  zones
-region_test_db  ap-southeast-2  true     true              {ap-az1,ap-az2,ap-az3}
+database        region          primary  zones
+region_test_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
 
 query TT
 SHOW SURVIVAL GOAL FROM DATABASE region_test_db
@@ -371,12 +371,12 @@ public  crdb_internal_region  {ca-central-1}  root
 statement ok
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  is_region_active  zones
-alter_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-alter_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
+database       region          primary  zones
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -399,13 +399,13 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
 statement ok
 ALTER DATABASE alter_test_db ADD REGION "us-east-1"
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database alter_test_db
 ----
-database       region          primary  is_region_active  zones
-alter_test_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-alter_test_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
-alter_test_db  us-east-1       false    true              {us-az1,us-az2,us-az3}
+database       region          primary  zones
+alter_test_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+alter_test_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
+alter_test_db  us-east-1       false    {us-az1,us-az2,us-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM alter_test_db.public
@@ -454,10 +454,10 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database primary_region_db
 ----
-database  region  primary  is_region_active  zones
+database  region  primary  zones
 
 query TTTT colnames
 SHOW ENUMS FROM primary_region_db.public
@@ -481,11 +481,11 @@ DATABASE primary_region_db  ALTER DATABASE primary_region_db CONFIGURE ZONE USIN
                             constraints = '{+region=ca-central-1: 1}',
                             lease_preferences = '[[+region=ca-central-1]]'
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database primary_region_db
 ----
-database           region        primary  is_region_active  zones
-primary_region_db  ca-central-1  true     true              {ca-az1,ca-az2,ca-az3}
+database           region        primary  zones
+primary_region_db  ca-central-1  true     {ca-az1,ca-az2,ca-az3}
 
 query TTTT colnames
 SHOW ENUMS FROM primary_region_db.public
@@ -516,12 +516,12 @@ SHOW ENUMS FROM primary_region_db.public
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database primary_region_db
 ----
-database           region          primary  is_region_active  zones
-primary_region_db  ap-southeast-2  false    true              {ap-az1,ap-az2,ap-az3}
-primary_region_db  ca-central-1    true     true              {ca-az1,ca-az2,ca-az3}
+database           region          primary  zones
+primary_region_db  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
+primary_region_db  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 
 statement ok
 ALTER DATABASE primary_region_db PRIMARY REGION "ap-southeast-2"
@@ -543,9 +543,9 @@ SHOW ENUMS FROM primary_region_db.public
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-query TTBBT colnames
+query TTBT colnames
 show regions from database primary_region_db
 ----
-database           region          primary  is_region_active  zones
-primary_region_db  ap-southeast-2  true     true              {ap-az1,ap-az2,ap-az3}
-primary_region_db  ca-central-1    false    true              {ca-az1,ca-az2,ca-az3}
+database           region          primary  zones
+primary_region_db  ap-southeast-2  true     {ap-az1,ap-az2,ap-az3}
+primary_region_db  ca-central-1    false    {ca-az1,ca-az2,ca-az3}
