@@ -1,10 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sql",
     srcs = [
         "add_column.go",
-        "advancecode_string.go",
         "alter_column_type.go",
         "alter_database.go",
         "alter_index.go",
@@ -113,7 +113,6 @@ go_library(
         "lookup_join.go",
         "max_one_row.go",
         "mem_metrics.go",
-        "nodestatus_string.go",
         "notice.go",
         "opaque.go",
         "opt_catalog.go",
@@ -198,8 +197,6 @@ go_library(
         "testutils.go",
         "truncate.go",
         "txn_state.go",
-        "txnevent_string.go",
-        "txntype_string.go",
         "type_change.go",
         "unary.go",
         "union.go",
@@ -218,6 +215,10 @@ go_library(
         "zero.go",
         "zigzag_join.go",
         "zone_config.go",
+        ":gen-txnevent-stringer", # keep
+        ":gen-txntype-stringer", # keep
+        ":gen-advancecode-stringer", # keep
+        ":gen-nodestatus-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql",
     visibility = ["//visibility:public"],
@@ -586,4 +587,28 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+# Using common function for stringer to create txnevent_string.go
+stringer(
+    file = "txn_state.go",
+    typ = "txnEvent",
+)
+
+# Using common function for stringer to create txntype_string.go
+stringer(
+    file = "txn_state.go",
+    typ = "txnType",
+)
+
+# Using common function for stringer to create advancecode_string.go
+stringer(
+    file = "txn_state.go",
+    typ = "advanceCode",
+)
+
+# Using common function for stringer to create nodestatus_string.go
+stringer(
+    file = "distsql_physical_planner.go",
+    typ = "NodeStatus",
 )

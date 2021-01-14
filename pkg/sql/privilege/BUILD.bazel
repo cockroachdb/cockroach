@@ -1,10 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "privilege",
     srcs = [
-        "kind_string.go",
         "privilege.go",
+        ":gen-kind-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
     visibility = ["//visibility:public"],
@@ -26,4 +27,10 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
     ],
+)
+
+# Using common function for stringer to create kind_string.go
+stringer(
+    file = "privilege.go",
+    typ = "Kind",
 )

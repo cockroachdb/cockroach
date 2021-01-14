@@ -1,12 +1,13 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "catalogkv",
     srcs = [
         "catalogkv.go",
-        "descriptorkind_string.go",
         "namespace.go",
         "test_utils.go",
+        ":gen-descriptorkind-stringer", # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
     visibility = ["//visibility:public"],
@@ -48,4 +49,10 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+# Using common function for stringer to create descriptorkind_string.go
+stringer(
+    file = "catalogkv.go",
+    typ = "DescriptorKind",
 )

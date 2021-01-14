@@ -6,3 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding/encodingtype",
     visibility = ["//visibility:public"],
 )
+
+exports_files(
+    [
+        "encoding_type.go",
+    ],
+    visibility = ["//visibility:public"],
+)
