@@ -122,6 +122,7 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 
 type clientI interface {
 	Get(context.Context, interface{}) (kv.KeyValue, error)
+	GetForUpdate(context.Context, interface{}) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
 	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
@@ -131,7 +132,11 @@ type clientI interface {
 func applyClientOp(ctx context.Context, db clientI, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
-		kv, err := db.Get(ctx, o.Key)
+		fn := db.Get
+		if o.ForUpdate {
+			fn = db.GetForUpdate
+		}
+		kv, err := fn(ctx, o.Key)
 		if err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
@@ -175,7 +180,11 @@ func applyBatchOp(
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
-			b.Get(subO.Key)
+			if subO.ForUpdate {
+				b.GetForUpdate(subO.Key)
+			} else {
+				b.Get(subO.Key)
+			}
 		case *PutOperation:
 			b.Put(subO.Key, subO.Value)
 		case *ScanOperation:
