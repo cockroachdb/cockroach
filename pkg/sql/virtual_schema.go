@@ -174,7 +174,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		tree.PersistencePermanent,
 	)
 	if err != nil {
-		return mutDesc.TableDescriptor, err
+		return descpb.TableDescriptor{}, err
 	}
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {
 		if index.NumColumns() > 1 {
@@ -643,10 +643,14 @@ func NewVirtualSchemaHolder(
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
-
+			td := tabledesc.NewImmutable(tableDesc)
+			if err := td.ValidateTable(ctx); err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to validate virtual table %s: programmer error", errors.Safe(td.Name))
+			}
 			entry := &virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       tabledesc.NewImmutable(tableDesc),
+				desc:                       td,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
