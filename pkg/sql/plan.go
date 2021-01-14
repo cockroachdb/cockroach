@@ -140,6 +140,7 @@ var _ planNode = &alterIndexNode{}
 var _ planNode = &alterSchemaNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterTableOwnerNode{}
 var _ planNode = &alterTableSetSchemaNode{}
 var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
