@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -860,6 +861,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 func TestHashRouterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 58956, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
