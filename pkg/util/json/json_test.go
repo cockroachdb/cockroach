@@ -1385,13 +1385,13 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		{`{"a": [1]}`, `{"a": []}`, true, true, false},
 		{`{"a": {"b": "c"}}`, `{"a": {}}`, true, true, false},
 		{`{"a": {}}`, `{"a": {"b": true}}`, false, true, true},
-		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true, true, false},
-		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false, true, false},
+		{`[1, 2, 3, 4, "foo"]`, `[1, 2]`, true, true, true},
+		{`[1, 2, 3, 4, "foo"]`, `[1, "bar"]`, false, true, true},
 		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true, true, true},
 		{`{"a": {"b": [1, [2]]}}`, `{"a": {"b": [1]}}`, true, true, true},
-		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, false},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, true},
 		{`{"a": {"b": false}}`, `{"a": {"b": true}}`, false, true, true},
-		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true, true, false},
+		{`[{"a": {"b": [1, [2]]}}, "d"]`, `[{"a": {"b": [[2]]}}, "d"]`, true, true, true},
 		{`["a", "a"]`, `"a"`, true, true, true},
 		{`[1, 2, 3, 1]`, `1`, true, true, true},
 		{`[1, 2, 3, 1]`, `[1, 1]`, true, true, true},
@@ -1410,12 +1410,12 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		{`[[[[{}], [], false], false], [{}]]`, `[[[[]]]]`, true, true, false},
 		{`[[[[{}], [], false], false], [{}]]`, `[false]`, false, true, true},
 		{`[[{"a": {}, "c": "foo"}, {}], [false]]`, `[[false, {}]]`, false, false, false},
-		{`[[1], [2]]`, `[[1, 2]]`, false, false, false},
-		{`[[1, 2]]`, `[[1], [2]]`, true, true, false},
+		{`[[1], [2]]`, `[[1, 2]]`, false, false, true},
+		{`[[1, 2]]`, `[[1], [2]]`, true, true, true},
 		{`{"bar": [["c"]]}`, `{"bar": []}`, true, true, false},
 		{`{"c": [{"a": "b"}, []]}`, `{"c": [{}]}`, true, true, false},
 		{`[{"bar": {"foo": {}}}, {"a": []}]`, `[{}, {"a": [], "bar": {}}, {}]`, false, false, false},
-		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, false, false, false},
+		{`[{"bar": [1]},{"bar": [2]}]`, `[{"bar": [1, 2]}]`, false, false, true},
 		{`[[1], [2]]`, `[[1, 1]]`, true, true, true},
 	}
 
@@ -1513,25 +1513,19 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		res, err := Contains(left, right)
 		require.NoError(t, err)
 
-		// The spans will not produce duplicate primary keys if there is exactly one
-		// path ending in a scalar (i.e., not an empty object or array) after
-		// de-duplication.
+		// The spans will not produce duplicate primary keys if all paths end in a
+		// scalar (i.e., not an empty object or array).
 		paths, err := AllPaths(right)
 		require.NoError(t, err)
 		hasContainerLeaf := false
-		hasMultiplePaths := false
 		for i := range paths {
 			hasContainerLeaf, err = paths[i].HasContainerLeaf()
 			require.NoError(t, err)
 			if hasContainerLeaf {
 				break
 			}
-			if i > 0 && !reflect.DeepEqual(paths[i], paths[0]) {
-				hasMultiplePaths = true
-				break
-			}
 		}
-		expectUnique := !hasMultiplePaths && !hasContainerLeaf
+		expectUnique := !hasContainerLeaf
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(left, right, res, expectUnique)

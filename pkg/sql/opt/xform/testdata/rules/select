@@ -1815,7 +1815,7 @@ select
  │         │    ├── union spans: empty
  │         │    └── UNION
  │         │         ├── span expression
- │         │         │    ├── tight: false, unique: false
+ │         │         │    ├── tight: false, unique: true
  │         │         │    ├── union spans: empty
  │         │         │    └── INTERSECTION
  │         │         │         ├── span expression
@@ -1825,7 +1825,7 @@ select
  │         │         │              ├── tight: false, unique: false
  │         │         │              └── union spans: ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
  │         │         └── span expression
- │         │              ├── tight: false, unique: false
+ │         │              ├── tight: false, unique: true
  │         │              ├── union spans: empty
  │         │              └── INTERSECTION
  │         │                   ├── span expression
@@ -2023,7 +2023,7 @@ project
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /6
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
@@ -3218,7 +3218,7 @@ select
  │    └── inverted-filter
  │         ├── columns: k:1!null
  │         ├── inverted expression: /8
- │         │    ├── tight: false, unique: false
+ │         │    ├── tight: false, unique: true
  │         │    ├── union spans: empty
  │         │    └── INTERSECTION
  │         │         ├── span expression
@@ -4873,7 +4873,7 @@ index-join b
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /8
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
@@ -4919,7 +4919,7 @@ project
  └── inverted-filter
       ├── columns: k:1!null
       ├── inverted expression: /6
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression

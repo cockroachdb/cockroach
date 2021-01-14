@@ -845,14 +845,12 @@ func EncodeInvertedIndexTableKeys(
 // Returns tight=true if the returned spans are tight and cannot produce false
 // positives. Otherwise, returns tight=false.
 //
-// Returns unique=true if the spans are guaranteed not to produce duplicate
-// primary keys. Otherwise, returns unique=false. This distinction is important
-// for the case where the length of spans is 1, and the single element has
-// length greater than 0. Per the above description, this would represent a
-// UNION over the returned spans, with no INTERSECTION. If unique is true, that
-// allows the optimizer to remove the UNION altogether (implemented
-// with the invertedFilterer), and simply return the results of the constrained
-// scan. unique is always false if the length of spans is greater than 1.
+// Returns unique=true if each of the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns unique=false. If unique is true
+// and the length of spans is 1 (representing a UNION over the returned spans,
+// with no INTERSECTION), that allows the optimizer to remove the UNION
+// altogether (implemented with the invertedFilterer), and simply return the
+// results of the constrained scan.
 //
 // The spans are not guaranteed to be sorted, so the caller must sort them if
 // needed.
@@ -945,10 +943,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		endKey := roachpb.Key(key).PrefixEnd()
 		spans[i] = roachpb.Spans{{Key: key, EndKey: endKey}}
 	}
-	// More than 1 key means that there could be duplicate primary keys in an
-	// inverted index.
-	unique = len(keys) == 1
-	return spans, unique, nil
+	return spans, true, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
