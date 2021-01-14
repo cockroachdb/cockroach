@@ -310,7 +310,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
-		} else if resultIsError(t.Result, `merge failed: cannot merge range with non-voter replicas`) {
+		} else if resultIsError(t.Result,
+			`merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
 			// This operation executed concurrently with one that was changing
 			// replicas.
 		} else if resultIsError(t.Result, `merge failed: ranges not collocated`) {
