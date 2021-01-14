@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
+	"github.com/cockroachdb/errors"
 )
 
 // JSONOrArrayToContainingSpanExpr converts a JSON or Array datum to a
@@ -25,43 +27,74 @@ func JSONOrArrayToContainingSpanExpr(
 	evalCtx *tree.EvalContext, d tree.Datum,
 ) (*SpanExpression, error) {
 	var b []byte
-	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
+	spanExpr, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if len(spansSlice) == 0 {
-		// This can happen if the input is ARRAY[NULL].
-		return &SpanExpression{}, nil
-	}
 
-	// The spans returned by EncodeContainingInvertedIndexSpans represent the
-	// intersection of unions. So the below logic is performing a union on the
-	// inner loop and an intersection on the outer loop. See the comment
-	// above EncodeContainingInvertedIndexSpans for details.
-	var invExpr InvertedExpression
-	for _, spans := range spansSlice {
-		var invExprLocal InvertedExpression
-		for _, span := range spans {
+	// Convert the spanExpr returned by EncodeContainingInvertedIndexSpans to a
+	// format that will be usable by the optimizer and execution engine.
+	var convertSpanExpr func(*inverted.SpanExpression) (InvertedExpression, error)
+	convertSpanExpr = func(spanExpr *inverted.SpanExpression) (InvertedExpression, error) {
+		// First check that the provided spanExpr is valid. Only leaf nodes in a
+		// SpanExpression tree are allowed to have UnionSpans set.
+		if len(spanExpr.UnionSpans) > 0 && len(spanExpr.Children) > 0 {
+			return nil, errors.AssertionFailedf(
+				"invalid SpanExpression: cannot be both a leaf and internal node",
+			)
+		}
+		if len(spanExpr.Children) == 0 && len(spanExpr.UnionSpans) == 0 {
+			// This can happen if the input is ARRAY[NULL].
+			return &SpanExpression{Tight: spanExpr.Tight, Unique: spanExpr.Unique}, nil
+		}
+
+		var invExpr InvertedExpression
+		for _, span := range spanExpr.UnionSpans {
 			invSpan := InvertedSpan{Start: EncInvertedVal(span.Key), End: EncInvertedVal(span.EndKey)}
-			spanExpr := ExprForInvertedSpan(invSpan, tight)
-			if invExprLocal == nil {
-				invExprLocal = spanExpr
+			newSpanExpr := ExprForInvertedSpan(invSpan, spanExpr.Tight)
+			newSpanExpr.Unique = spanExpr.Unique
+			if invExpr == nil {
+				invExpr = newSpanExpr
 			} else {
-				invExprLocal = Or(invExprLocal, spanExpr)
+				invExpr = Or(invExpr, newSpanExpr)
 			}
 		}
-		if invExpr == nil {
-			invExpr = invExprLocal
-		} else {
-			invExpr = And(invExpr, invExprLocal)
+
+		for _, child := range spanExpr.Children {
+			newSpanExpr, err := convertSpanExpr(child)
+			if err != nil {
+				return nil, err
+			}
+			if invExpr == nil {
+				invExpr = newSpanExpr
+			} else {
+				switch spanExpr.Operator {
+				case inverted.SetIntersection:
+					invExpr = And(invExpr, newSpanExpr)
+				case inverted.SetUnion:
+					invExpr = Or(invExpr, newSpanExpr)
+				default:
+					return nil, errors.AssertionFailedf("invalid operator %v", spanExpr.Operator)
+				}
+			}
 		}
+
+		if newSpanExpr, ok := invExpr.(*SpanExpression); ok {
+			newSpanExpr.Tight = spanExpr.Tight
+			newSpanExpr.Unique = spanExpr.Unique
+			return newSpanExpr, nil
+		}
+		return NonInvertedColExpression{}, nil
 	}
 
-	if spanExpr, ok := invExpr.(*SpanExpression); ok {
-		spanExpr.Unique = unique
-		return spanExpr, nil
+	invExpr, err := convertSpanExpr(spanExpr)
+	if err != nil {
+		return nil, err
+	}
+	if newSpanExpr, ok := invExpr.(*SpanExpression); ok {
+		return newSpanExpr, nil
 	}
 	return nil, nil
 }

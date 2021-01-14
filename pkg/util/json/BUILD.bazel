@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",
+        "//pkg/util/inverted",
         "//pkg/util/syncutil",
         "//pkg/util/unique",
         "@com_github_cockroachdb_apd_v2//:apd",
