@@ -38,9 +38,9 @@ system "grep -q 'authentication failed' $logfile"
 
 end_test
 
-start_test "Check that the auth events have both node ID and cluster ID"
+start_test "Check that the auth events include the cluster ID"
 
-system "grep -q '\\\[n1,.*clusterID=........-....-....-....-............\\\] . authentication' $logfile"
+system "grep -q '\\\[n1,.*clusterID=........-....-....-....-............\\\] \[0-9\]* authentication' $logfile"
 
 end_test
 
