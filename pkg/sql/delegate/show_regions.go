@@ -74,7 +74,6 @@ SELECT
 	r.name AS "database",
 	r.region as "region",
 	r.region = r.primary_region AS "primary",
-	zones_table.region IS NOT NULL AS is_region_active,
 	COALESCE(zones_table.zones, '{}'::string[])
 AS
 	zones
