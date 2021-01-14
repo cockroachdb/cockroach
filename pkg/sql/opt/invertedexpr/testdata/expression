@@ -195,7 +195,7 @@ span expression
 and result=b-and-b left=b right=b
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["b", "b"]
  └── union spans: ["b", "b"]
 
@@ -241,7 +241,7 @@ span expression
 and result=_ left=b right=ac
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["a", "c")
  └── union spans: ["b", "b"]
 
@@ -264,7 +264,7 @@ span expression
 and result=_ left=b right=bj
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["b", "j")
  └── union spans: ["b", "b"]
 
@@ -280,7 +280,7 @@ span expression
 and result=bj-and-ac left=bj right=ac
 ----
 span expression
- ├── tight: true, unique: false
+ ├── tight: true, unique: true
  ├── to read: ["a", "j")
  ├── union spans: ["b", "b"]
  └── INTERSECTION
@@ -308,7 +308,7 @@ span expression
       │         ├── ["a", "a"]
       │         └── ["c", "j")
       └── span expression
-           ├── tight: true, unique: false
+           ├── tight: true, unique: true
            ├── to read: ["a", "j")
            ├── union spans: empty
            └── INTERSECTION
@@ -330,7 +330,7 @@ span expression
  ├── union spans: ["b", "b"]
  └── INTERSECTION
       ├── span expression
-      │    ├── tight: true, unique: false
+      │    ├── tight: true, unique: true
       │    ├── to read: ["a", "j")
       │    ├── union spans: empty
       │    └── INTERSECTION
@@ -383,7 +383,7 @@ span expression
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
-      │         │    ├── tight: true, unique: false
+      │         │    ├── tight: true, unique: true
       │         │    ├── to read: ["a", "j")
       │         │    ├── union spans: empty
       │         │    └── INTERSECTION
@@ -430,7 +430,7 @@ span expression
       │    ├── union spans: empty
       │    └── INTERSECTION
       │         ├── span expression
-      │         │    ├── tight: true, unique: false
+      │         │    ├── tight: true, unique: true
       │         │    ├── to read: ["a", "j")
       │         │    ├── union spans: empty
       │         │    └── INTERSECTION
