@@ -223,6 +223,8 @@ func registerRestore(r *testRegistry) {
 			Cluster: makeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
+				// Randomize starting with encryption-at-rest enabled.
+				c.encryptAtRandom = true
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
 				m := newMonitor(ctx, c)

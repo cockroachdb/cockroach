@@ -1085,6 +1085,11 @@ type cluster struct {
 	// at rest enabled. The default only applies if encryption is not explicitly
 	// enabled or disabled by options passed to Start.
 	encryptDefault bool
+	// encryptAtRandom is true if the cluster should enable encryption-at-rest
+	// on about half of all runs. Only valid if encryptDefault is false. Only
+	// applies if encryption is not explicitly enabled or disabled by options
+	// passed to Start. For use in roachtests.
+	encryptAtRandom bool
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
@@ -2132,8 +2137,16 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	if !argExists(args, "--encrypt") && c.encryptDefault {
-		args = append(args, "--encrypt")
+	if !argExists(args, "--encrypt") {
+		if c.encryptDefault {
+			args = append(args, "--encrypt")
+		} else if c.encryptAtRandom {
+			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+			if rng.Intn(2) == 1 {
+				c.l.Printf("starting with encryption at rest enabled")
+				args = append(args, "--encrypt")
+			}
+		}
 	}
 	return execCmd(ctx, c.l, args...)
 }
