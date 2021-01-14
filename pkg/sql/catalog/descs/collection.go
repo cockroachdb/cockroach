@@ -457,11 +457,15 @@ func (tc *Collection) getObjectByName(
 	// But doing so turned problematic and the tests pass only by also
 	// disabling caching of system.eventlog, system.rangelog, and
 	// system.users. For now we're sticking to disabling caching of
-	// all system descriptors except the role-members-desc.
+	// all system descriptors except role_members, role_options, and users
+	// (i.e., the ones used during authn/authz flows).
 	// TODO (lucy): Reevaluate the above. We have many more system tables now and
 	// should be able to lease most of them.
+	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.Name ||
+		objectName == systemschema.RoleOptionsTable.Name ||
+		objectName == systemschema.UsersTable.Name
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
-		(catalogName == systemschema.SystemDatabaseName && objectName != systemschema.RoleMembersTable.Name)
+		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
 		return tc.getDescriptorFromStore(
 			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
