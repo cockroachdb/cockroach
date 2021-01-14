@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -42,10 +41,6 @@ func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test currently blocks indefinitely if
-	// row.kvDatumRowConverterBatchSize is set to 1 or 2 (#57955).
-	skip.UnderMetamorphic(t)
-
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.Background()
@@ -53,7 +48,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table.TableDesc()}}
 	opts := roachpb.MysqldumpOptions{}
 
-	kvCh := make(chan row.KVBatch, 10)
+	kvCh := make(chan row.KVBatch, 50)
 	// When creating a new dump reader, we need to pass in the walltime that will be used as
 	// a parameter used for generating unique rowid, random, and gen_random_uuid as default
 	// expressions. Here, the parameter doesn't matter so we pass in 0.

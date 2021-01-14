@@ -1523,6 +1523,7 @@ func NewTableDesc(
 				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
 			)
 		}
+		desc.PartitionAllBy = true
 		partitionByAll = n.PartitionByTable.PartitionBy
 	}
 
@@ -2022,8 +2023,8 @@ func NewTableDesc(
 			}
 			if n.Locality.RegionalByRowColumn != "" {
 				return nil, unimplemented.New(
-					"REGIONAL BY ROW ON name",
-					"REGIONAL BY ROW ON name is not yet supported",
+					"REGIONAL BY ROW AS",
+					"REGIONAL BY ROW AS is not yet supported",
 				)
 			}
 		default:

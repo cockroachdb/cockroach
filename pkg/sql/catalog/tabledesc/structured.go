@@ -239,6 +239,11 @@ func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
+// IsPartitionAllBy returns whether the table has a PARTITION ALL BY clause.
+func (desc *wrapper) IsPartitionAllBy() bool {
+	return desc.PartitionAllBy
+}
+
 // GetParentSchemaID returns the ParentSchemaID if the descriptor has
 // one. If the descriptor was created before the field was added, then the
 // descriptor belongs to a table under the `public` physical schema. The static
@@ -1560,6 +1565,27 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 
 	for _, indexI := range desc.NonDropIndexes() {
 		index := indexI.IndexDesc()
+		// Check partitioning is correctly set.
+		if desc.PartitionAllBy {
+			primaryIndexPartitioning := desc.PrimaryIndex.ColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
+			indexPartitioning := index.ColumnIDs[:index.Partitioning.NumColumns]
+			matchesPartitioning := false
+			if len(primaryIndexPartitioning) == len(indexPartitioning) {
+				matchesPartitioning = true
+				for i := range primaryIndexPartitioning {
+					if primaryIndexPartitioning[i] != indexPartitioning[i] {
+						matchesPartitioning = false
+						break
+					}
+				}
+			}
+			if !matchesPartitioning {
+				return errors.AssertionFailedf(
+					"table has PARTITION ALL BY defined, but index %s does not have matching PARTITION BY",
+					index.Name,
+				)
+			}
+		}
 		// Check interleaves.
 		if len(index.Interleave.Ancestors) > 0 {
 			// Only check the most recent ancestor, the rest of them don't point
