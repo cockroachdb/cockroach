@@ -191,6 +191,15 @@ func (s *Server) Proxy(proxyConn *Conn) error {
 	}
 	defer func() { _ = crdbConn.Close() }()
 
+	if err := authenticate(conn, crdbConn); err != nil {
+		s.metrics.AuthFailedCount.Inc(1)
+		if codeErr := (*CodeError)(nil); errors.As(err, &codeErr) {
+			sendErrToClient(conn, codeErr.code, codeErr.Error())
+			return err
+		}
+		return errors.AssertionFailedf("unrecognized auth failure")
+	}
+
 	s.metrics.SuccessfulConnCount.Inc(1)
 
 	// These channels are buffered because we'll only consume one of them.

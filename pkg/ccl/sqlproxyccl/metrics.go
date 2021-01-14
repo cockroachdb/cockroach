@@ -21,6 +21,7 @@ type Metrics struct {
 	RoutingErrCount        *metric.Counter
 	RefusedConnCount       *metric.Counter
 	SuccessfulConnCount    *metric.Counter
+	AuthFailedCount        *metric.Counter
 	ExpiredClientConnCount *metric.Counter
 }
 
@@ -78,6 +79,12 @@ var (
 		Measurement: "Successful Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAuthFailedCount = metric.Metadata{
+		Name:        "proxy.sql.authentication_failures",
+		Help:        "Number of authentication failures",
+		Measurement: "Authentication Failures",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaExpiredClientConnCount = metric.Metadata{
 		Name:        "proxy.sql.expired_client_conns",
 		Help:        "Number of expired client connections",
@@ -97,6 +104,7 @@ func MakeProxyMetrics() Metrics {
 		RoutingErrCount:        metric.NewCounter(metaRoutingErrCount),
 		RefusedConnCount:       metric.NewCounter(metaRefusedConnCount),
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
+		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
 	}
 }
