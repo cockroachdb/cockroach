@@ -34,7 +34,7 @@ func (m *CommonZoneConfigDetails) Reset()         { *m = CommonZoneConfigDetails
 func (m *CommonZoneConfigDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonZoneConfigDetails) ProtoMessage()    {}
 func (*CommonZoneConfigDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_events_f93c01e91b797e1b, []int{0}
+	return fileDescriptor_zone_events_2d4516fba6e1eac7, []int{0}
 }
 func (m *CommonZoneConfigDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -70,7 +70,7 @@ func (m *SetZoneConfig) Reset()         { *m = SetZoneConfig{} }
 func (m *SetZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*SetZoneConfig) ProtoMessage()    {}
 func (*SetZoneConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_events_f93c01e91b797e1b, []int{1}
+	return fileDescriptor_zone_events_2d4516fba6e1eac7, []int{1}
 }
 func (m *SetZoneConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -106,7 +106,7 @@ func (m *RemoveZoneConfig) Reset()         { *m = RemoveZoneConfig{} }
 func (m *RemoveZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*RemoveZoneConfig) ProtoMessage()    {}
 func (*RemoveZoneConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_events_f93c01e91b797e1b, []int{2}
+	return fileDescriptor_zone_events_2d4516fba6e1eac7, []int{2}
 }
 func (m *RemoveZoneConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -863,10 +863,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/zone_events.proto", fileDescriptor_zone_events_f93c01e91b797e1b)
+	proto.RegisterFile("util/log/eventpb/zone_events.proto", fileDescriptor_zone_events_2d4516fba6e1eac7)
 }
 
-var fileDescriptor_zone_events_f93c01e91b797e1b = []byte{
+var fileDescriptor_zone_events_2d4516fba6e1eac7 = []byte{
 	// 342 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x92, 0x41, 0x4a, 0xc3, 0x40,
 	0x14, 0x86, 0x33, 0x0d, 0xb4, 0x38, 0x55, 0x91, 0x20, 0x58, 0x0a, 0x4e, 0x4a, 0x16, 0x52, 0x41,

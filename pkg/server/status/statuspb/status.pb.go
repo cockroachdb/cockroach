@@ -47,7 +47,7 @@ func (x HealthAlert_Category) String() string {
 	return proto.EnumName(HealthAlert_Category_name, int32(x))
 }
 func (HealthAlert_Category) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{2, 0}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{2, 0}
 }
 
 // StoreStatus records the most recent values of metrics for a store.
@@ -62,7 +62,7 @@ func (m *StoreStatus) Reset()         { *m = StoreStatus{} }
 func (m *StoreStatus) String() string { return proto.CompactTextString(m) }
 func (*StoreStatus) ProtoMessage()    {}
 func (*StoreStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{0}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{0}
 }
 func (m *StoreStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -139,7 +139,7 @@ func (m *NodeStatus) Reset()         { *m = NodeStatus{} }
 func (m *NodeStatus) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus) ProtoMessage()    {}
 func (*NodeStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{1}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{1}
 }
 func (m *NodeStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,7 +174,7 @@ func (m *NodeStatus_NetworkActivity) Reset()         { *m = NodeStatus_NetworkAc
 func (m *NodeStatus_NetworkActivity) String() string { return proto.CompactTextString(m) }
 func (*NodeStatus_NetworkActivity) ProtoMessage()    {}
 func (*NodeStatus_NetworkActivity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{1, 2}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{1, 2}
 }
 func (m *NodeStatus_NetworkActivity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -213,7 +213,7 @@ func (m *HealthAlert) Reset()         { *m = HealthAlert{} }
 func (m *HealthAlert) String() string { return proto.CompactTextString(m) }
 func (*HealthAlert) ProtoMessage()    {}
 func (*HealthAlert) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{2}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{2}
 }
 func (m *HealthAlert) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -247,7 +247,7 @@ func (m *HealthCheckResult) Reset()         { *m = HealthCheckResult{} }
 func (m *HealthCheckResult) String() string { return proto.CompactTextString(m) }
 func (*HealthCheckResult) ProtoMessage()    {}
 func (*HealthCheckResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_status_46c3b5d63ad7300e, []int{3}
+	return fileDescriptor_status_c9ef8fcbce5ee691, []int{3}
 }
 func (m *HealthCheckResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1952,10 +1952,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("server/status/statuspb/status.proto", fileDescriptor_status_46c3b5d63ad7300e)
+	proto.RegisterFile("server/status/statuspb/status.proto", fileDescriptor_status_c9ef8fcbce5ee691)
 }
 
-var fileDescriptor_status_46c3b5d63ad7300e = []byte{
+var fileDescriptor_status_c9ef8fcbce5ee691 = []byte{
 	// 817 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0x5f, 0x6f, 0xe3, 0x44,
 	0x10, 0xcf, 0x36, 0x69, 0xe3, 0x8c, 0xef, 0x4a, 0x6f, 0x39, 0x90, 0x89, 0x44, 0x6a, 0x02, 0x0f,

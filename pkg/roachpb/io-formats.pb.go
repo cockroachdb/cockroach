@@ -68,7 +68,7 @@ func (x *IOFileFormat_FileFormat) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_FileFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{0, 0}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{0, 0}
 }
 
 type IOFileFormat_Compression int32
@@ -110,7 +110,7 @@ func (x *IOFileFormat_Compression) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IOFileFormat_Compression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{0, 1}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{0, 1}
 }
 
 type MySQLOutfileOptions_Enclose int32
@@ -149,7 +149,7 @@ func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (MySQLOutfileOptions_Enclose) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{2, 0}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{2, 0}
 }
 
 type AvroOptions_Format int32
@@ -191,7 +191,7 @@ func (x *AvroOptions_Format) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AvroOptions_Format) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{6, 0}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{6, 0}
 }
 
 type IOFileFormat struct {
@@ -211,7 +211,7 @@ func (m *IOFileFormat) Reset()         { *m = IOFileFormat{} }
 func (m *IOFileFormat) String() string { return proto.CompactTextString(m) }
 func (*IOFileFormat) ProtoMessage()    {}
 func (*IOFileFormat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{0}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{0}
 }
 func (m *IOFileFormat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -258,7 +258,7 @@ func (m *CSVOptions) Reset()         { *m = CSVOptions{} }
 func (m *CSVOptions) String() string { return proto.CompactTextString(m) }
 func (*CSVOptions) ProtoMessage()    {}
 func (*CSVOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{1}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{1}
 }
 func (m *CSVOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -309,7 +309,7 @@ func (m *MySQLOutfileOptions) Reset()         { *m = MySQLOutfileOptions{} }
 func (m *MySQLOutfileOptions) String() string { return proto.CompactTextString(m) }
 func (*MySQLOutfileOptions) ProtoMessage()    {}
 func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{2}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{2}
 }
 func (m *MySQLOutfileOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -348,7 +348,7 @@ func (m *PgCopyOptions) Reset()         { *m = PgCopyOptions{} }
 func (m *PgCopyOptions) String() string { return proto.CompactTextString(m) }
 func (*PgCopyOptions) ProtoMessage()    {}
 func (*PgCopyOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{3}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{3}
 }
 func (m *PgCopyOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -386,7 +386,7 @@ func (m *PgDumpOptions) Reset()         { *m = PgDumpOptions{} }
 func (m *PgDumpOptions) String() string { return proto.CompactTextString(m) }
 func (*PgDumpOptions) ProtoMessage()    {}
 func (*PgDumpOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{4}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{4}
 }
 func (m *PgDumpOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -421,7 +421,7 @@ func (m *MysqldumpOptions) Reset()         { *m = MysqldumpOptions{} }
 func (m *MysqldumpOptions) String() string { return proto.CompactTextString(m) }
 func (*MysqldumpOptions) ProtoMessage()    {}
 func (*MysqldumpOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{5}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{5}
 }
 func (m *MysqldumpOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -464,7 +464,7 @@ func (m *AvroOptions) Reset()         { *m = AvroOptions{} }
 func (m *AvroOptions) String() string { return proto.CompactTextString(m) }
 func (*AvroOptions) ProtoMessage()    {}
 func (*AvroOptions) Descriptor() ([]byte, []int) {
-	return fileDescriptor_io_formats_012f11cd671e76c0, []int{6}
+	return fileDescriptor_io_formats_cf12087409a41794, []int{6}
 }
 func (m *AvroOptions) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2181,10 +2181,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_012f11cd671e76c0)
+	proto.RegisterFile("roachpb/io-formats.proto", fileDescriptor_io_formats_cf12087409a41794)
 }
 
-var fileDescriptor_io_formats_012f11cd671e76c0 = []byte{
+var fileDescriptor_io_formats_cf12087409a41794 = []byte{
 	// 938 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0x5f, 0x6f, 0xe3, 0x44,
 	0x10, 0xb7, 0xf3, 0xcf, 0xf1, 0x24, 0x69, 0x97, 0x85, 0x07, 0xeb, 0x04, 0x26, 0xe4, 0x38, 0xd4,

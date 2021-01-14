@@ -387,10 +387,10 @@ var _PerStore_serviceDesc = grpc.ServiceDesc{
 }
 
 func init() {
-	proto.RegisterFile("kv/kvserver/storage_services.proto", fileDescriptor_storage_services_be9c06f8924f6568)
+	proto.RegisterFile("kv/kvserver/storage_services.proto", fileDescriptor_storage_services_bc1d55ecd4e3f795)
 }
 
-var fileDescriptor_storage_services_be9c06f8924f6568 = []byte{
+var fileDescriptor_storage_services_bc1d55ecd4e3f795 = []byte{
 	// 382 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x93, 0xb1, 0x8e, 0xd3, 0x30,
 	0x18, 0xc7, 0x63, 0x06, 0x54, 0x2c, 0x24, 0xa8, 0x05, 0x0c, 0x19, 0x3c, 0x74, 0x00, 0x54, 0x89,

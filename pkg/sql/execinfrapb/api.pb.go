@@ -58,7 +58,7 @@ func (m *SetupFlowRequest) Reset()         { *m = SetupFlowRequest{} }
 func (m *SetupFlowRequest) String() string { return proto.CompactTextString(m) }
 func (*SetupFlowRequest) ProtoMessage()    {}
 func (*SetupFlowRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{0}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{0}
 }
 func (m *SetupFlowRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -96,7 +96,7 @@ func (m *FlowSpec) Reset()         { *m = FlowSpec{} }
 func (m *FlowSpec) String() string { return proto.CompactTextString(m) }
 func (*FlowSpec) ProtoMessage()    {}
 func (*FlowSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{1}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{1}
 }
 func (m *FlowSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -132,7 +132,7 @@ func (m *EvalContext) Reset()         { *m = EvalContext{} }
 func (m *EvalContext) String() string { return proto.CompactTextString(m) }
 func (*EvalContext) ProtoMessage()    {}
 func (*EvalContext) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{2}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{2}
 }
 func (m *EvalContext) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -165,7 +165,7 @@ func (m *SimpleResponse) Reset()         { *m = SimpleResponse{} }
 func (m *SimpleResponse) String() string { return proto.CompactTextString(m) }
 func (*SimpleResponse) ProtoMessage()    {}
 func (*SimpleResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{3}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{3}
 }
 func (m *SimpleResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -208,7 +208,7 @@ func (m *ConsumerSignal) Reset()         { *m = ConsumerSignal{} }
 func (m *ConsumerSignal) String() string { return proto.CompactTextString(m) }
 func (*ConsumerSignal) ProtoMessage()    {}
 func (*ConsumerSignal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{4}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{4}
 }
 func (m *ConsumerSignal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -240,7 +240,7 @@ func (m *DrainRequest) Reset()         { *m = DrainRequest{} }
 func (m *DrainRequest) String() string { return proto.CompactTextString(m) }
 func (*DrainRequest) ProtoMessage()    {}
 func (*DrainRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{5}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{5}
 }
 func (m *DrainRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -291,7 +291,7 @@ func (m *ConsumerHandshake) Reset()         { *m = ConsumerHandshake{} }
 func (m *ConsumerHandshake) String() string { return proto.CompactTextString(m) }
 func (*ConsumerHandshake) ProtoMessage()    {}
 func (*ConsumerHandshake) Descriptor() ([]byte, []int) {
-	return fileDescriptor_api_e3358d2af00ffd7f, []int{6}
+	return fileDescriptor_api_db601d0d8134b9c6, []int{6}
 }
 func (m *ConsumerHandshake) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1938,9 +1938,9 @@ var (
 	ErrIntOverflowApi   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/execinfrapb/api.proto", fileDescriptor_api_e3358d2af00ffd7f) }
+func init() { proto.RegisterFile("sql/execinfrapb/api.proto", fileDescriptor_api_db601d0d8134b9c6) }
 
-var fileDescriptor_api_e3358d2af00ffd7f = []byte{
+var fileDescriptor_api_db601d0d8134b9c6 = []byte{
 	// 950 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x55, 0xcf, 0x72, 0xdb, 0x44,
 	0x18, 0xb7, 0xe4, 0xb5, 0xad, 0xac, 0x1d, 0x57, 0xd9, 0xe9, 0x30, 0xc2, 0x07, 0xdb, 0xa3, 0x29,

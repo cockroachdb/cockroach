@@ -87,7 +87,7 @@ func (m *StatementStatistics) Reset()         { *m = StatementStatistics{} }
 func (m *StatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*StatementStatistics) ProtoMessage()    {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{0}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{0}
 }
 func (m *StatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -136,7 +136,7 @@ func (m *TransactionStatistics) Reset()         { *m = TransactionStatistics{} }
 func (m *TransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*TransactionStatistics) ProtoMessage()    {}
 func (*TransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{1}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{1}
 }
 func (m *TransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -176,7 +176,7 @@ func (m *SensitiveInfo) Reset()         { *m = SensitiveInfo{} }
 func (m *SensitiveInfo) String() string { return proto.CompactTextString(m) }
 func (*SensitiveInfo) ProtoMessage()    {}
 func (*SensitiveInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{2}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{2}
 }
 func (m *SensitiveInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -218,7 +218,7 @@ func (m *NumericStat) Reset()         { *m = NumericStat{} }
 func (m *NumericStat) String() string { return proto.CompactTextString(m) }
 func (*NumericStat) ProtoMessage()    {}
 func (*NumericStat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{3}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{3}
 }
 func (m *NumericStat) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -257,7 +257,7 @@ func (m *StatementStatisticsKey) Reset()         { *m = StatementStatisticsKey{}
 func (m *StatementStatisticsKey) String() string { return proto.CompactTextString(m) }
 func (*StatementStatisticsKey) ProtoMessage()    {}
 func (*StatementStatisticsKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{4}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{4}
 }
 func (m *StatementStatisticsKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -297,7 +297,7 @@ func (m *CollectedStatementStatistics) Reset()         { *m = CollectedStatement
 func (m *CollectedStatementStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedStatementStatistics) ProtoMessage()    {}
 func (*CollectedStatementStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{5}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{5}
 }
 func (m *CollectedStatementStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -337,7 +337,7 @@ func (m *CollectedTransactionStatistics) Reset()         { *m = CollectedTransac
 func (m *CollectedTransactionStatistics) String() string { return proto.CompactTextString(m) }
 func (*CollectedTransactionStatistics) ProtoMessage()    {}
 func (*CollectedTransactionStatistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{6}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{6}
 }
 func (m *CollectedTransactionStatistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -377,7 +377,7 @@ func (m *ExplainTreePlanNode) Reset()         { *m = ExplainTreePlanNode{} }
 func (m *ExplainTreePlanNode) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode) ProtoMessage()    {}
 func (*ExplainTreePlanNode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{7}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{7}
 }
 func (m *ExplainTreePlanNode) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -411,7 +411,7 @@ func (m *ExplainTreePlanNode_Attr) Reset()         { *m = ExplainTreePlanNode_At
 func (m *ExplainTreePlanNode_Attr) String() string { return proto.CompactTextString(m) }
 func (*ExplainTreePlanNode_Attr) ProtoMessage()    {}
 func (*ExplainTreePlanNode_Attr) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{7, 0}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{7, 0}
 }
 func (m *ExplainTreePlanNode_Attr) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -450,7 +450,7 @@ func (m *TxnStats) Reset()         { *m = TxnStats{} }
 func (m *TxnStats) String() string { return proto.CompactTextString(m) }
 func (*TxnStats) ProtoMessage()    {}
 func (*TxnStats) Descriptor() ([]byte, []int) {
-	return fileDescriptor_app_stats_02e0c72cac47fa1c, []int{8}
+	return fileDescriptor_app_stats_1e7bd1c14de5d1e0, []int{8}
 }
 func (m *TxnStats) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3167,9 +3167,9 @@ var (
 	ErrIntOverflowAppStats   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_02e0c72cac47fa1c) }
+func init() { proto.RegisterFile("roachpb/app_stats.proto", fileDescriptor_app_stats_1e7bd1c14de5d1e0) }
 
-var fileDescriptor_app_stats_02e0c72cac47fa1c = []byte{
+var fileDescriptor_app_stats_1e7bd1c14de5d1e0 = []byte{
 	// 1145 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0xcd, 0x6e, 0x23, 0x45,
 	0x10, 0xce, 0xf8, 0x27, 0xb6, 0xcb, 0x76, 0xb2, 0x3b, 0xfb, 0x37, 0x58, 0x91, 0x1d, 0xac, 0x5d,

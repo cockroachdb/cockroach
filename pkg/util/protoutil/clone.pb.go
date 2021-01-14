@@ -31,7 +31,7 @@ func (m *RecursiveAndUncloneable) Reset()         { *m = RecursiveAndUncloneable
 func (m *RecursiveAndUncloneable) String() string { return proto.CompactTextString(m) }
 func (*RecursiveAndUncloneable) ProtoMessage()    {}
 func (*RecursiveAndUncloneable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_clone_96c900215ff8e4e9, []int{0}
+	return fileDescriptor_clone_e4042f116845b24f, []int{0}
 }
 func (m *RecursiveAndUncloneable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -350,9 +350,9 @@ var (
 	ErrIntOverflowClone   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("util/protoutil/clone.proto", fileDescriptor_clone_96c900215ff8e4e9) }
+func init() { proto.RegisterFile("util/protoutil/clone.proto", fileDescriptor_clone_e4042f116845b24f) }
 
-var fileDescriptor_clone_96c900215ff8e4e9 = []byte{
+var fileDescriptor_clone_e4042f116845b24f = []byte{
 	// 226 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x2d, 0xc9, 0xcc,
 	0xd1, 0x2f, 0x28, 0xca, 0x2f, 0xc9, 0x07, 0xb3, 0x92, 0x73, 0xf2, 0xf3, 0x52, 0xf5, 0xc0, 0x7c,

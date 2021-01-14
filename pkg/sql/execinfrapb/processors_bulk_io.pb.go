@@ -72,7 +72,7 @@ func (x *FileCompression) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (FileCompression) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{0}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{0}
 }
 
 type BackfillerSpec_Type int32
@@ -111,7 +111,7 @@ func (x *BackfillerSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{0, 0}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{0, 0}
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".
@@ -143,7 +143,7 @@ func (m *BackfillerSpec) Reset()         { *m = BackfillerSpec{} }
 func (m *BackfillerSpec) String() string { return proto.CompactTextString(m) }
 func (*BackfillerSpec) ProtoMessage()    {}
 func (*BackfillerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{0}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{0}
 }
 func (m *BackfillerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -183,7 +183,7 @@ func (m *JobProgress) Reset()         { *m = JobProgress{} }
 func (m *JobProgress) String() string { return proto.CompactTextString(m) }
 func (*JobProgress) ProtoMessage()    {}
 func (*JobProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{1}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{1}
 }
 func (m *JobProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -246,7 +246,7 @@ func (m *ReadImportDataSpec) Reset()         { *m = ReadImportDataSpec{} }
 func (m *ReadImportDataSpec) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec) ProtoMessage()    {}
 func (*ReadImportDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{2}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{2}
 }
 func (m *ReadImportDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -284,7 +284,7 @@ func (m *ReadImportDataSpec_ImportTable) Reset()         { *m = ReadImportDataSp
 func (m *ReadImportDataSpec_ImportTable) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec_ImportTable) ProtoMessage()    {}
 func (*ReadImportDataSpec_ImportTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{2, 0}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{2, 0}
 }
 func (m *ReadImportDataSpec_ImportTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -318,7 +318,7 @@ func (m *StreamIngestionDataSpec) Reset()         { *m = StreamIngestionDataSpec
 func (m *StreamIngestionDataSpec) String() string { return proto.CompactTextString(m) }
 func (*StreamIngestionDataSpec) ProtoMessage()    {}
 func (*StreamIngestionDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{3}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{3}
 }
 func (m *StreamIngestionDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -364,7 +364,7 @@ func (m *BackupDataSpec) Reset()         { *m = BackupDataSpec{} }
 func (m *BackupDataSpec) String() string { return proto.CompactTextString(m) }
 func (*BackupDataSpec) ProtoMessage()    {}
 func (*BackupDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{4}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{4}
 }
 func (m *BackupDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -403,7 +403,7 @@ func (m *RestoreSpanEntry) Reset()         { *m = RestoreSpanEntry{} }
 func (m *RestoreSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*RestoreSpanEntry) ProtoMessage()    {}
 func (*RestoreSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{5}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{5}
 }
 func (m *RestoreSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -441,7 +441,7 @@ func (m *RestoreDataSpec) Reset()         { *m = RestoreDataSpec{} }
 func (m *RestoreDataSpec) String() string { return proto.CompactTextString(m) }
 func (*RestoreDataSpec) ProtoMessage()    {}
 func (*RestoreDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{6}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{6}
 }
 func (m *RestoreDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -475,7 +475,7 @@ func (m *SplitAndScatterSpec) Reset()         { *m = SplitAndScatterSpec{} }
 func (m *SplitAndScatterSpec) String() string { return proto.CompactTextString(m) }
 func (*SplitAndScatterSpec) ProtoMessage()    {}
 func (*SplitAndScatterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{7}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{7}
 }
 func (m *SplitAndScatterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -508,7 +508,7 @@ func (m *SplitAndScatterSpec_RestoreEntryChunk) Reset()         { *m = SplitAndS
 func (m *SplitAndScatterSpec_RestoreEntryChunk) String() string { return proto.CompactTextString(m) }
 func (*SplitAndScatterSpec_RestoreEntryChunk) ProtoMessage()    {}
 func (*SplitAndScatterSpec_RestoreEntryChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{7, 0}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{7, 0}
 }
 func (m *SplitAndScatterSpec_RestoreEntryChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -555,7 +555,7 @@ func (m *CSVWriterSpec) Reset()         { *m = CSVWriterSpec{} }
 func (m *CSVWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*CSVWriterSpec) ProtoMessage()    {}
 func (*CSVWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{8}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{8}
 }
 func (m *CSVWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -590,7 +590,7 @@ func (m *BulkRowWriterSpec) Reset()         { *m = BulkRowWriterSpec{} }
 func (m *BulkRowWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*BulkRowWriterSpec) ProtoMessage()    {}
 func (*BulkRowWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_bulk_io_c5f06ccc7e921266, []int{9}
+	return fileDescriptor_processors_bulk_io_cc3b09b6f09aacff, []int{9}
 }
 func (m *BulkRowWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -4132,10 +4132,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_c5f06ccc7e921266)
+	proto.RegisterFile("sql/execinfrapb/processors_bulk_io.proto", fileDescriptor_processors_bulk_io_cc3b09b6f09aacff)
 }
 
-var fileDescriptor_processors_bulk_io_c5f06ccc7e921266 = []byte{
+var fileDescriptor_processors_bulk_io_cc3b09b6f09aacff = []byte{
 	// 1759 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x58, 0xcf, 0x6e, 0x1b, 0xc7,
 	0x19, 0xd7, 0xf2, 0x9f, 0xc8, 0x8f, 0x96, 0xb4, 0x9a, 0x38, 0xc9, 0x56, 0x40, 0x25, 0x81, 0x89,

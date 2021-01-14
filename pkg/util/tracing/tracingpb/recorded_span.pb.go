@@ -39,7 +39,7 @@ func (m *LogRecord) Reset()         { *m = LogRecord{} }
 func (m *LogRecord) String() string { return proto.CompactTextString(m) }
 func (*LogRecord) ProtoMessage()    {}
 func (*LogRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_00644d603767e262, []int{0}
+	return fileDescriptor_recorded_span_91eb39344bb7b1f1, []int{0}
 }
 func (m *LogRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -73,7 +73,7 @@ func (m *LogRecord_Field) Reset()         { *m = LogRecord_Field{} }
 func (m *LogRecord_Field) String() string { return proto.CompactTextString(m) }
 func (*LogRecord_Field) ProtoMessage()    {}
 func (*LogRecord_Field) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_00644d603767e262, []int{0, 0}
+	return fileDescriptor_recorded_span_91eb39344bb7b1f1, []int{0, 0}
 }
 func (m *LogRecord_Field) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -142,7 +142,7 @@ type RecordedSpan struct {
 func (m *RecordedSpan) Reset()      { *m = RecordedSpan{} }
 func (*RecordedSpan) ProtoMessage() {}
 func (*RecordedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_00644d603767e262, []int{1}
+	return fileDescriptor_recorded_span_91eb39344bb7b1f1, []int{1}
 }
 func (m *RecordedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -185,7 +185,7 @@ func (m *NormalizedSpan) Reset()         { *m = NormalizedSpan{} }
 func (m *NormalizedSpan) String() string { return proto.CompactTextString(m) }
 func (*NormalizedSpan) ProtoMessage()    {}
 func (*NormalizedSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_recorded_span_00644d603767e262, []int{2}
+	return fileDescriptor_recorded_span_91eb39344bb7b1f1, []int{2}
 }
 func (m *NormalizedSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1828,10 +1828,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_00644d603767e262)
+	proto.RegisterFile("util/tracing/tracingpb/recorded_span.proto", fileDescriptor_recorded_span_91eb39344bb7b1f1)
 }
 
-var fileDescriptor_recorded_span_00644d603767e262 = []byte{
+var fileDescriptor_recorded_span_91eb39344bb7b1f1 = []byte{
 	// 668 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x93, 0xcd, 0x6e, 0xd3, 0x4e,
 	0x14, 0xc5, 0xe3, 0xc4, 0xf9, 0xba, 0x89, 0xfa, 0xaf, 0xe6, 0xdf, 0x85, 0x1b, 0x21, 0xbb, 0x2a,

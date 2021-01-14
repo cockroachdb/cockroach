@@ -431,7 +431,7 @@ func (x *Family) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Family) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{0}
+	return fileDescriptor_types_82a2d44015c86700, []int{0}
 }
 
 // IntervalDurationType represents a duration that can be used
@@ -495,7 +495,7 @@ func (x *IntervalDurationType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (IntervalDurationType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{1}
+	return fileDescriptor_types_82a2d44015c86700, []int{1}
 }
 
 // IntervalDurationField represents precisions in intervals which are
@@ -517,7 +517,7 @@ func (m *IntervalDurationField) Reset()         { *m = IntervalDurationField{} }
 func (m *IntervalDurationField) String() string { return proto.CompactTextString(m) }
 func (*IntervalDurationField) ProtoMessage()    {}
 func (*IntervalDurationField) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{0}
+	return fileDescriptor_types_82a2d44015c86700, []int{0}
 }
 func (m *IntervalDurationField) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -552,7 +552,7 @@ func (m *GeoMetadata) Reset()         { *m = GeoMetadata{} }
 func (m *GeoMetadata) String() string { return proto.CompactTextString(m) }
 func (*GeoMetadata) ProtoMessage()    {}
 func (*GeoMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{1}
+	return fileDescriptor_types_82a2d44015c86700, []int{1}
 }
 func (m *GeoMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -590,7 +590,7 @@ func (m *PersistentUserDefinedTypeMetadata) Reset()         { *m = PersistentUse
 func (m *PersistentUserDefinedTypeMetadata) String() string { return proto.CompactTextString(m) }
 func (*PersistentUserDefinedTypeMetadata) ProtoMessage()    {}
 func (*PersistentUserDefinedTypeMetadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{2}
+	return fileDescriptor_types_82a2d44015c86700, []int{2}
 }
 func (m *PersistentUserDefinedTypeMetadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -618,7 +618,7 @@ var xxx_messageInfo_PersistentUserDefinedTypeMetadata proto.InternalMessageInfo
 func (m *T) Reset()      { *m = T{} }
 func (*T) ProtoMessage() {}
 func (*T) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{3}
+	return fileDescriptor_types_82a2d44015c86700, []int{3}
 }
 func (m *T) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_T.Unmarshal(m, b)
@@ -709,7 +709,7 @@ func (m *InternalType) Reset()         { *m = InternalType{} }
 func (m *InternalType) String() string { return proto.CompactTextString(m) }
 func (*InternalType) ProtoMessage()    {}
 func (*InternalType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_39f249fb6e7f534b, []int{4}
+	return fileDescriptor_types_82a2d44015c86700, []int{4}
 }
 func (m *InternalType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1877,9 +1877,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_39f249fb6e7f534b) }
+func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_82a2d44015c86700) }
 
-var fileDescriptor_types_39f249fb6e7f534b = []byte{
+var fileDescriptor_types_82a2d44015c86700 = []byte{
 	// 1119 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0xbf, 0x6f, 0xdb, 0x56,
 	0x10, 0x26, 0xad, 0x1f, 0x96, 0x4e, 0xbf, 0xe8, 0x17, 0x2b, 0x66, 0x3c, 0x88, 0x8a, 0xd0, 0x22,

@@ -44,7 +44,7 @@ func (x ProtectionMode) String() string {
 	return proto.EnumName(ProtectionMode_name, int32(x))
 }
 func (ProtectionMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_protectedts_5535080d2f6ed5b9, []int{0}
+	return fileDescriptor_protectedts_617050e91c41f7f2, []int{0}
 }
 
 // Metadata is the system metadata. The metadata is stored explicitly and all
@@ -73,7 +73,7 @@ func (m *Metadata) Reset()         { *m = Metadata{} }
 func (m *Metadata) String() string { return proto.CompactTextString(m) }
 func (*Metadata) ProtoMessage()    {}
 func (*Metadata) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protectedts_5535080d2f6ed5b9, []int{0}
+	return fileDescriptor_protectedts_617050e91c41f7f2, []int{0}
 }
 func (m *Metadata) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -132,7 +132,7 @@ func (m *Record) Reset()         { *m = Record{} }
 func (m *Record) String() string { return proto.CompactTextString(m) }
 func (*Record) ProtoMessage()    {}
 func (*Record) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protectedts_5535080d2f6ed5b9, []int{1}
+	return fileDescriptor_protectedts_617050e91c41f7f2, []int{1}
 }
 func (m *Record) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -167,7 +167,7 @@ func (m *State) Reset()         { *m = State{} }
 func (m *State) String() string { return proto.CompactTextString(m) }
 func (*State) ProtoMessage()    {}
 func (*State) Descriptor() ([]byte, []int) {
-	return fileDescriptor_protectedts_5535080d2f6ed5b9, []int{2}
+	return fileDescriptor_protectedts_617050e91c41f7f2, []int{2}
 }
 func (m *State) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1023,10 +1023,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/protectedts/ptpb/protectedts.proto", fileDescriptor_protectedts_5535080d2f6ed5b9)
+	proto.RegisterFile("kv/kvserver/protectedts/ptpb/protectedts.proto", fileDescriptor_protectedts_617050e91c41f7f2)
 }
 
-var fileDescriptor_protectedts_5535080d2f6ed5b9 = []byte{
+var fileDescriptor_protectedts_617050e91c41f7f2 = []byte{
 	// 555 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x53, 0xcf, 0x8f, 0xd2, 0x40,
 	0x14, 0x6e, 0xa1, 0x40, 0x19, 0x74, 0xa3, 0x13, 0x8d, 0x0d, 0x6a, 0x4b, 0x48, 0x34, 0xe8, 0xa1,

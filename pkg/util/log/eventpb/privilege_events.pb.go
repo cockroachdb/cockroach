@@ -35,7 +35,7 @@ func (m *CommonSQLPrivilegeEventDetails) Reset()         { *m = CommonSQLPrivile
 func (m *CommonSQLPrivilegeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLPrivilegeEventDetails) ProtoMessage()    {}
 func (*CommonSQLPrivilegeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{0}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{0}
 }
 func (m *CommonSQLPrivilegeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -74,7 +74,7 @@ func (m *ChangeDatabasePrivilege) Reset()         { *m = ChangeDatabasePrivilege
 func (m *ChangeDatabasePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeDatabasePrivilege) ProtoMessage()    {}
 func (*ChangeDatabasePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{1}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{1}
 }
 func (m *ChangeDatabasePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -113,7 +113,7 @@ func (m *ChangeTablePrivilege) Reset()         { *m = ChangeTablePrivilege{} }
 func (m *ChangeTablePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTablePrivilege) ProtoMessage()    {}
 func (*ChangeTablePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{2}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{2}
 }
 func (m *ChangeTablePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -152,7 +152,7 @@ func (m *ChangeSchemaPrivilege) Reset()         { *m = ChangeSchemaPrivilege{} }
 func (m *ChangeSchemaPrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeSchemaPrivilege) ProtoMessage()    {}
 func (*ChangeSchemaPrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{3}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{3}
 }
 func (m *ChangeSchemaPrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -191,7 +191,7 @@ func (m *ChangeTypePrivilege) Reset()         { *m = ChangeTypePrivilege{} }
 func (m *ChangeTypePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTypePrivilege) ProtoMessage()    {}
 func (*ChangeTypePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{4}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{4}
 }
 func (m *ChangeTypePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -230,7 +230,7 @@ func (m *AlterDatabaseOwner) Reset()         { *m = AlterDatabaseOwner{} }
 func (m *AlterDatabaseOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseOwner) ProtoMessage()    {}
 func (*AlterDatabaseOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{5}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{5}
 }
 func (m *AlterDatabaseOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -269,7 +269,7 @@ func (m *AlterSchemaOwner) Reset()         { *m = AlterSchemaOwner{} }
 func (m *AlterSchemaOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterSchemaOwner) ProtoMessage()    {}
 func (*AlterSchemaOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{6}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{6}
 }
 func (m *AlterSchemaOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -308,7 +308,7 @@ func (m *AlterTypeOwner) Reset()         { *m = AlterTypeOwner{} }
 func (m *AlterTypeOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterTypeOwner) ProtoMessage()    {}
 func (*AlterTypeOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{7}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{7}
 }
 func (m *AlterTypeOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -347,7 +347,7 @@ func (m *AlterTableOwner) Reset()         { *m = AlterTableOwner{} }
 func (m *AlterTableOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterTableOwner) ProtoMessage()    {}
 func (*AlterTableOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d0155a7b365833c5, []int{8}
+	return fileDescriptor_privilege_events_d93131cacd196a45, []int{8}
 }
 func (m *AlterTableOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2611,10 +2611,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_privilege_events_d0155a7b365833c5)
+	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_privilege_events_d93131cacd196a45)
 }
 
-var fileDescriptor_privilege_events_d0155a7b365833c5 = []byte{
+var fileDescriptor_privilege_events_d93131cacd196a45 = []byte{
 	// 583 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0x41, 0x6f, 0x12, 0x4f,
 	0x14, 0xc0, 0x77, 0x67, 0xff, 0x6d, 0xff, 0xbc, 0xd6, 0xaa, 0x63, 0x1b, 0x09, 0x89, 0x4b, 0xb3,

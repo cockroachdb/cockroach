@@ -85,7 +85,7 @@ func (x LeaseState) String() string {
 	return proto.EnumName(LeaseState_name, int32(x))
 }
 func (LeaseState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_019eb0d13224e9d6, []int{0}
+	return fileDescriptor_lease_status_d34a6264c23a8b82, []int{0}
 }
 
 // LeaseStatus holds the lease state, the timestamp at which the state
@@ -106,7 +106,7 @@ func (m *LeaseStatus) Reset()         { *m = LeaseStatus{} }
 func (m *LeaseStatus) String() string { return proto.CompactTextString(m) }
 func (*LeaseStatus) ProtoMessage()    {}
 func (*LeaseStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_019eb0d13224e9d6, []int{0}
+	return fileDescriptor_lease_status_d34a6264c23a8b82, []int{0}
 }
 func (m *LeaseStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -487,10 +487,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/lease_status.proto", fileDescriptor_lease_status_019eb0d13224e9d6)
+	proto.RegisterFile("kv/kvserver/kvserverpb/lease_status.proto", fileDescriptor_lease_status_d34a6264c23a8b82)
 }
 
-var fileDescriptor_lease_status_019eb0d13224e9d6 = []byte{
+var fileDescriptor_lease_status_d34a6264c23a8b82 = []byte{
 	// 379 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0xcf, 0x6a, 0xea, 0x40,
 	0x18, 0xc5, 0x33, 0xfe, 0xbb, 0xd7, 0x11, 0x24, 0x0c, 0x77, 0x11, 0x84, 0x3b, 0xca, 0x5d, 0x79,
