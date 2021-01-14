@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: CockroachDB Community Forum
+    url: https://forum.cockroachlabs.com/
+    about: "For general questions about CockroachDB"
+  - name: Enterprise Support
+    url: https://support.cockroachlabs.com
+    about: "Enterprise Support"
