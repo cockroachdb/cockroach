@@ -14,8 +14,8 @@ import "testing"
 
 func BenchmarkSystemDatabaseQueries(b *testing.B) {
 	tests := []RoundTripBenchTestCase{
-		// This query performs 2 lookups: getting the descriptor ID by name, then
-		// fetching the system table descriptor.
+		// This query performs 1-2 lookups: getting the descriptor ID by name, then
+		// fetching the system table descriptor. The descriptor is then cached.
 		{
 			name: "select system.users with schema name",
 			stmt: `SELECT username, "hashedPassword" FROM system.public.users WHERE username = 'root'`,
@@ -26,7 +26,7 @@ func BenchmarkSystemDatabaseQueries(b *testing.B) {
 			name: "select system.users without schema name",
 			stmt: `SELECT username, "hashedPassword" FROM system.users WHERE username = 'root'`,
 		},
-		// This query performs 0 extra lookup since the name resolution logic does
+		// This query performs 0 extra lookups since the name resolution logic does
 		// not try to resolve `"".system.users` and instead resolves
 		//`system.public.users` right away.
 		{
