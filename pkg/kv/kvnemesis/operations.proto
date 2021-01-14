@@ -40,7 +40,8 @@ message ClosureTxnOperation {
 
 message GetOperation {
   bytes key = 1;
-  Result result = 2 [(gogoproto.nullable) = false];
+  bool for_update = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message ScanOperation {

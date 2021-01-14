@@ -61,7 +61,7 @@ func TestApplier(t *testing.T) {
 	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // ([], nil)`)
 
 	check(t, step(put(`a`, `1`)), `db0.Put(ctx, "a", 1) // nil`)
-	check(t, step(get(`a`)), `db1.Get(ctx, "a") // ("1", nil)`)
+	check(t, step(getForUpdate(`a`)), `db1.GetForUpdate(ctx, "a") // ("1", nil)`)
 	check(t, step(scanForUpdate(`a`, `c`)), `db0.ScanForUpdate(ctx, "a", "c", 0) // (["a":"1"], nil)`)
 
 	check(t, step(put(`b`, `2`)), `db1.Put(ctx, "b", 2) // nil`)
@@ -82,11 +82,11 @@ func TestApplier(t *testing.T) {
   db1.Run(ctx, b) // nil
 }
 `)
-	checkErr(t, step(batch(put(`b`, `2`), get(`a`), scanForUpdate(`a`, `c`))), `
+	checkErr(t, step(batch(put(`b`, `2`), getForUpdate(`a`), scanForUpdate(`a`, `c`))), `
 {
   b := &Batch{}
   b.Put(ctx, "b", 2) // context canceled
-  b.Get(ctx, "a") // (nil, context canceled)
+  b.GetForUpdate(ctx, "a") // (nil, context canceled)
   b.ScanForUpdate(ctx, "a", "c") // (nil, context canceled)
   db0.Run(ctx, b) // context canceled
 }

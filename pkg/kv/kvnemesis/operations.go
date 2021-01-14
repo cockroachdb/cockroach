@@ -165,7 +165,11 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Get(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	methodName := `Get`
+	if op.ForUpdate {
+		methodName = `GetForUpdate`
+	}
+	fmt.Fprintf(w, `%s.%s(ctx, %s)`, fctx.receiver, methodName, roachpb.Key(op.Key))
 	switch op.Result.Type {
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *op.Result.Err)
