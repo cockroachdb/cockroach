@@ -164,7 +164,7 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 		},
 	}
 
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "system-log-gc", func(ctx context.Context) {
 		period := systemLogGCPeriod
 		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
 			period = storeKnobs.SystemLogsGCPeriod
@@ -205,12 +205,12 @@ func (s *Server) startSystemLogsGC(ctx context.Context) {
 				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
 					select {
 					case storeKnobs.SystemLogsGCGCDone <- struct{}{}:
-					case <-s.stopper.ShouldStop():
+					case <-s.stopper.ShouldQuiesce():
 						// Test has finished.
 						return
 					}
 				}
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}

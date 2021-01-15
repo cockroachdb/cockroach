@@ -736,7 +736,7 @@ func (s *Server) PeriodicallyClearSQLStats(
 	stats *sqlStats,
 	reset func(ctx context.Context),
 ) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
 			s.sqlStats.Lock()

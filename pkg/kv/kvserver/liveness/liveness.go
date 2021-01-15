@@ -667,10 +667,10 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 	nl.mu.engines = opts.Engines
 	nl.mu.Unlock()
 
-	opts.Stopper.RunWorker(ctx, func(context.Context) {
+	_ = opts.Stopper.RunAsyncTask(ctx, "liveness-hb", func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("liveness-hb", nil)
-		ctx, cancel := opts.Stopper.WithCancelOnStop(context.Background())
+		ctx, cancel := opts.Stopper.WithCancelOnQuiesce(context.Background())
 		defer cancel()
 		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
 		defer sp.Finish()
@@ -682,7 +682,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 		for {
 			select {
 			case <-nl.heartbeatToken:
-			case <-opts.Stopper.ShouldStop():
+			case <-opts.Stopper.ShouldQuiesce():
 				return
 			}
 			// Give the context a timeout approximately as long as the time we
@@ -719,7 +719,7 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
-			case <-opts.Stopper.ShouldStop():
+			case <-opts.Stopper.ShouldQuiesce():
 				return
 			}
 		}

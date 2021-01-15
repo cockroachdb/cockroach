@@ -72,7 +72,7 @@ type UpdateChecker struct {
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates.
 func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper *stop.Stopper) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "update-checker", func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &u.Settings.SV)
 		nextUpdateCheck := u.StartTime
 
