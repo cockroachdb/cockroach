@@ -235,7 +235,7 @@ func (rs *replicaScanner) waitAndProcess(
 		case repl := <-rs.removed:
 			rs.removeReplica(repl)
 
-		case <-stopper.ShouldStop():
+		case <-stopper.ShouldQuiesce():
 			return true
 		}
 	}
@@ -259,7 +259,7 @@ func (rs *replicaScanner) removeReplica(repl *Replica) {
 // is paced to complete a full scan in approximately the scan interval.
 func (rs *replicaScanner) scanLoop(stopper *stop.Stopper) {
 	ctx := rs.AnnotateCtx(context.Background())
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "scan-loop", func(ctx context.Context) {
 		start := timeutil.Now()
 
 		// waitTimer is reset in each call to waitAndProcess.
@@ -324,7 +324,7 @@ func (rs *replicaScanner) waitEnabled(stopper *stop.Stopper) bool {
 		case repl := <-rs.removed:
 			rs.removeReplica(repl)
 
-		case <-stopper.ShouldStop():
+		case <-stopper.ShouldQuiesce():
 			return true
 		}
 	}

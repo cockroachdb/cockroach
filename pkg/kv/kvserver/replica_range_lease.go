@@ -1117,7 +1117,7 @@ func (r *Replica) redirectOnOrAcquireLease(
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
 						"lease acquisition canceled because context canceled"))
-				case <-r.store.Stopper().ShouldStop():
+				case <-r.store.Stopper().ShouldQuiesce():
 					llHandle.Cancel()
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc(),
 						"lease acquisition canceled because node is stopping"))

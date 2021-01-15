@@ -131,11 +131,10 @@ func (f CloserFn) Close() {
 // stopper has stopped.
 type Stopper struct {
 	quiescer chan struct{}     // Closed when quiescing
-	stopper  chan struct{}     // Closed when stopping
 	stopped  chan struct{}     // Closed when stopped completely
 	onPanic  func(interface{}) // called with recover() on panic on any goroutine
-	stop     sync.WaitGroup    // Incremented for outstanding workers
-	mu       struct {
+
+	mu struct {
 		syncutil.Mutex
 		quiesce   *sync.Cond // Conditional variable to wait for outstanding tasks
 		quiescing bool       // true when Stop() has been called
@@ -174,7 +173,6 @@ func OnPanic(handler func(interface{})) Option {
 func NewStopper(options ...Option) *Stopper {
 	s := &Stopper{
 		quiescer: make(chan struct{}),
-		stopper:  make(chan struct{}),
 		stopped:  make(chan struct{}),
 	}
 
@@ -208,31 +206,18 @@ func (s *Stopper) Recover(ctx context.Context) {
 	}
 }
 
-// RunWorker runs the supplied function as a "worker" to be stopped
-// by the stopper. The function <f> is run in a goroutine.
-func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
-	s.stop.Add(1)
-	go func() {
-		// Remove any associated span; we need to ensure this because the
-		// worker may run longer than the caller which presumably closes
-		// any spans it has created.
-		ctx = tracing.ContextWithSpan(ctx, nil)
-		defer s.Recover(ctx)
-		defer s.stop.Done()
-		f(ctx)
-	}()
-}
-
 // AddCloser adds an object to close after the stopper has been stopped.
 //
 // WARNING: memory resources acquired by this method will stay around for
 // the lifetime of the Stopper. Use with care to avoid leaking memory.
+//
+// A closer that is added while Stop has already been called will be
+// called immediately.
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	select {
-	case <-s.stopper:
-		// Close immediately.
+	case <-s.stopped:
 		c.Close()
 	default:
 		s.mu.closers = append(s.mu.closers, c)
@@ -247,16 +232,6 @@ func (s *Stopper) AddCloser(c Closer) {
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
 	return s.withCancel(ctx, s.mu.qCancels, s.quiescer)
-}
-
-// WithCancelOnStop returns a child context which is canceled when the
-// returned cancel function is called or when the Stopper begins to stop,
-// whichever happens first.
-//
-// Canceling this context releases resources associated with it, so code should
-// call cancel as soon as the operations running in this Context complete.
-func (s *Stopper) WithCancelOnStop(ctx context.Context) (context.Context, func()) {
-	return s.withCancel(ctx, s.mu.sCancels, s.stopper)
 }
 
 func (s *Stopper) withCancel(
@@ -498,7 +473,6 @@ func (s *Stopper) Stop(ctx context.Context) {
 	// panics happen on purpose).
 	if r := recover(); r != nil {
 		go s.Quiesce(ctx)
-		close(s.stopper)
 		s.mu.Lock()
 		for _, c := range s.mu.closers {
 			go c.Close()
@@ -512,10 +486,8 @@ func (s *Stopper) Stop(ctx context.Context) {
 	for _, cancel := range s.mu.sCancels {
 		cancel()
 	}
-	close(s.stopper)
 	s.mu.Unlock()
 
-	s.stop.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, c := range s.mu.closers {
@@ -531,16 +503,6 @@ func (s *Stopper) ShouldQuiesce() <-chan struct{} {
 		return nil
 	}
 	return s.quiescer
-}
-
-// ShouldStop returns a channel which will be closed when Stop() has been
-// invoked and outstanding tasks have quiesced.
-func (s *Stopper) ShouldStop() <-chan struct{} {
-	if s == nil {
-		// A nil stopper will never signal ShouldStop, but will also never panic.
-		return nil
-	}
-	return s.stopper
 }
 
 // IsStopped returns a channel which will be closed after Stop() has

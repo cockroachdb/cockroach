@@ -75,7 +75,7 @@ type versionInfo struct {
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "check-for-updates", func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
 		nextUpdateCheck := s.startTime
 		nextDiagnosticReport := s.startTime

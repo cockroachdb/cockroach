@@ -622,7 +622,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	// RecomputeStats does not see any skew in its MVCC stats when they are
 	// modified concurrently. Note that these writes don't interfere with the
 	// field we modified (SysCount).
-	tc.Stopper().RunWorker(ctx, func(ctx context.Context) {
+	_ = tc.Stopper().RunAsyncTask(ctx, "recompute-loop", func(ctx context.Context) {
 		// This channel terminates the loop early if the test takes more than five
 		// seconds. This is useful for stress race runs in CI where the tight loop
 		// can starve the actual work to be done.

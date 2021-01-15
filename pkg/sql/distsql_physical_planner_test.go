@@ -152,12 +152,12 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	)
 
 	// Start a worker that continuously performs splits in the background.
-	tc.Stopper().RunWorker(context.Background(), func(ctx context.Context) {
+	_ = tc.Stopper().RunAsyncTask(context.Background(), "splitter", func(ctx context.Context) {
 		rng, _ := randutil.NewPseudoRand()
 		cdb := tc.Server(0).DB()
 		for {
 			select {
-			case <-tc.Stopper().ShouldStop():
+			case <-tc.Stopper().ShouldQuiesce():
 				return
 			default:
 				// Split the table at a random row.

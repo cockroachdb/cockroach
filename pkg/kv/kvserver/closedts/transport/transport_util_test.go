@@ -76,7 +76,7 @@ func newTestNotifyee(stopper *stop.Stopper) *TestNotifyee {
 
 func (tn *TestNotifyee) Notify(nodeID roachpb.NodeID) chan<- ctpb.Entry {
 	ch := make(chan ctpb.Entry)
-	tn.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	_ = tn.stopper.RunAsyncTask(context.Background(), "test-notify", func(ctx context.Context) {
 		for entry := range ch {
 			tn.mu.Lock()
 			tn.mu.entries[nodeID] = append(tn.mu.entries[nodeID], entry)

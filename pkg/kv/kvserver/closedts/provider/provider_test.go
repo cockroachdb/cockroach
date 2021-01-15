@@ -59,6 +59,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 		Clock: func(roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
 			select {
 			case <-stopper.ShouldQuiesce():
+				return hlc.Timestamp{}, 0, errors.New("stopping")
 			case <-unblockClockCh:
 			}
 			return hlc.Timestamp{}, ctpb.Epoch(1), errors.New("injected clock error")
@@ -105,7 +106,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 		defer log.Infof(ctx, "done")
 
 		ch := make(chan ctpb.Entry)
-		stopper.RunWorker(ctx, func(ctx context.Context) {
+		_ = stopper.RunAsyncTask(ctx, "subscribe", func(ctx context.Context) {
 			p.Subscribe(ctx, ch)
 		})
 

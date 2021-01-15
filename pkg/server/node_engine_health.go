@@ -29,7 +29,7 @@ func (n *Node) startAssertEngineHealth(
 ) {
 	maxSyncDuration := storage.MaxSyncDuration.Get(&settings.SV)
 	fatalOnExceeded := storage.MaxSyncDurationFatalOnExceeded.Get(&settings.SV)
-	n.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = n.stopper.RunAsyncTask(ctx, "engine-health", func(ctx context.Context) {
 		t := timeutil.NewTimer()
 		t.Reset(0)
 
