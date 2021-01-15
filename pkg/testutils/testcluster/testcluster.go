@@ -50,7 +50,6 @@ type TestCluster struct {
 	Conns           []*gosql.DB
 	stopper         *stop.Stopper
 	replicationMode base.TestClusterReplicationMode
-	scratchRangeKey roachpb.Key
 	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
@@ -730,14 +729,21 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 // kv scratch space (it doesn't overlap system spans or SQL tables). The range
 // is lazily split off on the first call to ScratchRange.
 func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
-	if tc.scratchRangeKey != nil {
-		return tc.scratchRangeKey
-	}
 	scratchKey, err := tc.Servers[0].ScratchRange()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tc.scratchRangeKey = scratchKey
+	return scratchKey
+}
+
+// ScratchRangeWithExpirationLease returns the start key of a span of keyspace
+// suitable for use as kv scratch space and that has an expiration based lease.
+// The range is lazily split off on the first call to ScratchRangeWithExpirationLease.
+func (tc *TestCluster) ScratchRangeWithExpirationLease(t testing.TB) roachpb.Key {
+	scratchKey, err := tc.Servers[0].ScratchRangeWithExpirationLease()
+	if err != nil {
+		t.Fatal(err)
+	}
 	return scratchKey
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestManualReplication(t *testing.T) {
@@ -259,4 +260,26 @@ func TestStopServer(t *testing.T) {
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestExpirationBasedLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRangeWithExpirationLease(t)
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
+	lease, _ := repl.GetLease()
+	require.NotNil(t, lease.Expiration)
+
+	// Verify idempotence of ScratchRangeWithExpirationLease
+	keyAgain := tc.ScratchRangeWithExpirationLease(t)
+	replAgain := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(keyAgain))
+	require.Equal(t, repl, replAgain)
 }
