@@ -388,6 +388,12 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 				continue
 			}
 
+			if rbt := tbDesc.LocalityConfig.GetRegionalByTable(); rbt != nil && rbt.Region == nil {
+				return errors.AssertionFailedf(
+					"invalid call to modify zone configurations without a region",
+				)
+			}
+
 			// Update the zone configuration
 			if err := p.applyZoneConfigFromTableLocalityConfig(
 				ctx,
