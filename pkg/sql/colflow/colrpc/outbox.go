@@ -238,7 +238,8 @@ func (o *Outbox) sendBatches(
 			}
 
 			o.batch = o.Input().Next(o.runnerCtx)
-			if o.batch.Length() == 0 {
+			n := o.batch.Length()
+			if n == 0 {
 				terminatedGracefully = true
 				return
 			}
@@ -248,7 +249,10 @@ func (o *Outbox) sendBatches(
 			if err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox BatchToArrow data serialization error"))
 			}
-			if _, _, err := o.serializer.Serialize(o.scratch.buf, d, o.batch.Length()); err != nil {
+			// We no longer need the batch, so unset it eagerly to allow it to
+			// be garbage-collected sooner.
+			o.batch = nil
+			if _, _, err := o.serializer.Serialize(o.scratch.buf, d, n); err != nil {
 				colexecerror.InternalError(errors.Wrap(err, "Outbox Serialize data error"))
 			}
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
