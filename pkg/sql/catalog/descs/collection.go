@@ -1028,12 +1028,13 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	return desc, nil
 }
 
-// GetMutableTableVersionByID is a variant of sqlbase.getTableDescFromID which returns a mutable
-// table descriptor of the table modified in the same transaction.
+// GetMutableTableByIDDeprecated is a variant of sqlbase.getTableDescFromID
+// which returns a mutable table descriptor of the table modified in the same
+// transaction.
 // Deprecated in favor of GetMutableTableByID.
 // TODO (lucy): Usages should be replaced with GetMutableTableByID, but this
 // needs a careful look at what flags should be passed in at each call site.
-func (tc *Collection) GetMutableTableVersionByID(
+func (tc *Collection) GetMutableTableByIDDeprecated(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
 ) (*tabledesc.Mutable, error) {
 	return tc.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
@@ -1044,23 +1045,22 @@ func (tc *Collection) GetMutableTableVersionByID(
 	})
 }
 
-// GetMutableDescriptorByID returns a mutable implementation of the descriptor
-// with the requested id. An error is returned if no descriptor exists.
-// Deprecated in favor of GetMutableDescriptorByIDWithFlags.
-func (tc *Collection) GetMutableDescriptorByID(
+// GetMutableDescriptorByIDDeprecated returns a mutable implementation of the
+// descriptor with the requested id. An error is returned if no descriptor
+// exists.
+// Deprecated in favor of GetMutableDescriptorByID.
+func (tc *Collection) GetMutableDescriptorByIDDeprecated(
 	ctx context.Context, id descpb.ID, txn *kv.Txn,
 ) (catalog.MutableDescriptor, error) {
-	return tc.GetMutableDescriptorByIDWithFlags(ctx, txn, id, tree.CommonLookupFlags{
+	return tc.GetMutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
 		IncludeOffline: true,
 		IncludeDropped: true,
 	})
 }
 
-// GetMutableDescriptorByIDWithFlags returns a mutable implementation of the
+// GetMutableDescriptorByID returns a mutable implementation of the
 // descriptor with the requested id. An error is returned if no descriptor exists.
-// TODO (lucy): This is meant to replace GetMutableDescriptorByID. Once it does,
-// rename this function.
-func (tc *Collection) GetMutableDescriptorByIDWithFlags(
+func (tc *Collection) GetMutableDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
 ) (catalog.MutableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable descriptor for id %d", id)
@@ -1165,11 +1165,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
 		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
-			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
+			desc, err := tc.GetMutableTypeByIDDeprecated(ctx, txn, id)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetMutableDescriptorByID(ctx, desc.ParentID, txn)
+			dbDesc, err := tc.GetMutableDescriptorByIDDeprecated(ctx, desc.ParentID, txn)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -1394,12 +1394,12 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 
 // User defined type accessors.
 
-// GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID
+// GetMutableTypeByIDDeprecated is the equivalent of GetMutableTableByIDDeprecated
 // but for accessing types.
 // Deprecated in favor of GetMutableTypeByID.
 // TODO (lucy): Usages should be replaced with GetMutableTypeByID, but this
 // needs a careful look at what flags should be passed in at each call site.
-func (tc *Collection) GetMutableTypeVersionByID(
+func (tc *Collection) GetMutableTypeByIDDeprecated(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
 ) (*typedesc.Mutable, error) {
 	return tc.GetMutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{

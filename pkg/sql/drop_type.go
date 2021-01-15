@@ -97,7 +97,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		}
 
 		// Get the array type that needs to be dropped as well.
-		mutArrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeDesc.ArrayTypeID)
+		mutArrayDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, typeDesc.ArrayTypeID)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +135,7 @@ func (p *planner) canDropTypeDesc(
 	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
 		var dependentNames []string
 		for _, id := range desc.ReferencingDescriptorIDs {
-			desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+			desc, err := p.Descriptors().GetMutableTableByIDDeprecated(ctx, id, p.txn)
 			if err != nil {
 				return errors.Wrapf(err, "type has dependent objects")
 			}
@@ -172,7 +172,7 @@ func (n *dropTypeNode) startExec(params runParams) error {
 func (p *planner) addTypeBackReference(
 	ctx context.Context, typeID, ref descpb.ID, jobDesc string,
 ) error {
-	mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+	mutDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, typeID)
 	if err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (p *planner) addTypeBackReference(
 func (p *planner) removeTypeBackReference(
 	ctx context.Context, typeID, ref descpb.ID, jobDesc string,
 ) error {
-	mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+	mutDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, typeID)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
 	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
+		mutDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, id)
 		if err != nil {
 			return nil, err
 		}
@@ -225,7 +225,7 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
 	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
+		mutDesc, err := p.Descriptors().GetMutableTypeByIDDeprecated(ctx, p.txn, id)
 		if err != nil {
 			return nil, err
 		}

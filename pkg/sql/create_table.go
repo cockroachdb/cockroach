@@ -1117,7 +1117,7 @@ func (p *planner) finalizeInterleave(
 		ancestorTable = desc
 	} else {
 		var err error
-		ancestorTable, err = p.Descriptors().GetMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
+		ancestorTable, err = p.Descriptors().GetMutableTableByIDDeprecated(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return err
 		}
