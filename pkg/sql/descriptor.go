@@ -247,10 +247,12 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 	if len(regionConfig.Regions) == 0 {
 		return errors.AssertionFailedf("expected > 0 number of regions in the region config")
 	}
-	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE && len(regionConfig.Regions) < 3 {
-		return pgerror.New(
+	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE &&
+		len(regionConfig.Regions) < minNumRegionsForSurviveRegionGoal {
+		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			"at least 3 regions are required for surviving a region failure",
+			"at least %d regions are required for surviving a region failure",
+			minNumRegionsForSurviveRegionGoal,
 		)
 	}
 	return nil
