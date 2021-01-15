@@ -4032,7 +4032,7 @@ func TestRangeQuiescence(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	pauseNodeLivenessHeartbeatLoopsTC(tc)
+	pauseNodeLivenessHeartbeatLoops(tc)
 	key := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
