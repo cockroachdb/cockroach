@@ -91,7 +91,7 @@ class AxisDomain {
   }
 }
 
-const countIncrementTable = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0];
+const countIncrementTable = [0.01, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0];
 
 // computeNormalizedIncrement computes a human-friendly increment between tick
 // values on an axis with a range of the given size. The provided size is taken
@@ -134,7 +134,11 @@ function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
   // but with a metric prefix for large numbers (i.e. 1000 will display as "1k")
   let unitFormat: (v: number) => string;
   if (Math.floor(increment) !== increment) {
-    unitFormat = d3.format(".1f");
+    if (increment < 0.1) {
+      unitFormat = d3.format(".2f");
+    } else {
+      unitFormat = d3.format(".1f");
+    }
   } else {
     unitFormat = d3.format("s");
   }
@@ -257,7 +261,7 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
 function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomain {
   const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
-  const allDatapoints = resultDatapoints.concat([0, 1]);
+  const allDatapoints = resultDatapoints.concat((_.max(resultDatapoints) == 0 && _.min(resultDatapoints) == 0) ? [0, 1] : [0]);
   const yExtent = d3.extent(allDatapoints);
 
   switch (axisUnits) {
