@@ -1,0 +1,248 @@
+@import "src/core/index.module";
+@import 'src/sortedtable/table.module.scss';
+
+.base-heading {
+  padding: 12px 0;
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+.plan-view-table {
+  @include table-base;
+
+  .plan-view-table__cell {
+    padding: 0;
+  }
+
+  .summary--card__title {
+    font-family: $font-family--base;
+    line-height: 1.6;
+    letter-spacing: -0.2px;
+    color: $popover-color;
+    font-size: 16px;
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 0;
+    text-transform: none;
+  }
+
+  &__row {
+    &--body {
+      border-top: none;
+
+      &:hover {
+        background-color: $adminui-white;
+      }
+    }
+  }
+
+  &__tooltip {
+    .hover-tooltip__text {
+      width: 520px;
+      margin-left: 15px;
+    }
+  }
+}
+
+.plan-view-table {
+  &__tooltip {
+    width: 36px;
+    height: 16px;
+    display: inline-block;
+
+
+    text-transform: none;
+    font-weight: normal;
+    white-space: normal;
+    letter-spacing: normal;
+    font-size: 14px;
+  }
+
+  &__tooltip-hover-area {
+    width: 100%;
+    padding: 0px 10px;
+  }
+
+  &__info-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid $tooltip-color;
+    font-size: 12px;
+    line-height: 14px;
+    text-align: center;
+    color: $tooltip-color;
+  }
+
+  .hover-tooltip--hovered &__info-icon {
+    border-color: $body-color;
+    color: $body-color;
+  }
+}
+
+.plan-view {
+  color: $body-color;
+  position: relative;
+
+  .plan-view-container {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+
+    .plan-view-container-scroll {
+      max-height: 400px;
+      overflow-y: scroll;
+    }
+
+    .plan-view-container-directions {
+      text-align: center;
+      cursor: pointer;
+      text-transform: uppercase;
+      color: $main-blue-color;
+      font-size: smaller;
+    }
+  }
+
+  .node-icon {
+    margin: 0 10px 0 0;
+    color: $grey-light;
+  }
+
+  .warning-icon {
+    margin: 0 4px 0 4px;
+    position: relative;
+    top: 3px;
+
+    path {
+      fill: $colors--functional-orange-4;
+    }
+  }
+
+  .warn {
+    position: relative;
+    left: -5px;
+    color: $colors--functional-orange-4;
+    background-color: rgba(209, 135, 55, 0.06);
+    border-radius: 2px;
+    padding: 2px;
+  }
+
+  .nodeDetails {
+    position: relative;
+    padding: 6px 0;
+    border: 1px solid transparent;
+
+    b {
+      font-family: $font-family--semi-bold;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.67;
+      letter-spacing: 0.3px;
+      color: $text-color;
+    }
+  }
+
+  .nodeAttributes {
+    color: $adminui-grey-2;
+    padding: 7px 16px 0px 18px;
+    margin-left: 3px;
+    border-left: 1px solid $grey-light;
+    font-family: $font-family--monospace;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.83;
+
+    .nodeAttributeKey {
+      color: $colors--primary-green-3;
+    }
+  }
+
+  ul {
+    padding: 0;
+    margin: 0;
+
+    li {
+      padding: 0;
+      margin: 0;
+      position: relative;
+      list-style-type: none;
+
+      &:not(:first-child):after {
+        content: '';
+        width: 1px;
+        height: 19px;
+        background-color: $grey-light;
+        position: absolute;
+        top: -10px;
+        left: 4px;
+      }
+
+      ul {
+        padding-left: 27px;
+        position: relative;
+
+        &:last-child {
+          &:before {
+            content: '';
+            width: 28px;
+            height: 29px;
+            position: absolute;
+            border-left: 1px solid $grey-light;
+            border-bottom: 1px solid $grey-light;
+            top: -10px;
+            left: 4px;
+            border-bottom-left-radius: 10px;
+          }
+
+          li {
+            &:before {
+              content: none;
+            }
+
+            &:first-child:after {
+              content: none;
+            }
+          }
+        }
+
+        li {
+          .nodeDetails {
+            margin-left: 12px;
+          }
+
+          &:not(:first-child):after {
+            left: 16px;
+          }
+
+          &:last-child {
+            .nodeAttributes {
+              border-color: transparent;
+            }
+          }
+
+          &:first-child {
+            &:after {
+              content: '';
+              height: 1px;
+              width: 27px;
+              background-color: $grey-light;
+              position: absolute;
+              top: 18px;
+              left: -22px;
+            }
+          }
+
+          &:before {
+            content: '';
+            width: 1px;
+            height: 100%;
+            background-color: $grey-light;
+            position: absolute;
+            top: -10px;
+            left: -23px;
+          }
+        }
+      }
+    }
+  }
+}

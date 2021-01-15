@@ -1,0 +1,40 @@
+@import '../../core/index.module.scss';
+@import '../table.module.scss';
+
+.row-wrapper {
+  @include table-base;
+
+  &__row {
+    height: 70px;
+    border-top: 1px solid transparent;
+    border-bottom: 1px solid $colors--neutral-3;
+    .cell--show-on-hover {
+      visibility: hidden;
+    }
+    &:hover .cell--show-on-hover {
+      visibility: visible;
+    }
+    &.drawer-active {
+      background-color: $colors--background;
+      .cl-table-link__tooltip {
+        color: $colors--primary-blue-3;
+        text-decoration: underline;
+      }
+    }
+    &--expandable {
+      border-top: none;
+      cursor: pointer;
+    }
+  }
+
+  &__cell__expansion-control {
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+/Edge */
+    user-select: none; /* Standard */
+
+    div {
+      width: 15px;
+    }
+  }
+}

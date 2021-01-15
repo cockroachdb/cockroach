@@ -1,0 +1,91 @@
+@import '../core/index.module.scss';
+
+$table-cell-border: 1px solid $colors--neutral-2;
+$stats-table-td--fg: $colors--neutral-6;
+$stats-table-th--bg: $colors--neutral-0;
+$stats-table-tr--bg: $colors--neutral-0;
+
+@mixin table-base {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: $font-family--base;
+  font-weight: 300;
+  line-height: 22px;
+  font-size: $font-size--medium;
+  vertical-align: top;
+  color: $colors--neutral-7;
+
+  .__cell--header {
+    border-right: 1px solid $colors--neutral-2;
+    width: 250px;
+  }
+  
+  &__row {
+    &--body {
+      letter-spacing: 0.33px;
+      background-color: $colors--neutral-0;
+      &:hover {
+        background-color: $colors--background;
+      }
+    }
+
+    &--header {
+      padding: 20px;
+      font-size: $font-size--medium;
+      font-weight: bold;
+      letter-spacing: 2px;
+      text-align: left;
+      white-space: nowrap;
+      background-color: $stats-table-th--bg;
+    }
+
+    &--summary {
+      background-color: $colors--background;
+      font-family: $font-family--semi-bold;
+      font-size: $font-size--medium;
+      font-weight: bold;
+      line-height: 1.71;
+      letter-spacing: 0.1px;
+      color: $colors--neutral-7;
+      .bar-chart .label {
+        font-family: $font-family--semi-bold;
+        font-size: $font-size--medium;
+        font-weight: bold;
+        line-height: 1.71;
+        letter-spacing: 0.1px;
+        color: $colors--neutral-7;
+      }
+    }
+  }
+
+  &__cell {
+    padding: 15px 22px 15px 11px;
+    border: none;
+    font-weight: inherit;
+    font-family: $font-family--base;
+    font-style: normal;
+    font-weight: $font-weight--light;
+    font-size: $font-size--medium;
+    line-height: $line-height--small;
+    letter-spacing: 0.3px;
+
+    a {
+      color: $adminui-grey-1;
+      text-decoration: none;
+      cursor: pointer;
+
+      &:hover {
+        color: $colors--link;
+        text-decoration: underline;
+      }
+    }
+
+    &--filler {
+      width: 100%;
+    }
+
+    &--right-aligned-stat {
+      text-align: right;
+    }
+  }
+}
