@@ -902,7 +902,7 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			// Launch a goroutine to continue consuming results from the job.
 			if resultsFromJob != nil {
-				go sj.registry.stopper.RunWorker(ctx, func(ctx context.Context) {
+				sj.registry.stopper.RunWorker(ctx, func(ctx context.Context) {
 					for {
 						select {
 						case <-errCh:
