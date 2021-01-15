@@ -50,6 +50,10 @@ func RequestLease(
 	// newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 
+	// NOTE: we use the range's current lease as prevLease instead of
+	// args.PrevLease so that we can detect lease requests that will
+	// inevitably fail early and reject them with a detailed
+	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 	rErr := &roachpb.LeaseRejectedError{
 		Existing:  prevLease,
