@@ -90,7 +90,7 @@ type Reporter struct {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "diagnostics", func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
 

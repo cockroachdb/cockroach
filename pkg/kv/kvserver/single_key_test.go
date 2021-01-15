@@ -104,7 +104,7 @@ func TestSingleKey(t *testing.T) {
 	var results []result
 	for len(results) < num {
 		select {
-		case <-tc.Stopper().ShouldStop():
+		case <-tc.Stopper().ShouldQuiesce():
 			t.Fatalf("interrupted")
 		case r := <-resultCh:
 			if r.err != nil {

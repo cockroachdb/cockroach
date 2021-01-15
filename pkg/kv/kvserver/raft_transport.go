@@ -190,7 +190,7 @@ func NewRaftTransport(
 	}
 	if t.stopper != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
-		t.stopper.RunWorker(ctx, func(ctx context.Context) {
+		_ = t.stopper.RunAsyncTask(ctx, "raft-transport", func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -254,7 +254,7 @@ func NewRaftTransport(
 					}
 					lastTime = now
 					log.Infof(ctx, "stats:\n%s", buf.String())
-				case <-t.stopper.ShouldStop():
+				case <-t.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -330,52 +330,50 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.stopper.RunTask(
+	if err := t.stopper.RunAsyncTask(
 		stream.Context(), "storage.RaftTransport: processing batch",
 		func(ctx context.Context) {
-			t.stopper.RunWorker(ctx, func(ctx context.Context) {
-				errCh <- func() error {
-					var stats *raftTransportStats
-					stream := &lockedRaftMessageResponseStream{wrapped: stream}
-					for {
-						batch, err := stream.Recv()
-						if err != nil {
-							return err
-						}
-						if len(batch.Requests) == 0 {
-							continue
-						}
+			errCh <- func() error {
+				var stats *raftTransportStats
+				stream := &lockedRaftMessageResponseStream{wrapped: stream}
+				for {
+					batch, err := stream.Recv()
+					if err != nil {
+						return err
+					}
+					if len(batch.Requests) == 0 {
+						continue
+					}
 
-						// This code always uses the DefaultClass. Class is primarily a
-						// client construct and the server has no way to determine which
-						// class an inbound connection holds on the client side. Because of
-						// this we associate all server receives and sends with the
-						// DefaultClass. This data is exclusively used to print a debug
-						// log message periodically. Using this policy may lead to a
-						// DefaultClass log line showing a high rate of server recv but
-						// a low rate of client sends if most of the traffic is due to
-						// system ranges.
-						//
-						// TODO(ajwerner): consider providing transport metadata to inform
-						// the server of the connection class or keep shared stats for all
-						// connection with a host.
-						if stats == nil {
-							stats = t.getStats(batch.Requests[0].FromReplica.NodeID, rpc.DefaultClass)
-						}
+					// This code always uses the DefaultClass. Class is primarily a
+					// client construct and the server has no way to determine which
+					// class an inbound connection holds on the client side. Because of
+					// this we associate all server receives and sends with the
+					// DefaultClass. This data is exclusively used to print a debug
+					// log message periodically. Using this policy may lead to a
+					// DefaultClass log line showing a high rate of server recv but
+					// a low rate of client sends if most of the traffic is due to
+					// system ranges.
+					//
+					// TODO(ajwerner): consider providing transport metadata to inform
+					// the server of the connection class or keep shared stats for all
+					// connection with a host.
+					if stats == nil {
+						stats = t.getStats(batch.Requests[0].FromReplica.NodeID, rpc.DefaultClass)
+					}
 
-						for i := range batch.Requests {
-							req := &batch.Requests[i]
-							atomic.AddInt64(&stats.serverRecv, 1)
-							if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
-								atomic.AddInt64(&stats.serverSent, 1)
-								if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
-									return err
-								}
+					for i := range batch.Requests {
+						req := &batch.Requests[i]
+						atomic.AddInt64(&stats.serverRecv, 1)
+						if pErr := t.handleRaftRequest(ctx, req, stream); pErr != nil {
+							atomic.AddInt64(&stats.serverSent, 1)
+							if err := stream.Send(newRaftMessageResponse(req, pErr)); err != nil {
+								return err
 							}
 						}
 					}
-				}()
-			})
+				}
+			}()
 		}); err != nil {
 		return err
 	}
@@ -417,7 +415,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	select {
-	case <-t.stopper.ShouldStop():
+	case <-t.stopper.ShouldQuiesce():
 		return nil
 	case err := <-errCh:
 		return err
@@ -448,30 +446,29 @@ func (t *RaftTransport) processQueue(
 ) error {
 	errCh := make(chan error, 1)
 
-	// Starting workers in a task prevents data races during shutdown.
-	if err := t.stopper.RunTask(
-		stream.Context(), "storage.RaftTransport: processing queue",
+	ctx := stream.Context()
+
+	if err := t.stopper.RunAsyncTask(
+		ctx, "storage.RaftTransport: processing queue",
 		func(ctx context.Context) {
-			t.stopper.RunWorker(ctx, func(ctx context.Context) {
-				errCh <- func() error {
-					for {
-						resp, err := stream.Recv()
-						if err != nil {
-							return err
-						}
-						atomic.AddInt64(&stats.clientRecv, 1)
-						handler, ok := t.getHandler(resp.ToReplica.StoreID)
-						if !ok {
-							log.Warningf(ctx, "no handler found for store %s in response %s",
-								resp.ToReplica.StoreID, resp)
-							continue
-						}
-						if err := handler.HandleRaftResponse(ctx, resp); err != nil {
-							return err
-						}
+			errCh <- func() error {
+				for {
+					resp, err := stream.Recv()
+					if err != nil {
+						return err
 					}
-				}()
-			})
+					atomic.AddInt64(&stats.clientRecv, 1)
+					handler, ok := t.getHandler(resp.ToReplica.StoreID)
+					if !ok {
+						log.Warningf(ctx, "no handler found for store %s in response %s",
+							resp.ToReplica.StoreID, resp)
+						continue
+					}
+					if err := handler.HandleRaftResponse(ctx, resp); err != nil {
+						return err
+					}
+				}
+			}()
 		}); err != nil {
 		return err
 	}
@@ -482,7 +479,7 @@ func (t *RaftTransport) processQueue(
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.stopper.ShouldStop():
+		case <-t.stopper.ShouldQuiesce():
 			return nil
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
@@ -636,11 +633,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}
-	// Starting workers in a task prevents data races during shutdown.
-	workerTask := func(ctx context.Context) {
-		t.stopper.RunWorker(ctx, worker)
-	}
-	err := t.stopper.RunTask(ctx, "storage.RaftTransport: sending messages", workerTask)
+	err := t.stopper.RunAsyncTask(ctx, "storage.RaftTransport: sending messages", worker)
 	if err != nil {
 		t.queues[class].Delete(int64(toNodeID))
 		return false

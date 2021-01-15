@@ -135,11 +135,8 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	errCh := make(chan error, 1)
 
-	// Starting workers in a task prevents data races during shutdown.
-	if err := s.stopper.RunTask(ctx, "gossip.server: receiver", func(ctx context.Context) {
-		s.stopper.RunWorker(ctx, func(ctx context.Context) {
-			errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
-		})
+	if err := s.stopper.RunAsyncTask(ctx, "gossip receiver", func(ctx context.Context) {
+		errCh <- s.gossipReceiver(ctx, &args, send, stream.Recv)
 	}); err != nil {
 		return err
 	}
@@ -379,7 +376,7 @@ func (s *server) start(addr net.Addr) {
 		broadcast()
 	}, Redundant)
 
-	s.stopper.RunWorker(context.TODO(), func(context.Context) {
+	waitQuiesce := func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 
 		s.mu.Lock()
@@ -387,7 +384,10 @@ func (s *server) start(addr net.Addr) {
 		s.mu.Unlock()
 
 		broadcast()
-	})
+	}
+	if err := s.stopper.RunAsyncTask(context.Background(), "gossip-wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(context.Background())
+	}
 }
 
 func (s *server) status() ServerStatus {

@@ -230,7 +230,7 @@ RETURNING val, sts, node, tb`,
 	for {
 		select {
 		case sem <- struct{}{}:
-		case <-tc.Stopper().ShouldStop():
+		case <-tc.Stopper().ShouldQuiesce():
 			return
 		case <-timer:
 			return

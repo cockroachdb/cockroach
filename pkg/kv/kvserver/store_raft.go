@@ -608,10 +608,12 @@ func (s *Store) processRaft(ctx context.Context) {
 
 	s.scheduler.Start(ctx, s.stopper)
 	// Wait for the scheduler worker goroutines to finish.
-	s.stopper.RunWorker(ctx, s.scheduler.Wait)
+	if err := s.stopper.RunAsyncTask(ctx, "sched-wait", s.scheduler.Wait); err != nil {
+		s.scheduler.Wait(ctx)
+	}
 
-	s.stopper.RunWorker(ctx, s.raftTickLoop)
-	s.stopper.RunWorker(ctx, s.coalescedHeartbeatsLoop)
+	_ = s.stopper.RunAsyncTask(ctx, "sched-tick-loop", s.raftTickLoop)
+	_ = s.stopper.RunAsyncTask(ctx, "coalesced-hb-loop", s.coalescedHeartbeatsLoop)
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.cfg.Transport.Stop(s.StoreID())
 	}))
@@ -646,7 +648,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			s.scheduler.EnqueueRaftTicks(rangeIDs...)
 			s.metrics.RaftTicks.Inc(1)
 
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return
 		}
 	}
@@ -689,7 +691,7 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			s.sendQueuedHeartbeats(ctx)
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return
 		}
 	}

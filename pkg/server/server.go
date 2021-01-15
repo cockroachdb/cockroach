@@ -1041,15 +1041,16 @@ func (s *Server) startPersistingHLCUpperBound(
 		}
 	}
 
-	s.stopper.RunWorker(
+	_ = s.stopper.RunAsyncTask(
 		ctx,
+		"persist-hlc-upper-bound",
 		func(context.Context) {
 			periodicallyPersistHLCUpperBound(
 				s.clock,
 				persistHLCUpperBoundIntervalCh,
 				persistHLCUpperBoundFn,
 				tickerFn,
-				s.stopper.ShouldStop(),
+				s.stopper.ShouldQuiesce(),
 				nil, /* tick callback */
 			)
 		},
@@ -1273,12 +1274,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// loopback handles the HTTP <-> RPC loopback connection.
 	loopback := newLoopbackListener(workersCtx, s.stopper)
 
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+	waitQuiesce := func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		_ = loopback.Close()
-	})
+	}
+	if err := s.stopper.RunAsyncTask(workersCtx, "gw-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(workersCtx)
+	}
 
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
+	_ = s.stopper.RunAsyncTask(workersCtx, "serve-loopback", func(context.Context) {
 		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
 	})
 
@@ -1310,12 +1314,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		if err := conn.Close(); err != nil {
-			log.Ops.Fatalf(workersCtx, "%v", err)
+	{
+		waitQuiesce := func(workersCtx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			// NB: we can't do this as a Closer because (*Server).ServeWith is
+			// running in a worker and usually sits on accept() which unblocks
+			// only when the listener closes. In other words, the listener needs
+			// to close when quiescing starts to allow that worker to shut down.
+			if err := conn.Close(); err != nil {
+				log.Ops.Fatalf(workersCtx, "%v", err)
+			}
 		}
-	})
+		if err := s.stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+			waitQuiesce(workersCtx)
+		}
+	}
 
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
@@ -1840,12 +1853,20 @@ func (s *Server) startListenRPCAndSQL(
 		}
 		// The SQL listener shutdown worker, which closes everything under
 		// the SQL port when the stopper indicates we are shutting down.
-		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		waitQuiesce := func(ctx context.Context) {
 			<-s.stopper.ShouldQuiesce()
+			// NB: we can't do this as a Closer because (*Server).ServeWith is
+			// running in a worker and usually sits on accept() which unblocks
+			// only when the listener closes. In other words, the listener needs
+			// to close when quiescing starts to allow that worker to shut down.
 			if err := pgL.Close(); err != nil {
-				log.Ops.Fatalf(workersCtx, "%v", err)
+				log.Ops.Fatalf(ctx, "%v", err)
 			}
-		})
+		}
+		if err := s.stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+			waitQuiesce(workersCtx)
+			return nil, nil, err
+		}
 		log.Eventf(ctx, "listening on sql port %s", s.cfg.SQLAddr)
 	}
 
@@ -1876,11 +1897,12 @@ func (s *Server) startListenRPCAndSQL(
 	}
 
 	// The remainder shutdown worker.
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
+	waitForQuiesce := func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
-		<-s.stopper.ShouldStop()
+	}
+	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.grpc.Stop()
 		serveOnMux.Do(func() {
 			// The cmux matches don't shut down properly unless serve is called on the
@@ -1888,7 +1910,12 @@ func (s *Server) startListenRPCAndSQL(
 			// if we wouldn't otherwise reach the point where we start serving on it.
 			netutil.FatalIfUnexpected(m.Serve())
 		})
-	})
+	}))
+	if err := s.stopper.RunAsyncTask(
+		workersCtx, "grpc-quiesce", waitForQuiesce,
+	); err != nil {
+		return nil, nil, err
+	}
 
 	// startRPCServer starts the RPC server. We do not do this
 	// immediately because we want the cluster to be ready (or ready to
@@ -1896,11 +1923,11 @@ func (s *Server) startListenRPCAndSQL(
 	// (Server.Start) will call this at the right moment.
 	startRPCServer = func(ctx context.Context) {
 		// Serve the gRPC endpoint.
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
 			netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 		})
 
-		s.stopper.RunWorker(ctx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(ctx, "serve-mux", func(context.Context) {
 			serveOnMux.Do(func() {
 				netutil.FatalIfUnexpected(m.Serve())
 			})
@@ -1921,12 +1948,20 @@ func (s *Server) startServeUI(
 
 	// The HTTP listener shutdown worker, which closes everything under
 	// the HTTP port when the stopper indicates we are shutting down.
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+	waitQuiesce := func(ctx context.Context) {
+		// NB: we can't do this as a Closer because (*Server).ServeWith is
+		// running in a worker and usually sits on accept() which unblocks
+		// only when the listener closes. In other words, the listener needs
+		// to close when quiescing starts to allow that worker to shut down.
 		<-s.stopper.ShouldQuiesce()
 		if err := httpLn.Close(); err != nil {
-			log.Ops.Fatalf(workersCtx, "%v", err)
+			log.Ops.Fatalf(ctx, "%v", err)
 		}
-	})
+	}
+	if err := s.stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(workersCtx)
+		return err
+	}
 
 	if uiTLSConfig != nil {
 		httpMux := cmux.New(httpLn)
@@ -1934,15 +1969,17 @@ func (s *Server) startServeUI(
 		tlsL := httpMux.Match(cmux.Any())
 
 		// Dispatch incoming requests to either clearL or tlsL.
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
+		if err := s.stopper.RunAsyncTask(workersCtx, "serve-ui", func(context.Context) {
 			netutil.FatalIfUnexpected(httpMux.Serve())
-		})
+		}); err != nil {
+			return err
+		}
 
 		// Serve the plain HTTP (non-TLS) connection over clearL.
 		// This produces a HTTP redirect to the `https` URL for the path /,
 		// handles the request normally (via s.ServeHTTP) for the path /health,
 		// and produces 404 for anything else.
-		s.stopper.RunWorker(workersCtx, func(context.Context) {
+		if err := s.stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
@@ -1952,7 +1989,9 @@ func (s *Server) startServeUI(
 			plainRedirectServer := netutil.MakeServer(s.stopper, uiTLSConfig, mux)
 
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
-		})
+		}); err != nil {
+			return err
+		}
 
 		httpLn = tls.NewListener(tlsL, uiTLSConfig)
 	}
@@ -1961,11 +2000,9 @@ func (s *Server) startServeUI(
 	// listening on --http-addr without TLS if uiTLSConfig was
 	// nil, or overridden above if uiTLSConfig was not nil to come from
 	// the TLS negotiation over the HTTP port.
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
+	return s.stopper.RunAsyncTask(workersCtx, "server-http", func(context.Context) {
 		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
 	})
-
-	return nil
 }
 
 // TODO(tbg): move into server_sql.go.
@@ -1984,7 +2021,7 @@ func (s *SQLServer) startServeSQL(
 		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
 	}
 
-	stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+	_ = stopper.RunAsyncTask(pgCtx, "serve-conn", func(pgCtx context.Context) {
 		netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, pgL, func(conn net.Conn) {
 			connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
 			tcpKeepAlive.configure(connCtx, conn)
@@ -2005,21 +2042,33 @@ func (s *SQLServer) startServeSQL(
 			return err
 		}
 
-		stopper.RunWorker(ctx, func(workersCtx context.Context) {
+		waitQuiesce := func(ctx context.Context) {
 			<-stopper.ShouldQuiesce()
+			// NB: we can't do this as a Closer because (*Server).ServeWith is
+			// running in a worker and usually sits on accept() which unblocks
+			// only when the listener closes. In other words, the listener needs
+			// to close when quiescing starts to allow that worker to shut down.
 			if err := unixLn.Close(); err != nil {
-				log.Ops.Fatalf(workersCtx, "%v", err)
+				log.Ops.Fatalf(ctx, "%v", err)
 			}
-		})
+		}
+		if err := stopper.RunAsyncTask(ctx, "unix-ln-close", func(ctx context.Context) {
+			waitQuiesce(ctx)
+		}); err != nil {
+			waitQuiesce(ctx)
+			return err
+		}
 
-		stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+		if err := stopper.RunAsyncTask(pgCtx, "unix-ln-serve", func(pgCtx context.Context) {
 			netutil.FatalIfUnexpected(connManager.ServeWith(pgCtx, stopper, unixLn, func(conn net.Conn) {
 				connCtx := s.pgServer.AnnotateCtxForIncomingConn(pgCtx, conn)
 				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
 					log.Ops.Errorf(connCtx, "%v", err)
 				}
 			}))
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -2177,7 +2226,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 		}
 	}
 
-	cfg.stopper.RunWorker(ctx, func(ctx context.Context) {
+	return cfg.stopper.RunAsyncTask(ctx, "mem-logger", func(ctx context.Context) {
 		var goMemStats atomic.Value // *status.GoMemStats
 		goMemStats.Store(&status.GoMemStats{})
 		var collectingMemStats int32 // atomic, 1 when stats call is ongoing
@@ -2188,7 +2237,7 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 
 		for {
 			select {
-			case <-cfg.stopper.ShouldStop():
+			case <-cfg.stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
 				timer.Read = true
@@ -2237,7 +2286,6 @@ func startSampleEnvironment(ctx context.Context, cfg sampleEnvironmentCfg) error
 			}
 		}
 	})
-	return nil
 }
 
 // Stop stops the server.

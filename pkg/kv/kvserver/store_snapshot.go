@@ -524,7 +524,7 @@ func (s *Store) reserveSnapshot(
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return nil, "", errors.Errorf("stopped")
 		default:
 			return nil, snapshotApplySemBusyMsg, nil
@@ -534,7 +534,7 @@ func (s *Store) reserveSnapshot(
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
-		case <-s.stopper.ShouldStop():
+		case <-s.stopper.ShouldQuiesce():
 			return nil, "", errors.Errorf("stopped")
 		}
 	}

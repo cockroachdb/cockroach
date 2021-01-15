@@ -328,7 +328,7 @@ func TestHeartbeatHealth(t *testing.T) {
 			}
 
 			select {
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			case heartbeat.ready <- err:
 			}
@@ -599,14 +599,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 			}}
 	}()
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
-		<-stopper.ShouldStop()
+		<-stopper.ShouldQuiesce()
 		s.Stop()
 	})
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 

@@ -3414,7 +3414,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	var allowErrors int32
 	for task := 0; task < numBackgroundTasks; task++ {
 		taskNum := task
-		tc.Stopper().RunWorker(context.Background(), func(context.Context) {
+		_ = tc.Stopper().RunAsyncTask(context.Background(), "bg-task", func(context.Context) {
 			conn := tc.Conns[taskNum%len(tc.Conns)]
 			// Use different sql gateways to make sure leasing is right.
 			if err := startBackgroundWrites(tc.Stopper(), conn, rows, bgActivity, &allowErrors); err != nil {

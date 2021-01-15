@@ -96,9 +96,9 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
 	for i := 0; i < numRunners; i++ {
-		dsp.stopper.RunWorker(ctx, func(context.Context) {
+		_ = dsp.stopper.RunAsyncTask(ctx, "distslq-runner", func(context.Context) {
 			runnerChan := dsp.runnerChan
-			stopChan := dsp.stopper.ShouldStop()
+			stopChan := dsp.stopper.ShouldQuiesce()
 			for {
 				select {
 				case req := <-runnerChan:
