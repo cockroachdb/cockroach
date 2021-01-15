@@ -289,10 +289,12 @@ func TestOutboxInbox(t *testing.T) {
 					batchCopy := testAllocator.NewMemBatchWithFixedCapacity(typs, outputBatch.Length())
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
 						for i := range typs {
-							batchCopy.ColVec(i).Append(
-								coldata.SliceArgs{
-									Src:       outputBatch.ColVec(i),
-									SrcEndIdx: outputBatch.Length(),
+							batchCopy.ColVec(i).Copy(
+								coldata.CopySliceArgs{
+									SliceArgs: coldata.SliceArgs{
+										Src:       outputBatch.ColVec(i),
+										SrcEndIdx: outputBatch.Length(),
+									},
 								},
 							)
 						}

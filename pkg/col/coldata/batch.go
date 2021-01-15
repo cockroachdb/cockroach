@@ -303,9 +303,6 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	// since those will get reset in ResetInternalBatch anyway.
 	m.length = length
 	m.b = m.b[:len(typs)]
-	for i := range m.b {
-		m.b[i].SetLength(length)
-	}
 	m.sel = m.sel[:length]
 	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
 		if i >= len(typs) {
