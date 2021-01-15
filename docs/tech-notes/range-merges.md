@@ -244,6 +244,20 @@ merge transaction is careful to update the local copy of the LHS descriptor as
 its first operation, since the local copy of the LHS descriptor lives on the
 LHS.
 
+---
+**UPDATE in v21.1:**
+
+As of v21.1, the merge transaction uses a locking read on the LHS range's
+transaction record as its first course of action. This eliminates thrashing and
+livelock in the face of concurrent merge attempts, which we typically only see
+in testing scenarios but which we'd like to handle effectively. It also has the
+effect of locating the transaction record on the LHS earlier in the transaction.
+Because of this, the merge transaction no longer needs to be quite as deliberate
+about the order in which it updates descriptors later on because that order does
+not impact the location of the transaction record.
+
+---
+
 Second, the merge transaction must ensure that, when it issues the delete
 request to remove the local copy of the RHS descriptor, the resulting intent is
 actually written to disk. (See the [transfer of power](#transfer-of-power)
