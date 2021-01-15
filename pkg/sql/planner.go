@@ -511,7 +511,7 @@ func (p *planner) LookupTableByID(
 		return entry.desc, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Descriptors().GetTableVersionByID(ctx, p.txn, tableID, flags)
+	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, flags)
 	if err != nil {
 		return nil, err
 	}

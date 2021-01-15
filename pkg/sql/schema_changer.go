@@ -1043,7 +1043,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		}
 
 		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			desc, err := descsCol.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+			desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
 			if err != nil {
 				return nil, err
 			}

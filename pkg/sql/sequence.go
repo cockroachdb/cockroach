@@ -54,7 +54,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
 			if len(col.UsesSequenceIds) == 1 {
-				seq, err := p.Descriptors().GetTableVersionByID(
+				seq, err := p.Descriptors().GetImmutableTableByID(
 					ctx,
 					p.txn,
 					col.UsesSequenceIds[0],
@@ -383,7 +383,8 @@ func removeSequenceOwnerIfExists(
 	if err != nil {
 		// Special case error swallowing for #50711 and #50781, which can cause a
 		// column to own sequences that have been dropped/do not exist.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorDropped) ||
+			pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 			log.Eventf(ctx, "swallowing error during sequence ownership unlinking: %s", err.Error())
 			return nil
 		}
@@ -542,7 +543,8 @@ func (p *planner) dropSequencesOwnedByCol(
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
 		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorDropped) ||
+				pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 				log.Eventf(ctx, "swallowing error dropping owned sequences: %s", err.Error())
 				continue
 			}

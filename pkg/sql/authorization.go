@@ -505,7 +505,8 @@ func (p *planner) canCreateOnSchema(
 	user security.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
-	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return err
 	}
@@ -517,8 +518,8 @@ func (p *planner) canCreateOnSchema(
 			// The caller wishes to skip this check.
 			return nil
 		}
-		dbDesc, err := p.Descriptors().GetDatabaseVersionByID(
-			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{})
 		if err != nil {
 			return err
 		}
@@ -545,7 +546,8 @@ func (p *planner) canResolveDescUnderSchema(
 	if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsTemporary() {
 		return nil
 	}
-	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
 	if err != nil {
 		return err
 	}
@@ -633,8 +635,8 @@ func (p *planner) HasOwnershipOnSchema(
 		// Only the node user has ownership over the system database.
 		return p.User().IsNodeUser(), nil
 	}
-	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(
-		ctx, p.Txn(), schemaID,
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{},
 	)
 	if err != nil {
 		return false, err
