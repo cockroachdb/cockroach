@@ -240,6 +240,10 @@ SELECT ARRAY['a', 'b', 'c'][0]
 ----
 NULL
 
+# Regression test for #52134: make sure this is not an internal error.
+query error cannot subscript type string because it is not an array
+SELECT '{a,b,c}'[0]
+
 query T
 SELECT (ARRAY['a', 'b', 'c'])[2]
 ----
