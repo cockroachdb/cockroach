@@ -10,9 +10,9 @@
   "types": "dist/types/index.d.ts",
   "scripts": {
     "build": "npm-run-all build:typescript build:bundle",
-    "build:bundle": "NODE_ENV=production webpack --display-error-details",
+    "build:bundle": "NODE_ENV=production webpack --display-error-details --mode=production",
     "build:typescript": "tsc",
-    "build:watch": "webpack --watch",
+    "build:watch": "webpack --watch --mode=development",
     "ci": "jest --ci -i",
     "clean": "rm -rf  ./dist/*",
     "lint": "eslint './src/**/*.{tsx,ts,js}' --format=codeframe",
