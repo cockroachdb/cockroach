@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -164,6 +165,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				DescriptorIDs: sqlbase.IDs{myTableID},
 				Details:       details,
 				Progress:      jobspb.SchemaChangeGCProgress{},
+				RunningStatus: sql.RunningStatusWaitingGC,
 				NonCancelable: true,
 			}
 
@@ -183,7 +185,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			// Check that the job started.
 			jobIDStr := strconv.Itoa(int(*job.ID()))
-			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, lookupJR); err != nil {
+			if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
 				t.Fatal(err)
 			}
 
@@ -266,12 +268,14 @@ SELECT parent_id, table_id
 	// Now we should be able to find our GC job
 	var jobID int64
 	var status jobs.Status
+	var runningStatus jobs.RunningStatus
 	sqlDB.QueryRow(t, `
-SELECT job_id, status
+SELECT job_id, status, running_status
   FROM crdb_internal.jobs
  WHERE description LIKE 'GC for DROP TABLE db.public.foo';
-`).Scan(&jobID, &status)
+`).Scan(&jobID, &status, &runningStatus)
 	require.Equal(t, jobs.StatusRunning, status)
+	require.Equal(t, sql.RunningStatusWaitingGC, runningStatus)
 
 	// Manually delete the table.
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
