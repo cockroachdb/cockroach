@@ -52,6 +52,12 @@ func TransferLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
 
+	// NOTE: we use the range's current lease as prevLease instead of
+	// args.PrevLease so that we can detect lease transfers that will
+	// inevitably fail early and reject them with a detailed
+	// LeaseRejectedError before going through Raft.
+	prevLease, _ := cArgs.EvalCtx.GetLease()
+
 	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
 	// no reason this wouldn't work in principle, but it seems inadvisable. In
 	// particular, learners can't become raft leaders, so we wouldn't be able to
@@ -67,7 +73,6 @@ func TransferLease(
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}
 
-	prevLease, _ := cArgs.EvalCtx.GetLease()
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
 		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
