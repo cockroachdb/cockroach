@@ -299,27 +299,41 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			return nil, errors.Errorf(
 				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
 		}
+		width := int(colDesc.Type.Width())
+		prec := int(colDesc.Type.Precision())
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
-			Precision:   int(colDesc.Type.Precision()),
-			Scale:       int(colDesc.Type.Width()),
+			Precision:   prec,
+			Scale:       width,
 		}
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			dec := d.(*tree.DDecimal).Decimal
+
+			// If the decimal happens to fit a smaller width than the
+			// column allows, add trailing zeroes so the scale is constant
+			if colDesc.Type.Width() > -dec.Exponent {
+				_, err := tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
+				if err != nil {
+					// This should always be possible without rounding since we're using the column def,
+					// but if it's not, WithPrecision will force it to error.
+					return nil, err
+				}
+			}
+
 			// TODO(dan): For the cases that the avro defined decimal format
 			// would not roundtrip, serialize the decimal as a string. Also
 			// support the unspecified precision/scale case in this branch. We
 			// can't currently do this without surgery to the avro library we're
 			// using and that's too scary leading up to 2.1.0.
-			rat, err := decimalToRat(dec, colDesc.Type.Width())
+			rat, err := decimalToRat(dec, int32(width))
 			if err != nil {
 				return nil, err
 			}
 			return &rat, nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width())}, nil
+			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), int32(width))}, nil
 		}
 	case types.UuidFamily:
 		// Should be logical type of "uuid", but the avro library doesn't support
