@@ -116,7 +116,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 				return err
 			}
-			otherName, err := p.getQualifiedTableName(ctx, other)
+			otherName, err := p.getQualifiedTableName(ctx, other, tree.DatabaseLookupFlags{})
 			if err != nil {
 				return err
 			}

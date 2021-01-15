@@ -176,7 +176,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		if err != nil {
 			return nil, err
 		}
-		fqName, err := n.p.getQualifiedTableName(ctx, tableDesc)
+		fqName, err := n.p.getQualifiedTableName(ctx, tableDesc, tree.DatabaseLookupFlags{})
 		if err != nil {
 			return nil, err
 		}

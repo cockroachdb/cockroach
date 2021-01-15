@@ -184,7 +184,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				)
 				var dependentDescQualifiedString string
 				if dbDesc.GetID() != dependentDesc.ParentID || tbDesc.GetParentSchemaID() != dependentDesc.GetParentSchemaID() {
-					descFQName, err := p.getQualifiedTableName(ctx, dependentDesc)
+					descFQName, err := p.getQualifiedTableName(ctx, dependentDesc, tree.DatabaseLookupFlags{})
 					if err != nil {
 						log.Warningf(
 							ctx,

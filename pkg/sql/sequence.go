@@ -63,7 +63,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 				if err != nil {
 					return nil, err
 				}
-				return p.getQualifiedTableName(ctx, seq)
+				return p.getQualifiedTableName(ctx, seq, tree.DatabaseLookupFlags{})
 			}
 			return nil, nil
 		}

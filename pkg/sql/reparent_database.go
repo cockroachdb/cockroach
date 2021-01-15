@@ -184,7 +184,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 			if len(tbl.GetDependedOnBy()) > 0 {
 				var names []string
 				const errStr = "cannot convert database %q into schema because %q has dependent objects"
-				tblName, err := p.getQualifiedTableName(ctx, tbl)
+				tblName, err := p.getQualifiedTableName(ctx, tbl, tree.DatabaseLookupFlags{})
 				if err != nil {
 					return errors.Wrapf(err, errStr, n.db.Name, tbl.Name)
 				}
@@ -193,7 +193,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 					if err != nil {
 						return errors.Wrapf(err, errStr, n.db.Name, tblName.String())
 					}
-					fqName, err := p.getQualifiedTableName(ctx, dep)
+					fqName, err := p.getQualifiedTableName(ctx, dep, tree.DatabaseLookupFlags{})
 					if err != nil {
 						return errors.Wrapf(err, errStr, n.db.Name, dep.Name)
 					}

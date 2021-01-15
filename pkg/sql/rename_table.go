@@ -282,7 +282,7 @@ func (p *planner) dependentViewError(
 	}
 	viewName := viewDesc.Name
 	if viewDesc.ParentID != parentID {
-		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
+		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc, tree.DatabaseLookupFlags{})
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
 			return sqlerrors.NewDependentObjectErrorf(

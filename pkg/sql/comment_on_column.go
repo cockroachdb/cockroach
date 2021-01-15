@@ -94,7 +94,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc, tree.DatabaseLookupFlags{})
 	if err != nil {
 		return err
 	}

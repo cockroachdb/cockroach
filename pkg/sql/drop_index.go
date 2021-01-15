@@ -424,7 +424,15 @@ func (p *planner) dropIndexByName(
 			if err != nil {
 				return err
 			}
-			droppedViews = append(droppedViews, viewDesc.Name)
+
+			qualifiedView, err := p.getQualifiedTableName(ctx, viewDesc, tree.DatabaseLookupFlags{
+				IncludeDropped: true,
+			})
+			if err != nil {
+				return err
+			}
+
+			droppedViews = append(droppedViews, qualifiedView.String())
 			droppedViews = append(droppedViews, cascadedViews...)
 		}
 	}
@@ -522,11 +530,9 @@ func (p *planner) dropIndexByName(
 	return p.logEvent(ctx,
 		tableDesc.ID,
 		&eventpb.DropIndex{
-			TableName:  tn.FQString(),
-			IndexName:  string(idxName),
-			MutationID: uint32(mutationID),
-			// TODO(knz): the dropped views are improperly qualified.
-			// See: https://github.com/cockroachdb/cockroach/issues/57735
+			TableName:           tn.FQString(),
+			IndexName:           string(idxName),
+			MutationID:          uint32(mutationID),
 			CascadeDroppedViews: droppedViews,
 		})
 }

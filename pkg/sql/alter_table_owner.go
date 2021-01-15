@@ -113,7 +113,7 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	tn, err := p.getQualifiedTableName(ctx, desc)
+	tn, err := p.getQualifiedTableName(ctx, desc, tree.DatabaseLookupFlags{})
 	if err != nil {
 		return err
 	}

@@ -223,12 +223,20 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
+
+			qualifiedView, err := p.getQualifiedTableName(ctx, dependentDesc, tree.DatabaseLookupFlags{
+				IncludeDropped: true,
+			})
+			if err != nil {
+				return cascadeDroppedViews, err
+			}
+
 			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
 			cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
-			cascadeDroppedViews = append(cascadeDroppedViews, dependentDesc.Name)
+			cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.String())
 		}
 	}
 
@@ -260,7 +268,7 @@ func (p *planner) getViewDescForCascade(
 		viewName := viewDesc.Name
 		if viewDesc.ParentID != parentID {
 			var err error
-			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
+			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc, tree.DatabaseLookupFlags{})
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				return nil, sqlerrors.NewDependentObjectErrorf(

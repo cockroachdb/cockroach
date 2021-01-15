@@ -402,16 +402,14 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 // or view represented by the provided descriptor. It is a sort of
 // reverse of the Resolve() functions.
 func (p *planner) getQualifiedTableName(
-	ctx context.Context, desc catalog.TableDescriptor,
+	ctx context.Context, desc catalog.TableDescriptor, flags tree.DatabaseLookupFlags,
 ) (*tree.TableName, error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{})
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), flags)
 	if err != nil {
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
-		tree.SchemaLookupFlags{})
+	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, flags)
 	if err != nil {
 		return nil, err
 	}
