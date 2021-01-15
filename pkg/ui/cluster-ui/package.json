@@ -83,6 +83,7 @@
     "astroturf": "^0.10.2",
     "babel-jest": "^26.2.2",
     "babel-loader": "^8.0.6",
+    "babel-plugin-import": "^1.13.3",
     "babel-preset-react-app": "^9.1.2",
     "chai": "^4.2.0",
     "classnames": "^2.2.6",

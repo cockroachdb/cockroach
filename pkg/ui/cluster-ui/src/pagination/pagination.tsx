@@ -1,5 +1,5 @@
 import React from "react";
-import AntPagination from "antd/lib/pagination";
+import { Pagination as AntPagination } from "antd";
 import { PaginationProps as AntPaginationProps } from "antd/lib/pagination";
 import classNames from "classnames/bind";
 import styles from "./pagination.module.scss";
