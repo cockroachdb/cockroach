@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -1358,6 +1359,21 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 		return nil, err
 	}
 	return desc.StartKey.AsRawKey(), nil
+}
+
+// ScratchRangeWithExpirationLease is like ScratchRange but creates a range with
+// an expiration based lease.
+//
+// Calling this multiple times is undefined (but see
+// TestCluster.ScratchRangeWithExpirationLease() which is idempotent).
+func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
+		roachpb.RKey("\x00aaa-testing")}, nil))
+	_, _, err := ts.SplitRange(scratchKey)
+	if err != nil {
+		return nil, err
+	}
+	return scratchKey, nil
 }
 
 // MetricsRecorder periodically records node-level and store-level metrics.

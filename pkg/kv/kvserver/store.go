@@ -801,6 +801,13 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
 }
 
+// LeaseExpiration needs to also be exposed on the Store, as test cases that
+// use the TestCluster dont have an easy way to get at the config.
+// TODO(lunevalex): Remove the LeaseExpiration on StoreConfig, once multiTestContext is removed.
+func (s *Store) LeaseExpiration() int64 {
+	return s.cfg.LeaseExpiration()
+}
+
 // RaftElectionTimeoutTicks exposed for testing.
 func (s *Store) RaftElectionTimeoutTicks() int {
 	return s.cfg.RaftElectionTimeoutTicks
@@ -1656,7 +1663,6 @@ func (s *Store) startGossip() {
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
 	}
-
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error

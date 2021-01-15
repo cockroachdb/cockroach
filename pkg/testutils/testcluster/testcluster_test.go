@@ -331,3 +331,21 @@ func TestRestart(t *testing.T) {
 	// Verify we can still read data.
 	tc.WaitForValues(t, roachpb.Key("b"), []int64{9, 9, 9})
 }
+
+func TestExpirationBasedLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRangeWithExpirationLease(t)
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
+	lease, _ := repl.GetLease()
+
+	require.NotNil(t, lease.Expiration)
+}
