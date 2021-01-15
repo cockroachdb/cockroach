@@ -2,8 +2,6 @@ const path = require("path");
 const WebpackBar = require("webpackbar");
 
 module.exports = {
-  mode: "development",
-
   entry: "./src/index.ts",
 
   output: {
