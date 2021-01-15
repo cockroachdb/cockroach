@@ -216,7 +216,9 @@ func SetNodeIDs(clusterID string, nodeID int32) {
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, "clusterID: %s", clusterID)
-	logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%s", nodeID)
+	if nodeID != 0 {
+		logfDepth(ctx, 1, severity.INFO, channel.OPS, "nodeID: n%d", nodeID)
+	}
 
 	// Perform the change proper.
 	logging.idMu.Lock()
@@ -236,8 +238,8 @@ func SetTenantIDs(tenantID string, sqlInstanceID int32) {
 	// new log files, even on the first log file. This ensures that grep
 	// will always find it.
 	ctx := logtags.AddTag(context.Background(), "config", nil)
-	logfDepth(ctx, 1, severity.INFO, channel.DEV, "tenantID: %s", tenantID)        // TODO(knz): Use OPS here.
-	logfDepth(ctx, 1, severity.INFO, channel.DEV, "instanceID: %d", sqlInstanceID) // TODO(knz): Use OPS here.
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "tenantID: %s", tenantID)
+	logfDepth(ctx, 1, severity.INFO, channel.OPS, "instanceID: %d", sqlInstanceID)
 
 	// Perform the change proper.
 	logging.idMu.Lock()

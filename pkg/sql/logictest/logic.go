@@ -1426,6 +1426,10 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 			},
 		}
+
+		// Prevent a logging assertion that the server ID is initialized multiple times.
+		log.TestingClearServerIdentifiers()
+
 		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
@@ -3242,9 +3246,14 @@ func RunLogicTestWithDefaultConfig(
 					//  - we're generating testfiles, or
 					//  - we are in race mode (where we can hit a limit on alive
 					//    goroutines).
-					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled {
+					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled && !cfg.useTenant {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
+						//
+						// We also cannot parallelise tests that use tenant servers
+						// because they change shared state in the logging configuration
+						// and there is an assertion against conflicting changes.
+						//
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
 						if filepath.Base(path) != "select_index_span_ranges" {
 							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
