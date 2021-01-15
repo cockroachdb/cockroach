@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -905,6 +906,18 @@ func (ts *TestServer) ForceTableGC(
 	}
 	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
 	return pErr.GoError()
+}
+
+// ScratchRangeWithExpirationLease is like ScratchRange but creates a range with
+// an expiration based lease.
+func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
+		roachpb.RKey("\x00aaa-testing")}, nil))
+	_, _, err := ts.SplitRange(scratchKey)
+	if err != nil {
+		return nil, err
+	}
+	return scratchKey, nil
 }
 
 type testServerFactoryImpl struct{}

@@ -696,6 +696,17 @@ func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
 	return scratchKey
 }
 
+// ScratchRangeWithExpirationLease returns the start key of a span of keyspace
+// suitable for use as kv scratch space and that has an expiration based lease.
+// The range is lazily split off on the first call to ScratchRangeWithExpirationLease.
+func (tc *TestCluster) ScratchRangeWithExpirationLease(t testing.TB) roachpb.Key {
+	scratchKey, err := tc.Servers[0].ScratchRangeWithExpirationLease()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scratchKey
+}
+
 // WaitForSplitAndInitialization waits for a range which starts with startKey
 // and then verifies that each replica in the range descriptor has been created.
 //
