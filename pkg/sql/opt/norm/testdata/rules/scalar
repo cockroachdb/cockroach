@@ -1834,3 +1834,51 @@ project
  │    └── key: (1)
  └── projections
       └── (k:1 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotDisjoint
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE g
+(
+    id1 INT PRIMARY KEY,
+    geom1 GEOMETRY,
+    geom2 GEOMETRY,
+    INVERTED INDEX (geom1),
+    INVERTED INDEX (geom2)
+)
+----
+
+norm expect=SimplifyNotDisjoint
+SELECT NOT st_disjoint(geom1, geom2) FROM g;
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── st_intersects(geom1:2, geom2:3) [as="?column?":7, outer=(2,3), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT st_disjoint(geom1, geom2) FROM g;
+----
+project
+ ├── columns: st_disjoint:7
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── st_disjoint(geom1:2, geom2:3) [as=st_disjoint:7, outer=(2,3), immutable]
+
+norm expect-not=SimplifyNotDisjoint
+SELECT NOT st_intersects(geom1, geom2) FROM g;
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan g
+ │    └── columns: geom1:2 geom2:3
+ └── projections
+      └── NOT st_intersects(geom1:2, geom2:3) [as="?column?":7, outer=(2,3), immutable]
