@@ -2026,7 +2026,7 @@ func (r *Replica) sendSnapshot(
 
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return errors.Mark(errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType), errMarkSnapshotError)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
@@ -2037,10 +2037,10 @@ func (r *Replica) sendSnapshot(
 	// the leaseholder and we haven't yet applied the configuration change that's
 	// adding the recipient to the range.
 	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Newf(
+		return errors.Mark(errors.Newf(
 			"attempting to send snapshot that does not contain the recipient as a replica; "+
 				"snapshot type: %s, recipient: s%d, desc: %s",
-			snapType, recipient, snap.State.Desc)
+			snapType, recipient, snap.State.Desc), errMarkSnapshotError)
 	}
 
 	sender, err := r.GetReplicaDescriptor()
