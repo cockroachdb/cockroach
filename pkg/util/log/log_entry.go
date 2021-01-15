@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -40,10 +39,28 @@ type logEntry struct {
 
 	// The entry timestamp.
 	ts int64
-	// The severity of the event.
+
+	// If header is true, the entry is for a sink header and is emitted
+	// no matter the filter.
+	//
+	// Header entries currently bypass the filter because they are emitted
+	// deep in the file handling logic of file sinks, and not in the outer
+	// coordination logic that ventilates entries across multiple sinks.
+	// See the functions makeStartLine() / getStartLines() and how they
+	// are used.
+	//
+	// This behavior is desirable because we want sinks to get an
+	// identifying header that explains the cluster, node ID, etc,
+	// regardless of the filtering parameters.
+	header bool
+
+	// The severity of the event. This is not reported by formatters
+	// when the header boolean is set.
 	sev Severity
-	// The channel on which the entry was sent.
+	// The channel on which the entry was sent. This is not reported by
+	// formatters when the header boolean is set.
 	ch Channel
+
 	// The goroutine where the event was generated.
 	gid int64
 	// The file/line where the event was generated.
@@ -164,12 +181,13 @@ var configTagsBuffer = logtags.SingleTagBuffer("config", nil)
 func makeStartLine(formatter logFormatter, format string, args ...interface{}) *buffer {
 	entry := makeUnstructuredEntry(
 		context.Background(),
-		severity.INFO,
-		channel.DEV, /* DEV ensures the channel number is omitted in headers. */
-		2,           /* depth */
-		true,        /* redactable */
+		severity.UNKNOWN, /* header - ignored */
+		0,                /* header - ignored */
+		2,                /* depth */
+		true,             /* redactable */
 		format,
 		args...)
+	entry.header = true
 	entry.tags = configTagsBuffer
 	return formatter.formatEntry(entry)
 }

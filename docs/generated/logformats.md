@@ -54,6 +54,18 @@ the following caveats apply:
   entries larger than 64KiB successfully. Generally, use of this internal
   log entry parser is discouraged.
 
+### Header lines
+
+At the beginning of each file, a header is printed using a similar format as
+regular log entries. This header reports when the file was created,
+which parameters were used to start the server, the server identifiers
+if known, and other metadata about the running process.
+
+This header appears to be logged at severity INFO (with an I prefix at the
+start of the line) even though it does not really have a severity. The
+header is printed unconditionally even when a filter is configured to
+omit entries at the INFO level.
+
 ### Common log entry prefix
 
 Each line of output starts with the following prefix:
@@ -106,6 +118,18 @@ the following caveats apply:
   and is unable to recognize the aforementioned pitfall; nor can it read
   entries larger than 64KiB successfully. Generally, use of this internal
   log entry parser is discouraged.
+
+### Header lines
+
+At the beginning of each file, a header is printed using a similar format as
+regular log entries. This header reports when the file was created,
+which parameters were used to start the server, the server identifiers
+if known, and other metadata about the running process.
+
+This header appears to be logged at severity INFO (with an I prefix at the
+start of the line) even though it does not really have a severity. The
+header is printed unconditionally even when a filter is configured to
+omit entries at the INFO level.
 
 ### Common log entry prefix
 
@@ -168,16 +192,23 @@ Each entry contains at least the following fields:
 
 | Field | Description |
 |-------|-------------|
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
 | `file` | The name of the source file where the event was emitted. |
 | `goroutine` | The identifier of the goroutine where the event was emitted. |
 | `line` | The line number where the event was emitted in the source. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
 | `redactable` | Whether the payload is redactable (see below for details). |
-| `severity_numeric` | The numeric value of the severity of the event. |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+
+
+After a couple of *header* entries written at the beginning of each log sink,
+all subsequent log entries also contain the following fields:
+
+| Field               | Description |
+|---------------------|-------------|
+| `channel` | The name of the logging channel where the event was sent. |
+| `severity` | The severity of the event. |
+| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `severity_numeric` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
@@ -218,16 +249,23 @@ Each entry contains at least the following fields:
 
 | Field | Description |
 |-------|-------------|
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
 | `f` | The name of the source file where the event was emitted. |
 | `g` | The identifier of the goroutine where the event was emitted. |
 | `l` | The line number where the event was emitted in the source. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
 | `r` | Whether the payload is redactable (see below for details). |
-| `s` | The numeric value of the severity of the event. |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+
+
+After a couple of *header* entries written at the beginning of each log sink,
+all subsequent log entries also contain the following fields:
+
+| Field               | Description |
+|---------------------|-------------|
+| `C` | The name of the logging channel where the event was sent. |
+| `sev` | The severity of the event. |
+| `c` | The numeric identifier for the logging channel where the event was sent. |
+| `n` | The entry number on this logging sink, relative to the last process restart. |
+| `s` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
@@ -269,16 +307,23 @@ Each entry contains at least the following fields:
 | Field | Description |
 |-------|-------------|
 | `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `channel` | The name of the logging channel where the event was sent. |
-| `severity` | The severity of the event. |
-| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
 | `file` | The name of the source file where the event was emitted. |
 | `goroutine` | The identifier of the goroutine where the event was emitted. |
 | `line` | The line number where the event was emitted in the source. |
-| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
 | `redactable` | Whether the payload is redactable (see below for details). |
-| `severity_numeric` | The numeric value of the severity of the event. |
 | `timestamp` | The timestamp at which the event was emitted on the logging channel. |
+
+
+After a couple of *header* entries written at the beginning of each log sink,
+all subsequent log entries also contain the following fields:
+
+| Field               | Description |
+|---------------------|-------------|
+| `channel` | The name of the logging channel where the event was sent. |
+| `severity` | The severity of the event. |
+| `channel_numeric` | The numeric identifier for the logging channel where the event was sent. |
+| `entry_counter` | The entry number on this logging sink, relative to the last process restart. |
+| `severity_numeric` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
@@ -320,16 +365,23 @@ Each entry contains at least the following fields:
 | Field | Description |
 |-------|-------------|
 | `tag` | A Fluent tag for the event, formed by the process name and the logging channel. |
-| `C` | The name of the logging channel where the event was sent. |
-| `sev` | The severity of the event. |
-| `c` | The numeric identifier for the logging channel where the event was sent. |
 | `f` | The name of the source file where the event was emitted. |
 | `g` | The identifier of the goroutine where the event was emitted. |
 | `l` | The line number where the event was emitted in the source. |
-| `n` | The entry number on this logging sink, relative to the last process restart. |
 | `r` | Whether the payload is redactable (see below for details). |
-| `s` | The numeric value of the severity of the event. |
 | `t` | The timestamp at which the event was emitted on the logging channel. |
+
+
+After a couple of *header* entries written at the beginning of each log sink,
+all subsequent log entries also contain the following fields:
+
+| Field               | Description |
+|---------------------|-------------|
+| `C` | The name of the logging channel where the event was sent. |
+| `sev` | The severity of the event. |
+| `c` | The numeric identifier for the logging channel where the event was sent. |
+| `n` | The entry number on this logging sink, relative to the last process restart. |
+| `s` | The numeric value of the severity of the event. |
 
 
 Additionally, the following fields are conditionally present:
