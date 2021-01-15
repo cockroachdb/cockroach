@@ -21,7 +21,6 @@ const nonTemplatePanic = "do not call from non-template code"
 var (
 	_ = COPYVAL
 	_ = SET
-	_ = SLICE
 	_ = COPYSLICE
 	_ = APPENDSLICE
 	_ = APPENDVAL
@@ -42,12 +41,6 @@ func COPYVAL(dest, src interface{}) {
 // SET is a template function.
 func SET(target, i, new interface{}) {
 	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-}
-
-// SLICE is a template function.
-func SLICE(target, start, end interface{}) interface{} {
-	colexecerror.InternalError(errors.AssertionFailedf(nonTemplatePanic))
-	return nil
 }
 
 // COPYSLICE is a template function.
