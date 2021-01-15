@@ -82,6 +82,9 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
 		// TODO(dan): Save returned desc?
 		o.Result = resultError(ctx, err)
+	case *TransferLeaseOperation:
+		err := db.AdminTransferLease(ctx, o.Key, o.Target)
+		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
 		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

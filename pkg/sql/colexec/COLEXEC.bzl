@@ -3,6 +3,7 @@ targets = [
     ('and_or_projection.eg.go', 'and_or_projection_tmpl.go'),
     ('cast.eg.go', 'cast_tmpl.go'),
     ('const.eg.go', 'const_tmpl.go'),
+    ('crossjoiner.eg.go', 'crossjoiner_tmpl.go'),
     ('default_cmp_expr.eg.go', 'default_cmp_expr_tmpl.go'),
     ('default_cmp_proj_ops.eg.go', 'default_cmp_proj_ops_tmpl.go'),
     ('default_cmp_sel_ops.eg.go', 'default_cmp_sel_ops_tmpl.go'),

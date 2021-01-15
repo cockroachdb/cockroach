@@ -19,6 +19,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Workaround for bazel auto-generated code. goimports does not automatically
+// pick up the right packages when run within the bazel sandbox.
+var (
+	_ = typeconv.DatumVecCanonicalTypeFamily
+)
+
 // buildFromLeftInput builds part of the output of a cross join that comes from
 // the vectors of the left input. The new output tuples are put starting at
 // index destStartIdx and will not exceed the capacity of the output batch. It
