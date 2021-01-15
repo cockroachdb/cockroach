@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -645,7 +646,7 @@ func (ts *TestServer) StartTenant(
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
-	sqlServer, addr, httpAddr, _, err := StartTenant(
+	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,
@@ -662,14 +663,14 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (sqlServer *SQLServer, pgAddr string, httpAddr string, instanceID base.SQLInstanceID, _ error) {
+) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
 	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
@@ -686,7 +687,7 @@ func StartTenant(
 
 	pgL, err := listen(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -700,7 +701,7 @@ func StartTenant(
 
 	httpL, err := listen(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -750,7 +751,7 @@ func StartTenant(
 		heapProfileDirName:   args.HeapProfileDirName,
 		runtime:              args.runtime,
 	}); err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: roachpb.NodeID(args.nodeIDContainer.SQLInstanceID())})
@@ -763,18 +764,27 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
+
+	// Register the server's identifiers so that log events are
+	// decorated with the server's identity. This helps when gathering
+	// log events from multiple servers into the same log collector.
+	//
+	// We do this only here, as the identifiers may not be known before this point.
+	clusterID := args.rpcContext.ClusterID.Get().String()
+	log.SetNodeIDs(clusterID, 0 /* nodeID is not known for a SQL-only server. */)
+	log.SetTenantIDs(args.TenantID.String(), int32(s.SQLInstanceID()))
 
 	if err := s.startServeSQL(ctx,
 		args.stopper,
 		s.connManager,
 		s.pgL,
 		socketFile); err != nil {
-		return nil, "", "", 0, err
+		return nil, "", "", err
 	}
 
-	return s, pgLAddr, httpLAddr, args.nodeIDContainer.SQLInstanceID(), nil
+	return s, pgLAddr, httpLAddr, nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should

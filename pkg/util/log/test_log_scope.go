@@ -172,6 +172,10 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 		t.Fatal(err)
 	}
 
+	// Reset the server identifiers, so that new servers
+	// can report their IDs through logging.
+	TestingClearServerIdentifiers()
+
 	// Switch to the new configuration.
 	TestingResetActive()
 	sc.cleanupFn, err = ApplyConfig(cfg)
