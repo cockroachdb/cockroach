@@ -49,13 +49,18 @@ func TransferLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
 
+	// NOTE: we use the range's current lease as prevLease instead of
+	// args.PrevLease so that we can detect lease transfers that will
+	// inevitably fail early and reject them with a detailed
+	// LeaseRejectedError before going through Raft.
+	prevLease, _ := cArgs.EvalCtx.GetLease()
+
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
 	if err := CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}
 
-	prevLease, _ := cArgs.EvalCtx.GetLease()
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
 		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
