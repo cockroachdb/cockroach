@@ -143,9 +143,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if err := params.p.logEvent(params.ctx,
 			droppedDesc.ID,
 			&eventpb.DropTable{
-				TableName: toDel.tn.FQString(),
-				// TODO(knz): the droppedViews are insufficiently qualified
-				// See: https://github.com/cockroachdb/cockroach/issues/57735
+				TableName:           toDel.tn.FQString(),
 				CascadeDroppedViews: droppedViews,
 			}); err != nil {
 			return err
@@ -348,8 +346,14 @@ func (p *planner) dropTableImpl(
 		if err != nil {
 			return droppedViews, err
 		}
+
+		qualifiedView, err := p.getQualifiedTableName(ctx, viewDesc)
+		if err != nil {
+			return droppedViews, err
+		}
+
 		droppedViews = append(droppedViews, cascadedViews...)
-		droppedViews = append(droppedViews, viewDesc.Name)
+		droppedViews = append(droppedViews, qualifiedView.String())
 	}
 
 	err := p.removeTableComments(ctx, tableDesc)

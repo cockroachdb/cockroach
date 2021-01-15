@@ -405,13 +405,19 @@ func (p *planner) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{})
+		tree.DatabaseLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
 	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
-		tree.SchemaLookupFlags{})
+		tree.SchemaLookupFlags{
+			IncludeOffline: true,
+			IncludeDropped: true,
+		})
 	if err != nil {
 		return nil, err
 	}
