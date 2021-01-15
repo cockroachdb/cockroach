@@ -1,6 +1,6 @@
 import React from "react";
 import classNames from "classnames/bind";
-import AntModal from "antd/lib/modal";
+import { Modal as AntModal } from "antd";
 import { Button } from "../button";
 import { Text, TextTypes } from "../text";
 import styles from "./modal.module.scss";

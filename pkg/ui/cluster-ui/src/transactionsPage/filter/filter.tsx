@@ -1,16 +1,14 @@
 import React from "react";
-// import Checkbox from "rc-checkbox";
 import Select from "react-select";
 import { Button } from "../../button";
 import { CaretDown } from "@cockroachlabs/icons";
 import { Filters } from "../../transactionsPage";
-import Input from "antd/lib/input";
+import { Input } from "antd";
 import {
   dropdownButton,
   dropdownContentWrapper,
   timePair,
   filterLabel,
-  // checkbox,
   applyBtn,
   dropdown,
   hidden,
@@ -34,12 +32,6 @@ export interface SelectOptions {
   label: string;
   value: string;
 }
-
-// const TransactionsType = [
-//   { label: "Insert values 1", value: "Insert values 1" },
-//   { label: "Insert values 2", value: "Insert values 2" },
-//   { label: "Insert values 3", value: "Insert values 3" },
-// ];
 
 const timeUnit = [
   { label: "seconds", value: "seconds" },
@@ -146,13 +138,6 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
               placeholder="All"
               {...defaultSelectProps}
             />
-            {/* <div className={filterLabel.type}> Transaction type </div>
-            <Select
-              options={TransactionsType}
-              onChange={e => this.handleChange(e, "transactionType")}
-              placeholder={"Select DDL, DML"}
-              {...defaultSelectProps}
-            /> */}
             <div className={filterLabel.query}>
               Query fingerprint runs longer than
             </div>
@@ -171,19 +156,6 @@ export class Filter extends React.Component<TransactionsFilter, FilterState> {
                 {...defaultSelectProps}
               />
             </section>
-            {/* <div className={checkbox.fullScansWrapper}>
-              <Checkbox onChange={e => this.handleChange(e, "fullScans")} />
-              <div className={checkbox.label}>
-                Only show transactions that contain queries with full table
-                scans
-              </div>
-            </div>
-            <div className={checkbox.distributedWrapper}>
-              <Checkbox onChange={e => this.handleChange(e, "distributed")} />
-              <div className={checkbox.label}>
-                Only show distributed transactions (across multiple nodes)
-              </div>
-            </div> */}
             <div className={applyBtn.wrapper}>
               <Button
                 className={applyBtn.btn}
