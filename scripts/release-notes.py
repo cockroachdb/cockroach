@@ -155,6 +155,7 @@ def lookup_person(name, email):
 # Section titles for release notes.
 relnotetitles = {
     'cli change': "Command-line changes",
+    'ops change': "Operational changes",
     'sql change': "SQL language changes",
     'api change': "API endpoint changes",
     'ui change': "DB Console changes",
@@ -174,6 +175,7 @@ relnote_sec_order = [
     'general change',
     'enterprise change',
     'sql change',
+    'ops change',
     'cli change',
     'api change',
     'ui change',
@@ -191,6 +193,7 @@ cat_misspells = {
     'performance change': 'performance improvement',
     'performance': 'performance improvement',
     'ui': 'ui change',
+    'operational change': 'ops change',
     'admin ui': 'ui change',
     'api': 'api change',
     'http': 'api change',
