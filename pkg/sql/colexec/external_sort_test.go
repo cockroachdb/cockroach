@@ -49,7 +49,8 @@ func TestExternalSort(t *testing.T) {
 		},
 	}
 
-	const numForcedRepartitions = 3
+	rng, _ := randutil.NewPseudoRand()
+	numForcedRepartitions := rng.Intn(5)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 
@@ -71,7 +72,7 @@ func TestExternalSort(t *testing.T) {
 		}
 		for _, tcs := range [][]sortTestCase{sortAllTestCases, topKSortTestCases, sortChunksTestCases} {
 			for _, tc := range tcs {
-				log.Infof(context.Background(), "spillForced=%t/%s", spillForced, tc.description)
+				log.Infof(context.Background(), "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.description)
 				var semsToCheck []semaphore.Semaphore
 				runTestsWithTyps(
 					t,

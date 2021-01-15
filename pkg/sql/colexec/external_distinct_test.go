@@ -56,6 +56,8 @@ func TestExternalDistinct(t *testing.T) {
 		accounts []*mon.BoundAccount
 		monitors []*mon.BytesMonitor
 	)
+	rng, _ := randutil.NewPseudoRand()
+	numForcedRepartitions := rng.Intn(5)
 	// Test the case in which the default memory is used as well as the case in
 	// which the distinct spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -83,8 +85,8 @@ func TestExternalDistinct(t *testing.T) {
 						outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 					}
 					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols,
-						outputOrdering, queueCfg, sem, nil, /* spillingCallbackFn */
+						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering,
+						queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
 					)
 					// Check that the external distinct and the disk-backed sort
 					// were added as Closers.
@@ -185,6 +187,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 
 	var numRuns, numSpills int
 	var semsToCheck []semaphore.Semaphore
+	numForcedRepartitions := rng.Intn(5)
 	runTestsWithoutAllNullsInjection(
 		t,
 		[]tuples{tups},
@@ -202,7 +205,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
 				ctx, flowCtx, input, typs, distinctCols, outputOrdering, queueCfg,
-				sem, func() { numSpills++ },
+				sem, func() { numSpills++ }, numForcedRepartitions,
 			)
 			require.NoError(t, err)
 			// Check that the external distinct and the disk-backed sort
@@ -318,8 +321,8 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					}
 					op, accs, mons, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecbase.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg,
-						&colexecbase.TestingSemaphore{}, nil, /* spillingCallbackFn */
+						distinctCols, outputOrdering, queueCfg, &colexecbase.TestingSemaphore{},
+						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
 					)
 					memAccounts = append(memAccounts, accs...)
 					memMonitors = append(memMonitors, mons...)
@@ -355,6 +358,7 @@ func createExternalDistinct(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 	spillingCallbackFn func(),
+	numForcedRepartitions int,
 ) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns: distinctCols,
@@ -376,6 +380,7 @@ func createExternalDistinct(
 		FDSemaphore:         testingSemaphore,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
+	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	// External sorter relies on different memory accounts to
 	// understand when to start a new partition, so we will not use
 	// the streaming memory account.
