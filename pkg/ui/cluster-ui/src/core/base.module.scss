@@ -1,0 +1,5 @@
+@import "typography.module";
+
+@mixin base {
+  font-family: $font-family--base;
+}

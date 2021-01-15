@@ -1,0 +1,20 @@
+@import '../../core/index.module.scss';
+
+.root {
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-large;
+  align-items: center;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.title {
+  margin: $spacing-medium 0;
+}
+
+.message {
+  color: $colors--title;
+  margin-bottom: $spacing-medium;
+}
