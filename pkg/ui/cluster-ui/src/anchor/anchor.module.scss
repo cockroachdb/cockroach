@@ -1,0 +1,8 @@
+@import '../core/index.module.scss';
+
+.crl-anchor {
+  color: $colors--link;
+  &:hover{
+    color: $colors--info-4;
+  }
+}

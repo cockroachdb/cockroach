@@ -1,0 +1,75 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+// Primary Palette
+$headings-color: $colors--primary-blue-5;
+$healthy-color: $colors--primary-green-3;
+$warning-color: $colors--warning;
+$alert-color: $colors--alert;
+$adminui-grey-1: $colors--neutral-8;
+$adminui-grey-2: $colors--neutral-6;
+$adminui-blue-1-base: $colors--primary-blue-3;
+$body-color: $colors--neutral-6;
+$text-color: $colors--neutral-7;
+$secondary-text-color: $colors--neutral-5;
+$link-color: $colors--primary-blue-3;
+$tooltip-color: $colors--neutral-5;
+$table-border-color: $colors--neutral-2;
+$button-border-color: $colors--neutral-4;
+$background-color: $colors--background;
+$main-blue-color: $colors--primary-blue-3;
+$grey: $colors--neutral-5;
+$grey-light: $colors--neutral-4;
+$adminui-white: $colors--white;
+$table-border: $colors--neutral-2;
+
+// Alert colors
+$notification-alert-fill-color: $colors--functional-red-1;
+$notification-alert-border-color: $colors--functional-red-2;
+$notification-info-fill-color: $colors--primary-blue-1;
+$notification-info-border-color: $colors--primary-blue-2;
+$notification-warning-fill-color: $colors--functional-orange-1;
+$notification-warning-border-color: $colors--functional-orange-2;
+
+// Info box colors
+$info-box-fill-color: $colors--primary-blue-1;
+$info-box-border-color: $colors--primary-blue-3;
+$info-box-heading-color: $colors--primary-blue-3;
+
+// Syntax highlight colors
+$syntax-string-color: $colors--functional-orange-4;
+$syntax-keyword-color: $colors--primary-blue-2;
+
+// Popover colors
+$popover-color: $colors--neutral-7;
+$popover-shadow-color: $colors--neutral-5;
+$popover-border-color: $colors--neutral-2;
+
+// classes colors
+$link: $colors--primary-blue-3;
+$checkbox-border: $colors--neutral-5;
+$checkbox-border-hover: $colors--neutral-4;
+
+// default
+$lightgreen: $colors--primary-green-1;
+$lightblue: $colors--primary-blue-1;
+$yellow: $colors--functional-orange-1;
+$placeholder: $colors--neutral-6;
+$blue: $colors--primary-blue-3;
+$light-blue: $colors--primary-blue-2;
+$green: $colors--primary-green-3;
+$grey2: $colors--neutral-3;
+$chip-green: $colors--primary-green-1;
+$chip-lightgreen: $colors--primary-green-0;
+$chip-grey: $colors--neutral-1;
+$chip-blue: #74bdfd80; // $colors--primary-blue-2 + 0.5 opacity
+$chip-lightblue: $colors--primary-blue-1;
+$chip-yellow: $colors--functional-orange-1;
