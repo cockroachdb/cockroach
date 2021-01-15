@@ -1,7 +1,6 @@
 import React from "react";
-import Button from "antd/lib/button";
-import Form from "antd/lib/form";
-import Input, { InputProps } from "antd/lib/input";
+import { Button, Form, Input } from "antd";
+import { InputProps } from "antd/lib/input";
 import classNames from "classnames/bind";
 import {
   Cancel as CancelIcon,

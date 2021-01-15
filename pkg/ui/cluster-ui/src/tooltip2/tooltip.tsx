@@ -1,8 +1,6 @@
 import * as React from "react";
-import {
-  default as AntTooltip,
-  TooltipProps as AntTooltipProps,
-} from "antd/lib/tooltip";
+import { Tooltip as AntTooltip } from "antd";
+import { TooltipProps as AntTooltipProps } from "antd/lib/tooltip";
 import classNames from "classnames/bind";
 import styles from "./tooltip.module.scss";
 

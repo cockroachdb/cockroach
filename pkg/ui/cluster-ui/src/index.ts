@@ -1,4 +1,3 @@
-import "antd/dist/antd.less";
 import "./protobufInit";
 import * as util from "./util";
 import * as api from "./api";
