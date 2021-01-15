@@ -27,7 +27,10 @@ export const CapacityUsageTooltip: React.FC<TooltipProps> = (props) => (
       <div className="tooltip__table--title">
         <p>Usage of disk space by CockroachDB data.</p>
         <p>
-          <Anchor href={howAreCapacityMetricsCalculatedOverview} target="_blank">
+          <Anchor
+            href={howAreCapacityMetricsCalculatedOverview}
+            target="_blank"
+          >
             How are these metrics calculated?
           </Anchor>
         </p>

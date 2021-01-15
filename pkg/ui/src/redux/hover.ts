@@ -38,15 +38,19 @@ export class HoverState {
   hoverTime: moment.Moment;
 }
 
-export function hoverReducer(state = new HoverState(), action: Action): HoverState {
+export function hoverReducer(
+  state = new HoverState(),
+  action: Action,
+): HoverState {
   switch (action.type) {
-    case HOVER_ON:
+    case HOVER_ON: {
       const { payload: hi } = action as PayloadAction<HoverInfo>;
       return {
         currentlyHovering: true,
         hoverChart: hi.hoverChart,
         hoverTime: hi.hoverTime,
       };
+    }
     case HOVER_OFF:
       return new HoverState();
     default:

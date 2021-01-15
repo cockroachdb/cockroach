@@ -14,7 +14,8 @@ import classNames from "classnames";
 
 import { allNodesHaveLocality } from "src/util/localities";
 import {
-  instructionsBoxCollapsedSelector, setInstructionsBoxCollapsed,
+  instructionsBoxCollapsedSelector,
+  setInstructionsBoxCollapsed,
 } from "src/redux/alerts";
 import { AdminUIState } from "src/redux/state";
 import { nodeStatusesSelector } from "src/redux/nodes";
@@ -45,6 +46,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
             <a
               href={docsURL.enableNodeMap}
               target="_blank"
+              rel="noreferrer"
               className="instructions-box-top-bar__setup_link"
             >
               Follow our configuration guide
@@ -60,18 +62,22 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
         <div className="instructions-box-content">
           <ol>
             <li
-              className={classNames(
-                "instructions-box-content__todo-item",
-                { "instructions-box-content__todo-item--done": firstTodoDone },
-              )}
+              className={classNames("instructions-box-content__todo-item", {
+                "instructions-box-content__todo-item--done": firstTodoDone,
+              })}
             >
-              { firstTodoDone ? (<div className="instructions-box-content__todo-check">{"\u2714"}</div>) : null }
-              Ensure every node in your cluster was started with a <code>--locality</code> flag.
-              (<Link to={"/reports/localities"}>See current locality tree</Link>)
+              {firstTodoDone ? (
+                <div className="instructions-box-content__todo-check">
+                  {"\u2714"}
+                </div>
+              ) : null}
+              Ensure every node in your cluster was started with a{" "}
+              <code>--locality</code> flag. (
+              <Link to={"/reports/localities"}>See current locality tree</Link>)
             </li>
             <li>
-              Add locations to the <code>system.locations</code> table corresponding to
-              your locality flags.
+              Add locations to the <code>system.locations</code> table
+              corresponding to your locality flags.
             </li>
           </ol>
           <div className="instructions-box-content__screenshot">
@@ -123,7 +129,10 @@ export default connect(mapStateToProps, mapDispatchToProps)(InstructionsBox);
 /**
  * showInstructionBox decides whether to show the instructionBox.
  */
-export function showInstructionsBox(showMap: boolean, tiers: LocalityTier[]): boolean {
+export function showInstructionsBox(
+  showMap: boolean,
+  tiers: LocalityTier[],
+): boolean {
   const atTopLevel = tiers.length === 0;
   return atTopLevel && !showMap;
 }

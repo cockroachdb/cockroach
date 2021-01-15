@@ -13,7 +13,10 @@ import { LocationTree } from "src/redux/locations";
 import { getChildLocalities } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 
-export function renderAsMap(locationTree: LocationTree, localityTree: LocalityTree) {
+export function renderAsMap(
+  locationTree: LocationTree,
+  localityTree: LocalityTree,
+) {
   // If there are any nodes directly under this locality, don't show a map.
   if (!_.isEmpty(localityTree.nodes)) {
     return false;

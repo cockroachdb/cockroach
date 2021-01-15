@@ -74,19 +74,16 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
   }
 
   render() {
-    const {
-      level,
-      dismiss,
-      link,
-      title,
-      text,
-      closable,
-    } = this.props;
+    const { level, dismiss, link, title, text, closable } = this.props;
 
     let description: React.ReactNode = text;
 
     if (link) {
-      description = <Link to={link} onClick={dismiss}>{text}</Link>;
+      description = (
+        <Link to={link} onClick={dismiss}>
+          {text}
+        </Link>
+      );
     }
 
     const type = mapAlertLevelToType(level);
@@ -97,17 +94,20 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
         message={title}
         description={description}
         showIcon
-        icon={<Icon type={iconType} theme="filled" className="alert-massage__icon" />}
+        icon={
+          <Icon
+            type={iconType}
+            theme="filled"
+            className="alert-massage__icon"
+          />
+        }
         closable={closable}
         onClose={dismiss}
         closeText={
-          closable && (
-            <div className="alert-massage__close-text">
-              &times;
-            </div>
-          )
+          closable && <div className="alert-massage__close-text">&times;</div>
         }
-        type={type} />
+        type={type}
+      />
     );
   }
 }

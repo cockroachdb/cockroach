@@ -6,8 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-/// <reference path="./typings.d.ts" />
-
 import React from "react";
 import * as d3 from "d3";
 
@@ -23,14 +21,14 @@ export class WorldMap extends React.Component<WorldMapProps> {
     return (
       <g>
         <g>
-          {shapes.features.map((feature: any, i: number) =>
+          {shapes.features.map((feature: any, i: number) => (
             <path
               key={i}
               className="geopath"
               id={`world-${feature.id}`}
               d={pathGen(feature)}
-            />,
-          )}
+            />
+          ))}
         </g>
       </g>
     );

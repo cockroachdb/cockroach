@@ -11,9 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter } from "react-router-dom";
-import {
-  refreshStatements,
-} from "src/redux/apiReducers";
+import { refreshStatements } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
@@ -50,17 +48,18 @@ const selectLastError = createSelector(
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
 );
 
-// tslint:disable-next-line:variable-name
-const TransactionsPageConnected = withRouter(connect(
-  (state: AdminUIState) => ({
-    data: selectData(state),
-    statementsError: state.cachedData.statements.lastError,
-    lastReset: selectLastReset(state),
-    error: selectLastError(state),
-  }),
-  {
-    refreshData: refreshStatements,
-  },
-)(TransactionsPage));
+const TransactionsPageConnected = withRouter(
+  connect(
+    (state: AdminUIState) => ({
+      data: selectData(state),
+      statementsError: state.cachedData.statements.lastError,
+      lastReset: selectLastReset(state),
+      error: selectLastError(state),
+    }),
+    {
+      refreshData: refreshStatements,
+    },
+  )(TransactionsPage),
+);
 
 export default TransactionsPageConnected;

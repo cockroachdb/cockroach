@@ -18,7 +18,7 @@ describe("parseSplatParams", () => {
   let match: Match;
 
   beforeEach(() => {
-    history = createMemoryHistory({initialEntries: ["/"]});
+    history = createMemoryHistory({ initialEntries: ["/"] });
     match = {
       path: "/",
       params: {},
@@ -31,14 +31,20 @@ describe("parseSplatParams", () => {
     history.push("/overview/map/region=us-west/zone=a");
     match.path = "/overview/map/";
 
-    assert.equal(parseSplatParams(match, history.location), "region=us-west/zone=a");
+    assert.equal(
+      parseSplatParams(match, history.location),
+      "region=us-west/zone=a",
+    );
   });
 
   it("trims out leading / from remaining path", () => {
     history.push("/overview/map/region=us-west/zone=a");
     match.path = "/overview/map";
 
-    assert.equal(parseSplatParams(match, history.location), "region=us-west/zone=a");
+    assert.equal(
+      parseSplatParams(match, history.location),
+      "region=us-west/zone=a",
+    );
   });
 
   it("returns empty string if path is fully matched", () => {

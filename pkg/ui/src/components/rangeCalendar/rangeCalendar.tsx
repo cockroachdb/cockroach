@@ -32,7 +32,9 @@ interface OwnProps {
   minTimeRange?: [DurationInputArg1, DurationInputArg2];
   onSubmit?: (range: [Moment, Moment]) => void;
   onCancel?: () => void;
-  onInvalidRangeSelect?: (allowedRange: [DurationInputArg1, DurationInputArg2]) => void;
+  onInvalidRangeSelect?: (
+    allowedRange: [DurationInputArg1, DurationInputArg2],
+  ) => void;
   showBorders?: boolean;
 }
 
@@ -44,6 +46,15 @@ interface RcTimePickerProps {
 
 export type RangeCalendarProps = OwnProps;
 
+function isBelowMinDateRange(
+  minTimeRange: [DurationInputArg1, DurationInputArg2],
+  from: Moment,
+  to: Moment,
+): boolean {
+  const minutesInRange = Math.abs(from.diff(to, minTimeRange[1], true));
+  return minutesInRange < minTimeRange[0];
+}
+
 export const RangeCalendar: React.FC<RangeCalendarProps> = ({
   timeFormat = "h:mm A",
   minTimeRange = [10, "minute"],
@@ -54,36 +65,39 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
 }) => {
   const currentDate = useMemo<Moment>(() => moment.utc().startOf("day"), []);
   const [startDate, setStartDate] = useState<Moment>(currentDate);
-  const [endDate, setEndDate] = useState<Moment>(moment.utc(currentDate).endOf("day"));
-
-  const isBelowMinDateRange = (from: Moment, to: Moment) => {
-    const minutesInRange = Math.abs(from.diff(to, minTimeRange[1], true));
-    return minutesInRange < minTimeRange[0];
-  };
+  const [endDate, setEndDate] = useState<Moment>(
+    moment.utc(currentDate).endOf("day"),
+  );
 
   const onDateRangeSelected = useCallback(
     ([selectedStartDate, selectedEndDate]: [Moment | null, Moment | null]) => {
       // Set only Date part and keep Time part unchanged
-      setStartDate(prevDate => moment.utc(prevDate).set({
-        year: selectedStartDate.year(),
-        month: selectedStartDate.month(),
-        date: selectedStartDate.date(),
-      }));
+      setStartDate((prevDate) =>
+        moment.utc(prevDate).set({
+          year: selectedStartDate.year(),
+          month: selectedStartDate.month(),
+          date: selectedStartDate.date(),
+        }),
+      );
 
-      setEndDate(prevDate => moment.utc(prevDate).set({
-        year: selectedEndDate.year(),
-        month: selectedEndDate.month(),
-        date: selectedEndDate.date(),
-      }));
+      setEndDate((prevDate) =>
+        moment.utc(prevDate).set({
+          year: selectedEndDate.year(),
+          month: selectedEndDate.month(),
+          date: selectedEndDate.date(),
+        }),
+      );
 
       // If date range is lower than allowed, update end date to be
       // equal startDate + min allowed date range
-      if (isBelowMinDateRange(selectedStartDate, selectedEndDate)) {
+      if (
+        isBelowMinDateRange(minTimeRange, selectedStartDate, selectedEndDate)
+      ) {
         setEndDate(moment.utc(selectedStartDate).add(...minTimeRange));
         onInvalidRangeSelect(minTimeRange);
       }
     },
-    [startDate, endDate, isBelowMinDateRange, setStartDate, setEndDate],
+    [minTimeRange, onInvalidRangeSelect],
   );
 
   const onTimeChange = useCallback(
@@ -92,34 +106,37 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
       const setOtherDate = rangePart !== "from" ? setStartDate : setEndDate;
       const otherDate = rangePart === "from" ? endDate : startDate;
 
-      setDate(prevDate => moment.utc(prevDate)
-        .set({
+      setDate((prevDate) =>
+        moment.utc(prevDate).set({
           hour: nextTime.get("hour"),
           minute: nextTime.get("minute"),
           second: nextTime.get("second"),
-        }));
+        }),
+      );
 
       // Handle edge case when `startDate` and `endDate` is the same day, In this case,
       // if `startTime` > `endTime` then endTime = startTime + 10min
       // if `endTime` < `startTime` then startTime = endTime - 10min
       // Keep new value for changed time part and update opposite part
       // automatically to keep at least 10min range.
-      if (isBelowMinDateRange(nextTime, otherDate)) {
-        const date = rangePart === "from" ?
-          nextTime.add(...minTimeRange) :
-          nextTime.subtract(...minTimeRange);
+      if (isBelowMinDateRange(minTimeRange, nextTime, otherDate)) {
+        const date =
+          rangePart === "from"
+            ? nextTime.add(...minTimeRange)
+            : nextTime.subtract(...minTimeRange);
 
         setOtherDate(date);
         onInvalidRangeSelect(minTimeRange);
       }
     },
-    [startDate, endDate, isBelowMinDateRange, setStartDate, setEndDate],
+    [endDate, startDate, minTimeRange, onInvalidRangeSelect],
   );
 
-  const onSubmitClick = useCallback(
-    () => onSubmit([startDate, endDate]),
-    [startDate, endDate],
-  );
+  const onSubmitClick = useCallback(() => onSubmit([startDate, endDate]), [
+    onSubmit,
+    startDate,
+    endDate,
+  ]);
 
   const timePickerDefaultProps: TimePickerProps & RcTimePickerProps = {
     allowClear: false,
@@ -162,7 +179,9 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
             <DateRangeLabel from={startDate} to={endDate} />
           </div>
           <div className={cx("crl-action-buttons")}>
-            <Button onClick={onCancel} type="secondary">Cancel</Button>
+            <Button onClick={onCancel} type="secondary">
+              Cancel
+            </Button>
             <Button onClick={onSubmitClick}>Apply</Button>
           </div>
         </div>
@@ -180,12 +199,9 @@ export const RangeCalendar: React.FC<RangeCalendarProps> = ({
       showDateInput={false}
       seperator=""
       renderFooter={renderFooter}
-      className={cx(
-        "crl-calendar",
-        {
-          "crl-calendar__no-borders": !showBorders,
-        },
-      )}
+      className={cx("crl-calendar", {
+        "crl-calendar__no-borders": !showBorders,
+      })}
       onSelect={onDateRangeSelected}
     />
   );

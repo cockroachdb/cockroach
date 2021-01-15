@@ -25,15 +25,22 @@ interface IDrawerProps {
 }
 
 const openDetails = (data: any) => {
-  const base = data.app && data.app.length > 0 ? `/statements/${data.app}/${data.implicitTxn}` : `/statement/${data.implicitTxn}`;
+  const base =
+    data.app && data.app.length > 0
+      ? `/statements/${data.app}/${data.implicitTxn}`
+      : `/statement/${data.implicitTxn}`;
   const link = `${base}/${encodeURIComponent(data.statement)}`;
-  return (
-    <Link to={link}>View statement details</Link>
-  );
+  return <Link to={link}>View statement details</Link>;
 };
 
-// tslint:disable-next-line: variable-name
-export const DrawerComponent = ({ visible, onClose, children, data, details, ...props }: IDrawerProps) => (
+export const DrawerComponent = ({
+  visible,
+  onClose,
+  children,
+  data,
+  details,
+  ...props
+}: IDrawerProps) => (
   <Drawer
     title={
       <div className={cx("__actions")}>

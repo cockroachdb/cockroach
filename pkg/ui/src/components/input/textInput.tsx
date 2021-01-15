@@ -57,10 +57,10 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
     const { validate } = this.props;
     const validationMessage = validate(value);
     this.setState({
-      isValid: !Boolean(validationMessage),
+      isValid: !validationMessage,
       validationMessage,
     });
-  }
+  };
 
   handleOnTextChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -72,7 +72,7 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isDirty: true,
     });
     this.props.onChange(value);
-  }
+  };
 
   handleOnBlur = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -81,24 +81,30 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
       isTouched: true,
       needValidation: true,
     });
-  }
+  };
 
   render() {
-    const { initialValue, placeholder, className, name, value, label } = this.props;
+    const {
+      initialValue,
+      placeholder,
+      className,
+      name,
+      value,
+      label,
+    } = this.props;
     const { isDirty, isValid, validationMessage } = this.state;
     const textValue = isDirty ? value : initialValue;
 
-    const classes = cn(
-      className,
-      "crl-input",
-      "crl-input__text",
-      {
-        "crl-input__text--invalid": !isValid,
-      },
-    );
+    const classes = cn(className, "crl-input", "crl-input__text", {
+      "crl-input__text--invalid": !isValid,
+    });
     return (
       <div className="crl-input__wrapper">
-        {label && <label htmlFor={name} className="crl-input__label">{label}</label>}
+        {label && (
+          <label htmlFor={name} className="crl-input__label">
+            {label}
+          </label>
+        )}
         <input
           name={name}
           type="text"
@@ -109,18 +115,16 @@ export class TextInput extends React.Component<TextInputProps, TextInputState> {
           onBlur={this.handleOnBlur}
           autoComplete="off"
         />
-        {
-          !isValid && (
-            <div className="crl-input__text--validation-container">
-              <Text
-                textType={TextTypes.Caption}
-                className="crl-input__text--error-message"
-              >
-                {validationMessage}
-              </Text>
-            </div>
-          )
-        }
+        {!isValid && (
+          <div className="crl-input__text--validation-container">
+            <Text
+              textType={TextTypes.Caption}
+              className="crl-input__text--error-message"
+            >
+              {validationMessage}
+            </Text>
+          </div>
+        )}
       </div>
     );
   }

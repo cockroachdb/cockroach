@@ -21,9 +21,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"Session ID."}
-          </p>
+          <p>{"Session ID."}</p>
         </div>
       }
     >
@@ -35,9 +33,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"Most recent or currently active statement."}
-          </p>
+          <p>{"Most recent or currently active statement."}</p>
         </div>
       }
     >
@@ -49,9 +45,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"Actions to take on the session."}
-          </p>
+          <p>{"Actions to take on the session."}</p>
         </div>
       }
     >
@@ -63,9 +57,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"The duration of the session."}
-          </p>
+          <p>{"The duration of the session."}</p>
         </div>
       }
     >
@@ -77,9 +69,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"The duration of the open transaction, if there is one."}
-          </p>
+          <p>{"The duration of the open transaction, if there is one."}</p>
         </div>
       }
     >
@@ -91,9 +81,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"The duration of the active statement, if there is one."}
-          </p>
+          <p>{"The duration of the active statement, if there is one."}</p>
         </div>
       }
     >
@@ -107,7 +95,7 @@ export const SessionTableTitle = {
         <div className={cx("tooltip__table--title")}>
           <p>
             {"The current amount of allocated memory on this session and the maximum amount of memory this" +
-            " session has ever allocated."}
+              " session has ever allocated."}
           </p>
         </div>
       }
@@ -134,9 +122,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"The number of times this transaction encountered a retry."}
-          </p>
+          <p>{"The number of times this transaction encountered a retry."}</p>
         </div>
       }
     >
@@ -148,9 +134,7 @@ export const SessionTableTitle = {
       placement="bottom"
       title={
         <div className={cx("tooltip__table--title")}>
-          <p>
-            {"The last statement that was completed on this session."}
-          </p>
+          <p>{"The last statement that was completed on this session."}</p>
         </div>
       }
     >
@@ -163,7 +147,9 @@ export const SessionTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            {"Number of statements that have been run in this transaction so far."}
+            {
+              "Number of statements that have been run in this transaction so far."
+            }
           </p>
         </div>
       }

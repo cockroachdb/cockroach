@@ -623,6 +623,22 @@ func (w *chunkWriter) Close() error {
 
 	return err
 }
+
+type reader struct {
+	pos int64
+	fn  func([]byte, int64) (int, error)
+}
+
+func (r *reader) Read(p []byte) (int, error) {
+	n, err := r.fn(p, r.pos)
+	r.pos += int64(n)
+	return n, err
+}
+
+func (reader) Close() error {
+	return nil
+}
+
 func newFileTableReader(
 	ctx context.Context,
 	filename string,
@@ -645,30 +661,43 @@ func newFileTableReader(
 	if fileIDRow == nil {
 		return nil, 0, os.ErrNotExist
 	}
-
-	query := fmt.Sprintf(`SELECT payload FROM %s WHERE file_id=$1`, payloadTableName)
-	rows, err := ie.QueryEx(
-		ctx, "get-filename-payload",
-		nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileIDRow[0],
+	fileID := fileIDRow[0]
+	rows, err := ie.QueryEx(ctx, "get-file-size", nil /*txn*/, sessiondata.InternalExecutorOverride{User: username},
+		fmt.Sprintf(`SELECT sum_int(length(payload)) FROM %s WHERE file_id=$1`, payloadTableName), fileID,
 	)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Verify that all the payloads are bytes and assemble bytes of filename.
-	var fileBytes []byte
-	for _, row := range rows {
-		fileBytes = append(fileBytes, []byte(tree.MustBeDBytes(row[0]))...)
+	if len(rows) == 0 || rows[0][0] == tree.DNull {
+		return ioutil.NopCloser(bytes.NewReader(nil)), 0, nil
 	}
 
-	size := int64(len(fileBytes))
+	sz := int64(tree.MustBeDInt(rows[0][0]))
 
-	// TODO(dt): only fetch needed rows above using offset.
-	if offset > 0 {
-		fileBytes = fileBytes[offset:]
+	fn := func(p []byte, pos int64) (int, error) {
+		if pos >= sz {
+			return 0, io.EOF
+		}
+		query := fmt.Sprintf(
+			`SELECT byte_offset, payload FROM %s WHERE file_id=$1 AND byte_offset <= $2 ORDER BY byte_offset DESC LIMIT 1`, payloadTableName)
+		rows, err := ie.QueryEx(
+			ctx, "get-filename-payload",
+			nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileID, pos,
+		)
+		if err != nil {
+			return 0, err
+		}
+		if len(rows) == 0 || rows[0][1] == tree.DNull {
+			return 0, io.EOF
+		}
+		block := tree.MustBeDBytes(rows[0][1])
+		offsetInBlock := pos - int64(tree.MustBeDInt(rows[0][0]))
+		n := copy(p, block[offsetInBlock:])
+		return n, nil
 	}
 
-	return ioutil.NopCloser(bytes.NewReader(fileBytes)), size, nil
+	return &reader{fn: fn, pos: offset}, sz, nil
 }
 
 // ReadFile returns the blob for filename using a FileTableReader.

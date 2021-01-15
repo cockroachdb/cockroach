@@ -69,17 +69,21 @@ function getValueFromSessionStorage(key: string) {
 /**
  * reducer function which handles local settings, storing them in a dictionary.
  */
-export function localSettingsReducer(state: LocalSettingsState = {}, action: Action): LocalSettingsState {
+export function localSettingsReducer(
+  state: LocalSettingsState = {},
+  action: Action,
+): LocalSettingsState {
   if (_.isNil(action)) {
     return state;
   }
 
   switch (action.type) {
-    case SET_UI_VALUE:
+    case SET_UI_VALUE: {
       const { payload } = action as PayloadAction<LocalSettingData>;
       state = _.clone(state);
       state[payload.key] = payload.value;
       return state;
+    }
     default:
       return state;
   }
@@ -88,7 +92,10 @@ export function localSettingsReducer(state: LocalSettingsState = {}, action: Act
 /**
  * Action creator to set a named local setting.
  */
-export function setLocalSetting(key: string, value: any): PayloadAction<LocalSettingData> {
+export function setLocalSetting(
+  key: string,
+  value: any,
+): PayloadAction<LocalSettingData> {
   return {
     type: SET_UI_VALUE,
     payload: {
@@ -112,7 +119,7 @@ export class LocalSetting<S, T> {
    */
   set = (value: T) => {
     return setLocalSetting(this.key, value);
-  }
+  };
 
   /**
    * Selector which retrieves this setting from the LocalSettingsState
@@ -120,7 +127,7 @@ export class LocalSetting<S, T> {
    */
   selector = (state: S) => {
     return this._value(state);
-  }
+  };
 
   /**
    * Construct a new LocalSetting manager.
@@ -130,7 +137,11 @@ export class LocalSetting<S, T> {
    * @param defaultValue Optional default value of the setting when it has not
    * yet been set.
    */
-  constructor(public key: string, innerSelector: Selector<S, LocalSettingsState>, defaultValue?: T) {
+  constructor(
+    public key: string,
+    innerSelector: Selector<S, LocalSettingsState>,
+    defaultValue?: T,
+  ) {
     this._value = createSelector(
       innerSelector,
       () => getValueFromSessionStorage(this.key),

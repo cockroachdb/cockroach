@@ -11,22 +11,20 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import {withBackgroundFactory, withRouterProvider} from ".storybook/decorators";
-import {SessionsPage} from "src/views/sessions/sessionsPage";
-import {sessionsPagePropsEmptyFixture, sessionsPagePropsFixture} from "src/views/sessions/sessionsPage.fixture";
+import {
+  withBackgroundFactory,
+  withRouterProvider,
+} from ".storybook/decorators";
+import { SessionsPage } from "src/views/sessions/sessionsPage";
+import {
+  sessionsPagePropsEmptyFixture,
+  sessionsPagePropsFixture,
+} from "src/views/sessions/sessionsPage.fixture";
 
 storiesOf("Sessions Page", module)
   .addDecorator(withRouterProvider)
   .addDecorator(withBackgroundFactory())
-  .add("Overview Page", () => (
-    <SessionsPage
-      {...sessionsPagePropsFixture}
-    />
-  ))
+  .add("Overview Page", () => <SessionsPage {...sessionsPagePropsFixture} />)
   .add("Empty Overview Page", () => (
-    <SessionsPage
-      {...sessionsPagePropsEmptyFixture}
-    />
-  ))
-
-;
+    <SessionsPage {...sessionsPagePropsEmptyFixture} />
+  ));
