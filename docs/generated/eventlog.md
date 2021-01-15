@@ -208,6 +208,28 @@ An event of type `alter_database_primary_region` is recorded when a primary regi
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
 
+### `alter_database_survival_goal`
+
+An event of type `alter_database_survival_goal` is recorded when the survival goal is modified.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DatabaseName` | The name of the database. | yes |
+| `SurvivalGoal` | The new survival goal | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+
 ### `alter_index`
 
 An event of type `alter_index` is recorded when an index is altered.
