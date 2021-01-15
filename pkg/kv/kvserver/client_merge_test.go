@@ -1311,6 +1311,7 @@ func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	t.Skip("WIP")
 
 	ctx := context.Background()
 
