@@ -89,6 +89,25 @@ Each entry contains at least the following fields:
 	sort.Strings(keys)
 	for _, k := range keys {
 		c := k[0]
+		if !jsonTags[c].includedInHeader {
+			continue
+		}
+		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[c].tags[tags], jsonTags[c].description)
+	}
+
+	buf.WriteString(`
+
+After a couple of *header* entries written at the beginning of each log sink,
+all subsequent log entries also contain the following fields:
+
+| Field               | Description |
+|---------------------|-------------|
+`)
+	for _, k := range keys {
+		c := k[0]
+		if jsonTags[c].includedInHeader {
+			continue
+		}
 		fmt.Fprintf(&buf, "| `%s` | %s |\n", jsonTags[c].tags[tags], jsonTags[c].description)
 	}
 
@@ -125,38 +144,39 @@ by ` + "`" + `debug zip` + "`" + ` and ` + "`" + `debug merge-logs` + "`" + ` wh
 }
 
 var jsonTags = map[byte]struct {
-	tags        [2]string
-	description string
+	tags             [2]string
+	description      string
+	includedInHeader bool
 }{
 	'c': {[2]string{"c", "channel_numeric"},
-		"The numeric identifier for the logging channel where the event was sent."},
+		"The numeric identifier for the logging channel where the event was sent.", false},
 	'C': {[2]string{"C", "channel"},
-		"The name of the logging channel where the event was sent."},
+		"The name of the logging channel where the event was sent.", false},
 	't': {[2]string{"t", "timestamp"},
-		"The timestamp at which the event was emitted on the logging channel."},
+		"The timestamp at which the event was emitted on the logging channel.", true},
 	's': {[2]string{"s", "severity_numeric"},
-		"The numeric value of the severity of the event."},
+		"The numeric value of the severity of the event.", false},
 	'S': {[2]string{"sev", "severity"},
-		"The severity of the event."},
+		"The severity of the event.", false},
 	'g': {[2]string{"g", "goroutine"},
-		"The identifier of the goroutine where the event was emitted."},
+		"The identifier of the goroutine where the event was emitted.", true},
 	'f': {[2]string{"f", "file"},
-		"The name of the source file where the event was emitted."},
+		"The name of the source file where the event was emitted.", true},
 	'l': {[2]string{"l", "line"},
-		"The line number where the event was emitted in the source."},
+		"The line number where the event was emitted in the source.", true},
 	'n': {[2]string{"n", "entry_counter"},
-		"The entry number on this logging sink, relative to the last process restart."},
+		"The entry number on this logging sink, relative to the last process restart.", false},
 	'r': {[2]string{"r", "redactable"},
-		"Whether the payload is redactable (see below for details)."},
+		"Whether the payload is redactable (see below for details).", true},
 	'N': {[2]string{"N", "node_id"},
-		"The node ID where the event was generated, once known. Only reported for single-tenant or KV servers."},
+		"The node ID where the event was generated, once known. Only reported for single-tenant or KV servers.", true},
 	'x': {[2]string{"x", "cluster_id"},
-		"The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers."},
+		"The cluster ID where the event was generated, once known. Only reported for single-tenant of KV servers.", true},
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
-		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers."},
+		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
 	'T': {[2]string{"T", "tenant_id"},
-		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers."},
+		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
 }
 
 const serverIdentifierFields = "NxqT"
@@ -189,22 +209,37 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		// than the one splitting the application and category.
 		buf.WriteString(programEscaped)
 		buf.WriteByte('.')
-		buf.WriteString(channelNamesLowercase[entry.ch])
+		if !entry.header {
+			buf.WriteString(channelNamesLowercase[entry.ch])
+		} else {
+			// Sink headers have no channel.
+			// Note: this string should never occur in practice, when the sink
+			// is connected to Fluentd over the network. Header entries
+			// only occur when emitting to file sinks, and when using file
+			// output it's likelier for the user to use format 'json' instead
+			// of 'json-fluent'.
+			buf.WriteString("unknown")
+		}
 		// Also include the channel number in numeric form to facilitate
 		// automatic processing.
 		buf.WriteString(`",`)
 	}
-	buf.WriteByte('"')
-	buf.WriteString(jtags['c'].tags[tags])
-	buf.WriteString(`":`)
-	n := buf.someDigits(0, int(entry.ch))
-	buf.Write(buf.tmp[:n])
-	if tags != tagCompact {
-		buf.WriteString(`,"`)
-		buf.WriteString(jtags['C'].tags[tags])
-		buf.WriteString(`":"`)
-		escapeString(buf, entry.ch.String())
+	if !entry.header {
 		buf.WriteByte('"')
+		buf.WriteString(jtags['c'].tags[tags])
+		buf.WriteString(`":`)
+		n := buf.someDigits(0, int(entry.ch))
+		buf.Write(buf.tmp[:n])
+		if tags != tagCompact {
+			buf.WriteString(`,"`)
+			buf.WriteString(jtags['C'].tags[tags])
+			buf.WriteString(`":"`)
+			escapeString(buf, entry.ch.String())
+			buf.WriteByte('"')
+		}
+		buf.WriteByte(',')
+	} else {
+		buf.WriteString(`"header":1,`)
 	}
 	// Timestamp.
 	// Note: fluentd is particular about the time format; although this
@@ -216,10 +251,10 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	// Also, we enclose the timestamp in double quotes because the
 	// precision of the resulting number exceeds json's native float
 	// precision. Fluentd doesn't care and still parses the value properly.
-	buf.WriteString(`,"`)
+	buf.WriteByte('"')
 	buf.WriteString(jtags['t'].tags[tags])
 	buf.WriteString(`":"`)
-	n = buf.someDigits(0, int(entry.ts/1000000000))
+	n := buf.someDigits(0, int(entry.ts/1000000000))
 	buf.tmp[n] = '.'
 	n++
 	n += buf.nDigits(9, n, int(entry.ts%1000000000), '0')
@@ -256,28 +291,30 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.Write(buf.tmp[:n])
 	}
 
-	// Severity, both in numeric form (for ease of processing) and
-	// string form (to facilitate human comprehension).
-	buf.WriteString(`,"`)
-	buf.WriteString(jtags['s'].tags[tags])
-	buf.WriteString(`":`)
-	n = buf.someDigits(0, int(entry.sev))
-	buf.Write(buf.tmp[:n])
+	if !entry.header {
+		// Severity, both in numeric form (for ease of processing) and
+		// string form (to facilitate human comprehension).
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['s'].tags[tags])
+		buf.WriteString(`":`)
+		n = buf.someDigits(0, int(entry.sev))
+		buf.Write(buf.tmp[:n])
 
-	if tags == tagCompact {
-		if entry.sev > 0 && int(entry.sev) <= len(severityChar) {
+		if tags == tagCompact {
+			if entry.sev > 0 && int(entry.sev) <= len(severityChar) {
+				buf.WriteString(`,"`)
+				buf.WriteString(jtags['S'].tags[tags])
+				buf.WriteString(`":"`)
+				buf.WriteByte(severityChar[int(entry.sev)-1])
+				buf.WriteByte('"')
+			}
+		} else {
 			buf.WriteString(`,"`)
 			buf.WriteString(jtags['S'].tags[tags])
 			buf.WriteString(`":"`)
-			buf.WriteByte(severityChar[int(entry.sev)-1])
+			escapeString(buf, entry.sev.String())
 			buf.WriteByte('"')
 		}
-	} else {
-		buf.WriteString(`,"`)
-		buf.WriteString(jtags['S'].tags[tags])
-		buf.WriteString(`":"`)
-		escapeString(buf, entry.sev.String())
-		buf.WriteByte('"')
 	}
 
 	// Goroutine number.
@@ -298,12 +335,14 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	n = buf.someDigits(0, entry.line)
 	buf.Write(buf.tmp[:n])
 
-	// Entry counter.
-	buf.WriteString(`,"`)
-	buf.WriteString(jtags['n'].tags[tags])
-	buf.WriteString(`":`)
-	n = buf.someDigits(0, int(entry.counter))
-	buf.Write(buf.tmp[:n])
+	if !entry.header {
+		// Entry counter.
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['n'].tags[tags])
+		buf.WriteString(`":`)
+		n = buf.someDigits(0, int(entry.counter))
+		buf.Write(buf.tmp[:n])
+	}
 
 	// Whether the tags/message are redactable.
 	// We use 0/1 instead of true/false, because
