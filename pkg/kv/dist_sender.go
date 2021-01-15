@@ -37,7 +37,7 @@ import (
 
 const (
 	// The default limit for asynchronous senders.
-	defaultSenderConcurrency = 500
+	defaultSenderConcurrency = 5000
 	// The maximum number of range descriptors to prefetch during range lookups.
 	rangeLookupPrefetchCount = 8
 )
