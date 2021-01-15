@@ -36,6 +36,13 @@ func TestJSONFormats(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "long", "2")
 
 	testCases := []logEntry{
+		// Header entry.
+		func() logEntry {
+			e := makeUnstructuredEntry(ctx, 0, 0, 0, true, "hello %s", "world")
+			e.header = true
+			return e
+		}(),
+		// Normal (non-header) entries.
 		{},
 		{idPayload: idPayload{clusterID: "abc", nodeID: 123}},
 		{idPayload: idPayload{tenantID: "abc", sqlInstanceID: 123}},
