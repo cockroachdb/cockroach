@@ -854,6 +854,8 @@ func (ir *IntentResolver) ResolveIntents(
 			_ = resp.Resp // ignore the response
 		case <-ctx.Done():
 			return roachpb.NewError(ctx.Err())
+		case <-ir.stopper.ShouldQuiesce():
+			return roachpb.NewErrorf("stopping")
 		}
 	}
 	return nil

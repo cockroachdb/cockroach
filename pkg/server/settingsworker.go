@@ -130,7 +130,7 @@ func (s *Server) refreshSettings(initialSettingsKVs []roachpb.KeyValue) error {
 		}
 	}
 	// Setup updater that listens for changes in settings.
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	return s.stopper.RunAsyncTask(ctx, "refresh-settings", func(ctx context.Context) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
 		for {
@@ -141,10 +141,9 @@ func (s *Server) refreshSettings(initialSettingsKVs []roachpb.KeyValue) error {
 				if err := processSystemConfigKVs(ctx, cfg.Values, u, s.engines[0]); err != nil {
 					log.Warningf(ctx, "error processing config KVs: %+v", err)
 				}
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}
 	})
-	return nil
 }

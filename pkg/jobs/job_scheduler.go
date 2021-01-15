@@ -344,7 +344,7 @@ func (s *jobScheduler) executeSchedules(
 }
 
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "job-scheduler", func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
 		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 

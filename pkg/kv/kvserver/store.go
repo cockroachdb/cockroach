@@ -1056,7 +1056,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	// To prevent this, we add this code here which adds the missing
 	// cancel + wait in the particular case where the stopper is
 	// completing a shutdown while a graceful SetDrain is still ongoing.
-	ctx, cancelFn := s.stopper.WithCancelOnStop(baseCtx)
+	ctx, cancelFn := s.stopper.WithCancelOnQuiesce(baseCtx)
 	defer cancelFn()
 
 	var wg sync.WaitGroup
@@ -1559,13 +1559,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
 		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
-		s.stopper.RunWorker(ctx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
 			for {
 				select {
 				case <-gossipUpdateC:
 					cfg := s.cfg.Gossip.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
-				case <-s.stopper.ShouldStop():
+				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
@@ -1580,11 +1580,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// Start the scanner. The construction here makes sure that the scanner
 		// only starts after Gossip has connected, and that it does not block Start
 		// from returning (as doing so might prevent Gossip from ever connecting).
-		s.stopper.RunWorker(ctx, func(context.Context) {
+		_ = s.stopper.RunAsyncTask(ctx, "scanner", func(context.Context) {
 			select {
 			case <-s.cfg.Gossip.Connected:
 				s.scanner.Start(s.stopper)
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		})
@@ -1692,7 +1692,7 @@ func (s *Store) startGossip() {
 	s.initComplete.Add(len(gossipFns))
 	for _, gossipFn := range gossipFns {
 		gossipFn := gossipFn // per-iteration copy
-		s.stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		if err := s.stopper.RunAsyncTask(context.Background(), "store-gossip", func(ctx context.Context) {
 			ticker := time.NewTicker(gossipFn.interval)
 			defer ticker.Stop()
 			for first := true; ; {
@@ -1701,7 +1701,7 @@ func (s *Store) startGossip() {
 				// making it impossible to get an epoch-based range lease), in which
 				// case we want to retry quickly.
 				retryOptions := base.DefaultRetryOptions()
-				retryOptions.Closer = s.stopper.ShouldStop()
+				retryOptions.Closer = s.stopper.ShouldQuiesce()
 				for r := retry.Start(retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
@@ -1720,11 +1720,13 @@ func (s *Store) startGossip() {
 				}
 				select {
 				case <-ticker.C:
-				case <-s.stopper.ShouldStop():
+				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
-		})
+		}); err != nil {
+			s.initComplete.Done()
+		}
 	}
 }
 
@@ -1738,7 +1740,7 @@ func (s *Store) startGossip() {
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
 		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
@@ -1771,7 +1773,7 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			case <-s.renewableLeasesSignal:
 			case <-timer.C:
 				timer.Read = true
-			case <-s.stopper.ShouldStop():
+			case <-s.stopper.ShouldQuiesce():
 				return
 			}
 		}
@@ -1793,7 +1795,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 		return
 	}
 
-	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(ctx, "ct-subscriber", func(ctx context.Context) {
 		var replIDs []roachpb.RangeID
 		for {
 			select {

@@ -308,7 +308,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					case <-timer.C:
 						timer.Read = true
 						break
-					case <-s.flowCtx.Stopper().ShouldStop():
+					case <-s.flowCtx.Stopper().ShouldQuiesce():
 						break
 					}
 				}

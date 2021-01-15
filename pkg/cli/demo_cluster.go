@@ -751,7 +751,7 @@ func (c *transientCluster) runWorkload(
 						log.Warningf(ctx, "error running workload query: %+v", err)
 					}
 					select {
-					case <-c.s.Stopper().ShouldStop():
+					case <-c.s.Stopper().ShouldQuiesce():
 						return
 					default:
 					}
@@ -761,7 +761,9 @@ func (c *transientCluster) runWorkload(
 		// As the SQL shell is tied to `c.s`, this means we want to tie the workload
 		// onto this as we want the workload to stop when the server dies,
 		// rather than the cluster. Otherwise, interrupts on cockroach demo hangs.
-		c.s.Stopper().RunWorker(ctx, workloadFun(workerFn))
+		if err := c.s.Stopper().RunAsyncTask(ctx, "workload", workloadFun(workerFn)); err != nil {
+			return err
+		}
 	}
 
 	return nil

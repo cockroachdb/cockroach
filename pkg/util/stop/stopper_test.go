@@ -38,7 +38,7 @@ func TestStopper(t *testing.T) {
 	cleanup := make(chan struct{})
 	ctx := context.Background()
 
-	s.RunWorker(ctx, func(context.Context) {
+	_ = s.RunAsyncTask(ctx, "task", func(context.Context) {
 		<-running
 	})
 
@@ -48,7 +48,7 @@ func TestStopper(t *testing.T) {
 		<-cleanup
 	}()
 
-	<-s.ShouldStop()
+	<-s.ShouldQuiesce()
 	select {
 	case <-waiting:
 		close(cleanup)
@@ -91,7 +91,7 @@ func TestStopperIsStopped(t *testing.T) {
 	go s.Stop(context.Background())
 
 	select {
-	case <-s.ShouldStop():
+	case <-s.ShouldQuiesce():
 	case <-time.After(time.Second):
 		t.Fatal("stopper should have finished waiting")
 	}
@@ -112,16 +112,16 @@ func TestStopperIsStopped(t *testing.T) {
 	s.Stop(context.Background())
 }
 
-func TestStopperMultipleStopees(t *testing.T) {
+func TestStopperMultipleTasks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const count = 3
 	s := stop.NewStopper()
 	ctx := context.Background()
 
 	for i := 0; i < count; i++ {
-		s.RunWorker(ctx, func(context.Context) {
-			<-s.ShouldStop()
-		})
+		require.NoError(t, s.RunAsyncTask(ctx, "task", func(context.Context) {
+			<-s.ShouldQuiesce()
+		}))
 	}
 
 	done := make(chan struct{})
@@ -144,8 +144,8 @@ func TestStopperStartFinishTasks(t *testing.T) {
 		go s.Stop(ctx)
 
 		select {
-		case <-s.ShouldStop():
-			t.Fatal("expected stopper to be quiesceing")
+		case <-s.IsStopped():
+			t.Fatal("stopper not fully stopped")
 		case <-time.After(100 * time.Millisecond):
 			// Expected.
 		}
@@ -153,27 +153,7 @@ func TestStopperStartFinishTasks(t *testing.T) {
 		t.Error(err)
 	}
 	select {
-	case <-s.ShouldStop():
-		// Success.
-	case <-time.After(time.Second):
-		t.Fatal("stopper should be ready to stop")
-	}
-}
-
-func TestStopperRunWorker(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := stop.NewStopper()
-	ctx := context.Background()
-	s.RunWorker(ctx, func(context.Context) {
-		<-s.ShouldStop()
-	})
-	closer := make(chan struct{})
-	go func() {
-		s.Stop(ctx)
-		close(closer)
-	}()
-	select {
-	case <-closer:
+	case <-s.IsStopped():
 		// Success.
 	case <-time.After(time.Second):
 		t.Fatal("stopper should be ready to stop")
@@ -197,17 +177,17 @@ func TestStopperQuiesce(t *testing.T) {
 		quiesceDone = append(quiesceDone, qc)
 		sc := make(chan struct{})
 		runTaskDone = append(runTaskDone, sc)
-		thisStopper.RunWorker(ctx, func(ctx context.Context) {
+		go func() {
 			// Wait until Quiesce() is called.
 			<-qc
-			err := thisStopper.RunTask(ctx, "test", func(context.Context) {})
+			err := thisStopper.RunTask(ctx, "inner", func(context.Context) {})
 			if !errors.HasType(err, (*roachpb.NodeUnavailableError)(nil)) {
 				t.Error(err)
 			}
 			// Make the stoppers call Stop().
 			close(sc)
-			<-thisStopper.ShouldStop()
-		})
+			<-thisStopper.ShouldQuiesce()
+		}()
 	}
 
 	done := make(chan struct{})
@@ -368,9 +348,6 @@ func TestStopperRunTaskPanic(t *testing.T) {
 				func(ctx context.Context) { explode(ctx) },
 			)
 		},
-		func() {
-			s.RunWorker(ctx, explode)
-		},
 	} {
 		go test()
 		recovered := <-ch
@@ -385,35 +362,20 @@ func TestStopperWithCancel(t *testing.T) {
 	s := stop.NewStopper()
 	ctx := context.Background()
 	ctx1, _ := s.WithCancelOnQuiesce(ctx)
-	ctx2, _ := s.WithCancelOnStop(ctx)
 	ctx3, cancel3 := s.WithCancelOnQuiesce(ctx)
-	ctx4, cancel4 := s.WithCancelOnStop(ctx)
 
 	if err := ctx1.Err(); err != nil {
-		t.Fatalf("should not be canceled: %v", err)
-	}
-	if err := ctx2.Err(); err != nil {
 		t.Fatalf("should not be canceled: %v", err)
 	}
 	if err := ctx3.Err(); err != nil {
 		t.Fatalf("should not be canceled: %v", err)
 	}
-	if err := ctx4.Err(); err != nil {
-		t.Fatalf("should not be canceled: %v", err)
-	}
 
 	cancel3()
-	cancel4()
 	if err := ctx1.Err(); err != nil {
 		t.Fatalf("should not be canceled: %v", err)
 	}
-	if err := ctx2.Err(); err != nil {
-		t.Fatalf("should not be canceled: %v", err)
-	}
 	if err := ctx3.Err(); !errors.Is(err, context.Canceled) {
-		t.Fatalf("should be canceled: %v", err)
-	}
-	if err := ctx4.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
 
@@ -421,14 +383,8 @@ func TestStopperWithCancel(t *testing.T) {
 	if err := ctx1.Err(); !errors.Is(err, context.Canceled) {
 		t.Fatalf("should be canceled: %v", err)
 	}
-	if err := ctx2.Err(); err != nil {
-		t.Fatalf("should not be canceled: %v", err)
-	}
 
 	s.Stop(ctx)
-	if err := ctx2.Err(); !errors.Is(err, context.Canceled) {
-		t.Fatalf("should be canceled: %v", err)
-	}
 }
 
 func TestStopperWithCancelConcurrent(t *testing.T) {
@@ -437,21 +393,16 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 	for i := 0; i < trials; i++ {
 		s := stop.NewStopper()
 		ctx := context.Background()
-		var ctx1, ctx2 context.Context
+		var ctx1 context.Context
 
-		// Tie two contexts to the Stopper and Stop concurrently. There should
+		// Tie a context to the Stopper and Stop concurrently. There should
 		// be no circumstance where either Context is not canceled.
 		var wg sync.WaitGroup
-		wg.Add(3)
+		wg.Add(2)
 		go func() {
 			defer wg.Done()
 			runtime.Gosched()
 			ctx1, _ = s.WithCancelOnQuiesce(ctx)
-		}()
-		go func() {
-			defer wg.Done()
-			runtime.Gosched()
-			ctx2, _ = s.WithCancelOnStop(ctx)
 		}()
 		go func() {
 			defer wg.Done()
@@ -463,27 +414,17 @@ func TestStopperWithCancelConcurrent(t *testing.T) {
 		if err := ctx1.Err(); !errors.Is(err, context.Canceled) {
 			t.Errorf("should be canceled: %v", err)
 		}
-		if err := ctx2.Err(); !errors.Is(err, context.Canceled) {
-			t.Errorf("should be canceled: %v", err)
-		}
 	}
 }
 
 func TestStopperShouldQuiesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
-	running := make(chan struct{})
 	runningTask := make(chan struct{})
 	waiting := make(chan struct{})
 	cleanup := make(chan struct{})
 	ctx := context.Background()
 
-	// Run a worker. A call to stopper.Stop(context.Background()) will not close until all workers
-	// have completed, and this worker will complete when the "running" channel
-	// is closed.
-	s.RunWorker(ctx, func(context.Context) {
-		<-running
-	})
 	// Run an asynchronous task. A stopper which has been Stop()ed will not
 	// close it's ShouldStop() channel until all tasks have completed. This task
 	// will complete when the "runningTask" channel is closed.
@@ -502,33 +443,15 @@ func TestStopperShouldQuiesce(t *testing.T) {
 	// The ShouldQuiesce() channel should close as soon as the stopper is
 	// Stop()ed.
 	<-s.ShouldQuiesce()
-	// However, the ShouldStop() channel should still be blocked because the
-	// async task started above is still running, meaning we haven't quiesceed
-	// yet.
-	select {
-	case <-s.ShouldStop():
-		close(cleanup)
-		t.Fatal("expected ShouldStop() to block until quiesceing complete")
-	default:
-		// Expected.
-	}
 	// After completing the running task, the ShouldStop() channel should
 	// now close.
 	close(runningTask)
-	<-s.ShouldStop()
-	// However, the working running above prevents the call to Stop() from
-	// returning; it blocks until the runner's goroutine is finished. We
-	// use the "waiting" channel to detect this.
 	select {
-	case <-waiting:
-		close(cleanup)
-		t.Fatal("expected stopper to have blocked")
-	default:
-		// Expected.
+	case <-s.IsStopped():
+	// Good.
+	case <-time.After(10 * time.Second):
+		t.Fatal("stopper did not fully stop in time")
 	}
-	// Finally, close the "running" channel, which should cause the original
-	// call to Stop() to return.
-	close(running)
 	<-waiting
 	close(cleanup)
 }

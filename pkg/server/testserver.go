@@ -698,24 +698,36 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	args.stopper.RunWorker(ctx, func(ctx context.Context) {
-		<-args.stopper.ShouldQuiesce()
-		// NB: we can't do this as a Closer because (*Server).ServeWith is
-		// running in a worker and usually sits on accept(pgL) which unblocks
-		// only when pgL closes. In other words, pgL needs to close when
-		// quiescing starts to allow that worker to shut down.
-		_ = pgL.Close()
-	})
+	{
+		waitQuiesce := func(ctx context.Context) {
+			<-args.stopper.ShouldQuiesce()
+			// NB: we can't do this as a Closer because (*Server).ServeWith is
+			// running in a worker and usually sits on accept(pgL) which unblocks
+			// only when pgL closes. In other words, pgL needs to close when
+			// quiescing starts to allow that worker to shut down.
+			_ = pgL.Close()
+		}
+		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-pgl", waitQuiesce); err != nil {
+			waitQuiesce(ctx)
+			return nil, "", "", 0, err
+		}
+	}
 
 	httpL, err := listen(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return nil, "", "", err
 	}
 
-	args.stopper.RunWorker(ctx, func(ctx context.Context) {
-		<-args.stopper.ShouldQuiesce()
-		_ = httpL.Close()
-	})
+	{
+		waitQuiesce := func(ctx context.Context) {
+			<-args.stopper.ShouldQuiesce()
+			_ = httpL.Close()
+		}
+		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {
+			waitQuiesce(ctx)
+			return nil, "", "", 0, err
+		}
+	}
 
 	pgLAddr := pgL.Addr().String()
 	httpLAddr := httpL.Addr().String()
@@ -728,7 +740,7 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
-	args.stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
 		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
 		mux.Handle("/", debugServer)
@@ -742,7 +754,9 @@ func StartTenant(
 		f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
 		_ = http.Serve(httpL, mux)
-	})
+	}); err != nil {
+		return nil, "", "", 0, err
+	}
 
 	const (
 		socketFile = "" // no unix socket
