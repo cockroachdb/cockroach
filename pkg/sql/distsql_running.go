@@ -262,12 +262,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
 	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
-	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return ctx, flow, nil
+	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 }
 
 // Run executes a physical plan. The plan should have been finalized using
