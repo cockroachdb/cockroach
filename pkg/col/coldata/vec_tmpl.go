@@ -83,7 +83,8 @@ func (m *memColumn) Append(args SliceArgs) {
 				}
 				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 				// {{else}}
-				toCol = execgen.SLICE(toCol, 0, args.DestIdx)
+				// {{/* Here "WINDOW" means slicing which allows us to use APPENDVAL below. */}}
+				toCol = execgen.WINDOW(toCol, 0, args.DestIdx)
 				// {{end}}
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
