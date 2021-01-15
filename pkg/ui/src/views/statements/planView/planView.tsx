@@ -21,13 +21,21 @@ import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 const cx = classNames.bind(styles);
 
 const WARNING_ICON = (
-  <svg className={cx("warning-icon")} width="17" height="17" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
-    <path fill-rule="evenodd" clip-rule="evenodd" d="M15.7798 2.18656L23.4186 15.5005C25.0821 18.4005 22.9761 21.9972 19.6387 21.9972H4.3619C1.02395 21.9972 -1.08272 18.4009 0.582041 15.5005M0.582041 15.5005L8.21987 2.18656C9.89189 -0.728869 14.1077 -0.728837 15.7798 2.18656M13.4002 7.07075C13.4002 6.47901 12.863 5.99932 12.2002 5.99932C11.5375 5.99932 11.0002 6.47901 11.0002 7.07075V13.4993C11.0002 14.0911 11.5375 14.5707 12.2002 14.5707C12.863 14.5707 13.4002 14.0911 13.4002 13.4993V7.07075ZM13.5717 17.2774C13.5717 16.5709 12.996 15.9981 12.286 15.9981C11.5759 15.9981 11.0002 16.5709 11.0002 17.2774V17.2902C11.0002 17.9967 11.5759 18.5695 12.286 18.5695C12.996 18.5695 13.5717 17.9967 13.5717 17.2902V17.2774Z"/>
+  <svg
+    className={cx("warning-icon")}
+    width="17"
+    height="17"
+    viewBox="0 0 24 22"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M15.7798 2.18656L23.4186 15.5005C25.0821 18.4005 22.9761 21.9972 19.6387 21.9972H4.3619C1.02395 21.9972 -1.08272 18.4009 0.582041 15.5005M0.582041 15.5005L8.21987 2.18656C9.89189 -0.728869 14.1077 -0.728837 15.7798 2.18656M13.4002 7.07075C13.4002 6.47901 12.863 5.99932 12.2002 5.99932C11.5375 5.99932 11.0002 6.47901 11.0002 7.07075V13.4993C11.0002 14.0911 11.5375 14.5707 12.2002 14.5707C12.863 14.5707 13.4002 14.0911 13.4002 13.4993V7.07075ZM13.5717 17.2774C13.5717 16.5709 12.996 15.9981 12.286 15.9981C11.5759 15.9981 11.0002 16.5709 11.0002 17.2774V17.2902C11.0002 17.9967 11.5759 18.5695 12.286 18.5695C12.996 18.5695 13.5717 17.9967 13.5717 17.2902V17.2774Z"
+    />
   </svg>
 );
-const NODE_ICON = (
-  <span className={cx("node-icon")}>&#x26AC;</span>
-);
+const NODE_ICON = <span className={cx("node-icon")}>&#x26AC;</span>;
 
 // FlatPlanNodeAttribute contains a flattened representation of IAttr[].
 export interface FlatPlanNodeAttribute {
@@ -83,18 +91,18 @@ export interface FlatPlanNode {
 export function flattenTree(treePlan: IExplainTreePlanNode): FlatPlanNode[] {
   const flattenedPlan: FlatPlanNode[] = [
     {
-      "name": treePlan.name,
-      "attrs": flattenAttributes(treePlan.attrs),
-      "children": [],
+      name: treePlan.name,
+      attrs: flattenAttributes(treePlan.attrs),
+      children: [],
     },
   ];
 
   if (treePlan.children.length === 0) {
     return flattenedPlan;
   }
-  const flattenedChildren =
-    treePlan.children
-      .map( (child) => flattenTree(child));
+  const flattenedChildren = treePlan.children.map((child) =>
+    flattenTree(child),
+  );
   if (treePlan.children.length === 1) {
     // Append single child into same list that contains parent node.
     flattenedPlan.push(...flattenedChildren[0]);
@@ -127,12 +135,14 @@ export function flattenTree(treePlan: IExplainTreePlanNode): FlatPlanNode[] {
 //  value: ["name", "title"],
 // };
 //
-export function flattenAttributes(attrs: IAttr[]|null): FlatPlanNodeAttribute[] {
+export function flattenAttributes(
+  attrs: IAttr[] | null,
+): FlatPlanNodeAttribute[] {
   if (attrs === null) {
     return [];
   }
   const flattenedAttrsMap: { [key: string]: FlatPlanNodeAttribute } = {};
-  attrs.forEach( (attr) => {
+  attrs.forEach((attr) => {
     const existingAttr = flattenedAttrsMap[attr.key];
     const warn = warnForAttribute(attr);
     if (!existingAttr) {
@@ -149,16 +159,19 @@ export function flattenAttributes(attrs: IAttr[]|null): FlatPlanNodeAttribute[] 
     }
   });
   const flattenedAttrs = _.values(flattenedAttrsMap);
-  return _.sortBy(flattenedAttrs, (attr) => (
-    attr.key === "table" ? "table" : "z" + attr.key
-  ));
+  return _.sortBy(flattenedAttrs, (attr) =>
+    attr.key === "table" ? "table" : "z" + attr.key,
+  );
 }
 
 function warnForAttribute(attr: IAttr): boolean {
   // TODO(yuzefovich): 'spans ALL' is pre-20.1 attribute (and it might show up
   // during an upgrade), so we should remove the check for it after 20.2
   // release.
-  if (attr.key === "spans" && (attr.value === "FULL SCAN" || attr.value === "ALL")) {
+  if (
+    attr.key === "spans" &&
+    (attr.value === "FULL SCAN" || attr.value === "ALL")
+  ) {
     return true;
   }
   return false;
@@ -196,7 +209,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
     if (values.length === 1) {
       return <span> = {values[0]}</span>;
     }
-    return <span> = [{values.join((", "))}]</span>;
+    return <span> = [{values.join(", ")}]</span>;
   }
 
   renderAttribute(attr: FlatPlanNodeAttribute) {
@@ -220,7 +233,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
     if (node.attrs && node.attrs.length > 0) {
       return (
         <div className={cx("nodeAttributes")}>
-          {node.attrs.map( (attr) => this.renderAttribute(attr))}
+          {node.attrs.map((attr) => this.renderAttribute(attr))}
         </div>
       );
     }
@@ -237,14 +250,12 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   }
 }
 
-function PlanNodes(props: {
-  nodes: FlatPlanNode[],
-}): React.ReactElement<{}> {
+function PlanNodes(props: { nodes: FlatPlanNode[] }): React.ReactElement<{}> {
   const nodes = props.nodes;
   return (
     <ul>
-      {nodes.map( (node) => {
-        return <PlanNode node={node}/>;
+      {nodes.map((node) => {
+        return <PlanNode node={node} />;
       })}
     </ul>
   );
@@ -262,15 +273,9 @@ class PlanNode extends React.Component<PlanNodeProps> {
     const node = this.props.node;
     return (
       <li>
-        <PlanNodeDetails
-          node={node}
-        />
-        {node.children && node.children.map( (child) => (
-          <PlanNodes
-            nodes={child}
-          />
-        ))
-        }
+        <PlanNodeDetails node={node} />
+        {node.children &&
+          node.children.map((child) => <PlanNodes nodes={child} />)}
       </li>
     );
   }
@@ -298,10 +303,10 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
   }
 
   toggleExpanded = () => {
-    this.setState(state => ({
+    this.setState((state) => ({
       expanded: !state.expanded,
     }));
-  }
+  };
 
   showExpandDirections() {
     // Only show directions to show/hide the full plan if content is longer than its max-height.
@@ -318,49 +323,49 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
 
     const lastSampledHelpText = (
       <Fragment>
-        If the time from the last sample is greater than 5 minutes, a new
-        plan will be sampled. This frequency can be configured
-        with the cluster setting{" "}
+        If the time from the last sample is greater than 5 minutes, a new plan
+        will be sampled. This frequency can be configured with the cluster
+        setting{" "}
         <code>
-        <pre style={{ display: "inline-block" }}>
-          sql.metrics.statement_details.plan_collection.period
-        </pre>
-        </code>.
+          <pre style={{ display: "inline-block" }}>
+            sql.metrics.statement_details.plan_collection.period
+          </pre>
+        </code>
+        .
       </Fragment>
     );
 
     return (
       <table className={cx("plan-view-table")}>
         <thead>
-        <tr className={cx("plan-view-table__row--header")}>
-          <th className={cx("plan-view-table__cell")}>
-            <h2 className={cx("base-heading", "summary--card__title")}>{this.props.title}</h2>
-            <div className={cx("plan-view-table__tooltip")}>
-              <ToolTipWrapper
-                text={lastSampledHelpText}>
-                <div className={cx("plan-view-table__tooltip-hover-area")}>
-                  <div className={cx("plan-view-table__info-icon")}>i</div>
-                </div>
-              </ToolTipWrapper>
-            </div>
-          </th>
-        </tr>
+          <tr className={cx("plan-view-table__row--header")}>
+            <th className={cx("plan-view-table__cell")}>
+              <h2 className={cx("base-heading", "summary--card__title")}>
+                {this.props.title}
+              </h2>
+              <div className={cx("plan-view-table__tooltip")}>
+                <ToolTipWrapper text={lastSampledHelpText}>
+                  <div className={cx("plan-view-table__tooltip-hover-area")}>
+                    <div className={cx("plan-view-table__info-icon")}>i</div>
+                  </div>
+                </ToolTipWrapper>
+              </div>
+            </th>
+          </tr>
         </thead>
         <tbody>
-        <tr className={cx("plan-view-table__row--body")}>
-          <td className={cx("plan-view", "plan-view-table__cell")} style={{ textAlign: "left" }}>
-            <div className={cx("plan-view-container")}>
-              <div
-                id="plan-view-inner-container"
-                ref={this.innerContainer}
-              >
-                <PlanNodes
-                  nodes={flattenedPlanNodes}
-                />
+          <tr className={cx("plan-view-table__row--body")}>
+            <td
+              className={cx("plan-view", "plan-view-table__cell")}
+              style={{ textAlign: "left" }}
+            >
+              <div className={cx("plan-view-container")}>
+                <div id="plan-view-inner-container" ref={this.innerContainer}>
+                  <PlanNodes nodes={flattenedPlanNodes} />
+                </div>
               </div>
-            </div>
-          </td>
-        </tr>
+            </td>
+          </tr>
         </tbody>
       </table>
     );

@@ -28,7 +28,12 @@ export default class EncryptionStatus {
   renderHeaderRow(header: string) {
     return (
       <tr className="stores-table__row">
-        <td colSpan={2} className="stores-table__cell stores-table__cell--header--row">{header}</td>
+        <td
+          colSpan={2}
+          className="stores-table__cell stores-table__cell--header--row"
+        >
+          {header}
+        </td>
       </tr>
     );
   }
@@ -36,16 +41,28 @@ export default class EncryptionStatus {
   renderSimpleRow(header: string, value: string) {
     return (
       <tr className="stores-table__row">
-        <th className="stores-table__cell stores-table__cell--header">{header}</th>
-        <td className="stores-table__cell" title={value}>{value}</td>
+        <th className="stores-table__cell stores-table__cell--header">
+          {header}
+        </th>
+        <td className="stores-table__cell" title={value}>
+          {value}
+        </td>
       </tr>
     );
   }
 
-  renderStoreKey(key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo) {
+  renderStoreKey(
+    key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
+  ) {
     // Get the enum name from its value (eg: "AES128_CTR" for 1).
-    const encryptionType = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[key.encryption_type];
-    const createdAt = moment.unix(FixLong(key.creation_time).toNumber()).utc().format(dateFormat);
+    const encryptionType =
+      protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
+        key.encryption_type
+      ];
+    const createdAt = moment
+      .unix(FixLong(key.creation_time).toNumber())
+      .utc()
+      .format(dateFormat);
 
     return [
       this.renderHeaderRow("Active Store Key: user specified"),
@@ -56,10 +73,18 @@ export default class EncryptionStatus {
     ];
   }
 
-  renderDataKey(key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo) {
+  renderDataKey(
+    key: protos.cockroach.ccl.storageccl.engineccl.enginepbccl.IKeyInfo,
+  ) {
     // Get the enum name from its value (eg: "AES128_CTR" for 1).
-    const encryptionType = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[key.encryption_type];
-    const createdAt = moment.unix(key.creation_time.toNumber()).utc().format(dateFormat);
+    const encryptionType =
+      protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType[
+        key.encryption_type
+      ];
+    const createdAt = moment
+      .unix(key.creation_time.toNumber())
+      .utc()
+      .format(dateFormat);
 
     return [
       this.renderHeaderRow("Active Data Key: automatically generated"),
@@ -87,14 +112,23 @@ export default class EncryptionStatus {
     const activeFiles = FixLong(stats.active_key_files);
     const activeBytes = FixLong(stats.active_key_bytes);
 
-    let fileDetails = this.calculatePercentage(activeFiles, totalFiles).toFixed(2) + "%";
+    let fileDetails =
+      this.calculatePercentage(activeFiles, totalFiles).toFixed(2) + "%";
     fileDetails += " (" + activeFiles + "/" + totalFiles + ")";
 
-    let byteDetails = this.calculatePercentage(activeBytes, totalBytes).toFixed(2) + "%";
-    byteDetails += " (" + Bytes(activeBytes.toNumber()) + "/" + Bytes(totalBytes.toNumber()) + ")";
+    let byteDetails =
+      this.calculatePercentage(activeBytes, totalBytes).toFixed(2) + "%";
+    byteDetails +=
+      " (" +
+      Bytes(activeBytes.toNumber()) +
+      "/" +
+      Bytes(totalBytes.toNumber()) +
+      ")";
 
     return [
-      this.renderHeaderRow("Encryption Progress: fraction encrypted using the active data key"),
+      this.renderHeaderRow(
+        "Encryption Progress: fraction encrypted using the active data key",
+      ),
       this.renderSimpleRow("Files", fileDetails),
       this.renderSimpleRow("Bytes", byteDetails),
     ];
@@ -104,16 +138,23 @@ export default class EncryptionStatus {
     const { store } = this.props;
     const rawStatus = store.encryption_status;
     if (_.isEmpty(rawStatus)) {
-      return [ this.renderSimpleRow("Encryption status", "Not encrypted") ];
+      return [this.renderSimpleRow("Encryption status", "Not encrypted")];
     }
 
     let decodedStatus;
 
     // Attempt to decode protobuf.
     try {
-      decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(rawStatus);
+      decodedStatus = protos.cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionStatus.decode(
+        rawStatus,
+      );
     } catch (e) {
-      return [ this.renderSimpleRow("Encryption status", "Error decoding protobuf: " + e.toString()) ];
+      return [
+        this.renderSimpleRow(
+          "Encryption status",
+          "Error decoding protobuf: " + e.toString(),
+        ),
+      ];
     }
 
     return [

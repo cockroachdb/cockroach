@@ -18,14 +18,19 @@ export class Box {
       return null;
     }
 
-    const left = d3.min(boxes, b => b.left());
-    const top = d3.min(boxes, b => b.top());
-    const right = d3.max(boxes, b => b.right());
-    const bottom = d3.max(boxes, b => b.bottom());
+    const left = d3.min(boxes, (b) => b.left());
+    const top = d3.min(boxes, (b) => b.top());
+    const right = d3.max(boxes, (b) => b.right());
+    const bottom = d3.max(boxes, (b) => b.bottom());
     return new Box(left, top, right - left, bottom - top);
   }
 
-  constructor(private x: number, private y: number, private w: number, private h: number) { }
+  constructor(
+    private x: number,
+    private y: number,
+    private w: number,
+    private h: number,
+  ) {}
 
   width() {
     return this.w;

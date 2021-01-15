@@ -8,34 +8,38 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, {forwardRef, useCallback, useImperativeHandle, useState} from "react";
-import {Modal, Text} from "src/components";
-import {Action, Dispatch} from "redux";
-import {AdminUIState} from "src/redux/state";
-import {connect} from "react-redux";
-import {terminateQueryAction} from "src/redux/sessions/sessionsSagas";
-import {cockroach} from "src/js/protos";
-import {trackTerminateQuery} from "src/util/analytics/trackTerminate";
+import React, {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useState,
+} from "react";
+import { Modal, Text } from "src/components";
+import { Action, Dispatch } from "redux";
+import { AdminUIState } from "src/redux/state";
+import { connect } from "react-redux";
+import { terminateQueryAction } from "src/redux/sessions/sessionsSagas";
+import { cockroach } from "src/js/protos";
+import { trackTerminateQuery } from "src/util/analytics/trackTerminate";
 import ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;
 
 export interface TerminateQueryModalRef {
   showModalFor: (req: ICancelQueryRequest) => void;
 }
 
-// tslint:disable-next-line:variable-name
-const TerminateQueryModal = (props: TerminateQueryModalProps, ref: React.RefObject<TerminateQueryModalRef>) => {
-  const {cancel} = props;
+const TerminateQueryModal = (
+  props: TerminateQueryModalProps,
+  ref: React.RefObject<TerminateQueryModalRef>,
+) => {
+  const { cancel } = props;
   const [visible, setVisible] = useState(false);
   const [req, setReq] = useState<ICancelQueryRequest>();
 
-  const onOkHandler = useCallback(
-    () => {
-      cancel(req);
-      trackTerminateQuery();
-      setVisible(false);
-    },
-    [req],
-  );
+  const onOkHandler = useCallback(() => {
+    cancel(req);
+    trackTerminateQuery();
+    setVisible(false);
+  }, [cancel, req]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
 
@@ -58,7 +62,8 @@ const TerminateQueryModal = (props: TerminateQueryModalProps, ref: React.RefObje
       title="Terminate the Statement?"
     >
       <Text>
-        Terminating a statement ends the statement, returning an error to the session.
+        Terminating a statement ends the statement, returning an error to the
+        session.
       </Text>
     </Modal>
   );
@@ -68,7 +73,9 @@ interface TerminateQueryModalProps {
   cancel: (req: ICancelQueryRequest) => void;
 }
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>): TerminateQueryModalProps => ({
+const mapDispatchToProps = (
+  dispatch: Dispatch<Action, AdminUIState>,
+): TerminateQueryModalProps => ({
   cancel: (req: ICancelQueryRequest) => {
     dispatch(terminateQueryAction(req));
   },
@@ -78,5 +85,5 @@ export default connect<null, TerminateQueryModalProps>(
   null,
   mapDispatchToProps,
   null,
-  {forwardRef: true},
+  { forwardRef: true },
 )(forwardRef(TerminateQueryModal));

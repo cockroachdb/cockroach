@@ -51,7 +51,11 @@ export class KeyedCachedDataReducerState<TResponseMessage> {
  * Each instance of this class is instantiated with an api endpoint with request
  * type TRequest and response type Promise<TResponseMessage>.
  */
-export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace extends string = string> {
+export class CachedDataReducer<
+  TRequest,
+  TResponseMessage,
+  TActionNamespace extends string = string
+> {
   // Track all the currently seen namespaces, to ensure there isn't a conflict
   private static namespaces: { [actionNamespace: string]: boolean } = {};
 
@@ -75,7 +79,13 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
     protected requestTimeout?: moment.Duration,
   ) {
     // check actionNamespace
-    assert(!CachedDataReducer.namespaces.hasOwnProperty(actionNamespace), "Expected actionNamespace to be unique.");
+    assert(
+      !Object.prototype.hasOwnProperty.call(
+        CachedDataReducer.namespaces,
+        actionNamespace,
+      ),
+      "Expected actionNamespace to be unique.",
+    );
     CachedDataReducer.namespaces[actionNamespace] = true;
 
     this.REQUEST = `cockroachui/CachedDataReducer/${actionNamespace}/REQUEST`;
@@ -95,7 +105,10 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
   /**
    * Redux reducer which processes actions related to the api endpoint query.
    */
-  reducer = (state = new CachedDataReducerState<TResponseMessage>(), action: Action): CachedDataReducerState<TResponseMessage> => {
+  reducer = (
+    state = new CachedDataReducerState<TResponseMessage>(),
+    action: Action,
+  ): CachedDataReducerState<TResponseMessage> => {
     if (_.isNil(action)) {
       return state;
     }
@@ -107,9 +120,11 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
         state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
-      case this.RECEIVE:
+      case this.RECEIVE: {
         // The results of a request have been received.
-        const { payload } = action as PayloadAction<WithRequest<TResponseMessage, TRequest>>;
+        const { payload } = action as PayloadAction<
+          WithRequest<TResponseMessage, TRequest>
+        >;
         state = _.clone(state);
         state.inFlight = false;
         state.data = payload.data;
@@ -117,14 +132,18 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
         state.valid = true;
         state.lastError = null;
         return state;
-      case this.ERROR:
+      }
+      case this.ERROR: {
         // A request failed.
-        const { payload: error } = action as PayloadAction<WithRequest<Error, TRequest>>;
+        const { payload: error } = action as PayloadAction<
+          WithRequest<Error, TRequest>
+        >;
         state = _.clone(state);
         state.inFlight = false;
         state.lastError = error.data;
         state.valid = false;
         return state;
+      }
       case this.INVALIDATE:
         // The data is invalidated.
         state = _.clone(state);
@@ -133,39 +152,49 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
       default:
         return state;
     }
-  }
+  };
 
   // requestData is the REQUEST action creator.
-  requestData = (request?: TRequest): PayloadAction<WithRequest<void, TRequest>> => {
+  requestData = (
+    request?: TRequest,
+  ): PayloadAction<WithRequest<void, TRequest>> => {
     return {
       type: this.REQUEST,
       payload: { request },
     };
-  }
+  };
 
   // receiveData is the RECEIVE action creator.
-  receiveData = (data: TResponseMessage, request?: TRequest): PayloadAction<WithRequest<TResponseMessage, TRequest>> => {
+  receiveData = (
+    data: TResponseMessage,
+    request?: TRequest,
+  ): PayloadAction<WithRequest<TResponseMessage, TRequest>> => {
     return {
       type: this.RECEIVE,
       payload: { request, data },
     };
-  }
+  };
 
   // errorData is the ERROR action creator.
-  errorData = (error: Error, request?: TRequest): PayloadAction<WithRequest<Error, TRequest>> => {
+  errorData = (
+    error: Error,
+    request?: TRequest,
+  ): PayloadAction<WithRequest<Error, TRequest>> => {
     return {
       type: this.ERROR,
       payload: { request, data: error },
     };
-  }
+  };
 
   // invalidateData is the INVALIDATE action creator.
-  invalidateData = (request?: TRequest): PayloadAction<WithRequest<void, TRequest>> => {
+  invalidateData = (
+    request?: TRequest,
+  ): PayloadAction<WithRequest<void, TRequest>> => {
     return {
       type: this.INVALIDATE,
       payload: { request },
     };
-  }
+  };
 
   /**
    * refresh is the primary action creator that should be used to refresh the
@@ -182,49 +211,64 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
    */
   refresh = <S>(
     req?: TRequest,
-    stateAccessor = (state: any, _req: TRequest) => state.cachedData[this.actionNamespace],
+    stateAccessor = (state: any, _req: TRequest) =>
+      state.cachedData[this.actionNamespace],
   ): ThunkAction<any, S, any> => {
-    return (dispatch: Dispatch<Action, TResponseMessage>, getState: () => S) => {
-      const state: CachedDataReducerState<TResponseMessage> = stateAccessor(getState(), req);
+    return (
+      dispatch: Dispatch<Action, TResponseMessage>,
+      getState: () => S,
+    ) => {
+      const state: CachedDataReducerState<TResponseMessage> = stateAccessor(
+        getState(),
+        req,
+      );
 
-      if (state && (state.inFlight || (this.invalidationPeriod && state.valid))) {
+      if (
+        state &&
+        (state.inFlight || (this.invalidationPeriod && state.valid))
+      ) {
         return;
       }
 
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req, this.requestTimeout).then(
-        (data) => {
-          // Dispatch the results to the store.
-          dispatch(this.receiveData(data, req));
-        },
-        (error: Error) => {
-          // TODO(couchand): This is a really myopic way to check for HTTP
-          // codes.  However, at the moment that's all that the underlying
-          // timeoutFetch offers.  Major changes to this plumbing are warranted.
-          if (error.message === "Unauthorized") {
-            // TODO(couchand): This is an unpleasant dependency snuck in here...
-            const { location } = createHashHistory();
-            if (location && !location.pathname.startsWith("/login")) {
-              dispatch(push(getLoginPage(location)));
+      return this.apiEndpoint(req, this.requestTimeout)
+        .then(
+          (data) => {
+            // Dispatch the results to the store.
+            dispatch(this.receiveData(data, req));
+          },
+          (error: Error) => {
+            // TODO(couchand): This is a really myopic way to check for HTTP
+            // codes.  However, at the moment that's all that the underlying
+            // timeoutFetch offers.  Major changes to this plumbing are warranted.
+            if (error.message === "Unauthorized") {
+              // TODO(couchand): This is an unpleasant dependency snuck in here...
+              const { location } = createHashHistory();
+              if (location && !location.pathname.startsWith("/login")) {
+                dispatch(push(getLoginPage(location)));
+              }
             }
-          }
 
-          // If an error occurred during the fetch, add it to the store.
-          // Wait 1s to record the error to avoid spamming errors.
-          // TODO(maxlang): Fix error handling more comprehensively.
-          // Tracked in #8699
-          setTimeout(() => dispatch(this.errorData(error, req)), 1000);
-        },
-      ).then(() => {
-        // Invalidate data after the invalidation period if one exists.
-        if (this.invalidationPeriod) {
-          setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
-        }
-      });
+            // If an error occurred during the fetch, add it to the store.
+            // Wait 1s to record the error to avoid spamming errors.
+            // TODO(maxlang): Fix error handling more comprehensively.
+            // Tracked in #8699
+            setTimeout(() => dispatch(this.errorData(error, req)), 1000);
+          },
+        )
+        .then(() => {
+          // Invalidate data after the invalidation period if one exists.
+          if (this.invalidationPeriod) {
+            setTimeout(
+              () => dispatch(this.invalidateData(req)),
+              this.invalidationPeriod.asMilliseconds(),
+            );
+          }
+        });
     };
-  }
+  };
 
   private timeSource: { (): moment.Moment } = () => moment();
 }
@@ -239,8 +283,16 @@ export class CachedDataReducer<TRequest, TResponseMessage, TActionNamespace exte
  * Each instance of this class is instantiated with an api endpoint with request
  * type TRequest and response type Promise<TResponseMessage>.
  */
-export class KeyedCachedDataReducer<TRequest, TResponseMessage, TActionNamespace extends string = string> {
-  cachedDataReducer: CachedDataReducer<TRequest, TResponseMessage, TActionNamespace>;
+export class KeyedCachedDataReducer<
+  TRequest,
+  TResponseMessage,
+  TActionNamespace extends string = string
+> {
+  cachedDataReducer: CachedDataReducer<
+    TRequest,
+    TResponseMessage,
+    TActionNamespace
+  >;
 
   /**
    * apiEndpoint - The API endpoint used to refresh data.
@@ -260,9 +312,11 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage, TActionNamespace
     protected invalidationPeriod?: moment.Duration,
     protected requestTimeout?: moment.Duration,
   ) {
-    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage, TActionNamespace>(
-      apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout,
-    );
+    this.cachedDataReducer = new CachedDataReducer<
+      TRequest,
+      TResponseMessage,
+      TActionNamespace
+    >(apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout);
   }
 
   /**
@@ -278,13 +332,22 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage, TActionNamespace
    * default stateAccessor that indexes in to the state based on a key generated
    * from the request.
    */
-  refresh = (req?: TRequest, stateAccessor = (state: any, r: TRequest) => state.cachedData[this.cachedDataReducer.actionNamespace][this.requestToID(r)]) => this.cachedDataReducer.refresh(req, stateAccessor);
+  refresh = (
+    req?: TRequest,
+    stateAccessor = (state: any, r: TRequest) =>
+      state.cachedData[this.cachedDataReducer.actionNamespace][
+        this.requestToID(r)
+      ],
+  ) => this.cachedDataReducer.refresh(req, stateAccessor);
 
   /**
    * Keyed redux reducer which pulls out the id from the action payload and then
    * runs the CachedDataReducer reducer on the action.
    */
-  reducer = (state = new KeyedCachedDataReducerState<TResponseMessage>(), action: Action): KeyedCachedDataReducerState<TResponseMessage> => {
+  reducer = (
+    state = new KeyedCachedDataReducerState<TResponseMessage>(),
+    action: Action,
+  ): KeyedCachedDataReducerState<TResponseMessage> => {
     if (_.isNil(action)) {
       return state;
     }
@@ -293,14 +356,17 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage, TActionNamespace
       case this.cachedDataReducer.REQUEST:
       case this.cachedDataReducer.RECEIVE:
       case this.cachedDataReducer.ERROR:
-      case this.cachedDataReducer.INVALIDATE:
-        const { request } = (action as PayloadAction<WithRequest<TResponseMessage | Error | void, TRequest>>).payload;
+      case this.cachedDataReducer.INVALIDATE: {
+        const { request } = (action as PayloadAction<
+          WithRequest<TResponseMessage | Error | void, TRequest>
+        >).payload;
         const id = this.requestToID(request);
         state = _.clone(state);
         state[id] = this.cachedDataReducer.reducer(state[id], action);
         return state;
+      }
       default:
         return state;
     }
-  }
+  };
 }

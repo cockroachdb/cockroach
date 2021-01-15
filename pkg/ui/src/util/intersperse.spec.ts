@@ -13,7 +13,6 @@ import { assert } from "chai";
 import { intersperse } from "src/util/intersperse";
 
 describe("intersperse", () => {
-
   it("puts separator in between array items", () => {
     const result = intersperse(["foo", "bar", "baz"], "-");
     assert.deepEqual(result, ["foo", "-", "bar", "-", "baz"]);
@@ -28,5 +27,4 @@ describe("intersperse", () => {
     const result = intersperse([], "-");
     assert.deepEqual(result, []);
   });
-
 });

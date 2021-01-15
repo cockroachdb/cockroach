@@ -37,7 +37,10 @@ import { EventPage } from "src/views/cluster/containers/events";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import { DatabaseGrantsList, DatabaseTablesList } from "src/views/databases/containers/databases";
+import {
+  DatabaseGrantsList,
+  DatabaseTablesList,
+} from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
@@ -80,127 +83,266 @@ export interface AppProps {
   store: Store<AdminUIState, Action>;
 }
 
-// tslint:disable-next-line:variable-name
 export const App: React.FC<AppProps> = (props: AppProps) => {
-  const {store, history} = props;
+  const { store, history } = props;
 
   return (
     <Provider store={store}>
       <ConnectedRouter history={history}>
-          <Switch>
-            { /* login */}
-            { createLoginRoute() }
-            { createLogoutRoute(store) }
-            <Route path="/">
-              <Layout>
-                <Switch>
-                  <Redirect exact from="/" to="/overview" />
-                  { /* overview page */ }
-                  { visualizationRoutes() }
+        <Switch>
+          {/* login */}
+          {createLoginRoute()}
+          {createLogoutRoute(store)}
+          <Route path="/">
+            <Layout>
+              <Switch>
+                <Redirect exact from="/" to="/overview" />
+                {/* overview page */}
+                {visualizationRoutes()}
 
-                  { /* time series metrics */ }
-                  <Redirect exact from="/metrics" to="/metrics/overview/cluster" />
-                  <Redirect exact from={`/metrics/:${dashboardNameAttr}`} to={`/metrics/:${dashboardNameAttr}/cluster`} />
-                  <Route exact path={`/metrics/:${dashboardNameAttr}/cluster`} component={ NodeGraphs } />
-                  <Redirect exact path={`/metrics/:${dashboardNameAttr}/node`} to={ `/metrics/:${dashboardNameAttr}/cluster` } />
-                  <Route path={ `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}` } component={ NodeGraphs } />
+                {/* time series metrics */}
+                <Redirect
+                  exact
+                  from="/metrics"
+                  to="/metrics/overview/cluster"
+                />
+                <Redirect
+                  exact
+                  from={`/metrics/:${dashboardNameAttr}`}
+                  to={`/metrics/:${dashboardNameAttr}/cluster`}
+                />
+                <Route
+                  exact
+                  path={`/metrics/:${dashboardNameAttr}/cluster`}
+                  component={NodeGraphs}
+                />
+                <Redirect
+                  exact
+                  path={`/metrics/:${dashboardNameAttr}/node`}
+                  to={`/metrics/:${dashboardNameAttr}/cluster`}
+                />
+                <Route
+                  path={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
+                  component={NodeGraphs}
+                />
 
-                  { /* node details */ }
-                  <Redirect exact from="/node" to="/overview/list" />
-                  <Route exact path={ `/node/:${nodeIDAttr}` } component={ NodeOverview } />
-                  <Route exact path={ `/node/:${nodeIDAttr}/logs` } component={ NodeLogs } />
+                {/* node details */}
+                <Redirect exact from="/node" to="/overview/list" />
+                <Route
+                  exact
+                  path={`/node/:${nodeIDAttr}`}
+                  component={NodeOverview}
+                />
+                <Route
+                  exact
+                  path={`/node/:${nodeIDAttr}/logs`}
+                  component={NodeLogs}
+                />
 
-                  { /* events & jobs */ }
-                  <Route path="/events" component={ EventPage } />
-                  <Route exact path="/jobs" component={ JobsPage } />
-                  <Route path="/jobs/:id" component={ JobDetails } />
+                {/* events & jobs */}
+                <Route path="/events" component={EventPage} />
+                <Route exact path="/jobs" component={JobsPage} />
+                <Route path="/jobs/:id" component={JobDetails} />
 
-                  { /* databases */ }
-                  <Redirect exact from="/databases" to="/databases/tables" />
-                  <Route path="/databases/tables" component={ DatabaseTablesList } />
-                  <Route path="/databases/grants" component={ DatabaseGrantsList } />
-                  <Redirect
-                    from={ `/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
-                    to={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
-                  />
+                {/* databases */}
+                <Redirect exact from="/databases" to="/databases/tables" />
+                <Route
+                  path="/databases/tables"
+                  component={DatabaseTablesList}
+                />
+                <Route
+                  path="/databases/grants"
+                  component={DatabaseGrantsList}
+                />
+                <Redirect
+                  from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                  to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                />
 
-                  <Redirect exact from="/database" to="/databases" />
-                  <Redirect exact from={ `/database/:${databaseNameAttr}`} to="/databases" />
-                  <Redirect exact from={ `/database/:${databaseNameAttr}/table`} to="/databases" />
-                  <Route exact path={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
+                <Redirect exact from="/database" to="/databases" />
+                <Redirect
+                  exact
+                  from={`/database/:${databaseNameAttr}`}
+                  to="/databases"
+                />
+                <Redirect
+                  exact
+                  from={`/database/:${databaseNameAttr}/table`}
+                  to="/databases"
+                />
+                <Route
+                  exact
+                  path={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                  component={TableDetails}
+                />
 
-                  { /* data distribution */ }
-                  <Route exact path="/data-distribution" component={ DataDistributionPage } />
+                {/* data distribution */}
+                <Route
+                  exact
+                  path="/data-distribution"
+                  component={DataDistributionPage}
+                />
 
-                  { /* statement statistics */ }
-                  <Route exact path="/statements" component={ StatementsPage }/>
-                  <Route exact path={ `/statements/:${appAttr}`} component={ StatementsPage } />
-                  <Route exact path={ `/statements/:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
-                  <Route exact path={ `/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}` } component={ StatementDetails } />
+                {/* statement statistics */}
+                <Route exact path="/statements" component={StatementsPage} />
+                <Route
+                  exact
+                  path={`/statements/:${appAttr}`}
+                  component={StatementsPage}
+                />
+                <Route
+                  exact
+                  path={`/statements/:${appAttr}/:${statementAttr}`}
+                  component={StatementDetails}
+                />
+                <Route
+                  exact
+                  path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
+                  component={StatementDetails}
+                />
 
-                  <Route exact path="/statement" component={() => <Redirect to="/statements" />}/>
-                  <Route exact path={`/statement/:${statementAttr}`} component={StatementDetails}/>
-                  <Route exact path={`/statement/:${implicitTxnAttr}/:${statementAttr}`} component={StatementDetails}/>
+                <Route
+                  exact
+                  path="/statement"
+                  component={() => <Redirect to="/statements" />}
+                />
+                <Route
+                  exact
+                  path={`/statement/:${statementAttr}`}
+                  component={StatementDetails}
+                />
+                <Route
+                  exact
+                  path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
+                  component={StatementDetails}
+                />
 
-                  { /* sessions */ }
-                  <Route exact path="/sessions" component={ SessionsPage }/>
-                  <Route exact path={ `/session/:${sessionAttr}`} component={ SessionDetails } />
-                  { /* transactions */ }
-                  <Route exact path="/transactions" component={ TransactionsPage }/>
+                {/* sessions */}
+                <Route exact path="/sessions" component={SessionsPage} />
+                <Route
+                  exact
+                  path={`/session/:${sessionAttr}`}
+                  component={SessionDetails}
+                />
+                {/* transactions */}
+                <Route
+                  exact
+                  path="/transactions"
+                  component={TransactionsPage}
+                />
 
-                  { /* debug pages */ }
-                  <Route exact path="/debug" component={Debug}/>
-                  <Route exact path="/debug/redux" component={ReduxDebug}/>
-                  <Route exact path="/debug/chart" component={CustomChart}/>
-                  <Route exact path="/debug/enqueue_range" component={EnqueueRange}/>
+                {/* debug pages */}
+                <Route exact path="/debug" component={Debug} />
+                <Route exact path="/debug/redux" component={ReduxDebug} />
+                <Route exact path="/debug/chart" component={CustomChart} />
+                <Route
+                  exact
+                  path="/debug/enqueue_range"
+                  component={EnqueueRange}
+                />
 
-                  <Route path="/raft">
-                    <Raft>
-                      <Switch>
-                        <Redirect exact from="/raft" to="/raft/ranges" />
-                        <Route exact path="/raft/ranges" component={RaftRanges}/>
-                        <Route exact path="/raft/messages/all" component={RaftMessages}/>
-                        <Route exact path={`/raft/messages/node/:${nodeIDAttr}`} component={RaftMessages}/>
-                      </Switch>
-                    </Raft>
-                  </Route>
+                <Route path="/raft">
+                  <Raft>
+                    <Switch>
+                      <Redirect exact from="/raft" to="/raft/ranges" />
+                      <Route exact path="/raft/ranges" component={RaftRanges} />
+                      <Route
+                        exact
+                        path="/raft/messages/all"
+                        component={RaftMessages}
+                      />
+                      <Route
+                        exact
+                        path={`/raft/messages/node/:${nodeIDAttr}`}
+                        component={RaftMessages}
+                      />
+                    </Switch>
+                  </Raft>
+                </Route>
 
-                  <Route exact path="/reports/problemranges" component={ ProblemRanges } />
-                  <Route exact path={`/reports/problemranges/:${nodeIDAttr}`} component={ ProblemRanges }/>
-                  <Route exact path="/reports/localities" component={ Localities } />
-                  <Route exact path={`/reports/network/:${nodeIDAttr}`} component={ Network } />
-                  <Route exact path="/reports/network" component={ Network } />
-                  <Route exact path="/reports/nodes" component={ Nodes } />
-                  <Route exact path="/reports/nodes/history" component={ ConnectedDecommissionedNodeHistory } />
-                  <Route exact path="/reports/settings" component={ Settings } />
-                  <Route exact path={`/reports/certificates/:${nodeIDAttr}`} component={ Certificates } />
-                  <Route exact path={`/reports/range/:${rangeIDAttr}`} component={ Range } />
-                  <Route exact path={`/reports/stores/:${nodeIDAttr}`} component={ Stores } />
-                  <Route exact path={`/reports/statements/diagnosticshistory`} component={ StatementsDiagnosticsHistoryView } />
+                <Route
+                  exact
+                  path="/reports/problemranges"
+                  component={ProblemRanges}
+                />
+                <Route
+                  exact
+                  path={`/reports/problemranges/:${nodeIDAttr}`}
+                  component={ProblemRanges}
+                />
+                <Route
+                  exact
+                  path="/reports/localities"
+                  component={Localities}
+                />
+                <Route
+                  exact
+                  path={`/reports/network/:${nodeIDAttr}`}
+                  component={Network}
+                />
+                <Route exact path="/reports/network" component={Network} />
+                <Route exact path="/reports/nodes" component={Nodes} />
+                <Route
+                  exact
+                  path="/reports/nodes/history"
+                  component={ConnectedDecommissionedNodeHistory}
+                />
+                <Route exact path="/reports/settings" component={Settings} />
+                <Route
+                  exact
+                  path={`/reports/certificates/:${nodeIDAttr}`}
+                  component={Certificates}
+                />
+                <Route
+                  exact
+                  path={`/reports/range/:${rangeIDAttr}`}
+                  component={Range}
+                />
+                <Route
+                  exact
+                  path={`/reports/stores/:${nodeIDAttr}`}
+                  component={Stores}
+                />
+                <Route
+                  exact
+                  path={`/reports/statements/diagnosticshistory`}
+                  component={StatementsDiagnosticsHistoryView}
+                />
 
-                  { /* old route redirects */ }
-                  <Redirect exact from="/cluster" to="/metrics/overview/cluster" />
-                  <Redirect
-                    from={`/cluster/all/:${dashboardNameAttr}`}
-                    to={`/metrics/:${dashboardNameAttr}/cluster`}
-                  />
-                  <Redirect
-                    from={`/cluster/node/:${nodeIDAttr}/:${dashboardNameAttr}`}
-                    to={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
-                  />
-                  <Redirect exact from="/cluster/nodes" to="/overview/list" />
-                  <Redirect exact from={`/cluster/nodes/:${nodeIDAttr}`} to={`/node/:${nodeIDAttr}`} />
-                  <Redirect from={`/cluster/nodes/:${nodeIDAttr}/logs`} to={`/node/:${nodeIDAttr}/logs`}/>
-                  <Redirect from="/cluster/events" to="/events"/>
+                {/* old route redirects */}
+                <Redirect
+                  exact
+                  from="/cluster"
+                  to="/metrics/overview/cluster"
+                />
+                <Redirect
+                  from={`/cluster/all/:${dashboardNameAttr}`}
+                  to={`/metrics/:${dashboardNameAttr}/cluster`}
+                />
+                <Redirect
+                  from={`/cluster/node/:${nodeIDAttr}/:${dashboardNameAttr}`}
+                  to={`/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}`}
+                />
+                <Redirect exact from="/cluster/nodes" to="/overview/list" />
+                <Redirect
+                  exact
+                  from={`/cluster/nodes/:${nodeIDAttr}`}
+                  to={`/node/:${nodeIDAttr}`}
+                />
+                <Redirect
+                  from={`/cluster/nodes/:${nodeIDAttr}/logs`}
+                  to={`/node/:${nodeIDAttr}/logs`}
+                />
+                <Redirect from="/cluster/events" to="/events" />
 
-                  <Redirect exact from="/nodes" to="/overview/list" />
+                <Redirect exact from="/nodes" to="/overview/list" />
 
-                  { /* 404 */ }
-                  <Route path="*" component={ NotFound } />
-                </Switch>
-              </Layout>
-            </Route>
-          </Switch>
+                {/* 404 */}
+                <Route path="*" component={NotFound} />
+              </Switch>
+            </Layout>
+          </Route>
+        </Switch>
       </ConnectedRouter>
     </Provider>
   );

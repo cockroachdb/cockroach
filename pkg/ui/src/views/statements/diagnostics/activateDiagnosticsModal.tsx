@@ -8,36 +8,46 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { forwardRef, useState, useCallback, useImperativeHandle } from "react";
+import React, {
+  forwardRef,
+  useState,
+  useCallback,
+  useImperativeHandle,
+} from "react";
 import { connect } from "react-redux";
 import { Action, Dispatch } from "redux";
 
 import { Anchor, Modal, Text } from "src/components";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { AdminUIState } from "src/redux/state";
-import { invalidateStatementDiagnosticsRequests, refreshStatementDiagnosticsRequests } from "src/redux/apiReducers";
+import {
+  invalidateStatementDiagnosticsRequests,
+  refreshStatementDiagnosticsRequests,
+} from "src/redux/apiReducers";
 import { statementDiagnostics } from "src/util/docs";
-import { trackActivateDiagnostics, trackDiagnosticsModalOpen } from "src/util/analytics";
+import {
+  trackActivateDiagnostics,
+  trackDiagnosticsModalOpen,
+} from "src/util/analytics";
 export type ActivateDiagnosticsModalProps = MapDispatchToProps;
 
 export interface ActivateDiagnosticsModalRef {
   showModalFor: (statement: string) => void;
 }
 
-// tslint:disable-next-line:variable-name
-const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: React.RefObject<ActivateDiagnosticsModalRef>) => {
-  const {activate} = props;
+const ActivateDiagnosticsModal = (
+  props: ActivateDiagnosticsModalProps,
+  ref: React.RefObject<ActivateDiagnosticsModalRef>,
+) => {
+  const { activate } = props;
   const [visible, setVisible] = useState(false);
   const [statement, setStatement] = useState<string>();
 
-  const onOkHandler = useCallback(
-    () => {
-      activate(statement);
-      trackActivateDiagnostics(statement);
-      setVisible(false);
-    },
-    [statement],
-  );
+  const onOkHandler = useCallback(() => {
+    activate(statement);
+    trackActivateDiagnostics(statement);
+    setVisible(false);
+  }, [activate, statement]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
 
@@ -61,13 +71,15 @@ const ActivateDiagnosticsModal = (props: ActivateDiagnosticsModalProps, ref: Rea
       title="Activate statement diagnostics"
     >
       <Text>
-        When you activate statement diagnostics, CockroachDB will wait for the next query that matches this statement
-        fingerprint.
+        When you activate statement diagnostics, CockroachDB will wait for the
+        next query that matches this statement fingerprint.
       </Text>
-      <p/>
+      <p />
       <Text>
-        A download button will appear on the statement list and detail pages when the query is ready.
-        The download will include EXPLAIN plans, table statistics, and traces. <Anchor href={statementDiagnostics}>Learn more</Anchor>
+        A download button will appear on the statement list and detail pages
+        when the query is ready. The download will include EXPLAIN plans, table
+        statistics, and traces.{" "}
+        <Anchor href={statementDiagnostics}>Learn more</Anchor>
       </Text>
     </Modal>
   );
@@ -78,8 +90,11 @@ interface MapDispatchToProps {
   refreshDiagnosticsReports: () => void;
 }
 
-const mapDispatchToProps = (dispatch: Dispatch<Action, AdminUIState>): MapDispatchToProps => ({
-  activate: (statement: string) => dispatch(createStatementDiagnosticsReportAction(statement)),
+const mapDispatchToProps = (
+  dispatch: Dispatch<Action, AdminUIState>,
+): MapDispatchToProps => ({
+  activate: (statement: string) =>
+    dispatch(createStatementDiagnosticsReportAction(statement)),
   refreshDiagnosticsReports: () => {
     dispatch(invalidateStatementDiagnosticsRequests());
     dispatch(refreshStatementDiagnosticsRequests());
@@ -90,5 +105,5 @@ export default connect<null, MapDispatchToProps>(
   null,
   mapDispatchToProps,
   null,
-  {forwardRef: true},
+  { forwardRef: true },
 )(forwardRef(ActivateDiagnosticsModal));

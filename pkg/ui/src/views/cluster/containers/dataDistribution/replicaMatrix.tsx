@@ -52,7 +52,6 @@ const ROW_TREE_INDENT_PX = 18;
 const ROW_LEFT_MARGIN_PX = 5;
 
 class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
-
   constructor(props: ReplicaMatrixProps) {
     super(props);
     this.state = {
@@ -63,27 +62,31 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   expandRow = (path: TreePath) => {
     this.setState({
-      collapsedRows: this.state.collapsedRows.filter((tp) => !_.isEqual(tp, path)),
+      collapsedRows: this.state.collapsedRows.filter(
+        (tp) => !_.isEqual(tp, path),
+      ),
     });
-  }
+  };
 
   collapseRow = (path: TreePath) => {
     this.setState({
       collapsedRows: [...this.state.collapsedRows, path],
     });
-  }
+  };
 
   expandCol = (path: TreePath) => {
     this.setState({
-      collapsedCols: this.state.collapsedCols.filter((tp) => !_.isEqual(tp, path)),
+      collapsedCols: this.state.collapsedCols.filter(
+        (tp) => !_.isEqual(tp, path),
+      ),
     });
-  }
+  };
 
   collapseCol = (path: TreePath) => {
     this.setState({
       collapsedCols: [...this.state.collapsedCols, path],
     });
-  }
+  };
 
   colLabel(col: LayoutCell<NodeDescriptor$Properties>): string {
     if (col.isPlaceholder) {
@@ -95,7 +98,8 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     }
 
     const arrow = col.isCollapsed ? SIDE_ARROW : DOWN_ARROW;
-    const localityLabel = col.path.length === 0 ? "Cluster" : col.path[col.path.length - 1];
+    const localityLabel =
+      col.path.length === 0 ? "Cluster" : col.path[col.path.length - 1];
     return `${arrow} ${localityLabel}`;
   }
 
@@ -114,7 +118,11 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const text = this.rowLabelText(row);
 
     const label = (
-      <span className={classNames("table-label", { "table-label--dropped": !!row.data.droppedAt })}>
+      <span
+        className={classNames("table-label", {
+          "table-label--dropped": !!row.data.droppedAt,
+        })}
+      >
         {text}
       </span>
     );
@@ -124,9 +132,9 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
         <ToolTipWrapper
           text={
             <span>
-              Dropped at {TimestampToMoment(row.data.droppedAt).format()}.
-              Will eventually be garbage collected according to this schema
-              object's GC TTL.
+              Dropped at {TimestampToMoment(row.data.droppedAt).format()}. Will
+              eventually be garbage collected according to this schema object's
+              GC TTL.
             </span>
           }
         >
@@ -139,41 +147,41 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   }
 
   render() {
-    const {
-      cols,
-      rows,
-      getValue,
-    } = this.props;
-    const {
-      collapsedRows,
-      collapsedCols,
-    } = this.state;
+    const { cols, rows, getValue } = this.props;
+    const { collapsedRows, collapsedCols } = this.state;
 
     const flattenedRows = flatten(rows, collapsedRows, true /* includeNodes */);
     const headerRows = layoutTreeHorizontal(cols, collapsedCols);
-    const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
+    const flattenedCols = flatten(
+      cols,
+      collapsedCols,
+      false /* includeNodes */,
+    );
 
     return (
       <table className="matrix">
         <thead>
           {headerRows.map((row, idx) => (
             <tr key={idx}>
-              {idx === 0
-                ? <th className="matrix__metric-label"># Replicas</th>
-                : <th />}
+              {idx === 0 ? (
+                <th className="matrix__metric-label"># Replicas</th>
+              ) : (
+                <th />
+              )}
               {row.map((col) => (
                 <th
                   key={col.path.join("/")}
                   colSpan={col.width}
-                  className={classNames(
-                    "matrix__column-header",
-                    { "matrix__column-header--internal-node": !(col.isLeaf || col.isPlaceholder) },
-                  )}
-                  onClick={() => (
+                  className={classNames("matrix__column-header", {
+                    "matrix__column-header--internal-node": !(
+                      col.isLeaf || col.isPlaceholder
+                    ),
+                  })}
+                  onClick={() =>
                     col.isCollapsed
                       ? this.expandCol(col.path)
                       : this.collapseCol(col.path)
-                  )}
+                  }
                 >
                   {this.colLabel(col)}
                 </th>
@@ -186,33 +194,39 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
             return (
               <tr
                 key={row.path.join("/")}
-                className={classNames(
-                  "matrix__row",
-                  { "matrix__row--internal-node": !row.isLeaf },
-                )}
-                onClick={() => (
+                className={classNames("matrix__row", {
+                  "matrix__row--internal-node": !row.isLeaf,
+                })}
+                onClick={() =>
                   row.isCollapsed
                     ? this.expandRow(row.path)
                     : this.collapseRow(row.path)
-                )}
+                }
               >
                 <th
-                  className={classNames(
-                    "matrix__row-header",
-                    { "matrix__row-header--internal-node": !row.isLeaf },
-                  )}
-                  style={{ paddingLeft: row.depth * ROW_TREE_INDENT_PX + ROW_LEFT_MARGIN_PX }}
+                  className={classNames("matrix__row-header", {
+                    "matrix__row-header--internal-node": !row.isLeaf,
+                  })}
+                  style={{
+                    paddingLeft:
+                      row.depth * ROW_TREE_INDENT_PX + ROW_LEFT_MARGIN_PX,
+                  }}
                 >
                   {this.rowLabel(row)}
                 </th>
                 {flattenedCols.map((col) => {
                   return (
-                    <td
-                      key={col.path.join("/")}
-                      className="matrix__cell-value"
-                    >
+                    <td key={col.path.join("/")} className="matrix__cell-value">
                       {row.isLeaf || row.isCollapsed
-                        ? emptyIfZero(sumValuesUnderPaths(rows, cols, row.path, col.path, getValue))
+                        ? emptyIfZero(
+                            sumValuesUnderPaths(
+                              rows,
+                              cols,
+                              row.path,
+                              col.path,
+                              getValue,
+                            ),
+                          )
                         : null}
                     </td>
                   );
@@ -224,7 +238,6 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
       </table>
     );
   }
-
 }
 
 function emptyIfZero(n: number): string {

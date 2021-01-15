@@ -34,7 +34,12 @@ const QUEUES = [
 ];
 
 interface EnqueueRangeProps {
-  handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => Promise<EnqueueRangeResponse>;
+  handleEnqueueRange: (
+    queue: string,
+    rangeID: number,
+    nodeID: number,
+    skipShouldQueue: boolean,
+  ) => Promise<EnqueueRangeResponse>;
 }
 
 interface EnqueueRangeState {
@@ -46,7 +51,10 @@ interface EnqueueRangeState {
   error: Error;
 }
 
-export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteComponentProps, EnqueueRangeState> {
+export class EnqueueRange extends React.Component<
+  EnqueueRangeProps & RouteComponentProps,
+  EnqueueRangeState
+> {
   state: EnqueueRangeState = {
     queue: QUEUES[0],
     rangeID: "",
@@ -60,21 +68,26 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
     this.setState({
       queue: evt.currentTarget.value,
     });
-  }
+  };
 
   handleUpdateRangeID = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
       rangeID: evt.currentTarget.value,
     });
-  }
+  };
 
   handleUpdateNodeID = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
       nodeID: evt.currentTarget.value,
     });
-  }
+  };
 
-  handleEnqueueRange = (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
+  handleEnqueueRange = (
+    queue: string,
+    rangeID: number,
+    nodeID: number,
+    skipShouldQueue: boolean,
+  ) => {
     const req = new EnqueueRangeRequest({
       queue: queue,
       range_id: rangeID,
@@ -82,7 +95,7 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
       skip_should_queue: skipShouldQueue,
     });
     return enqueueRange(req, moment.duration({ hours: 1 }));
-  }
+  };
 
   handleSubmit = (evt: React.FormEvent<any>) => {
     evt.preventDefault();
@@ -95,28 +108,36 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
       parseInt(this.state.nodeID, 10),
       this.state.skipShouldQueue,
     ).then(
-      response => {
+      (response) => {
         this.setState({ response, error: null });
       },
-      error => {
+      (error) => {
         this.setState({ response: null, error });
       },
     );
-  }
+  };
 
   renderNodeResponse(details: EnqueueRangeResponse.IDetails) {
     return (
       <Fragment>
         <p>
-          {details.error
-            ? <Fragment><b>Error:</b> {details.error}</Fragment>
-            : "Call succeeded"}
+          {details.error ? (
+            <Fragment>
+              <b>Error:</b> {details.error}
+            </Fragment>
+          ) : (
+            "Call succeeded"
+          )}
         </p>
         <table className="enqueue-range-table">
           <thead>
             <tr className="enqueue-range-table__row enqueue-range-table__row--header">
-              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Timestamp</th>
-              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Message</th>
+              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">
+                Timestamp
+              </th>
+              <th className="enqueue-range-table__cell enqueue-range-table__cell--header">
+                Message
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -164,9 +185,7 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
       return null;
     }
 
-    return (
-      <Fragment>Error running EnqueueRange: {error.message}</Fragment>
-    );
+    return <Fragment>Error running EnqueueRange: {error.message}</Fragment>;
   }
 
   render() {
@@ -176,14 +195,22 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
         <div className="content">
           <section className="section">
             <div className="form-container">
-              <h1 className="base-heading heading">Manually enqueue range in a replica queue</h1>
+              <h1 className="base-heading heading">
+                Manually enqueue range in a replica queue
+              </h1>
               <br />
-              <form onSubmit={this.handleSubmit} className="form-internal" method="post">
+              <form
+                onSubmit={this.handleSubmit}
+                className="form-internal"
+                method="post"
+              >
                 <label>
                   Queue:{" "}
                   <select onChange={this.handleUpdateQueue}>
                     {QUEUES.map((queue) => (
-                      <option key={queue} value={queue}>{queue}</option>
+                      <option key={queue} value={queue}>
+                        {queue}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -210,7 +237,8 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
                     value={this.state.nodeID}
                     placeholder="NodeID (optional)"
                   />
-                  &nbsp;If not specified, we'll attempt to enqueue on all the nodes.
+                  &nbsp;If not specified, we'll attempt to enqueue on all the
+                  nodes.
                 </label>
                 <br />
                 <label>
@@ -219,15 +247,15 @@ export class EnqueueRange extends React.Component<EnqueueRangeProps & RouteCompo
                     type="checkbox"
                     checked={this.state.skipShouldQueue}
                     name="skipShouldQueue"
-                    onChange={() => this.setState({ skipShouldQueue: !this.state.skipShouldQueue })}
+                    onChange={() =>
+                      this.setState({
+                        skipShouldQueue: !this.state.skipShouldQueue,
+                      })
+                    }
                   />
                 </label>
                 <br />
-                <input
-                  type="submit"
-                  className="submit-button"
-                  value="Submit"
-                />
+                <input type="submit" className="submit-button" value="Submit" />
               </form>
             </div>
           </section>

@@ -59,7 +59,7 @@ export interface TimeScaleCollection {
  * availableTimeScales is a preconfigured set of time scales that can be
  * selected by the user.
  */
-export let availableTimeScales: TimeScaleCollection = _.mapValues(
+export const availableTimeScales: TimeScaleCollection = _.mapValues(
   {
     "Past 10 Minutes": {
       windowSize: moment.duration(10, "minutes"),
@@ -129,9 +129,17 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
 
 export const findClosestTimeScale = (seconds: number) => {
   const data: TimeScale[] = [];
-  Object.keys(availableTimeScales).forEach((val) => data.push(availableTimeScales[val]));
-  data.sort( (a, b) => (Math.abs(seconds - a.windowSize.asSeconds()) - Math.abs(seconds - b.windowSize.asSeconds())) );
-  return data[0].windowSize.asSeconds() === seconds ? data[0] : { ...data[0], key: "Custom" };
+  Object.keys(availableTimeScales).forEach((val) =>
+    data.push(availableTimeScales[val]),
+  );
+  data.sort(
+    (a, b) =>
+      Math.abs(seconds - a.windowSize.asSeconds()) -
+      Math.abs(seconds - b.windowSize.asSeconds()),
+  );
+  return data[0].windowSize.asSeconds() === seconds
+    ? data[0]
+    : { ...data[0], key: "Custom" };
 };
 
 export class TimeWindowState {
@@ -149,22 +157,27 @@ export class TimeWindowState {
   }
 }
 
-export function timeWindowReducer(state = new TimeWindowState(), action: Action): TimeWindowState {
+export function timeWindowReducer(
+  state = new TimeWindowState(),
+  action: Action,
+): TimeWindowState {
   switch (action.type) {
-    case SET_WINDOW:
+    case SET_WINDOW: {
       const { payload: tw } = action as PayloadAction<TimeWindow>;
       state = _.clone(state);
       state.currentWindow = tw;
       state.scaleChanged = false;
       return state;
-    case SET_RANGE:
+    }
+    case SET_RANGE: {
       const { payload: data } = action as PayloadAction<TimeWindow>;
       state = _.clone(state);
       state.currentWindow = data;
       state.useTimeRange = true;
       state.scaleChanged = false;
       return state;
-    case SET_SCALE:
+    }
+    case SET_SCALE: {
       const { payload: scale } = action as PayloadAction<TimeScale>;
       state = _.clone(state);
       if (scale.key === "Custom") {
@@ -175,6 +188,7 @@ export function timeWindowReducer(state = new TimeWindowState(), action: Action)
       state.scale = scale;
       state.scaleChanged = true;
       return state;
+    }
     default:
       return state;
   }

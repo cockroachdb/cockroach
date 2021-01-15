@@ -23,8 +23,10 @@ import { selectEnterpriseEnabled } from "src/redux/license";
 import { Dropdown } from "src/components/dropdown";
 import { parseSplatParams } from "src/util/parseSplatParams";
 
-// tslint:disable-next-line:variable-name
-const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
+const NodeCanvasContent = swapByLicense(
+  NeedEnterpriseLicense,
+  NodeCanvasContainer,
+);
 
 interface ClusterVisualizationProps {
   licenseDataExists: boolean;
@@ -32,7 +34,9 @@ interface ClusterVisualizationProps {
   clusterDataError: Error | null;
 }
 
-export class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouteComponentProps> {
+export class ClusterVisualization extends React.Component<
+  ClusterVisualizationProps & RouteComponentProps
+> {
   readonly items = [
     { value: "list", name: "Node List" },
     { value: "map", name: "Node Map" },
@@ -40,7 +44,7 @@ export class ClusterVisualization extends React.Component<ClusterVisualizationPr
 
   handleMapTableToggle = (value: string) => {
     this.props.history.push(`/overview/${value}`);
-  }
+  };
 
   getTiers() {
     const { match, location } = this.props;
@@ -52,30 +56,35 @@ export class ClusterVisualization extends React.Component<ClusterVisualizationPr
     const tiers = this.getTiers();
 
     // TODO(couchand): integrate with license swapper
-    const showingLicensePage = this.props.licenseDataExists && !this.props.enterpriseEnabled;
+    const showingLicensePage =
+      this.props.licenseDataExists && !this.props.enterpriseEnabled;
 
-    const classes = cn(
-      "cluster-visualization-layout",
-      { "cluster-visualization-layout--show-license": showingLicensePage });
+    const classes = cn("cluster-visualization-layout", {
+      "cluster-visualization-layout--show-license": showingLicensePage,
+    });
 
     const contentItemClasses = cn(
       "cluster-visualization-layout__content-item",
-      { "cluster-visualization-layout__content-item--show-license": showingLicensePage });
+      {
+        "cluster-visualization-layout__content-item--show-license": showingLicensePage,
+      },
+    );
 
     // TODO(vilterp): dedup with NodeList
     return (
       <div className={classes}>
         <div className="cluster-visualization-layout__content">
           <div className="cluster-visualization-layout__content-item">
-            <Dropdown
-              items={this.items}
-              onChange={this.handleMapTableToggle}
-            >
+            <Dropdown items={this.items} onChange={this.handleMapTableToggle}>
               Node Map
             </Dropdown>
           </div>
-          <div className={contentItemClasses}><Breadcrumbs tiers={tiers} /></div>
-          <div className={contentItemClasses}><TimeScaleDropdown /></div>
+          <div className={contentItemClasses}>
+            <Breadcrumbs tiers={tiers} />
+          </div>
+          <div className={contentItemClasses}>
+            <TimeScaleDropdown />
+          </div>
         </div>
         <Loading
           loading={!this.props.licenseDataExists}

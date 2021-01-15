@@ -13,10 +13,18 @@ import _ from "lodash";
 import React, { ReactNode } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
-import { Link, RouteComponentProps, match as Match, withRouter } from "react-router-dom";
+import {
+  Link,
+  RouteComponentProps,
+  match as Match,
+  withRouter,
+} from "react-router-dom";
 import { createSelector } from "reselect";
 
-import { refreshStatementDiagnosticsRequests, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshStatementDiagnosticsRequests,
+  refreshStatements,
+} from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -29,7 +37,7 @@ import {
 } from "src/util/appStats";
 import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import {Bytes, Duration} from "src/util/format";
+import { Bytes, Duration } from "src/util/format";
 import { intersperse } from "src/util/intersperse";
 import { Pick } from "src/util/pick";
 import { Loading } from "@cockroachlabs/admin-ui-components";
@@ -39,14 +47,22 @@ import { formatNumberForDisplay } from "src/views/shared/components/summaryBar";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import { PlanView } from "src/views/statements/planView";
 import { SummaryCard } from "../shared/components/summaryCard";
-import { approximify, latencyBreakdown, genericBarChart, longToInt, rowsBreakdown } from "./barCharts";
-import { AggregateStatistics, makeNodesColumns, StatementsSortedTable } from "./statementsTable";
+import {
+  approximify,
+  latencyBreakdown,
+  genericBarChart,
+  longToInt,
+  rowsBreakdown,
+} from "./barCharts";
+import {
+  AggregateStatistics,
+  makeNodesColumns,
+  StatementsSortedTable,
+} from "./statementsTable";
 import { getMatchParamByName } from "src/util/query";
 import DiagnosticsView from "./diagnostics";
 import classNames from "classnames/bind";
-import {
-  selectDiagnosticsReportsCountByStatementFingerprint,
-} from "src/redux/statements/statementsSelectors";
+import { selectDiagnosticsReportsCountByStatementFingerprint } from "src/redux/statements/statementsSelectors";
 import { Button } from "@cockroachlabs/admin-ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { trackSubnavSelection } from "src/util/analytics";
@@ -81,19 +97,15 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
-    return (
-      <span className={cx("app-name", "app-name__unset")}>
-        (unset)
-      </span>
-    );
+    return <span className={cx("app-name", "app-name__unset")}>(unset)</span>;
   }
 
   return (
     <Link
       className={cx("app-name")}
-      to={ `/statements/${encodeURIComponent(props.app)}` }
+      to={`/statements/${encodeURIComponent(props.app)}`}
     >
-      { props.app }
+      {props.app}
     </Link>
   );
 }
@@ -108,7 +120,8 @@ interface StatementDetailsOwnProps {
   diagnosticsCount: number;
 }
 
-export type StatementDetailsProps = StatementDetailsOwnProps & RouteComponentProps;
+export type StatementDetailsProps = StatementDetailsOwnProps &
+  RouteComponentProps;
 
 interface StatementDetailsState {
   sortSetting: SortSetting;
@@ -142,10 +155,25 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
   render() {
     const { rows } = this.props;
     return (
-      <table className={classNames(sortableTableCx("sort-table"), cx("statements-table"))}>
+      <table
+        className={classNames(
+          sortableTableCx("sort-table"),
+          cx("statements-table"),
+        )}
+      >
         <thead>
-          <tr className={sortableTableCx("sort-table__row", "sort-table__row--header")}>
-            <th className={sortableTableCx("sort-table__cell", "sort-table__cell--header")}>
+          <tr
+            className={sortableTableCx(
+              "sort-table__row",
+              "sort-table__row--header",
+            )}
+          >
+            <th
+              className={sortableTableCx(
+                "sort-table__cell",
+                "sort-table__cell--header",
+              )}
+            >
               {this.props.title}
             </th>
             <th className={sortableTableCx("sort-table__cell")}>
@@ -157,51 +185,59 @@ class NumericStatTable extends React.Component<NumericStatTableProps> {
           </tr>
         </thead>
         <tbody>
-          {
-            rows.map((row: NumericStatRow) => {
-              let { format } = this.props;
-              if (row.format) {
-                format = row.format;
-              }
-              const className = sortableTableCx(
-                "sort-table__row",
-                "sort-table__row--body",
-                {
-                  "sort-table__row--summary": row.summary,
-                },
-              );
-              return (
-                <tr className={className}>
-                  <th
-                    className={sortableTableCx("sort-table__cell", "sort-table__cell--header")}
-                    style={{ textAlign: "left" }}
-                  >
-                    { row.name }
-                  </th>
-                  <td className={sortableTableCx("sort-table__cell")}>
-                    { row.bar ? row.bar() : null }
-                  </td>
-                  <td className={sortableTableCx("sort-table__cell", "sort-table__cell--active")}>
-                    { format(stdDev(row.value, this.props.count)) }
-                  </td>
-                </tr>
-              );
-            })
-          }
+          {rows.map((row: NumericStatRow) => {
+            let { format } = this.props;
+            if (row.format) {
+              format = row.format;
+            }
+            const className = sortableTableCx(
+              "sort-table__row",
+              "sort-table__row--body",
+              {
+                "sort-table__row--summary": row.summary,
+              },
+            );
+            return (
+              <tr className={className}>
+                <th
+                  className={sortableTableCx(
+                    "sort-table__cell",
+                    "sort-table__cell--header",
+                  )}
+                  style={{ textAlign: "left" }}
+                >
+                  {row.name}
+                </th>
+                <td className={sortableTableCx("sort-table__cell")}>
+                  {row.bar ? row.bar() : null}
+                </td>
+                <td
+                  className={sortableTableCx(
+                    "sort-table__cell",
+                    "sort-table__cell--active",
+                  )}
+                >
+                  {format(stdDev(row.value, this.props.count))}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     );
   }
 }
 
-export class StatementDetails extends React.Component<StatementDetailsProps, StatementDetailsState> {
-
+export class StatementDetails extends React.Component<
+  StatementDetailsProps,
+  StatementDetailsState
+> {
   constructor(props: StatementDetailsProps) {
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
       sortSetting: {
-        sortKey: 5,  // Latency
+        sortKey: 5, // Latency
         ascending: false,
       },
       currentTab: searchParams.get("tab") || "overview",
@@ -212,7 +248,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     this.setState({
       sortSetting: ss,
     });
-  }
+  };
 
   componentDidMount() {
     this.props.refreshStatements();
@@ -230,7 +266,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
       ...location,
       pathname: "/statements",
     });
-  }
+  };
 
   onTabChange = (tabId: string) => {
     const { history } = this.props;
@@ -244,13 +280,13 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     this.setState({
       currentTab: tabId,
     });
-  }
+  };
 
   render() {
     const app = getMatchParamByName(this.props.match, appAttr);
     return (
       <div>
-        <Helmet title={`Details | ${(app ? `${app} App |` : "")} Statements`} />
+        <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
         <div className={cx("section", "page--header")}>
           <Button
             onClick={this.backToStatementsPage}
@@ -283,7 +319,16 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     if (!this.props.statement) {
       return null;
     }
-    const { stats, statement, app, distSQL, vec, opt, failed, implicit_txn } = this.props.statement;
+    const {
+      stats,
+      statement,
+      app,
+      distSQL,
+      vec,
+      opt,
+      failed,
+      implicit_txn,
+    } = this.props.statement;
 
     if (!stats) {
       const sourceApp = getMatchParamByName(this.props.match, appAttr);
@@ -292,12 +337,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
       return (
         <React.Fragment>
           <section className={cx("section")}>
-            <SqlBox value={ statement } />
+            <SqlBox value={statement} />
           </section>
           <section className={cx("section")}>
             <h3>Unable to find statement</h3>
             There are no execution statistics for this statement.{" "}
-            <Link className={cx("back-link")} to={ listUrl }>
+            <Link className={cx("back-link")} to={listUrl}>
               Back to Statements
             </Link>
           </section>
@@ -308,15 +353,26 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
     const count = FixLong(stats.count).toInt();
 
     const { rowsBarChart } = rowsBreakdown(this.props.statement);
-    const { parseBarChart, planBarChart, runBarChart, overheadBarChart, overallBarChart } = latencyBreakdown(this.props.statement);
+    const {
+      parseBarChart,
+      planBarChart,
+      runBarChart,
+      overheadBarChart,
+      overallBarChart,
+    } = latencyBreakdown(this.props.statement);
 
     const totalCountBarChart = longToInt(this.props.statement.stats.count);
-    const firstAttemptsBarChart = longToInt(this.props.statement.stats.first_attempt_count);
+    const firstAttemptsBarChart = longToInt(
+      this.props.statement.stats.first_attempt_count,
+    );
     const retriesBarChart = totalCountBarChart - firstAttemptsBarChart;
-    const maxRetriesBarChart = longToInt(this.props.statement.stats.max_retries);
+    const maxRetriesBarChart = longToInt(
+      this.props.statement.stats.max_retries,
+    );
 
     const statsByNode = this.props.statement.byNode;
-    const logicalPlan = stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
+    const logicalPlan =
+      stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
     return (
       <Tabs
@@ -328,25 +384,55 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         <TabPane tab="Overview" key="overview">
           <Row gutter={16}>
             <Col className="gutter-row" span={16}>
-              <SqlBox value={ statement } />
+              <SqlBox value={statement} />
             </Col>
             <Col className="gutter-row" span={8}>
               <SummaryCard>
                 <Row>
                   <Col span={12}>
-                    <div className={summaryCardStylesCx("summary--card__counting")}>
-                      <h3 className={summaryCardStylesCx("summary--card__counting--value")}>
-                        {formatNumberForDisplay(count * stats.service_lat.mean, duration)}
+                    <div
+                      className={summaryCardStylesCx("summary--card__counting")}
+                    >
+                      <h3
+                        className={summaryCardStylesCx(
+                          "summary--card__counting--value",
+                        )}
+                      >
+                        {formatNumberForDisplay(
+                          count * stats.service_lat.mean,
+                          duration,
+                        )}
                       </h3>
-                      <p className={summaryCardStylesCx("summary--card__counting--label")}>Total Time</p>
+                      <p
+                        className={summaryCardStylesCx(
+                          "summary--card__counting--label",
+                        )}
+                      >
+                        Total Time
+                      </p>
                     </div>
                   </Col>
                   <Col span={12}>
-                    <div className={summaryCardStylesCx("summary--card__counting")}>
-                      <h3 className={summaryCardStylesCx("summary--card__counting--value")}>
-                        {formatNumberForDisplay(stats.service_lat.mean, duration)}
+                    <div
+                      className={summaryCardStylesCx("summary--card__counting")}
+                    >
+                      <h3
+                        className={summaryCardStylesCx(
+                          "summary--card__counting--value",
+                        )}
+                      >
+                        {formatNumberForDisplay(
+                          stats.service_lat.mean,
+                          duration,
+                        )}
                       </h3>
-                      <p className={summaryCardStylesCx("summary--card__counting--label")}>Mean Service Latency</p>
+                      <p
+                        className={summaryCardStylesCx(
+                          "summary--card__counting--label",
+                        )}
+                      >
+                        Mean Service Latency
+                      </p>
                     </div>
                   </Col>
                 </Row>
@@ -355,30 +441,103 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                   className={summaryCardStylesCx("summary--card__item")}
                   style={{ justifyContent: "flex-start" }}
                 >
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>App:</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>
-                    { intersperse<ReactNode>(app.map(a => <AppLink app={ a } key={ a } />), ", ") }
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    App:
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {intersperse<ReactNode>(
+                      app.map((a) => <AppLink app={a} key={a} />),
+                      ", ",
+                    )}
                   </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Transaction Type</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderTransactionType(implicit_txn) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Transaction Type
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {renderTransactionType(implicit_txn)}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Distributed execution?</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(distSQL) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Distributed execution?
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {renderBools(distSQL)}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Vectorized execution?</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(vec) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Vectorized execution?
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {renderBools(vec)}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Used cost-based optimizer?</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(opt) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Used cost-based optimizer?
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {renderBools(opt)}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Failed?</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ renderBools(failed) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Failed?
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {renderBools(failed)}
+                  </p>
                 </div>
               </SummaryCard>
               <SummaryCard>
@@ -391,11 +550,29 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                   Execution Count
                 </h2>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>First Attempts</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ firstAttemptsBarChart }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    First Attempts
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {firstAttemptsBarChart}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Retries</h4>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Retries
+                  </h4>
                   <p
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
@@ -404,25 +581,44 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                       },
                     )}
                   >
-                    { retriesBarChart }
+                    {retriesBarChart}
                   </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Max Retries</h4>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Max Retries
+                  </h4>
                   <p
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
                       {
-                        "summary--card__item--value-red": maxRetriesBarChart > 0,
+                        "summary--card__item--value-red":
+                          maxRetriesBarChart > 0,
                       },
                     )}
                   >
-                    { maxRetriesBarChart }
+                    {maxRetriesBarChart}
                   </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Total</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ totalCountBarChart }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Total
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {totalCountBarChart}
+                  </p>
                 </div>
                 <p className={summaryCardStylesCx("summary--card__divider")} />
                 <h2
@@ -434,26 +630,52 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
                   Rows Affected
                 </h2>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Mean Rows</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ rowsBarChart(true) }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Mean Rows
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {rowsBarChart(true)}
+                  </p>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <h4 className={summaryCardStylesCx("summary--card__item--label")}>Standard Deviation</h4>
-                  <p className={summaryCardStylesCx("summary--card__item--value")}>{ rowsBarChart() }</p>
+                  <h4
+                    className={summaryCardStylesCx(
+                      "summary--card__item--label",
+                    )}
+                  >
+                    Standard Deviation
+                  </h4>
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__item--value",
+                    )}
+                  >
+                    {rowsBarChart()}
+                  </p>
                 </div>
               </SummaryCard>
             </Col>
           </Row>
         </TabPane>
-        <TabPane tab={`Diagnostics ${diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""}`} key="diagnostics">
+        <TabPane
+          tab={`Diagnostics ${
+            diagnosticsCount > 0 ? `(${diagnosticsCount})` : ""
+          }`}
+          key="diagnostics"
+        >
           <DiagnosticsView statementFingerprint={statement} />
         </TabPane>
         <TabPane tab="Logical Plan" key="logical-plan">
           <SummaryCard>
-            <PlanView
-              title="Logical Plan"
-              plan={logicalPlan}
-            />
+            <PlanView title="Logical Plan" plan={logicalPlan} />
           </SummaryCard>
         </TabPane>
         <TabPane tab="Execution Stats" key="execution-stats">
@@ -467,8 +689,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
               Execution Latency By Phase
               <div className={cx("numeric-stats-table__tooltip")}>
                 <ToolTipWrapper text="The execution latency of this statement, broken down by phase.">
-                  <div className={cx("numeric-stats-table__tooltip-hover-area")}>
-                    <div className={cx("numeric-stats-table__info-icon")}>i</div>
+                  <div
+                    className={cx("numeric-stats-table__tooltip-hover-area")}
+                  >
+                    <div className={cx("numeric-stats-table__info-icon")}>
+                      i
+                    </div>
                   </div>
                 </ToolTipWrapper>
               </div>
@@ -476,14 +702,23 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             <NumericStatTable
               title="Phase"
               measure="Latency"
-              count={ count }
-              format={ (v: number) => Duration(v * 1e9) }
+              count={count}
+              format={(v: number) => Duration(v * 1e9)}
               rows={[
                 { name: "Parse", value: stats.parse_lat, bar: parseBarChart },
                 { name: "Plan", value: stats.plan_lat, bar: planBarChart },
                 { name: "Run", value: stats.run_lat, bar: runBarChart },
-                { name: "Overhead", value: stats.overhead_lat, bar: overheadBarChart },
-                { name: "Overall", summary: true, value: stats.service_lat, bar: overallBarChart },
+                {
+                  name: "Overhead",
+                  value: stats.overhead_lat,
+                  bar: overheadBarChart,
+                },
+                {
+                  name: "Overall",
+                  summary: true,
+                  value: stats.service_lat,
+                  bar: overallBarChart,
+                },
               ]}
             />
           </SummaryCard>
@@ -499,19 +734,36 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
             <NumericStatTable
               title="Stat"
               measure="Quantity"
-              count={ count }
-              format={ d3.format(".2f") }
+              count={count}
+              format={d3.format(".2f")}
               rows={[
-                { name: "Rows Read", value: stats.rows_read, bar: genericBarChart(stats.rows_read, stats.count)},
-                { name: "Disk Bytes Read", value: stats.bytes_read, bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
+                {
+                  name: "Rows Read",
+                  value: stats.rows_read,
+                  bar: genericBarChart(stats.rows_read, stats.count),
+                },
+                {
+                  name: "Disk Bytes Read",
+                  value: stats.bytes_read,
+                  bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
                   format: Bytes,
                 },
                 {
-                  name: "Network Bytes Sent", value: stats.bytes_sent_over_network, bar: genericBarChart(stats.bytes_sent_over_network, stats.count, Bytes),
+                  name: "Network Bytes Sent",
+                  value: stats.bytes_sent_over_network,
+                  bar: genericBarChart(
+                    stats.bytes_sent_over_network,
+                    stats.count,
+                    Bytes,
+                  ),
                   format: Bytes,
                 },
               ].filter(function (r) {
-                if (r.name === "Network Bytes Sent" && r.value && r.value.mean === 0) {
+                if (
+                  r.name === "Network Bytes Sent" &&
+                  r.value &&
+                  r.value.mean === 0
+                ) {
                   // Omit if empty.
                   return false;
                 }
@@ -529,8 +781,12 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
               Stats By Node
               <div className={cx("numeric-stats-table__tooltip")}>
                 <ToolTipWrapper text="Execution statistics for this statement per gateway node.">
-                  <div className={cx("numeric-stats-table__tooltip-hover-area")}>
-                    <div className={cx("numeric-stats-table__info-icon")}>i</div>
+                  <div
+                    className={cx("numeric-stats-table__tooltip-hover-area")}
+                  >
+                    <div className={cx("numeric-stats-table__info-icon")}>
+                      i
+                    </div>
                   </div>
                 </ToolTipWrapper>
               </div>
@@ -547,7 +803,7 @@ export class StatementDetails extends React.Component<StatementDetailsProps, Sta
         </TabPane>
       </Tabs>
     );
-  }
+  };
 }
 
 function renderTransactionType(implicitTxn: Fraction) {
@@ -560,7 +816,10 @@ function renderTransactionType(implicitTxn: Fraction) {
   if (implicitTxn.numerator === implicitTxn.denominator) {
     return "Implicit";
   }
-  const fraction = approximify(implicitTxn.numerator) + " of " + approximify(implicitTxn.denominator);
+  const fraction =
+    approximify(implicitTxn.numerator) +
+    " of " +
+    approximify(implicitTxn.denominator);
   return `${fraction} were Implicit Txns`;
 }
 
@@ -574,7 +833,9 @@ function renderBools(fraction: Fraction) {
   if (fraction.numerator === fraction.denominator) {
     return "Yes";
   }
-  return approximify(fraction.numerator) + " of " + approximify(fraction.denominator);
+  return (
+    approximify(fraction.numerator) + " of " + approximify(fraction.denominator)
+  );
 }
 
 type StatementsState = Pick<AdminUIState, "cachedData", "statements">;
@@ -589,10 +850,12 @@ function keyByNodeAndImplicitTxn(stmt: ExecutionStatistics): string {
   return stmt.node_id.toString() + stmt.implicit_txn;
 }
 
-function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] {
+function coalesceNodeStats(
+  stats: ExecutionStatistics[],
+): AggregateStatistics[] {
   const byNodeAndImplicitTxn: { [nodeId: string]: StatementDetailsData } = {};
 
-  stats.forEach(stmt => {
+  stats.forEach((stmt) => {
     const key = keyByNodeAndImplicitTxn(stmt);
     if (!(key in byNodeAndImplicitTxn)) {
       byNodeAndImplicitTxn[key] = {
@@ -604,7 +867,7 @@ function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] 
     byNodeAndImplicitTxn[key].stats.push(stmt.stats);
   });
 
-  return Object.keys(byNodeAndImplicitTxn).map(key => {
+  return Object.keys(byNodeAndImplicitTxn).map((key) => {
     const stmt = byNodeAndImplicitTxn[key];
     return {
       label: stmt.nodeId.toString(),
@@ -614,11 +877,14 @@ function coalesceNodeStats(stats: ExecutionStatistics[]): AggregateStatistics[] 
   });
 }
 
-function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: ExecutionStatistics) => boolean): Fraction {
+function fractionMatching(
+  stats: ExecutionStatistics[],
+  predicate: (stmt: ExecutionStatistics) => boolean,
+): Fraction {
   let numerator = 0;
   let denominator = 0;
 
-  stats.forEach(stmt => {
+  stats.forEach((stmt) => {
     const count = FixLong(stmt.stats.first_attempt_count).toInt();
     denominator += count;
     if (predicate(stmt)) {
@@ -629,9 +895,12 @@ function fractionMatching(stats: ExecutionStatistics[], predicate: (stmt: Execut
   return { numerator, denominator };
 }
 
-function filterByRouterParamsPredicate(match: Match<any>, internalAppNamePrefix: string): (stat: ExecutionStatistics) => boolean {
+function filterByRouterParamsPredicate(
+  match: Match<any>,
+  internalAppNamePrefix: string,
+): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
-  const implicitTxn = (getMatchParamByName(match, implicitTxnAttr) === "true");
+  const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
   let app = getMatchParamByName(match, appAttr);
 
   const filterByStatementAndImplicitTxn = (stmt: ExecutionStatistics) =>
@@ -647,7 +916,8 @@ function filterByRouterParamsPredicate(match: Match<any>, internalAppNamePrefix:
 
   if (app === "(internal)") {
     return (stmt: ExecutionStatistics) =>
-      filterByStatementAndImplicitTxn(stmt) && stmt.app.startsWith(internalAppNamePrefix);
+      filterByStatementAndImplicitTxn(stmt) &&
+      stmt.app.startsWith(internalAppNamePrefix);
   }
 
   return (stmt: ExecutionStatistics) =>
@@ -663,21 +933,25 @@ export const selectStatement = createSelector(
       return null;
     }
 
-    const internalAppNamePrefix = statementsState.data?.internal_app_name_prefix;
+    const internalAppNamePrefix =
+      statementsState.data?.internal_app_name_prefix;
     const flattened = flattenStatementStats(statements);
-    const results = _.filter(flattened, filterByRouterParamsPredicate(props.match, internalAppNamePrefix));
+    const results = _.filter(
+      flattened,
+      filterByRouterParamsPredicate(props.match, internalAppNamePrefix),
+    );
     const statement = getMatchParamByName(props.match, statementAttr);
     return {
       statement,
-      stats: combineStatementStats(results.map(s => s.stats)),
+      stats: combineStatementStats(results.map((s) => s.stats)),
       byNode: coalesceNodeStats(results),
-      app: _.uniq(results.map(s => s.app)),
-      distSQL: fractionMatching(results, s => s.distSQL),
-      vec: fractionMatching(results, s => s.vec),
-      opt: fractionMatching(results, s => s.opt),
-      implicit_txn: fractionMatching(results, s => s.implicit_txn),
-      failed: fractionMatching(results, s => s.failed),
-      node_id: _.uniq(results.map(s => s.node_id)),
+      app: _.uniq(results.map((s) => s.app)),
+      distSQL: fractionMatching(results, (s) => s.distSQL),
+      vec: fractionMatching(results, (s) => s.vec),
+      opt: fractionMatching(results, (s) => s.opt),
+      implicit_txn: fractionMatching(results, (s) => s.implicit_txn),
+      failed: fractionMatching(results, (s) => s.failed),
+      node_id: _.uniq(results.map((s) => s.node_id)),
     };
   },
 );
@@ -688,7 +962,10 @@ const mapStateToProps = (state: AdminUIState, props: StatementDetailsProps) => {
     statement,
     statementsError: state.cachedData.statements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
-    diagnosticsCount: selectDiagnosticsReportsCountByStatementFingerprint(state, statement?.statement),
+    diagnosticsCount: selectDiagnosticsReportsCountByStatementFingerprint(
+      state,
+      statement?.statement,
+    ),
   };
 };
 
@@ -697,10 +974,8 @@ const mapDispatchToProps = {
   refreshStatementDiagnosticsRequests,
 };
 
-// tslint:disable-next-line:variable-name
-const StatementDetailsConnected = withRouter(connect(
-  mapStateToProps,
-  mapDispatchToProps,
-)(StatementDetails));
+const StatementDetailsConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(StatementDetails),
+);
 
 export default StatementDetailsConnected;

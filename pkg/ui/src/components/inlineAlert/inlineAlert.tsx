@@ -32,18 +32,15 @@ export const InlineAlert: React.FC<InlineAlertProps> = ({
   intent = "info",
   className,
 }) => {
-  const Icon = useMemo(
-    () => {
-      switch (intent) {
-        case "error":
-          return ErrorIcon;
-        case "info":
-        default:
-          return InfoIcon;
-      }
-  },
-    [intent],
-  );
+  const Icon = useMemo(() => {
+    switch (intent) {
+      case "error":
+        return ErrorIcon;
+      case "info":
+      default:
+        return InfoIcon;
+    }
+  }, [intent]);
 
   return (
     <div className={cn("root", `intent-${intent}`, className)}>

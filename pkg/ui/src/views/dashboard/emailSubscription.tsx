@@ -34,12 +34,12 @@ class EmailSubscription extends React.Component<EmailSubscriptionProps> {
 
   handleEmailSubscriptionSubmit = (email: string) => {
     this.props.signUpForEmailSubscription(this.props.clusterId, email);
-  }
+  };
 
   handlePanelHide = () => {
     this.props.dismissAlertMessage();
     this.props.hidePanel();
-  }
+  };
 
   componentWillUnmount() {
     this.props.dismissAlertMessage();

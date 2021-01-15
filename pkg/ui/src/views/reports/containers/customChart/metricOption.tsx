@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {OptionComponentProps} from "react-select";
+import { OptionComponentProps } from "react-select";
 import classnames from "classnames";
 
 import "./metricOption.styl";
@@ -25,13 +25,11 @@ export function MetricOption(props: OptionComponentProps) {
       role="option"
       aria-label={label}
       title={option.title}
-      onMouseDown={event => onSelect(option, event)}
-      onMouseEnter={event => onFocus(option, event)}
+      onMouseDown={(event) => onSelect(option, event)}
+      onMouseEnter={(event) => onFocus(option, event)}
     >
       <div className="metric-option__label">{label}</div>
-      <div
-        className="metric-option__description"
-        title={description}>
+      <div className="metric-option__description" title={description}>
         {description}
       </div>
     </div>

@@ -38,21 +38,27 @@ interface TableInfoProps {
 
 const cx = classNames.bind(styles);
 
-class TableInfoComponent extends React.Component<TableInfoComponentProps & TableInfoProps> {
+class TableInfoComponent extends React.Component<
+  TableInfoComponentProps & TableInfoProps
+> {
   componentDidMount() {
     this.loadTable();
   }
 
   loadTable = () => {
-    this.props.refreshTableDetails(new protos.cockroach.server.serverpb.TableDetailsRequest({
-      database: this.props.params[databaseNameAttr],
-      table: this.props.params[tableNameAttr],
-    }));
-    this.props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
-      database: this.props.params[databaseNameAttr],
-      table: this.props.params[tableNameAttr],
-    }));
-  }
+    this.props.refreshTableDetails(
+      new protos.cockroach.server.serverpb.TableDetailsRequest({
+        database: this.props.params[databaseNameAttr],
+        table: this.props.params[tableNameAttr],
+      }),
+    );
+    this.props.refreshTableStats(
+      new protos.cockroach.server.serverpb.TableStatsRequest({
+        database: this.props.params[databaseNameAttr],
+        table: this.props.params[tableNameAttr],
+      }),
+    );
+  };
 
   render() {
     const { title, tableInfo, params } = this.props;
@@ -78,9 +84,9 @@ class TableInfoComponent extends React.Component<TableInfoComponentProps & Table
 }
 
 const mapStateToProps = (state: AdminUIState, props: any) => {
-  return ({
+  return {
     tableInfo: selectTableInfo(state, props),
-  });
+  };
 };
 
 const mapDispatchToProps = {
@@ -88,7 +94,6 @@ const mapDispatchToProps = {
   refreshTableStats,
 };
 
-// tslint:disable-next-line:variable-name
 const TableInfoConnected = connect(
   mapStateToProps,
   mapDispatchToProps,

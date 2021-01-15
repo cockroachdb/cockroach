@@ -35,31 +35,44 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
     const { match } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
     return nodeId || "cluster";
-  }
+  };
 
   navigateTo = (selected: DropdownOption) => {
     trackNetworkSort(selected.label);
     this.props.onChangeCollapse(false);
     this.props.history.push(`/reports/network/${selected.value}`);
-  }
+  };
 
   componentDidMount() {
     this.setDefaultSortValue("region");
   }
 
   setDefaultSortValue = (sortValue: string) => {
-    const isDefaultValuePresent = this.getSortValues(this.props.sort).find(e => e.value === sortValue);
+    const isDefaultValuePresent = this.getSortValues(this.props.sort).find(
+      (e) => e.value === sortValue,
+    );
     if (isDefaultValuePresent) {
       this.navigateTo(isDefaultValuePresent);
     }
-  }
+  };
 
-  getSortValues = (sort: NetworkSort[]) => sort.map(value => {
-    return { value: value.id, label: value.id.replace(/^[a-z]/, m => m.toUpperCase()) };
-  })
+  getSortValues = (sort: NetworkSort[]) =>
+    sort.map((value) => {
+      return {
+        value: value.id,
+        label: value.id.replace(/^[a-z]/, (m) => m.toUpperCase()),
+      };
+    });
 
   render() {
-    const { collapsed, sort, onChangeFilter, deselectFilterByKey, filter, match } = this.props;
+    const {
+      collapsed,
+      sort,
+      onChangeFilter,
+      deselectFilterByKey,
+      filter,
+      match,
+    } = this.props;
     const nodeId = getMatchParamByName(match, "node_id");
     return (
       <div className="Sort-latency">
@@ -78,7 +91,13 @@ class Sort extends React.Component<ISortProps & RouteComponentProps, {}> {
           dropDownClassName="Sort-latency__dropdown--spacing"
         />
         <Divider type="vertical" style={{ height: "100%" }} />
-        <Checkbox disabled={!nodeId || nodeId === "cluster"} checked={collapsed} onChange={this.onChange}>Collapse Nodes</Checkbox>
+        <Checkbox
+          disabled={!nodeId || nodeId === "cluster"}
+          checked={collapsed}
+          onChange={this.onChange}
+        >
+          Collapse Nodes
+        </Checkbox>
       </div>
     );
   }

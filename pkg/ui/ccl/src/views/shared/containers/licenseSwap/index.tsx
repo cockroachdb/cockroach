@@ -21,9 +21,7 @@ type StatelessComponent<P> = React.StatelessComponent<P>;
 type Component<P> = ComponentClass<P> | StatelessComponent<P>;
 
 function getComponentName<P>(wrappedComponent: Component<P>) {
-  return wrappedComponent.displayName
-    || wrappedComponent.name
-    || "Component";
+  return wrappedComponent.displayName || wrappedComponent.name || "Component";
 }
 
 function combineNames(a: string, b: string) {
@@ -49,26 +47,29 @@ function mapStateToProps(state: AdminUIState): OwnProps {
  * on the current license status.
  */
 export default function swapByLicense<TProps>(
-  // tslint:disable:variable-name
   OSSComponent: React.ComponentClass<TProps>,
   CCLComponent: React.ComponentClass<TProps>,
-  // tslint:enable:variable-name
 ) {
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
   class LicenseSwap extends React.Component<TProps & OwnProps & any> {
-    public static displayName = `LicenseSwap(${combineNames(ossName, cclName)})`;
+    public static displayName = `LicenseSwap(${combineNames(
+      ossName,
+      cclName,
+    )})`;
 
     render() {
       const props = _.omit(this.props, ["enterpriseEnabled"]);
 
       if (!this.props.enterpriseEnabled) {
-        return <OSSComponent {...props as TProps} />;
+        return <OSSComponent {...(props as TProps)} />;
       }
-      return <CCLComponent {...props as TProps} />;
+      return <CCLComponent {...(props as TProps)} />;
     }
   }
 
-  return connect<OwnProps, null, TProps, AdminUIState>(mapStateToProps)(LicenseSwap);
+  return connect<OwnProps, null, TProps, AdminUIState>(mapStateToProps)(
+    LicenseSwap,
+  );
 }

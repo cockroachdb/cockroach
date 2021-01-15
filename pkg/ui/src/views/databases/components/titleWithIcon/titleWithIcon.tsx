@@ -12,15 +12,15 @@ import React from "react";
 import "./titleWithIcon.styl";
 
 interface TitleWithIconProps {
-    title: string;
-    src: string;
+  title: string;
+  src: string;
 }
 
-const TitleWithIcon: React.FC<TitleWithIconProps> = ({
-    title,
-    src,
-}) => <h2 className="base-heading title-with-icon">
-        <img src={src} alt="Stack" />{title}
-    </h2>;
+const TitleWithIcon: React.FC<TitleWithIconProps> = ({ title, src }) => (
+  <h2 className="base-heading title-with-icon">
+    <img src={src} alt="Stack" />
+    {title}
+  </h2>
+);
 
 export default TitleWithIcon;

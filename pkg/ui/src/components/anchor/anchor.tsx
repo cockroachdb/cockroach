@@ -12,7 +12,10 @@ import React from "react";
 import classnames from "classnames/bind";
 import styles from "./anchor.module.styl";
 
-type AnchorProps = React.DetailedHTMLProps<React.AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>;
+type AnchorProps = React.DetailedHTMLProps<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  HTMLAnchorElement
+>;
 
 const cx = classnames.bind(styles);
 
@@ -20,16 +23,10 @@ export function Anchor({
   target = "_blank",
   className,
   children,
-  // conflicting rule with TS. TS1013: A rest parameter or binding pattern may not have a trailing comma
-  // tslint:disable-next-line:trailing-comma
   ...props
 }: AnchorProps) {
   return (
-    <a
-      {...props}
-      className={cx("crl-anchor", className)}
-      target={target}
-    >
+    <a {...props} className={cx("crl-anchor", className)} target={target}>
       {children}
     </a>
   );

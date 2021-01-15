@@ -11,9 +11,15 @@
 import React from "react";
 import { storiesOf, RenderFunction } from "@storybook/react";
 
-import {countBarChart, genericBarChart, latencyBarChart, retryBarChart, rowsBarChart} from "./barCharts";
+import {
+  countBarChart,
+  genericBarChart,
+  latencyBarChart,
+  retryBarChart,
+  rowsBarChart,
+} from "./barCharts";
 import statementsPagePropsFixture from "./statementsPage.fixture";
-import {cockroach} from "src/js/protos";
+import { cockroach } from "src/js/protos";
 import NumericStat = cockroach.sql.NumericStat;
 import Long from "long";
 
@@ -33,13 +39,11 @@ const withinColumn = (width = "150px") => (storyFn: RenderFunction) => {
   return (
     <table>
       <tbody>
-      <tr style={rowStyle}>
-        <td style={cellStyle}>
-          <div style={{ width }}>
-            { storyFn() }
-          </div>
-        </td>
-      </tr>
+        <tr style={rowStyle}>
+          <td style={cellStyle}>
+            <div style={{ width }}>{storyFn()}</div>
+          </td>
+        </tr>
       </tbody>
     </table>
   );

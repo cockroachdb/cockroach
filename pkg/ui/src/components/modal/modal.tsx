@@ -22,7 +22,6 @@ export interface ModalProps {
   visible: boolean;
 }
 
-// tslint:disable-next-line:variable-name
 export const Modal: React.FC<ModalProps> = (props) => {
   const {
     children,
@@ -35,35 +34,24 @@ export const Modal: React.FC<ModalProps> = (props) => {
   } = props;
   return (
     <AntModal
-      title={title && (<Text textType={TextTypes.Heading3}>{title}</Text>)}
+      title={title && <Text textType={TextTypes.Heading3}>{title}</Text>}
       className="crl-modal"
       visible={visible}
       closeIcon={
-        <div
-          className="crl-modal__close-icon"
-          onClick={onCancel}
-        >
+        <div className="crl-modal__close-icon" onClick={onCancel}>
           &times;
         </div>
       }
       footer={[
-        <Button
-          onClick={onCancel}
-          type="secondary"
-          key="cancelButton"
-        >
-          { cancelText }
+        <Button onClick={onCancel} type="secondary" key="cancelButton">
+          {cancelText}
         </Button>,
-        <Button
-          onClick={onOk}
-          type="primary"
-          key="okButton"
-        >
-          { okText }
+        <Button onClick={onOk} type="primary" key="okButton">
+          {okText}
         </Button>,
       ]}
     >
-      { children }
+      {children}
     </AntModal>
   );
 };

@@ -65,8 +65,12 @@ export class Stores extends React.Component<StoresProps, {}> {
     }
     return (
       <tr className="stores-table__row">
-        <th className="stores-table__cell stores-table__cell--header">{header}</th>
-        <td className="stores-table__cell" title={realTitle}>{value}</td>
+        <th className="stores-table__cell stores-table__cell--header">
+          {header}
+        </th>
+        <td className="stores-table__cell" title={realTitle}>
+          {value}
+        </td>
       </tr>
     );
   }
@@ -75,12 +79,12 @@ export class Stores extends React.Component<StoresProps, {}> {
     return (
       <table key={store.store_id} className="stores-table">
         <tbody>
-          { this.renderSimpleRow("Store ID", store.store_id.toString()) }
-          { new EncryptionStatus({store: store}).getEncryptionRows() }
+          {this.renderSimpleRow("Store ID", store.store_id.toString())}
+          {new EncryptionStatus({ store: store }).getEncryptionRows()}
         </tbody>
       </table>
     );
-  }
+  };
 
   renderContent = () => {
     const { stores, match } = this.props;
@@ -92,8 +96,8 @@ export class Stores extends React.Component<StoresProps, {}> {
       );
     }
 
-    return _.map(this.props.stores,  this.renderStore);
-  }
+    return _.map(this.props.stores, this.renderStore);
+  };
 
   render() {
     const nodeID = getMatchParamByName(this.props.match, nodeIDAttr);

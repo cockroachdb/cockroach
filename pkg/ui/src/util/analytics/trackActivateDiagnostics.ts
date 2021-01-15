@@ -19,7 +19,7 @@ export const track = (fn: Function) => (statement: string) => {
   });
 };
 
-export default function trackActivateDiagnostics (statement: string) {
+export default function trackActivateDiagnostics(statement: string) {
   const boundTrack = analytics.track.bind(analytics);
   track(boundTrack)(statement);
 }

@@ -63,7 +63,10 @@ export function getChildLocalities(locality: LocalityTree): LocalityTree[] {
  * getLocality gets the locality within this tree which corresponds to a set of
  * locality tiers, or null if the locality is not present.
  */
-export function getLocality(localityTree: LocalityTree, tiers: LocalityTier[]): LocalityTree {
+export function getLocality(
+  localityTree: LocalityTree,
+  tiers: LocalityTier[],
+): LocalityTree {
   let result = localityTree;
   for (let i = 0; i < tiers.length; i += 1) {
     const { key, value } = tiers[i];
@@ -113,6 +116,8 @@ export function getLocalityLabel(path: LocalityTier[]): string {
  * allNodesHaveLocality returns true if there exists a node without a locality flag.
  */
 export function allNodesHaveLocality(nodes: INodeStatus[]): boolean {
-  const nodesWithoutLocality = nodes.filter((n) => n.desc.locality.tiers.length === 0);
+  const nodesWithoutLocality = nodes.filter(
+    (n) => n.desc.locality.tiers.length === 0,
+  );
   return nodesWithoutLocality.length === 0;
 }

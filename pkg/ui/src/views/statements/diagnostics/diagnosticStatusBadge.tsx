@@ -40,13 +40,12 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
         <div className="tooltip__table--title">
           <p>
             {"The most recent "}
-            <Anchor
-              href={statementDiagnostics}
-              target="_blank"
-            >
+            <Anchor href={statementDiagnostics} target="_blank">
               diagnostics
             </Anchor>
-            {" for this SQL statement fingerprint are ready to download. Access the full history of diagnostics for the fingerprint in the Statement Details page."}
+            {
+              " for this SQL statement fingerprint are ready to download. Access the full history of diagnostics for the fingerprint in the Statement Details page."
+            }
           </p>
         </div>
       );
@@ -54,14 +53,12 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
       return (
         <div className="tooltip__table--title">
           <p>
-            CockroachDB is waiting for the next SQL statement that matches this fingerprint.
+            CockroachDB is waiting for the next SQL statement that matches this
+            fingerprint.
           </p>
           <p>
             {"When the most recent "}
-            <Anchor
-              href={statementDiagnostics}
-              target="_blank"
-            >
+            <Anchor href={statementDiagnostics} target="_blank">
               diagnostics
             </Anchor>
             {" are ready to download, a link will appear in this row."}
@@ -71,11 +68,10 @@ function mapStatusToDescription(diagnosticsStatus: DiagnosticStatuses) {
     case "ERROR":
       return (
         <div>
-          {"There was an error when attempting to collect diagnostics for this statement. Please try activating again. "}
-          <Anchor
-            href={statementDiagnostics}
-            target="_blank"
-          >
+          {
+            "There was an error when attempting to collect diagnostics for this statement. Please try activating again. "
+          }
+          <Anchor href={statementDiagnostics} target="_blank">
             Learn more
           </Anchor>
         </div>
@@ -90,27 +86,13 @@ export function DiagnosticStatusBadge(props: OwnProps) {
   const tooltipContent = mapStatusToDescription(status);
 
   if (!enableTooltip) {
-    return (
-      <Badge
-        text={status}
-        status={mapDiagnosticsStatusToBadge(status)}
-      />
-    );
+    return <Badge text={status} status={mapDiagnosticsStatusToBadge(status)} />;
   }
 
   return (
-    <Tooltip
-      title={tooltipContent}
-      theme="blue"
-      placement="bottomLeft"
-    >
-      <div
-        className="diagnostic-status-badge__content"
-      >
-        <Badge
-          text={status}
-          status={mapDiagnosticsStatusToBadge(status)}
-        />
+    <Tooltip title={tooltipContent} theme="blue" placement="bottomLeft">
+      <div className="diagnostic-status-badge__content">
+        <Badge text={status} status={mapDiagnosticsStatusToBadge(status)} />
       </div>
     </Tooltip>
   );

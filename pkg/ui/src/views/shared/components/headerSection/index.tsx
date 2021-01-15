@@ -24,22 +24,23 @@ export interface HeaderSectionProps {
   };
 }
 
-// tslint:disable-next-line:variable-name
-const HeaderSection: React.FC<HeaderSectionProps & RouteComponentProps> = (props) => {
+const HeaderSection: React.FC<HeaderSectionProps & RouteComponentProps> = (
+  props,
+) => {
   const { navigationBackConfig, title } = props;
   return (
     <div className="header-section">
-      {
-        navigationBackConfig && (
-          <div className="header-section__back-link">
-            <span
-              className="header-section__back-icon"
-              dangerouslySetInnerHTML={ trustIcon(ArrowLeftIcon) }
-            />
-            <Link to={navigationBackConfig.path}>{navigationBackConfig.text}</Link>
-          </div>
-        )
-      }
+      {navigationBackConfig && (
+        <div className="header-section__back-link">
+          <span
+            className="header-section__back-icon"
+            dangerouslySetInnerHTML={trustIcon(ArrowLeftIcon)}
+          />
+          <Link to={navigationBackConfig.path}>
+            {navigationBackConfig.text}
+          </Link>
+        </div>
+      )}
       <div className="header-section__title">
         <Text textType={TextTypes.Heading3}>{title}</Text>
       </div>

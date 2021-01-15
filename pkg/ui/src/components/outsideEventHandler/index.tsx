@@ -38,9 +38,10 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
 
   onClick = (event: any) => {
     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
-    const isChildEl = this.nodeRef.current && this.nodeRef.current.contains(event.target);
+    const isChildEl =
+      this.nodeRef.current && this.nodeRef.current.contains(event.target);
 
-    const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
+    const isOutsideIgnoredEl = ignoreClickOnRefs.some((outsideIgnoredRef) => {
       if (!outsideIgnoredRef || !outsideIgnoredRef.current) {
         return false;
       }
@@ -50,23 +51,26 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     if (!isChildEl && !isOutsideIgnoredEl) {
       onOutsideClick();
     }
-  }
+  };
 
   addEventListener = () => {
     addEventListener("click", this.onClick);
-  }
+  };
 
   removeEventListener = () => {
     removeEventListener("click", this.onClick);
-  }
+  };
 
   render() {
     const { children, mountNodePosition = "initial" } = this.props;
-    const classes = classNames("outside-event-handler", `outside-event-handler--position-${mountNodePosition}`);
+    const classes = classNames(
+      "outside-event-handler",
+      `outside-event-handler--position-${mountNodePosition}`,
+    );
 
     return (
-      <div ref={ this.nodeRef } className={classes}>
-        { children }
+      <div ref={this.nodeRef} className={classes}>
+        {children}
       </div>
     );
   }

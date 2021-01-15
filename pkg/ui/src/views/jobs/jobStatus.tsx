@@ -10,11 +10,11 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import {JobStatusBadge, ProgressBar} from "src/views/jobs/progressBar";
-import {Duration} from "src/views/jobs/duration";
+import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
+import { Duration } from "src/views/jobs/duration";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
-import {cockroach} from "src/js/protos";
-import {JobStatusVisual, jobToVisual} from "src/views/jobs/jobStatusOptions";
+import { cockroach } from "src/js/protos";
+import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
 import styles from "./jobStatus.module.styl";
 
@@ -26,7 +26,11 @@ export interface JobStatusProps {
 
 const cn = classNames.bind(styles);
 
-export const JobStatus: React.FC<JobStatusProps> = ({ job, compact, lineWidth }) => {
+export const JobStatus: React.FC<JobStatusProps> = ({
+  job,
+  compact,
+  lineWidth,
+}) => {
   const visualType = jobToVisual(job);
 
   switch (visualType) {
@@ -37,16 +41,20 @@ export const JobStatus: React.FC<JobStatusProps> = ({ job, compact, lineWidth })
         <div>
           <JobStatusBadge jobStatus={job.status} />
           <span className="jobs-table__duration">
-            <Duration job={job}/>
+            <Duration job={job} />
           </span>
         </div>
       );
     case JobStatusVisual.ProgressBarWithDuration:
       return (
         <div>
-          <ProgressBar job={job} lineWidth={lineWidth || 11} showPercentage={true}/>
+          <ProgressBar
+            job={job}
+            lineWidth={lineWidth || 11}
+            showPercentage={true}
+          />
           <span className="jobs-table__duration">
-            <Duration job={job}/>
+            <Duration job={job} />
           </span>
         </div>
       );
@@ -54,20 +62,20 @@ export const JobStatus: React.FC<JobStatusProps> = ({ job, compact, lineWidth })
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          <span className="jobs-table__duration">
-            {job.running_status}
-          </span>
+          <span className="jobs-table__duration">{job.running_status}</span>
         </div>
       );
     case JobStatusVisual.BadgeWithErrorMessage:
       return (
         <div>
           <JobStatusBadge jobStatus={job.status} />
-          {
-            !compact && (
-              <InlineAlert title={job.error} intent="error" className={cn("inline-message")} />
-            )
-          }
+          {!compact && (
+            <InlineAlert
+              title={job.error}
+              intent="error"
+              className={cn("inline-message")}
+            />
+          )}
         </div>
       );
     default:

@@ -12,76 +12,106 @@ import React from "react";
 import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import {
+  Metric,
+  Axis,
+  AxisUnits,
+} from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import {
+  GraphDashboardProps,
+  nodeDisplayName,
+  storeIDsForNode,
+} from "./dashboardUtils";
 import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
+  const {
+    nodeIDs,
+    nodesSummary,
+    nodeSources,
+    storeSources,
+    tooltipSelection,
+  } = props;
 
   return [
     <LineGraph
       title="SQL Queries"
       sources={nodeSources}
-      tooltip={
-        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
-        successfully executed per second ${tooltipSelection}.`
-      }
+      tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
+        successfully executed per second ${tooltipSelection}.`}
     >
       <Axis label="queries">
-        <Metric name="cr.node.sql.select.count" title="Selects" nonNegativeRate />
-        <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
-        <Metric name="cr.node.sql.insert.count" title="Inserts" nonNegativeRate />
-        <Metric name="cr.node.sql.delete.count" title="Deletes" nonNegativeRate />
+        <Metric
+          name="cr.node.sql.select.count"
+          title="Selects"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.update.count"
+          title="Updates"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.insert.count"
+          title="Inserts"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.delete.count"
+          title="Deletes"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="Service Latency: SQL, 99th percentile"
-      tooltip={(
+      tooltip={
         <div>
-          Over the last minute, this node executed 99% of queries within this time.&nbsp;
-          <em>This time does not include network latency between the node and client.</em>
+          Over the last minute, this node executed 99% of queries within this
+          time.&nbsp;
+          <em>
+            This time does not include network latency between the node and
+            client.
+          </em>
         </div>
-      )}
+      }
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.sql.service.latency-p99"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
+        {_.map(nodeIDs, (node) => (
+          <Metric
+            key={node}
+            name="cr.node.sql.service.latency-p99"
+            title={nodeDisplayName(nodesSummary, node)}
+            sources={[node]}
+            downsampleMax
+          />
+        ))}
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="Replicas per Node"
-      tooltip={(
+      tooltip={
         <div>
-          The number of range replicas stored on this node.
-          {" "}
-          <em>Ranges are subsets of your data, which are replicated to ensure survivability.</em>
+          The number of range replicas stored on this node.{" "}
+          <em>
+            Ranges are subsets of your data, which are replicated to ensure
+            survivability.
+          </em>
         </div>
-      )}
+      }
     >
       <Axis label="replicas">
-        {
-          _.map(nodeIDs, (nid) => (
-            <Metric
-              key={nid}
-              name="cr.store.replicas"
-              title={nodeDisplayName(nodesSummary, nid)}
-              sources={storeIDsForNode(nodesSummary, nid)}
-            />
-          ))
-        }
+        {_.map(nodeIDs, (nid) => (
+          <Metric
+            key={nid}
+            name="cr.store.replicas"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+          />
+        ))}
       </Axis>
     </LineGraph>,
 

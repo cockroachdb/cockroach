@@ -32,15 +32,15 @@ interface AlertSectionProps {
 class AlertSection extends React.Component<AlertSectionProps, {}> {
   render() {
     const { alerts, dispatch } = this.props;
-    return <div>
-      {
-        _.map(alerts, (a, i) => {
+    return (
+      <div>
+        {_.map(alerts, (a, i) => {
           const { dismiss, ...alertProps } = a;
           const boundDismiss = bindActionCreators(() => a.dismiss, dispatch);
-          return <AlertBox key={i} dismiss={ boundDismiss } {...alertProps} />;
-        })
-      }
-    </div>;
+          return <AlertBox key={i} dismiss={boundDismiss} {...alertProps} />;
+        })}
+      </div>
+    );
   }
 }
 
