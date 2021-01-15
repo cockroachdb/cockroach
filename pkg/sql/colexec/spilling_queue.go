@@ -238,11 +238,11 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 
 	alreadyCopied := 0
 	if q.numInMemoryItems > 0 {
-		// If we have already enqueued at least one batch, let's try to append
-		// as many tuples to it as it has the capacity for.
+		// If we have already enqueued at least one batch, let's try to copy
+		// as many tuples into it as it has the capacity for.
 		tailBatchIdx := q.curTailIdx - 1
 		if tailBatchIdx < 0 {
-			tailBatchIdx = 0
+			tailBatchIdx = len(q.items) - 1
 		}
 		tailBatch := q.items[tailBatchIdx]
 		if l, c := tailBatch.Length(), tailBatch.Capacity(); l < c {
@@ -252,13 +252,15 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 			}
 			q.unlimitedAllocator.PerformOperation(tailBatch.ColVecs(), func() {
 				for i := range q.typs {
-					tailBatch.ColVec(i).Append(
-						coldata.SliceArgs{
-							Src:         batch.ColVec(i),
-							Sel:         batch.Selection(),
-							DestIdx:     l,
-							SrcStartIdx: 0,
-							SrcEndIdx:   alreadyCopied,
+					tailBatch.ColVec(i).Copy(
+						coldata.CopySliceArgs{
+							SliceArgs: coldata.SliceArgs{
+								Src:         batch.ColVec(i),
+								Sel:         batch.Selection(),
+								DestIdx:     l,
+								SrcStartIdx: 0,
+								SrcEndIdx:   alreadyCopied,
+							},
 						},
 					)
 				}
