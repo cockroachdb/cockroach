@@ -366,11 +366,11 @@ func (n *createTableNode) startExec(params runParams) error {
 	// TODO(otan): for MR databases with no locality set, set a default locality
 	// and add a notice.
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().GetDatabaseVersionByID(
+		dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{Required: true},
+			tree.DatabaseLookupFlags{},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")

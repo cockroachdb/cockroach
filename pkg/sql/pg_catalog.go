@@ -921,7 +921,7 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
-	return r.p.Descriptors().GetDatabaseVersionByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
+	return r.p.Descriptors().GetImmutableDatabaseByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
@@ -1011,7 +1011,8 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, table.GetParentSchemaID())
+					sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{})
 					if err != nil {
 						return false, err
 					}
@@ -2382,7 +2383,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Now generate rows for user defined types in this database.
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
-					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
+					sc, err := p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
 					if err != nil {
 						return err
 					}
@@ -2426,7 +2428,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Check if it is a user defined type.
 				id := typedesc.UserDefinedTypeOIDToID(ooid)
-				typDesc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+				typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 				if err != nil {
 					if errors.Is(err, catalog.ErrDescriptorNotFound) {
 						return false, nil
@@ -2436,7 +2438,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					}
 					return false, err
 				}
-				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
+				sc, err := p.Descriptors().GetImmutableSchemaByID(
+					ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
 				if err != nil {
 					return false, err
 				}

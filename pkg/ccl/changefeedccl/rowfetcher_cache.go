@@ -108,7 +108,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			if err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				txn.SetFixedTimestamp(ctx, ts)
 				var err error
-				tableDesc, err = c.collection.GetTableVersionByID(ctx, txn, tableID, tree.ObjectLookupFlagsWithRequired())
+				tableDesc, err = c.collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
 				return err
 			}); err != nil {
 				// Manager can return all kinds of errors during chaos, but based on
