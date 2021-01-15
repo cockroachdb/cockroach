@@ -194,7 +194,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, db, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, db.GetID(), txn)
+			byID, err := descriptors.GetMutableDescriptorByIDDeprecated(ctx, db.GetID(), txn)
 			require.NoError(t, err)
 			require.Same(t, db, byID)
 
@@ -261,7 +261,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, schema.Desc, resolved.Desc)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.ID, txn)
+			byID, err := descriptors.GetMutableDescriptorByIDDeprecated(ctx, schema.ID, txn)
 			require.NoError(t, err)
 
 			require.Same(t, schema.Desc, byID)
@@ -285,7 +285,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, tab, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, tab.GetID(), txn)
+			byID, err := descriptors.GetMutableDescriptorByIDDeprecated(ctx, tab.GetID(), txn)
 			require.NoError(t, err)
 
 			require.Same(t, tab, byID)
@@ -308,7 +308,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, typ, resolved)
 
-			byID, err := descriptors.GetMutableTypeVersionByID(ctx, txn, typ.GetID())
+			byID, err := descriptors.GetMutableTypeByIDDeprecated(ctx, txn, typ.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, typ, byID)

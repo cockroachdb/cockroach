@@ -72,7 +72,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 
 	// Fetch the existing descriptor.
 
-	existing, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	existing, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(ctx, id, p.txn)
 	var forceNoticeString string // for the event
 	if !errors.Is(err, catalog.ErrDescriptorNotFound) && err != nil {
 		if force {
@@ -190,7 +190,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		existingID = descpb.ID(val.ValueInt())
 	}
 	validateDescriptor := func() error {
-		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, descID, p.txn)
+		desc, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(ctx, descID, p.txn)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
@@ -229,7 +229,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentID == 0 {
 			return nil
 		}
-		parent, err := p.Descriptors().GetMutableDescriptorByID(
+		parent, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(
 			ctx, parentID, p.txn,
 		)
 		if err != nil {
@@ -245,7 +245,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentSchemaID == 0 || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.Descriptors().GetMutableDescriptorByID(
+		schema, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(
 			ctx, parentID, p.txn,
 		)
 		if err != nil {
@@ -329,7 +329,7 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 				parentID, parentSchemaID, name, existingID, descID)
 		}
 	}
-	desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, descID, p.txn)
+	desc, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(ctx, descID, p.txn)
 	var forceNoticeString string // for the event
 	if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 		if force {
@@ -371,7 +371,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 		return err
 	}
 	id := descpb.ID(descID)
-	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	mut, err := p.Descriptors().GetMutableDescriptorByIDDeprecated(ctx, id, p.txn)
 	var forceNoticeString string // for the event
 	if err != nil {
 		if !errors.Is(err, catalog.ErrDescriptorNotFound) && force {

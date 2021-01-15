@@ -1041,7 +1041,7 @@ func createImportingDescriptors(
 				// Write the updated databases.
 				for dbID, schemas := range existingDBsWithNewSchemas {
 					log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-					desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
+					desc, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, dbID, txn)
 					if err != nil {
 						return err
 					}
@@ -1078,7 +1078,7 @@ func createImportingDescriptors(
 							continue
 						}
 						// Otherwise, add a backreference to this table.
-						typDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+						typDesc, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, id)
 						if err != nil {
 							return err
 						}
@@ -1404,7 +1404,7 @@ func (r *restoreResumer) publishDescriptors(
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for _, tbl := range details.TableDescs {
-		mutTable, err := descsCol.GetMutableTableVersionByID(ctx, tbl.GetID(), txn)
+		mutTable, err := descsCol.GetMutableTableByIDDeprecated(ctx, tbl.GetID(), txn)
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1430,7 +1430,7 @@ func (r *restoreResumer) publishDescriptors(
 	// For all of the newly created types, make type schema change jobs for any
 	// type descriptors that were backed up in the middle of a type schema change.
 	for _, typDesc := range details.TypeDescs {
-		typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typDesc.GetID())
+		typ, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, typDesc.GetID())
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1448,7 +1448,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 	}
 	for _, sc := range details.SchemaDescs {
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, sc.ID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, sc.ID, txn)
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1464,7 +1464,7 @@ func (r *restoreResumer) publishDescriptors(
 		// an offline state.
 		// TODO(lucy): Should we make this more explicit with a format version
 		// field in the details?
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, dbDesc.ID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, dbDesc.ID, txn)
 		if err != nil {
 			return newDescriptorChangeJobs, err
 		}
@@ -1563,7 +1563,7 @@ func (r *restoreResumer) dropDescriptors(
 	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
 	for i := range details.TableDescs {
 		var err error
-		mutableTables[i], err = descsCol.GetMutableTableVersionByID(ctx, details.TableDescs[i].ID, txn)
+		mutableTables[i], err = descsCol.GetMutableTableByIDDeprecated(ctx, details.TableDescs[i].ID, txn)
 		if err != nil {
 			return err
 		}
@@ -1718,7 +1718,7 @@ func (r *restoreResumer) dropDescriptors(
 	// delete the now-deleted child schema from its schema map.
 	for dbID, schemas := range dbsWithDeletedSchemas {
 		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
+		desc, err := descsCol.GetMutableDescriptorByIDDeprecated(ctx, dbID, txn)
 		if err != nil {
 			return err
 		}
@@ -1774,7 +1774,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				return restored, nil
 			}
 			// Finally, look it up using the transaction.
-			typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+			typ, err := descsCol.GetMutableTypeByIDDeprecated(ctx, txn, id)
 			if err != nil {
 				return nil, err
 			}
