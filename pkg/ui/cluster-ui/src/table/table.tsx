@@ -1,9 +1,7 @@
 import React from "react";
-import { default as AntTable, ColumnProps } from "antd/lib/table";
-import ConfigProvider from "antd/lib/config-provider";
+import { Table as AntTable, ConfigProvider } from "antd";
+import { ColumnProps } from "antd/lib/table";
 import classnames from "classnames/bind";
-
-import "antd/lib/table/style/css";
 import styles from "./table.module.scss";
 
 export type ColumnsConfig<T> = Array<ColumnProps<T>>;
