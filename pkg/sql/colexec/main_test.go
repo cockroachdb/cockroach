@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -68,8 +69,8 @@ func TestMain(m *testing.M) {
 		defer testDiskAcc.Close(ctx)
 
 		flag.Parse()
-		if f := flag.Lookup("test.bench"); f == nil || f.Value.String() == "" {
-			// If we're running benchmarks, don't set a random batch size.
+		if !skip.UnderBench() {
+			// (If we're running benchmarks, don't set a random batch size.)
 			// Pick a random batch size in [minBatchSize, coldata.MaxBatchSize]
 			// range. The randomization can be disabled using COCKROACH_RANDOMIZE_BATCH_SIZE=false.
 			randomBatchSize := generateBatchSize()
