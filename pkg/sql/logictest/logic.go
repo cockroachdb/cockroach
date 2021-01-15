@@ -1682,22 +1682,19 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 		blocklist[blockedConfig] = issueNo
 	}
 
-	var configs configSet
-	if util.IsMetamorphicBuild() {
-		for c := range blocklist {
-			if c == "metamorphic" {
-				// We have a metamorphic build and the file has !metamorphic
-				// blocklist directive which effectively skips the file, so we
-				// simply return empty configSet.
-				return configs
-			}
-		}
+	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
+		// We have a metamorphic build and the file has !metamorphic
+		// blocklist directive which effectively skips the file, so we
+		// simply return empty configSet.
+		t.Logf("will skip test %s because it cannot run in a metamorphic build; pass TAGS=crdb_test_off to disable metamorphic builds", path)
+		return configSet{}
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
 		return applyBlocklistToConfigs(defaults, blocklist)
 	}
 
+	var configs configSet
 	for _, configName := range configNames {
 		if configName[0] == blocklistChar {
 			continue
