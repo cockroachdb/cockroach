@@ -299,14 +299,23 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			return nil, errors.Errorf(
 				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
 		}
+		width := int(colDesc.Type.Width())
+		prec := int(colDesc.Type.Precision())
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
-			Precision:   int(colDesc.Type.Precision()),
-			Scale:       int(colDesc.Type.Width()),
+			Precision:   prec,
+			Scale:       width,
 		}
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			dec := d.(*tree.DDecimal).Decimal
+
+			// If the decimal happens to fit a smaller width than the
+			// column allows, add trailing zeroes so the scale is constant
+			if colDesc.Type.Width() > -dec.Exponent {
+				tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
+			}
+
 			// TODO(dan): For the cases that the avro defined decimal format
 			// would not roundtrip, serialize the decimal as a string. Also
 			// support the unspecified precision/scale case in this branch. We
