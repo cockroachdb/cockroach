@@ -80,6 +80,9 @@ type TestingKnobs struct {
 	// StickyEngineRegistry manages the lifecycle of sticky in memory engines,
 	// which can be enabled via base.StoreSpec.StickyInMemoryEngineID.
 	StickyEngineRegistry StickyInMemEnginesRegistry
+	// Clock Source used to an inject a custom clock for testing the server. It is
+	// typically either an hlc.HybridManualClock or hlc.ManualClock.
+	ClockSource func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

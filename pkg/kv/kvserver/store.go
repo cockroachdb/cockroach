@@ -791,6 +791,11 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 }
 
+// GetStoreConfig exposes the config used for this store.
+func (s *Store) GetStoreConfig() *StoreConfig {
+	return &s.cfg
+}
+
 // LeaseExpiration returns an int64 to increment a manual clock with to
 // make sure that all active range leases expire.
 func (sc *StoreConfig) LeaseExpiration() int64 {
@@ -1656,7 +1661,6 @@ func (s *Store) startGossip() {
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
 	}
-
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error

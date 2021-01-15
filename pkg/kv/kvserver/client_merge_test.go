@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -243,14 +244,11 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
-	storeCfg := kvserver.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.DisableReplicateQueue = true
-	storeCfg.TestingKnobs.DisableMergeQueue = true
-	storeCfg.Clock = nil // manual clock
 
+	manualClock := hlc.NewHybridManualClock()
+	var store *kvserver.Store
 	// Maybe inject some retryable errors when the merge transaction commits.
-	var mtc *multiTestContext
-	storeCfg.TestingKnobs.TestingRequestFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
 				if atomic.AddInt64(&retries, -1) >= 0 {
@@ -263,148 +261,114 @@ func mergeWithData(t *testing.T, retries int64) {
 				// Subsume can execute. This triggers an unusual code path where the
 				// lease acquisition, not Subsume, notices the merge and installs a
 				// mergeComplete channel on the replica.
-				mtc.advanceClock(ctx)
+				manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 			}
 		}
 		return nil
 	}
 
-	mtc = &multiTestContext{
-		storeConfig: &storeCfg,
-		// This test was written before the multiTestContext started creating many
-		// system ranges at startup, and hasn't been update to take that into
-		// account.
-		startWithSingleRange: true,
-	}
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue:    true,
+				DisableSplitQueue:    true,
+				TestingRequestFilter: testingRequestFilter,
+			},
+			Server: &server.TestingKnobs{
+				ClockSource: manualClock.UnixNano,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
 
-	var store1, store2 *kvserver.Store
-	mtc.Start(t, 1)
-	store1, store2 = mtc.stores[0], mtc.stores[0]
-	defer mtc.Stop()
+	scratchKey, err := s.ScratchRangeWithExpirationLease()
+	repl := store.LookupReplica(roachpb.RKey(scratchKey))
+	require.NoError(t, err)
 
-	lhsDesc, rhsDesc, pErr := createSplitRanges(ctx, store1)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	lhsDesc, rhsDesc, pErr := s.SplitRange(scratchKey.Next().Next())
+	require.NoError(t, pErr)
 
 	content := []byte("testing!")
 
 	// Write some values left and right of the proposed split key.
-	pArgs := putArgs(roachpb.Key("aaa"), content)
-	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	pArgs = putArgs(roachpb.Key("ccc"), content)
-	if _, pErr := kv.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
-		RangeID: rhsDesc.RangeID,
-	}, pArgs); pErr != nil {
-		t.Fatal(pErr)
+
+	put := func(key roachpb.Key, rangeID roachpb.RangeID, value []byte) {
+		pArgs := putArgs(key, value)
+		if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			RangeID: rangeID,
+		}, pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
-	// Confirm the values are there.
-	gArgs := getArgs(roachpb.Key("aaa"))
-	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
+	verify := func(key roachpb.Key, rangeID roachpb.RangeID, value []byte) {
+		// Confirm the values are there.
+		gArgs := getArgs(key)
+		if reply, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			RangeID: rangeID,
+		}, gArgs); pErr != nil {
+		} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(replyBytes, value) {
+			t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
+		}
 	}
-	gArgs = getArgs(roachpb.Key("ccc"))
-	if reply, pErr := kv.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
-		RangeID: rhsDesc.RangeID,
-	}, gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
-	}
+
+	put(lhsDesc.StartKey.Next().AsRawKey(), lhsDesc.RangeID, content)
+	put(rhsDesc.StartKey.Next().AsRawKey(), rhsDesc.RangeID, content)
+
+	verify(lhsDesc.StartKey.Next().AsRawKey(), lhsDesc.RangeID, content)
+	verify(rhsDesc.StartKey.Next().AsRawKey(), rhsDesc.RangeID, content)
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), args); pErr != nil {
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
 		if _, _, err := storage.MVCCGet(
-			ctx, store1.Engine(), key, store1.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Verify the merge by looking up keys from both ranges.
-	lhsRepl := store1.LookupReplica(roachpb.RKey("a"))
-	rhsRepl := store1.LookupReplica(roachpb.RKey("c"))
+	lhsRepl := store.LookupReplica(lhsDesc.StartKey.Next())
+	rhsRepl := store.LookupReplica(rhsDesc.StartKey.Next())
 
 	if lhsRepl != rhsRepl {
 		t.Fatalf("ranges were not merged %+v=%+v", lhsRepl.Desc(), rhsRepl.Desc())
 	}
-	if startKey := lhsRepl.Desc().StartKey; !bytes.Equal(startKey, roachpb.RKeyMin) {
+	if startKey := lhsRepl.Desc().StartKey; !bytes.Equal(startKey, repl.Desc().StartKey) {
 		t.Fatalf("The start key is not equal to KeyMin %q=%q", startKey, roachpb.RKeyMin)
 	}
-	if endKey := rhsRepl.Desc().EndKey; !bytes.Equal(endKey, roachpb.RKeyMax) {
+	if endKey := rhsRepl.Desc().EndKey; !bytes.Equal(endKey, repl.Desc().EndKey) {
 		t.Fatalf("The end key is not equal to KeyMax %q=%q", endKey, roachpb.RKeyMax)
 	}
 
-	// Try to get values from after the merge.
-	gArgs = getArgs(roachpb.Key("aaa"))
-	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
-	}
-	gArgs = getArgs(roachpb.Key("ccc"))
-	if reply, pErr := kv.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
-		RangeID: rhsRepl.RangeID,
-	}, gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
-	}
+	verify(lhsDesc.StartKey.Next().AsRawKey(), lhsRepl.RangeID, content)
+	verify(rhsDesc.StartKey.Next().AsRawKey(), rhsRepl.RangeID, content)
 
+	newContent := []byte("testing!better!")
 	// Put new values after the merge on both sides.
-	pArgs = putArgs(roachpb.Key("aaaa"), content)
-	if _, pErr := kv.SendWrapped(ctx, store1.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	pArgs = putArgs(roachpb.Key("cccc"), content)
-	if _, pErr := kv.SendWrappedWith(ctx, store1.TestSender(), roachpb.Header{
-		RangeID: rhsRepl.RangeID,
-	}, pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	put(lhsDesc.StartKey.Next().AsRawKey(), lhsRepl.RangeID, newContent)
+	put(rhsDesc.StartKey.Next().AsRawKey(), rhsRepl.RangeID, newContent)
 
 	// Try to get the newly placed values.
-	gArgs = getArgs(roachpb.Key("aaaa"))
-	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
-	}
-	gArgs = getArgs(roachpb.Key("cccc"))
-	if reply, pErr := kv.SendWrapped(ctx, store1.TestSender(), gArgs); pErr != nil {
-		t.Fatal(pErr)
-	} else if replyBytes, err := reply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(replyBytes, content) {
-		t.Fatalf("actual value %q did not match expected value %q", replyBytes, content)
-	}
+	verify(lhsDesc.StartKey.Next().AsRawKey(), lhsRepl.RangeID, newContent)
+	verify(rhsDesc.StartKey.Next().AsRawKey(), rhsRepl.RangeID, newContent)
 
-	gArgs = getArgs(roachpb.Key("cccc"))
-	if _, pErr := kv.SendWrappedWith(ctx, store2, roachpb.Header{
+	gArgs := getArgs(lhsDesc.StartKey.Next().AsRawKey())
+	if _, pErr := kv.SendWrappedWith(ctx, store, roachpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, gArgs); !testutils.IsPError(
-		pErr, `r2 was not found`,
+		pErr, `was not found on s`,
 	) {
 		t.Fatalf("expected get on rhs to fail after merge, but got err=%v", pErr)
 	}
