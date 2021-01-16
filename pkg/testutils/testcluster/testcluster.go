@@ -1346,11 +1346,6 @@ func (tc *TestCluster) GetStatusClient(
 	return serverpb.NewStatusClient(cc)
 }
 
-// HeartbeatNodeLiveness sends a liveness heartbeat on a particular store.
-func (tc *TestCluster) HeartbeatNodeLiveness(storeIdx int) error {
-	return tc.Servers[storeIdx].HeartbeatNodeLiveness()
-}
-
 type testClusterFactoryImpl struct{}
 
 // TestClusterFactory can be passed to serverutils.InitTestClusterFactory
