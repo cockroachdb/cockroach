@@ -6294,13 +6294,25 @@ func TestBackupRestoreTenant(t *testing.T) {
 		ten10Stopper.Stop(ctx)
 		restoreConn10 = nil
 
+		// Mark tenant as DROP.
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
 			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
 		)
 
+		// Make GC jobs run in 1 second.
+		restoreDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+		restoreDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		// Now run the GC job to delete the tenant and its data.
 		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		// Wait for tenant GC job to complete.
+		restoreDB.CheckQueryResultsRetry(
+			t,
+			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
+			[][]string{{"succeeded"}},
+		)
+
 		ten10Prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(10))
 		ten10PrefixEnd := ten10Prefix.PrefixEnd()
 		rows, err := restoreTC.Server(0).DB().Scan(ctx, ten10Prefix, ten10PrefixEnd, 0 /* maxRows */)
@@ -6323,6 +6335,22 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar`, tenant10.QueryStr(t, `select * from foo.bar`))
 		restoreTenant10.CheckQueryResults(t, `select * from foo.bar2`, tenant10.QueryStr(t, `select * from foo.bar2`))
+
+		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
+		restoreDB.Exec(t, `SELECT crdb_internal.gc_tenant(10)`)
+		// Wait for tenant GC job to complete.
+		restoreDB.CheckQueryResultsRetry(
+			t,
+			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
+			[][]string{{"succeeded"}, {"succeeded"}},
+		)
+
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
+		restoreDB.CheckQueryResults(t,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
+			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+		)
 	})
 
 	t.Run("restore-t10-from-cluster-backup", func(t *testing.T) {

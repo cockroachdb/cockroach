@@ -327,6 +327,9 @@ message DroppedTableDetails {
 // 3. Database deletions: The deletion of a database and therefore all its tables.
 //      details.Tables -> the IDs of the tables to GC.
 //      details.ParentID -> the ID of the database to drop.
+//
+// 4. Tenant deletion: The deletion of a tenant key range.
+//      details.TenantID -> the ID of the tenant to delete.
 message SchemaChangeGCDetails {
   message DroppedIndex {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
@@ -359,6 +362,14 @@ message SchemaChangeGCDetails {
   // database, the database ID.
   int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+
+  message DroppedTenant {
+    uint64 id = 1 [(gogoproto.customname) = "ID"];
+    int64 drop_time = 2;
+  }
+
+  // Tenant to GC.
+  DroppedTenant tenant = 6;
 }
 
 message SchemaChangeDetails {
@@ -427,11 +438,18 @@ message SchemaChangeGCProgress {
     Status status = 2;
   }
 
+  message TenantProgress {
+    Status status = 1;
+  }
+
   // Indexes to GC.
   repeated IndexProgress indexes = 1 [(gogoproto.nullable) = false];
 
   // Entire tables to GC.
   repeated TableProgress tables = 2 [(gogoproto.nullable) = false];
+
+  // The status of the tenant to be deleted.
+ TenantProgress tenant = 3;
 }
 
 message ChangefeedTarget {
