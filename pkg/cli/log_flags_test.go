@@ -42,10 +42,10 @@ func TestSetupLogging(t *testing.T) {
 		`exit-on-error: false` +
 		`}, `
 	stdFileDefaultsRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true\}`)
+		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true\}`)
-	const fileDefaultsNoDir = `file-defaults: {buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true}`
+		`file-defaults: \{dir: (?P<path>[^,]+), buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true\}`)
+	const fileDefaultsNoDir = `file-defaults: {buffered-writes: true, filter: INFO, format: crdb-v2, redactable: true}`
 	const defaultLogDir = `PWD/cockroach-data/logs`
 	stdCaptureFd2Re := regexp.MustCompile(
 		`capture-stray-errors: \{enable: true, dir: (?P<path>[^}]+)\}`)
@@ -53,7 +53,7 @@ func TestSetupLogging(t *testing.T) {
 		`\{channels: (?P<chans>[^ ]+), dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: (?P<buf>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
 
 	stderrCfgRe := regexp.MustCompile(
-		`stderr: {channels: all, filter: (?P<level>[^,]+), format: crdb-v1-tty, redactable: (?P<redactable>[^}]+)}`)
+		`stderr: {channels: all, filter: (?P<level>[^,]+), format: crdb-v2-tty, redactable: (?P<redactable>[^}]+)}`)
 
 	wd, err := os.Getwd()
 	if err != nil {

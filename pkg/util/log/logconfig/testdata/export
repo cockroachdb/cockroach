@@ -20,7 +20,7 @@ cloud stray as "stray\nerrors"
 }
 queue stderr
 card buffer2 as "buffer"
-card p__1 as "format:crdb-v1"
+card p__1 as "format:crdb-v2"
 artifact files {
  folder "/default-dir" {
   file f1 as "cockroach.log"
@@ -43,7 +43,7 @@ p__1 --> buffer2
 buffer2 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/L99FZzCm4CNl_XIZdE0GK3boG1krmpPIDornYJWWHLx_sOr8usNY827Kxuvi9tLpydjlNYnhVdaOdI0tNNhMQ-F0MQ3kvTM1waXBrzc1INjviuCU78ns8gb7-CVUlOSTDluudhW_zbWSpdkl-FbO5uyO979U7gjGuDyEBT_kyQdmxZl7kYrsJsNbtQakc_A0ZnYRMF7oN3RO5jijyjlN-0EtYpvX_NNHPNN6kYhcKFPsKZ0w4dz1Z905zNFGH9R6Z5tPxqbF6aQdD16JWXGyJyPe-XJgKMTnyDQscv0QInVXFajIp_cVJSO4kSu8wS1qVTW76DihJP1zLDg8gNUvwYZpWr014--HLluYA-JhXzw-PCimlYN8LIcFWxbxPLUsmmRo_4ju63kUU39n_ydF5Ew2cSLTSYEIiiGbPOdE_MrhHkjRFQbruj6ianMrD0ehzsw6mXOuFZCR5i5waxR67lIW_1_yFm00__y0
+# http://www.plantuml.com/plantuml/uml/L99FZvim4CNl_XGZJks1Lhl77gf5oNI3b2KfJb4FbP3NVtPH2TuEfb9LvRklR4CSJdxlpSEoviV3w0IvwTopNXi7pW9rBwyEL4TQkiuEJDhpcntqu62q4qazmd_suIDiiV77uSZziSDYVzfvnK-7kdZ4897pyb250l--R_bcXq-5TpyurcsnVIehxuvrsPHxVCJOn8gNfxB1jjXia5-_nf-uMVGHws-BBgiJrbKnXxAtauBHaVW7OeGig5-39h8qPkp2_anwqZ0wfOcO5AJWUJ96qtseHvt5mLlRteNKM3eBzqMIUix_tcTCaEkCa0vCruTzWB6zqWJPPwMDc7gNguuoFmWLCF4UQULliaA-VkhjIxOCurk2N9NoE9Yx5tPXMsmWpx-6Xx73aISJzv_yJE4cc5dS95SYAKjSKfRetDwsPhI-rPDQ9nxDEbbHIwEmSkzcA6o1upDpno9ORzBMs8CUbF-3tmC00F__
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS
@@ -65,8 +65,8 @@ cloud stray as "stray\nerrors"
 }
 queue stderr
 card p__1 as "redact"
-card p__2 as "format:crdb-v1"
-card p__3 as "format:crdb-v1-tty"
+card p__2 as "format:crdb-v2"
+card p__3 as "format:crdb-v2-tty"
 card p__4 as "filter:W"
 artifact files {
  folder "/default-dir" {
@@ -84,4 +84,4 @@ SESSIONS --> p__4
 p__3 --> stderr
 p__4 --> p__3
 @enduml
-# http://www.plantuml.com/plantuml/uml/R94nJpCn38Pt_mehq_SD1phQgGFgq0uiC9nK5gGg94uRaPwBuwjKeVvtTBah1u8fjjydZlrccTMATeS4YOAYCahSxHLz578QkGN7XoEtr2fcxiHHnW_uznzNwqr_DEkcUNXwRC0bxZnc5Nj6cz6KwAKb4PPiu0Bl7NM4MJs9WBFYyRZTreKLyjQf-QhUbMfWELXTEF6lrQcUrDaVQgLwdeZvGCIa98jd0rOq1kiKGqnbVWoSF0cQMq_1Taah7yNqGa4m37CvTc_2rkqhEf6STH_RtKtYdRbompOb_CaFmiXUu0AhzGQhwhvi1rVJfagneiz23SM0KQbXSBHFfyU-Tvl_wZQ7Oj9q1Oebepg39RM-__3F0000__y0
+# http://www.plantuml.com/plantuml/uml/R96_JWCn3CPtFuML2OO3zS_K0NLe1nOOJYeBKXKIfur8pyNnLQfGtnrTxig1O8hjxnV7_hBCQaNRGu94GL4P9UxsYZuAEOtSWEF3aHjg53EtuYZZ9zpSucgzwOvwNTUFpqyrkCIjnwnYpsWpcXAzDYJ2aWrSuAEbbZ2h9n5mLZmUjzj9OOMyTMg-gzDI3Im7gmid_gqwJKTrzezQgPv7OjuJCId9uiM05Ot1EiKGKvaV0oTFWkRUKx1jqif7CPrG40pzN8xTkx1r-ufE96VTnsPtbtXdhbo_JGb_yxqmi1Uum6gzmQfwADl1rRInKgpeiZ21Oi2WJA1tj4l7ntvsc__fDeTYqdW5YYM3EeCbDRxxyAy0003__m00

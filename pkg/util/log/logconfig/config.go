@@ -24,11 +24,11 @@ import (
 
 // DefaultFileFormat is the entry format for file sinks when not
 // specified in a configuration.
-const DefaultFileFormat = `crdb-v1`
+const DefaultFileFormat = `crdb-v2`
 
 // DefaultStderrFormat is the entry format for stderr sinks
 // when not specified in a configuration.
-const DefaultStderrFormat = `crdb-v1-tty`
+const DefaultStderrFormat = `crdb-v2-tty`
 
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
