@@ -560,7 +560,7 @@ func TestStatusLocalLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, entry := range wrapper.Entries {
-			switch entry.Message {
+			switch strings.TrimSpace(entry.Message) {
 			case "TestStatusLocalLogFile test message-Error":
 				foundError = true
 			case "TestStatusLocalLogFile test message-Warning":
@@ -639,7 +639,7 @@ func TestStatusLocalLogs(t *testing.T) {
 			for _, entry := range wrapper.Entries {
 				fmt.Fprintln(&logsBuf, entry.Message)
 
-				switch entry.Message {
+				switch strings.TrimSpace(entry.Message) {
 				case "TestStatusLocalLogFile test message-Error":
 					actual.Error = true
 				case "TestStatusLocalLogFile test message-Warning":
@@ -672,16 +672,16 @@ func TestStatusLogRedaction(t *testing.T) {
 		// If there were no markers to start with (redactableLogs=false), we
 		// introduce markers around the entire message to indicate it's not known to
 		// be safe.
-		{false, false, `‹THISISSAFE THISISUNSAFE›`, true},
+		{false, false, `‹ THISISSAFE THISISUNSAFE›`, true},
 		// redact=true must be conservative and redact everything out if
 		// there were no markers to start with (redactableLogs=false).
 		{false, true, `‹×›`, false},
 		// redact=false keeps whatever was in the log file.
-		{true, false, `THISISSAFE ‹THISISUNSAFE›`, true},
+		{true, false, ` THISISSAFE ‹THISISUNSAFE›`, true},
 		// Whether or not to keep the redactable markers has no influence
 		// on the output of redaction, just on the presence of the
 		// "redactable" marker. In any case no information is leaked.
-		{true, true, `THISISSAFE ‹×›`, true},
+		{true, true, ` THISISSAFE ‹×›`, true},
 	}
 
 	testutils.RunTrueAndFalse(t, "redactableLogs",

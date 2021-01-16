@@ -91,8 +91,8 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 	if c.Sinks.Stderr.Auditable != nil {
 		if *c.Sinks.Stderr.Auditable {
-			if *c.Sinks.Stderr.Format == DefaultStderrFormat {
-				f := DefaultStderrFormat + "-count"
+			if *c.Sinks.Stderr.Format == "crdb-v1-tty" {
+				f := "crdb-v1-tty-count"
 				c.Sinks.Stderr.Format = &f
 			}
 			c.Sinks.Stderr.Criticality = &bt
@@ -260,8 +260,8 @@ func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error
 		bf, bt := false, true
 		fc.BufferedWrites = &bf
 		fc.Criticality = &bt
-		if *fc.Format == DefaultFileFormat {
-			s := DefaultFileFormat + "-count"
+		if *fc.Format == "crdb-v1" {
+			s := "`crdb-v1-count"
 			fc.Format = &s
 		}
 	}

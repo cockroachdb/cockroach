@@ -241,13 +241,7 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 	}
 
 	if e.tags != nil {
-		if e.payload.redactable {
-			res.Tags = string(renderTagsAsRedactable(e.tags))
-		} else {
-			var buf strings.Builder
-			e.tags.FormatToString(&buf)
-			res.Tags = buf.String()
-		}
+		res.Tags = renderTagsAsString(e.tags, e.payload.redactable)
 	}
 
 	if e.structured {
@@ -262,6 +256,15 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 	}
 
 	return res
+}
+
+func renderTagsAsString(tags *logtags.Buffer, redactable bool) string {
+	if redactable {
+		return string(renderTagsAsRedactable(tags))
+	}
+	var buf strings.Builder
+	tags.FormatToString(&buf)
+	return buf.String()
 }
 
 // MakeLegacyEntry creates an logpb.Entry.
