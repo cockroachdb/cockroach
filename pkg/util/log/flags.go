@@ -153,7 +153,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		bt, bf := true, false
 		mf := logconfig.ByteSize(math.MaxInt64)
 		f := logconfig.DefaultFileFormat
-		fakeConfig := logconfig.FileConfig{
+		fakeConfig := logconfig.FileSinkConfig{
 			CommonSinkConfig: logconfig.CommonSinkConfig{
 				Filter:      severity.INFO,
 				Criticality: &bt,
@@ -287,7 +287,9 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 
 // newFileSinkInfo creates a new fileSink and its accompanying sinkInfo
 // from the provided configuration.
-func newFileSinkInfo(fileNamePrefix string, c logconfig.FileConfig) (*sinkInfo, *fileSink, error) {
+func newFileSinkInfo(
+	fileNamePrefix string, c logconfig.FileSinkConfig,
+) (*sinkInfo, *fileSink, error) {
 	info := &sinkInfo{}
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, nil, err
@@ -393,7 +395,7 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the file sinks.
-	config.Sinks.FileGroups = make(map[string]*logconfig.FileConfig)
+	config.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
 	_ = allSinkInfos.iter(func(l *sinkInfo) error {
 		if cl := logging.testingFd2CaptureLogger; cl != nil && cl.sinkInfos[0] == l {
 			// Not a real sink. Omit.
@@ -404,7 +406,7 @@ func DescribeAppliedConfig() string {
 			return nil
 		}
 
-		fc := &logconfig.FileConfig{}
+		fc := &logconfig.FileSinkConfig{}
 		fc.CommonSinkConfig = l.describeAppliedConfig()
 		mf := logconfig.ByteSize(fileSink.logFileMaxSize)
 		fc.MaxFileSize = &mf
