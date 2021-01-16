@@ -94,7 +94,7 @@ func TestSecondaryLog(t *testing.T) {
 	contents = string(bcontents)
 	if !strings.Contains(contents, "hello") ||
 		!strings.Contains(contents, "world") ||
-		!strings.Contains(contents, "1 " /* entry counter */ +"story time") {
+		!strings.Contains(contents, "1  " /* entry counter */ +"story time") {
 		t.Errorf("secondary log does not contain text or counter\n%s", contents)
 	}
 	if strings.Contains(contents, "test1") {
