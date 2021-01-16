@@ -147,7 +147,7 @@ type RaftTransport struct {
 	stopper *stop.Stopper
 
 	queues   [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
-	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
+	stats    [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
 	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
