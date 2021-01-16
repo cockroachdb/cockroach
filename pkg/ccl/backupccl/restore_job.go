@@ -1531,7 +1531,9 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {
 				tenant.State = descpb.TenantInfo_DROP
-				if err := sql.GCTenant(ctx, execCfg, &tenant); err != nil {
+				// This is already a job so no need to spin up a gc job for the tenant;
+				// instead just GC the data eagerly.
+				if err := sql.GCTenantSync(ctx, execCfg, &tenant); err != nil {
 					return err
 				}
 			}
