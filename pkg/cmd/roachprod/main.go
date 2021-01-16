@@ -1796,6 +1796,8 @@ func main() {
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
 			cmd.Flags().BoolVar(
 				&install.StartOpts.SkipInit, "skip-init", skipInit, "skip initializing the cluster")
+			cmd.Flags().IntVar(
+				&install.StartOpts.StoreCount, "store-count", 1, "number of stores to start each node with")
 			fallthrough
 		case sqlCmd:
 			cmd.Flags().StringVarP(

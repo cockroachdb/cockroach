@@ -837,6 +837,7 @@ type clusterSpec struct {
 	NodeCount int
 	// CPUs is the number of CPUs per node.
 	CPUs        int
+	SSDs        int
 	Zones       string
 	Geo         bool
 	Lifetime    time.Duration
@@ -908,6 +909,18 @@ func (s *clusterSpec) args() []string {
 		args = append(args, machineTypeArg)
 	}
 
+	if !local && s.SSDs != 0 {
+		var arg string
+		switch cloud {
+		case gce:
+			arg = fmt.Sprintf("--gce-local-ssd-count=%d", s.SSDs)
+		default:
+			fmt.Fprintf(os.Stderr, "specifying ssd count is not yet supported on %s", cloud)
+			os.Exit(1)
+		}
+		args = append(args, arg)
+	}
+
 	if !local {
 		zones := s.Zones
 		if zones == "" {
@@ -966,6 +979,17 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type nodeSSDOption int
+
+func (o nodeSSDOption) apply(spec *clusterSpec) {
+	spec.SSDs = int(o)
+}
+
+// ssd is a node option which requests nodes with the specified number of SSDs.
+func ssd(n int) nodeSSDOption {
+	return nodeSSDOption(n)
 }
 
 type nodeGeoOption struct{}
