@@ -348,6 +348,7 @@ var charts = []sectionDescription{
 					"distsender.rpc.err.integeroverflowerrtype",
 					"distsender.rpc.err.intentmissingerrtype",
 					"distsender.rpc.err.internalerrtype",
+					"distsender.rpc.err.invalidleaseerrtype",
 					"distsender.rpc.err.leaserejectederrtype",
 					"distsender.rpc.err.mergeinprogresserrtype",
 					"distsender.rpc.err.nodeunavailableerrtype",

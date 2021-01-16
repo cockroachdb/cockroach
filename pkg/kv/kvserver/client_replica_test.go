@@ -3569,6 +3569,12 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1))
 	require.NoError(t, err)
 
+	// Send an arbitrary request to the range to update the range descriptor
+	// cache with the new lease. This prevents the rollback from getting stuck
+	// waiting on latches held by txn2's read on the old leaseholder.
+	_, err = kvDB.Get(ctx, "c")
+	require.NoError(t, err)
+
 	// Roll back txn1.
 	err = txn1.Rollback(ctx)
 	require.NoError(t, err)

@@ -371,9 +371,6 @@ func (t ClockTimestamp) ToTimestamp() Timestamp {
 // Less returns whether the receiver is less than the parameter.
 func (t ClockTimestamp) Less(s ClockTimestamp) bool { return Timestamp(t).Less(Timestamp(s)) }
 
-// LessEq returns whether the receiver is less than or equal to the parameter.
-func (t ClockTimestamp) LessEq(s ClockTimestamp) bool { return Timestamp(t).LessEq(Timestamp(s)) }
-
 // String implements the fmt.Stringer interface.
 func (t ClockTimestamp) String() string { return t.ToTimestamp().String() }
 
