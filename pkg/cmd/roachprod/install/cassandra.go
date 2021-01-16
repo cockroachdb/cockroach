@@ -91,11 +91,14 @@ func (Cassandra) Start(c *SyncedCluster, extraArgs []string) {
 }
 
 // NodeDir implements the ClusterImpl.NodeDir interface.
-func (Cassandra) NodeDir(c *SyncedCluster, index int) string {
+func (Cassandra) NodeDir(c *SyncedCluster, index, storeIndex int) string {
 	if c.IsLocal() {
 		// TODO(peter): This will require a bit of work to adjust paths in
 		// cassandra.yaml.
 		panic("Cassandra.NodeDir unimplemented")
+	}
+	if storeIndex != 1 {
+		panic("Cassandra.NodeDir only supports one store")
 	}
 	return "/mnt/data1/cassandra"
 }
