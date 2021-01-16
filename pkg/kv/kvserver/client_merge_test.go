@@ -1391,6 +1391,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	storeCfg := kvserver.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableReplicateQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true
 	storeCfg.Clock = nil // manual clock
 
 	// The synchronization in this test is tricky. The merge transaction is
@@ -1414,21 +1415,24 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	}
 
 	// Install a hook to observe when a get or a put request for a special key,
-	// rhsSentinel, acquires latches and begins evaluating.
+	// rhsSentinel, hits a MergeInProgressError and begins waiting on the merge.
 	const reqConcurrency = 10
 	rhsSentinel := roachpb.Key("rhs-sentinel")
-	reqAcquiredLatch := make(chan struct{}, reqConcurrency)
-	storeCfg.TestingKnobs.TestingLatchFilter = func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
-		for _, r := range ba.Requests {
-			req := r.GetInner()
-			switch req.Method() {
-			case roachpb.Get, roachpb.Put:
-				if req.Header().Key.Equal(rhsSentinel) {
-					reqAcquiredLatch <- struct{}{}
+	reqWaitingOnMerge := make(chan struct{}, reqConcurrency)
+	storeCfg.TestingKnobs.TestingConcurrencyRetryFilter = func(
+		_ context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+	) {
+		if _, ok := pErr.GetDetail().(*roachpb.MergeInProgressError); ok {
+			for _, r := range ba.Requests {
+				req := r.GetInner()
+				switch req.Method() {
+				case roachpb.Get, roachpb.Put:
+					if req.Header().Key.Equal(rhsSentinel) {
+						reqWaitingOnMerge <- struct{}{}
+					}
 				}
 			}
 		}
-		return nil
 	}
 
 	mtc := &multiTestContext{
@@ -1546,19 +1550,17 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Wait for the get and put requests to acquire latches, which is as far as
-	// they can get while the merge is in progress. Then wait a little bit
-	// longer. This tests that the requests really do get stuck waiting for the
-	// merge to complete without depending too heavily on implementation
-	// details.
+	// Wait for the get and put requests to begin waiting on the merge to
+	// complete. Then wait a little bit longer. This tests that the requests
+	// really do get stuck waiting for the merge to complete without depending
+	// too heavily on implementation details.
 	for i := 0; i < reqConcurrency; i++ {
 		select {
-		case <-reqAcquiredLatch:
-			// Latch acquired.
+		case <-reqWaitingOnMerge:
+			// Waiting on merge.
 		case pErr := <-reqErrs:
-			// Requests may never make it to the latch acquisition if s1 has not
-			// yet learned s2's lease is expired. Instead, we'll see a
-			// NotLeaseholderError.
+			// Requests may never wait on the merge if s1 has not yet learned
+			// s2's lease is expired. Instead, we'll see a NotLeaseholderError.
 			require.IsType(t, &roachpb.NotLeaseHolderError{}, pErr.GetDetail())
 		}
 	}

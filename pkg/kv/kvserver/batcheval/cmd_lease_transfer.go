@@ -67,6 +67,14 @@ func TransferLease(
 	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 
+	// Forward the lease's start time to a current clock reading. Now
+	// that we're holding latches across the entire range, we know that
+	// this time is greater than the timestamps at which any request was
+	// serviced by the leaseholder before it stopped serving requests
+	// (i.e. before the TransferLease request acquired latches).
+	newLease := args.Lease
+	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
+
 	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
 	// no reason this wouldn't work in principle, but it seems inadvisable. In
 	// particular, learners can't become raft leaders, so we wouldn't be able to
@@ -84,5 +92,5 @@ func TransferLease(
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
+		newLease, prevLease, false /* isExtension */, true /* isTransfer */)
 }
