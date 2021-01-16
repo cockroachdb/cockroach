@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -95,11 +96,13 @@ func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *moc
 	st := cluster.MakeTestingClusterSettings()
 	LockTableLivenessPushDelay.Override(&st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
+	manual := hlc.NewManualClock(123)
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
 	}
 	w := &lockTableWaiterImpl{
 		st:      st,
+		clock:   hlc.NewClock(manual.UnixNano, time.Nanosecond),
 		stopper: stop.NewStopper(),
 		ir:      ir,
 		lt:      &mockLockTable{},

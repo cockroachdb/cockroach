@@ -17,7 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -120,10 +123,13 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			StoreID: voterStoreID,
 			Desc:    &desc,
+			Clock:   clock,
 		}).EvalContext(),
 		Args: &roachpb.TransferLeaseRequest{
 			Lease: roachpb.Lease{
@@ -155,6 +161,64 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
 		`replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
+}
+
+// TestLeaseTransferForwardsStartTime tests that during a lease transfer, the
+// start time of the new lease is determined during evaluation, after latches
+// have granted the lease transfer full mutual exclusion over the leaseholder.
+func TestLeaseTransferForwardsStartTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "epoch", func(t *testing.T, epoch bool) {
+		ctx := context.Background()
+		db := storage.NewDefaultInMem()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		replicas := []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, Type: roachpb.ReplicaTypeVoterFull(), ReplicaID: 2},
+		}
+		desc := roachpb.RangeDescriptor{}
+		desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
+		manual := hlc.NewManualClock(123)
+		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+		nextLease := roachpb.Lease{
+			Replica: replicas[1],
+			Start:   clock.NowAsClockTimestamp(),
+		}
+		if epoch {
+			nextLease.Epoch = 1
+		} else {
+			exp := nextLease.Start.ToTimestamp().Add(9*time.Second.Nanoseconds(), 0)
+			nextLease.Expiration = &exp
+		}
+		cArgs := CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				StoreID: 1,
+				Desc:    &desc,
+				Clock:   clock,
+			}).EvalContext(),
+			Args: &roachpb.TransferLeaseRequest{
+				Lease: nextLease,
+			},
+		}
+
+		manual.Increment(1000)
+		beforeEval := clock.NowAsClockTimestamp()
+
+		res, err := TransferLease(ctx, batch, cArgs, nil)
+		require.NoError(t, err)
+
+		// The proposed lease start time should be assigned at eval time.
+		propLease := res.Replicated.State.Lease
+		require.NotNil(t, propLease)
+		require.True(t, nextLease.Start.Less(propLease.Start))
+		require.True(t, beforeEval.Less(propLease.Start))
+	})
 }
 
 func TestCheckCanReceiveLease(t *testing.T) {

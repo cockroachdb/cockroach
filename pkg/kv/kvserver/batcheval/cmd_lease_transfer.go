@@ -67,13 +67,22 @@ func TransferLease(
 	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 
+	// Forward the lease's start time to a current clock reading. At this
+	// point, we're holding latches across the entire range, we know that
+	// this time is greater than the timestamps at which any request was
+	// serviced by the leaseholder before it stopped serving requests (i.e.
+	// before the TransferLease request acquired latches).
+	newLease := args.Lease
+	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
+	args.Lease = roachpb.Lease{} // prevent accidental use below
+
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := roachpb.CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
+	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}
 
-	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, args.Lease)
+	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
-		args.Lease, prevLease, false /* isExtension */, true /* isTransfer */)
+		newLease, prevLease, false /* isExtension */, true /* isTransfer */)
 }

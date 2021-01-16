@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -94,6 +95,7 @@ var LockTableDeadlockDetectionPushDelay = settings.RegisterDurationSetting(
 // lockTableWaiterImpl is an implementation of lockTableWaiter.
 type lockTableWaiterImpl struct {
 	st      *cluster.Settings
+	clock   *hlc.Clock
 	stopper *stop.Stopper
 	ir      IntentResolver
 	lt      lockTable
@@ -573,12 +575,34 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		// could race). Since the subsequent execution of the original request
 		// might mutate the transaction, make a copy here. See #9130.
 		h.Txn = req.Txn.Clone()
+
 		// We must push at least to req.Timestamp, but for transactional
 		// requests we actually want to go all the way up to the top of the
 		// transaction's uncertainty interval. This allows us to not have to
 		// restart for uncertainty if the push succeeds and we come back and
 		// read.
-		h.Timestamp.Forward(req.Txn.MaxTimestamp)
+		//
+		// However, because we intend to read on the same node, we can limit
+		// this to a clock reading from the local clock, relying on the fact
+		// that an observed timestamp from this node will limit our local
+		// uncertainty limit when we return to read.
+		//
+		// We intentionally do not use an observed timestamp directly to limit
+		// the push timestamp, because observed timestamps are not applicable in
+		// some cases (e.g. across lease changes). So to avoid an infinite loop
+		// where we continue to push to an unusable observed timestamp and
+		// continue to find the pushee in our uncertainty interval, we instead
+		// use the present time to limit the push timestamp, which is less
+		// optimal but is guaranteed to progress.
+		//
+		// There is some inherent raciness here, because the lease may move
+		// between when we push and when we later read. In such cases, we may
+		// need to push again, but expect to eventually succeed in reading,
+		// either after lease movement subsides or after the reader's read
+		// timestamp surpasses its global uncertainty limit.
+		localMaxTS := req.Txn.MaxTimestamp
+		localMaxTS.Backward(w.clock.Now())
+		h.Timestamp.Forward(localMaxTS)
 	}
 	return h
 }
