@@ -73,6 +73,7 @@ import (
 // debug-latch-manager
 // debug-lock-table
 // debug-disable-txn-pushes
+// debug-set-clock           ts=<secs>
 // reset
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
@@ -119,7 +120,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					ReadTimestamp: ts,
 					MaxTimestamp:  maxTS,
 				}
-				txn.UpdateObservedTimestamp(c.nodeDesc.NodeID, ts.UnsafeToClockTimestamp())
 				c.registerTxn(txnName, txn)
 				return ""
 
@@ -459,6 +459,17 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.disableTxnPushes()
 				return ""
 
+			case "debug-set-clock":
+				var secs int
+				d.ScanArgs(t, "ts", &secs)
+
+				nanos := int64(secs) * time.Second.Nanoseconds()
+				if nanos < c.manual.UnixNano() {
+					d.Fatalf(t, "manual clock must advance")
+				}
+				c.manual.Set(nanos)
+				return ""
+
 			case "reset":
 				if n := mon.numMonitored(); n > 0 {
 					d.Fatalf(t, "%d requests still in flight", n)
@@ -494,6 +505,8 @@ type cluster struct {
 	nodeDesc  *roachpb.NodeDescriptor
 	rangeDesc *roachpb.RangeDescriptor
 	st        *clustersettings.Settings
+	manual    *hlc.ManualClock
+	clock     *hlc.Clock
 	m         concurrency.Manager
 
 	// Definitions.
@@ -523,10 +536,13 @@ type txnPush struct {
 }
 
 func newCluster() *cluster {
+	manual := hlc.NewManualClock(123 * time.Second.Nanoseconds())
 	return &cluster{
-		st:        clustersettings.MakeTestingClusterSettings(),
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
 		rangeDesc: &roachpb.RangeDescriptor{RangeID: 1},
+		st:        clustersettings.MakeTestingClusterSettings(),
+		manual:    manual,
+		clock:     hlc.NewClock(manual.UnixNano, time.Nanosecond),
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]testReq),
@@ -541,6 +557,7 @@ func (c *cluster) makeConfig() concurrency.Config {
 		NodeDesc:       c.nodeDesc,
 		RangeDesc:      c.rangeDesc,
 		Settings:       c.st,
+		Clock:          c.clock,
 		IntentResolver: c,
 		OnContentionEvent: func(ev *roachpb.ContentionEvent) {
 			ev.Duration = 1234 * time.Millisecond // for determinism

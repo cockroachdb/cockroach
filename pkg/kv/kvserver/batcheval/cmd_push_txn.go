@@ -124,6 +124,8 @@ func PushTxn(
 		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.WriteTimestamp)
 	}
 	now := cArgs.EvalCtx.Clock().Now()
+	// TODO(nvanbenschoten): remove this limitation. But when doing so,
+	// keep the h.Timestamp.Less(args.PushTo) check above.
 	if now.Less(h.Timestamp) {
 		// The batch's timestamp should have been used to update the clock.
 		return result.Result{}, errors.Errorf("request timestamp %s less than current clock time %s", h.Timestamp, now)

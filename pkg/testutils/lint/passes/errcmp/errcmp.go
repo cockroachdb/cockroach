@@ -91,11 +91,11 @@ func checkErrCast(pass *analysis.Pass, texpr *ast.TypeAssertExpr) {
 	if pass.TypesInfo.Types[texpr.X].Type == errorType {
 		pass.Reportf(texpr.Lparen, escNl(`invalid direct cast on error object
 Alternatives:
-   if _, ok := err.(*T); ok        ->   if errors.HasType(err, (*T)(nil)
+   if _, ok := err.(*T); ok        ->   if errors.HasType(err, (*T)(nil))
    if _, ok := err.(I); ok         ->   if errors.HasInterface(err, (*I)(nil))
    if myErr, ok := err.(*T); ok    ->   if myErr := (*T)(nil); errors.As(err, &myErr)
    if myErr, ok := err.(I); ok     ->   if myErr := (I)(nil); errors.As(err, &myErr)
-   switch err.(type) { case *T:... ->   switch { case errors.HasType(err, (*T)(nil): ...
+   switch err.(type) { case *T:... ->   switch { case errors.HasType(err, (*T)(nil)): ...
 `))
 	}
 }

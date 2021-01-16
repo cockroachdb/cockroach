@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/observedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,15 +32,22 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if _, err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
+	st, err := r.checkExecutionCanProceed(ctx, ba, g)
+	if err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
+
+	// Limit the transaction's maximum timestamp using observed timestamps.
+	// TODO(nvanbenschoten): now that we've pushed this down here, consider
+	// keeping the "local max timestamp" on the stack and never modifying the
+	// batch.
+	ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, st)
 
 	// Evaluate read-only batch command.
 	spans := g.LatchSpans()
@@ -74,6 +81,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// If the request hit a server-side concurrency retry error, immediately
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
+		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, g, pErr
 	}
 
