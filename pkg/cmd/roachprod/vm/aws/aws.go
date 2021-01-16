@@ -180,6 +180,9 @@ type providerOpts struct {
 	// Overrides config.json AMI.
 	ImageAMI string
 
+	// Use specified placement policy group (PPG) when starting instances
+	PPG string
+
 	// CreateZones stores the list of zones for used cluster creation.
 	// When > 1 zone specified, geo is automatically used, otherwise, geo depends
 	// on the geo flag being set. If no zones specified, defaultCreateZones are
@@ -260,6 +263,8 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
+	flags.StringVar(&o.PPG, ProviderName+"-placement",
+		"", "Use specified placement policy group when scheduling instances.")
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
@@ -851,6 +856,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			"--block-device-mapping",
 			"file://"+deviceMapping.Name(),
 		)
+	}
+
+	if p.opts.PPG != "" {
+		args = append(args, "--placement", fmt.Sprintf("GroupName=%s", p.opts.PPG))
 	}
 	return p.runJSONCommand(args, &data)
 }
