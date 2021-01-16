@@ -1,5 +1,5 @@
 # -------------------------------------------------------------
-# A transactional (txn2) read-only request runs into replicated
+# A transactional (txn2) read-only request runs into a replicated
 # intent below its read timestamp. It informs the lock table and
 # pushes the intent's transaction (txn1) above its uncertainty
 # window. The push succeeds and the request is able to proceed.
@@ -59,20 +59,31 @@ reset namespace
 ----
 
 # -------------------------------------------------------------
-# A transactional (txn2) read-only request runs into replicated
-# intent above its read timestamp but in its uncertainty window.
-# It informs the lock table and pushes the intent's transaction
-# (txn1) above its uncertainty window. The push succeeds and the
-# request is able to proceed.
+# A transactional (txn2) read-only request runs into a replicated
+# intent below its read timestamp and informs the lock table.
+#
+# A second transactional (txn3) read-only request does not wait
+# on the intent in the lock table because its read timestamp is
+# below the intent timestamp. However, the intent's provisional
+# value is in txn3's uncertainty window. The read-only request
+# returns a ReadWithinUncertaintyIntervalError and does not
+# inform the lock table of the intent.
+#
+# This causes txn3 to restart with a higher read timestamp. At
+# this point, since txn1's intent is still present, it begins
+# waiting in the lock table.
 # -------------------------------------------------------------
 
 new-txn name=txn1 ts=14,1 epoch=0
 ----
 
-new-txn name=txn2 ts=12,1 epoch=0 maxts=15,1
+new-txn name=txn2 ts=15,1 epoch=0
 ----
 
-new-request name=req1 txn=txn2 ts=12,1
+new-txn name=txn3 ts=12,1 epoch=0 maxts=15,1
+----
+
+new-request name=req1 txn=txn2 ts=15,1
   get key=k
 ----
 
@@ -104,17 +115,63 @@ sequence req=req1
 [3] sequence req1: pushing timestamp of txn 00000001 above 15.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 
-on-txn-updated txn=txn1 status=pending ts=15,2
+# txn3 does not wait on lock in lock table, but does end up throwing a
+# ReadWithinUncertaintyIntervalError when it scans and finds txn1's
+# provisional value in its uncertainty interval.
+new-request name=req2 txn=txn3 ts=12,1
+  get key=k
 ----
-[-] update txn: increasing timestamp of txn1
-[3] sequence req1: resolving intent "k" for txn 00000001 with PENDING status
+
+sequence req=req2
+----
+[4] sequence req2: sequencing request
+[4] sequence req2: acquiring latches
+[4] sequence req2: scanning lock table for conflicting locks
+[4] sequence req2: sequencing complete, returned guard
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+# txn3 refreshes/restarts with a higher read timestamp than that of the
+# value it saw in its uncertainty interval. It then retries its request.
+on-txn-updated txn=txn3 status=pending ts=14,2
+----
+[-] update txn: increasing timestamp of txn3
+
+new-request name=req2-retry txn=txn3 ts=14,2
+  get key=k
+----
+
+sequence req=req2-retry
+----
+[5] sequence req2-retry: sequencing request
+[5] sequence req2-retry: acquiring latches
+[5] sequence req2-retry: scanning lock table for conflicting locks
+[5] sequence req2-retry: waiting in lock wait-queues
+[5] sequence req2-retry: pushing timestamp of txn 00000001 above 15.000000000,1
+[5] sequence req2-retry: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+# txn1 commits and lets both reads through.
+on-txn-updated txn=txn1 status=committed
+----
+[-] update txn: committing txn1
+[3] sequence req1: resolving intent "k" for txn 00000001 with COMMITTED status
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
+[5] sequence req2-retry: resolving intent "k" for txn 00000001 with COMMITTED status
+[5] sequence req2-retry: acquiring latches
+[5] sequence req2-retry: scanning lock table for conflicting locks
+[5] sequence req2-retry: sequencing complete, returned guard
 
 finish req=req1
 ----
 [-] finish req1: finishing request
+
+finish req=req2-retry
+----
+[-] finish req2-retry: finishing request
 
 reset namespace
 ----
