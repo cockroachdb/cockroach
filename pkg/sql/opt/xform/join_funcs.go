@@ -742,7 +742,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 
 	// Ensure that this join expression was not added to the memo by a previous
 	// reordering, as well as that the join does not have hints.
-	return !private.WasReordered && c.NoJoinHints(private)
+	return !c.e.o.JoinOrderBuilder().WasReordered(root) && c.NoJoinHints(private)
 }
 
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The
@@ -752,6 +752,16 @@ func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr) memo.RelExpr {
 	c.e.o.JoinOrderBuilder().Init(c.e.f, c.e.evalCtx)
 	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
 	return grp
+}
+
+// PreventReordering should be called when a rule replaces a join with a new
+// join group. If the original join is the result of a reordering, ReorderJoins
+// should not match the new group to avoid exponential blowup.
+func (c *CustomFuncs) PreventReordering(root, replace memo.RelExpr) memo.RelExpr {
+	if c.e.o.JoinOrderBuilder().WasReordered(root) {
+		c.e.o.JoinOrderBuilder().PreventReordering(replace)
+	}
+	return replace
 }
 
 // IsSimpleEquality returns true if all of the filter conditions are equalities
