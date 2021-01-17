@@ -503,6 +503,13 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+type JoinWasReordered bool
+
+const (
+	JoinReordered JoinWasReordered = true
+	JoinNotReordered JoinWasReordered = false
+)
+
 func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
 	initJoinMultiplicity(ij)
 }

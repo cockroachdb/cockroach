@@ -506,6 +506,11 @@ func (h *hasher) HashJoinFlags(val JoinFlags) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashJoinWasReordered(val JoinWasReordered) {
+	// Do not include the WasReordered flag in the hash. See the comment in
+	// hasher.IsJoinWasReorderedEqual for an explanation.
+}
+
 func (h *hasher) HashFKCascades(val FKCascades) {
 	for i := range val {
 		h.HashUint64(uint64(reflect.ValueOf(val[i].Builder).Pointer()))
@@ -893,6 +898,15 @@ func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
 
 func (h *hasher) IsJoinFlagsEqual(l, r JoinFlags) bool {
 	return l == r
+}
+
+func (h *hasher) IsJoinWasReorderedEqual(l, r JoinWasReordered) bool {
+	// Ignore differences in the WasReordered flag, because it is only used to
+	// prevent ReorderJoins from matching on newly created groups. A memo group is
+	// only explored once. Therefore, it is ok for the JoinOrderBuilder to reuse a
+	// group without setting the flag because it will not match on that group
+	// again.
+	return true
 }
 
 func (h *hasher) IsFKCascadesEqual(l, r FKCascades) bool {

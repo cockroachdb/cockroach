@@ -255,7 +255,7 @@ define JoinPrivate {
 
     # WasReordered indicates whether reorderings of the join tree rooted at this
     # join have already been considered.
-    WasReordered bool
+    WasReordered JoinWasReordered
 }
 
 # IndexJoin represents an inner join between an input expression and a primary

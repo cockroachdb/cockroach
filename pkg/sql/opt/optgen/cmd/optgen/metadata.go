@@ -204,6 +204,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScanLimit":         {fullName: "memo.ScanLimit", passByVal: true},
 		"ScanFlags":         {fullName: "memo.ScanFlags", passByVal: true},
 		"JoinFlags":         {fullName: "memo.JoinFlags", passByVal: true},
+		"JoinWasReordered":  {fullName: "memo.JoinWasReordered", passByVal: true},
 		"WindowFrame":       {fullName: "memo.WindowFrame", passByVal: true},
 		"FKCascades":        {fullName: "memo.FKCascades", passByVal: true},
 		"ExplainOptions":    {fullName: "tree.ExplainOptions", passByVal: true},

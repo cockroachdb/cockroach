@@ -721,13 +721,20 @@ func (jb *JoinOrderBuilder) addToGroup(
 		jb.f.Memo().AddSelectToGroup(selectExpr, grp)
 		return
 	}
+
+	// Set the WasReordered flag in the new join private to prevent matching on a
+	// given memo group more than once. While ReorderJoins only matches the first
+	// expression of a group, rules like CommuteSemiJoin may construct a new group
+	// using this join private, which can lead to exponential blowup if the flag
+	// is not set.
+	newPrivate := memo.JoinPrivate{WasReordered: memo.JoinReordered}
 	switch op {
 	case opt.InnerJoinOp:
 		newJoin := &memo.InnerJoinExpr{
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newPrivate,
 		}
 		jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
 
@@ -736,7 +743,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newPrivate,
 		}
 		jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
 
@@ -745,7 +752,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newPrivate,
 		}
 		jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
 
@@ -754,7 +761,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newPrivate,
 		}
 		jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
 
@@ -763,7 +770,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newPrivate,
 		}
 		jb.f.Memo().AddFullJoinToGroup(newJoin, grp)
 
@@ -778,22 +785,25 @@ func (jb *JoinOrderBuilder) addToGroup(
 func (jb *JoinOrderBuilder) memoize(
 	op opt.Operator, left, right memo.RelExpr, on, selectFilters memo.FiltersExpr,
 ) memo.RelExpr {
+	// Set the WasReordered flag in the new join private to prevent ReorderJoins
+	// from matching on the new memo groups.
+	newPrivate := &memo.JoinPrivate{WasReordered: memo.JoinReordered}
 	var join memo.RelExpr
 	switch op {
 	case opt.InnerJoinOp:
-		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, newPrivate)
 
 	case opt.SemiJoinOp:
-		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, newPrivate)
 
 	case opt.AntiJoinOp:
-		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, newPrivate)
 
 	case opt.LeftJoinOp:
-		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, newPrivate)
 
 	case opt.FullJoinOp:
-		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeFullJoin(left, right, on, newPrivate)
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator: %v", op))
