@@ -80,7 +80,7 @@ message EncryptionInfo {
 message StreamIngestionDetails {
   // StreamAddress is the location of the stream which the ingestion job will
   // read from.
-  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.StreamAddress"];
+  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress"];
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 }
