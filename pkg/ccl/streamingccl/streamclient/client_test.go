@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -23,15 +24,19 @@ type testStreamClient struct{}
 var _ Client = testStreamClient{}
 
 // GetTopology implements the Client interface.
-func (sc testStreamClient) GetTopology(_ StreamAddress) (Topology, error) {
-	return Topology{Partitions: []PartitionAddress{
+func (sc testStreamClient) GetTopology(
+	_ streamingccl.StreamAddress,
+) (streamingccl.Topology, error) {
+	return streamingccl.Topology{Partitions: []streamingccl.PartitionAddress{
 		"s3://my_bucket/my_stream/partition_1",
 		"s3://my_bucket/my_stream/partition_2",
 	}}, nil
 }
 
 // ConsumePartition implements the Client interface.
-func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (chan Event, error) {
+func (sc testStreamClient) ConsumePartition(
+	_ streamingccl.PartitionAddress, _ time.Time,
+) (chan streamingccl.Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
 		Value: roachpb.Value{
@@ -40,9 +45,9 @@ func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (ch
 		},
 	}
 
-	events := make(chan Event, 100)
-	events <- MakeKVEvent(sampleKV)
-	events <- MakeCheckpointEvent(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	events := make(chan streamingccl.Event, 100)
+	events <- streamingccl.MakeKVEvent(sampleKV)
+	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	close(events)
 
 	return events, nil
@@ -52,7 +57,7 @@ func (sc testStreamClient) ConsumePartition(_ PartitionAddress, _ time.Time) (ch
 // client could be used.
 func TestExampleClientUsage(t *testing.T) {
 	client := testStreamClient{}
-	sa := StreamAddress("s3://my_bucket/my_stream")
+	sa := streamingccl.StreamAddress("s3://my_bucket/my_stream")
 	topology, err := client.GetTopology(sa)
 	require.NoError(t, err)
 
