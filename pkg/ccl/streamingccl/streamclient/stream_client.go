@@ -9,6 +9,7 @@
 package streamclient
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -33,8 +34,12 @@ func (m *client) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topolog
 
 // ConsumePartition implements the Client interface.
 func (m *client) ConsumePartition(
-	_ streamingccl.PartitionAddress, _ time.Time,
+	ctx context.Context, _ streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)
+	go func() {
+		<-ctx.Done()
+		close(eventCh)
+	}()
 	return eventCh, nil
 }
