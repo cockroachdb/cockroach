@@ -9,6 +9,7 @@
 package streamclient
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func (sc testStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (sc testStreamClient) ConsumePartition(
-	_ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -56,6 +57,7 @@ func (sc testStreamClient) ConsumePartition(
 // TestExampleClientUsage serves as documentation to indicate how a stream
 // client could be used.
 func TestExampleClientUsage(t *testing.T) {
+	ctx := context.Background()
 	client := testStreamClient{}
 	sa := streamingccl.StreamAddress("s3://my_bucket/my_stream")
 	topology, err := client.GetTopology(sa)
@@ -65,7 +67,7 @@ func TestExampleClientUsage(t *testing.T) {
 	numReceivedEvents := 0
 
 	for _, partition := range topology.Partitions {
-		eventCh, err := client.ConsumePartition(partition, startTimestamp)
+		eventCh, err := client.ConsumePartition(ctx, partition, startTimestamp)
 		require.NoError(t, err)
 
 		// This example looks for the closing of the channel to terminate the test,
@@ -82,4 +84,24 @@ func TestExampleClientUsage(t *testing.T) {
 
 	// We expect 4 events, 2 from each partition.
 	require.Equal(t, 4, numReceivedEvents)
+}
+
+// Ensure that all implementations specified in this test properly close the
+// eventChannel when the given context is canceled.
+func TestImplementationsCloseChannel(t *testing.T) {
+	// TODO: Add SQL client and file client here when implemented.
+	impls := []Client{
+		&client{},
+	}
+
+	for _, impl := range impls {
+		ctx, cancel := context.WithCancel(context.Background())
+		eventCh, err := impl.ConsumePartition(ctx, "test://53/", timeutil.Now())
+		require.NoError(t, err)
+
+		// Ensure that the eventCh closes when the context is canceled.
+		cancel()
+		for range eventCh {
+		}
+	}
 }

@@ -127,7 +127,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, err := sip.client.ConsumePartition(partitionAddress, startTime)
+		eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
 		if err != nil {
 			sip.ingestionErr = errors.Wrapf(err, "consuming partition %v", partitionAddress)
 		}
@@ -216,17 +216,17 @@ func merge(
 	for partition, eventCh := range partitionStreams {
 		go func(partition streamingccl.PartitionAddress, eventCh <-chan streamingccl.Event) {
 			defer wg.Done()
-			for {
+			for event := range eventCh {
+				pe := partitionEvent{
+					Event:     event,
+					partition: partition,
+				}
+
 				select {
-				case event, ok := <-eventCh:
-					if !ok {
-						return
-					}
-					merged <- partitionEvent{
-						Event:     event,
-						partition: partition,
-					}
+				case merged <- pe:
 				case <-ctx.Done():
+					// TODO: Add ctx.Err() to an error channel once ConsumePartition
+					// supports an error ch.
 					return
 				}
 			}
