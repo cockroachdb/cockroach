@@ -18,16 +18,17 @@ ALTER TABLE s.t OWNER TO testuser
 
 statement ok
 GRANT CREATE ON DATABASE test TO testuser, testuser2;
-GRANT CREATE ON SCHEMA s TO testuser, testuser2
+GRANT CREATE ON SCHEMA s TO testuser, testuser2;
+GRANT CREATE ON t TO testuser, testuser2;
+
 
 statement ok
 ALTER TABLE t OWNER TO testuser;
 ALTER TABLE s.t OWNER TO testuser;
-ALTER TABLE t OWNER TO root;
-ALTER TABLE s.t OWNER TO root
+
 
 # Other users must be owner to alter the owner.
-user testuser
+user testuser2
 
 statement error must be owner of table t
 ALTER TABLE t OWNER TO testuser2
