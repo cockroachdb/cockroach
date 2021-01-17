@@ -49,7 +49,7 @@ func (m *mockStreamClient) GetTopology(
 
 // ConsumePartition implements the StreamClient interface.
 func (m *mockStreamClient) ConsumePartition(
-	_ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event, len(m.partitionEvents))
 
