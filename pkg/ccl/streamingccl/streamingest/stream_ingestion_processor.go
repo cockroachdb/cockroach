@@ -114,7 +114,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context 
 
 		startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 		eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
-		for _, partitionAddress := range sip.spec.PartitionAddress {
+		for _, partitionAddress := range sip.spec.PartitionAddresses {
 			eventCh, err := sip.client.ConsumePartition(partitionAddress, startTime)
 			if err != nil {
 				sip.ingestionErr = err
