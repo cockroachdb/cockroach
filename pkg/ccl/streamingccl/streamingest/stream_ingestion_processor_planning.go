@@ -34,12 +34,12 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				PartitionAddress: make([]streamingccl.PartitionAddress, 0),
+				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
 		n := i % len(nodes)
-		streamIngestionSpecs[n].PartitionAddress = append(streamIngestionSpecs[n].PartitionAddress, partition)
+		streamIngestionSpecs[n].PartitionAddresses = append(streamIngestionSpecs[n].PartitionAddresses, partition)
 	}
 
 	return streamIngestionSpecs, nil

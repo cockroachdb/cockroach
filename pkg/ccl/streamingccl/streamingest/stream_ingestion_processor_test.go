@@ -89,7 +89,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.PartitionAddress = []streamingccl.PartitionAddress{"s3://my_streams/stream/partition1", "s3://my_streams/stream/partition2"}
+	spec.PartitionAddresses = []streamingccl.PartitionAddress{"s3://my_streams/stream/partition1", "s3://my_streams/stream/partition2"}
 	proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 	require.NoError(t, err)
 	sip, ok := proc.(*streamIngestionProcessor)
