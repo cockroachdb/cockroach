@@ -5689,3 +5689,31 @@ query T
 SELECT ST_AsText(ST_OrientedEnvelope(ST_GeomFromText('MULTIPOINT ((0 0), (-1 -1), (3 2))')));
 ----
 POLYGON ((3 2, 2.88 2.16, -1.12 -0.84, -1 -1, 3 2))
+
+
+statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0.5,0.4))
+
+statement error pq: st_linesubstring\(\): start and and must be within 0 and 1
+select st_astext(st_linesubstring('LINESTRING(0 0, 0 5, 5 5,10 3)'::geometry,0,1.4));
+
+statement error pq: st_linesubstring\(\): end must be greater or equal to the start
+select st_astext(st_linesubstring('POINT(0 0)'::geometry,0.5,0.4));
+
+query T
+select st_astext(st_linesubstring(g,star,"end"))from (VALUES
+       ('LINESTRING(0 0, 0 5, 4 5, 4 2)'::geometry, 0.0, 0.3),
+       ('LINESTRING(-25 -50, 100 125, 150 190, 40 60)'::geometry, 0.8, 0.9),
+       ('LINESTRING(70 10, 10 125.6, 15.40 1.9, 4 6)'::geometry, 0.1, 0.8),
+       ('LINESTRING(70 10, 10 125)'::geometry, 0.1, 0.8),
+       ('LINESTRING(70 10, 10 125)'::geometry, 0.8, 0.8),
+       ('LINESTRING(0 0, 0 0)'::geometry, 0.8, 0.8)
+    ) t(g,star, "end");
+----
+LINESTRING (0 0, 0 3.6)
+LINESTRING (100.377266789273136 131.354951660050062, 70.188633394636568 95.677475830025031)
+LINESTRING (57.73791181125825 33.624956576975762, 10 125.599999999999994, 13.606639646773948 42.981236239641234)
+LINESTRING (64 21.5, 22 102)
+POINT (22 102)
+POINT (0 0)
+

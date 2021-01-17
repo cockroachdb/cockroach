@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
+	"github.com/twpayne/go-geom/encoding/ewkb"
 )
 
 // LineStringFromMultiPoint generates a linestring from a multipoint.
@@ -251,4 +252,97 @@ func removePoint(lineString *geom.LineString, index int) (*geom.LineString, erro
 	coords = append(coords[:index], coords[index+1:]...)
 
 	return lineString.SetCoords(coords)
+}
+
+// LineSubstring returns a LineString being a substring by start and end
+func LineSubstring(g geo.Geometry, start, end float64) (geo.Geometry, error) {
+	if start < 0 || start > 1 || end < 0 || end > 1 {
+		return g, pgerror.Newf(pgcode.InvalidParameterValue,
+			"start and and must be within 0 and 1")
+	}
+	if start > end {
+		return g, pgerror.Newf(pgcode.InvalidParameterValue,
+			"end must be greater or equal to the start")
+	}
+
+	if start == end {
+		return LineInterpolatePoints(g, start, false)
+	}
+
+	lineT, err := g.AsGeomT()
+	if err != nil {
+		return g, err
+	}
+	lineString, ok := lineT.(*geom.LineString)
+	if !ok {
+		return g, pgerror.Newf(pgcode.InvalidParameterValue,
+			"first parameter has to be of type LineString")
+	}
+
+	// Flat line should be return point empty immediately,
+	if lineString.Length() == 0 {
+		return geo.MakeGeometryFromGeomT(geom.NewPointEmpty(geom.XY).SetSRID(lineString.SRID()))
+	}
+
+	var newFlatCoords []float64
+	startDistance, endDistance := start*lineString.Length(), end*lineString.Length()
+	for i := range lineString.Coords() {
+		currentLineString, err := geom.NewLineString(geom.XY).SetCoords(lineString.Coords()[0 : i+1])
+		if err != nil {
+			return geo.Geometry{}, err
+		}
+		// If the current distance exceeds the end distance, find the last point and terminate the loop early.
+		// If the current distance exceeds the end distance but the `newFlatCoords` is still empty,
+		// Interpolate the start point and add to `newFlatCoords`
+		if currentLineString.Length() >= endDistance {
+			if len(newFlatCoords) == 0 {
+				coords, err := interpolateFlatCoordsFromDistance(g, startDistance)
+				if err != nil {
+					return geo.Geometry{}, err
+				}
+				newFlatCoords = append(newFlatCoords, coords...)
+			}
+
+			coords, err := interpolateFlatCoordsFromDistance(g, endDistance)
+			if err != nil {
+				return geo.Geometry{}, err
+			}
+			newFlatCoords = append(newFlatCoords, coords...)
+			break
+		}
+		// If we are past the beginning, check if we already have points in the line string.
+		// If this is our first point, interpolate the first point.
+		// If we have already added a point, simply add the current coordinate in.
+		if currentLineString.Length() >= startDistance {
+			if len(newFlatCoords) == 0 {
+				coords, err := interpolateFlatCoordsFromDistance(g, startDistance)
+				if err != nil {
+					return geo.Geometry{}, err
+				}
+				newFlatCoords = append(newFlatCoords, coords...)
+
+				// If it starts from 0, we don't need to add the first coords
+				// because has already added by the previous point.
+				if startDistance != 0 {
+					newFlatCoords = append(newFlatCoords, currentLineString.Coord(i)...)
+				}
+			} else {
+				newFlatCoords = append(newFlatCoords, lineString.Coord(i)...)
+			}
+		}
+	}
+	return geo.MakeGeometryFromGeomT(geom.NewLineStringFlat(geom.XY, newFlatCoords).SetSRID(lineString.SRID()))
+}
+
+// interpolateFlatCoordsFromDistance interpolates the geometry at a given distance and returns its flat coordinates.
+func interpolateFlatCoordsFromDistance(g geo.Geometry, distance float64) ([]float64, error) {
+	pointEWKB, err := geos.InterpolateLine(g.EWKB(), distance)
+	if err != nil {
+		return []float64{}, err
+	}
+	point, err := ewkb.Unmarshal(pointEWKB)
+	if err != nil {
+		return []float64{}, err
+	}
+	return point.FlatCoords(), nil
 }
