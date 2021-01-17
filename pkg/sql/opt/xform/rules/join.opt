@@ -67,21 +67,24 @@
 )
 =>
 (Project
-    (InnerJoin
-        $left
-        (DistinctOn
-            $right
-            []
-            (MakeGrouping
-                (IntersectionCols
-                    (OutputCols $right)
-                    (FilterOuterCols $on)
+    (PreventReordering
+        (Root)
+        (InnerJoin
+            $left
+            (DistinctOn
+                $right
+                []
+                (MakeGrouping
+                    (IntersectionCols
+                        (OutputCols $right)
+                        (FilterOuterCols $on)
+                    )
+                    (EmptyOrdering)
                 )
-                (EmptyOrdering)
             )
+            $on
+            $private
         )
-        $on
-        $private
     )
     []
     (OutputCols $left)
@@ -107,11 +110,14 @@
 =>
 (Project
     (DistinctOn
-        (InnerJoin
-            $newLeft:(EnsureKey $left)
-            $right
-            $on
-            $private
+        (PreventReordering
+            (Root)
+            (InnerJoin
+                $newLeft:(EnsureKey $left)
+                $right
+                $on
+                $private
+            )
         )
         (MakeAggCols ConstAgg (NonKeyCols $newLeft))
         (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))

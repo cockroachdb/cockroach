@@ -1927,65 +1927,6 @@ ABC D    refs [AD] [left]
 
 Joins Considered: 12
 --------------------------------------------------------------------------------
-----Join Tree #5----
-inner-join (hash)
- ├── anti-join (hash)
- │    ├── left-join (hash)
- │    │    ├── scan bx
- │    │    ├── scan cy
- │    │    └── filters
- │    │         └── bx.b = cy.c
- │    ├── scan abc
- │    └── filters
- │         └── bx.b = a
- ├── scan dz
- └── filters
-      └── bx.b = dz.d
-
-----Vertexes----
-A:
-scan bx
-
-D:
-scan cy
-
-B:
-scan abc
-
-C:
-scan dz
-
-----Edges----
-bx.b = cy.c [left]
-bx.b = a [anti]
-bx.b = dz.d [inner]
-
-----Joining AD----
-A D    refs [AD] [left]
-----Joining AB----
-A B    refs [AB] [anti]
-----Joining ADB----
-AB D    refs [AD] [left]
-AD B    refs [AB] [anti]
-----Joining AC----
-A C    refs [AC] [inner]
-C A    refs [AC] [inner]
-----Joining ADC----
-AC D    refs [AD] [left]
-AD C    refs [AC] [inner]
-C AD    refs [AC] [inner]
-----Joining ABC----
-AC B    refs [AB] [anti]
-AB C    refs [AC] [inner]
-C AB    refs [AC] [inner]
-----Joining ADBC----
-ABC D    refs [AD] [left]
-ADC B    refs [AB] [anti]
-ADB C    refs [AC] [inner]
-C ADB    refs [AC] [inner]
-
-Joins Considered: 16
---------------------------------------------------------------------------------
 ----Final Plan----
 semi-join (lookup dz)
  ├── lookup columns are key
@@ -2256,47 +2197,6 @@ Joins Considered: 6
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── scan abc [as=a1]
- │    ├── scan abc [as=a2]
- │    └── filters
- │         └── a1.a = a2.a
- ├── distinct-on
- │    └── scan abc [as=a5]
- └── filters
-      └── a2.c = a5.c
-
-----Vertexes----
-C:
-scan abc [as=a1]
-
-A:
-scan abc [as=a2]
-
-B:
-distinct-on
- └── scan abc [as=a5]
-
-----Edges----
-a1.a = a2.a [inner]
-a2.c = a5.c [inner]
-
-----Joining CA----
-C A    refs [CA] [inner]
-A C    refs [CA] [inner]
-----Joining AB----
-A B    refs [AB] [inner]
-B A    refs [AB] [inner]
-----Joining CAB----
-C AB    refs [CA] [inner]
-AB C    refs [CA] [inner]
-CA B    refs [AB] [inner]
-B CA    refs [AB] [inner]
-
-Joins Considered: 8
---------------------------------------------------------------------------------
-----Join Tree #5----
-inner-join (hash)
- ├── inner-join (hash)
- │    ├── scan abc [as=a1]
  │    ├── semi-join (hash)
  │    │    ├── scan abc [as=a2]
  │    │    ├── scan abc [as=a5]
@@ -2340,7 +2240,7 @@ D CA    refs [AD] [inner]
 
 Joins Considered: 8
 --------------------------------------------------------------------------------
-----Join Tree #6----
+----Join Tree #5----
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── inner-join (hash)
@@ -2413,6 +2313,431 @@ inner-join (hash)
  │    └── filters (true)
  └── filters
       └── a2.b = a3.b
+--------------------------------------------------------------------------------
+----
+----
+
+# Regression test for #59076. Do not reorder on the inner join produced by
+# CommuteSemiJoin when it matches on an already-reordered semi join. The
+# following test output should only have 9 join trees.
+reorderjoins format=hide-all
+SELECT * FROM cy
+WHERE EXISTS (SELECT 1 FROM dz WHERE z = y)
+AND EXISTS (SELECT 1 FROM bx WHERE x = y)
+AND EXISTS (SELECT 1 FROM abc WHERE a = y)
+----
+----
+--------------------------------------------------------------------------------
+----Join Tree #1----
+semi-join (hash)
+ ├── scan cy
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+----Edges----
+a = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+
+Joins Considered: 1
+--------------------------------------------------------------------------------
+----Join Tree #2----
+inner-join (hash)
+ ├── scan cy
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+----Edges----
+a = y [inner]
+
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+
+Joins Considered: 2
+--------------------------------------------------------------------------------
+----Join Tree #3----
+semi-join (hash)
+ ├── semi-join (hash)
+ │    ├── scan cy
+ │    ├── scan abc
+ │    └── filters
+ │         └── a = y
+ ├── scan bx
+ └── filters
+      └── x = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+----Edges----
+a = y [semi]
+x = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+
+Joins Considered: 4
+--------------------------------------------------------------------------------
+----Join Tree #4----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── scan cy
+ │    ├── scan abc
+ │    └── filters
+ │         └── a = y
+ ├── distinct-on
+ │    └── scan bx
+ └── filters
+      └── x = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+distinct-on
+ └── scan bx
+
+----Edges----
+a = y [semi]
+x = y [inner]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [inner]
+C A    refs [AC] [inner]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [inner]
+C AB    refs [AC] [inner]
+
+Joins Considered: 6
+--------------------------------------------------------------------------------
+----Join Tree #5----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── scan cy
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+C:
+scan bx
+
+B:
+scan abc
+
+----Edges----
+x = y [semi]
+a = y [inner]
+
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+----Joining ACB----
+AB C    refs [AC] [semi]
+AC B    refs [AB] [inner]
+B AC    refs [AB] [inner]
+
+Joins Considered: 6
+--------------------------------------------------------------------------------
+----Join Tree #6----
+semi-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan abc
+ │    │    └── filters
+ │    │         └── a = y
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── scan dz
+ └── filters
+      └── z = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+D:
+scan dz
+
+----Edges----
+a = y [semi]
+x = y [semi]
+z = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+----Joining AD----
+A D    refs [AD] [semi]
+----Joining ABD----
+AD B    refs [AB] [semi]
+AB D    refs [AD] [semi]
+----Joining ACD----
+AD C    refs [AC] [semi]
+AC D    refs [AD] [semi]
+----Joining ABCD----
+ACD B    refs [AB] [semi]
+ABD C    refs [AC] [semi]
+ABC D    refs [AD] [semi]
+
+Joins Considered: 12
+--------------------------------------------------------------------------------
+----Join Tree #7----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan abc
+ │    │    └── filters
+ │    │         └── a = y
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── distinct-on
+ │    └── scan dz
+ └── filters
+      └── z = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+D:
+distinct-on
+ └── scan dz
+
+----Edges----
+a = y [semi]
+x = y [semi]
+z = y [inner]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+----Joining AD----
+A D    refs [AD] [inner]
+D A    refs [AD] [inner]
+----Joining ABD----
+AD B    refs [AB] [semi]
+AB D    refs [AD] [inner]
+D AB    refs [AD] [inner]
+----Joining ACD----
+AD C    refs [AC] [semi]
+AC D    refs [AD] [inner]
+D AC    refs [AD] [inner]
+----Joining ABCD----
+ACD B    refs [AB] [semi]
+ABD C    refs [AC] [semi]
+ABC D    refs [AD] [inner]
+D ABC    refs [AD] [inner]
+
+Joins Considered: 16
+--------------------------------------------------------------------------------
+----Join Tree #8----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan dz
+ │    │    └── filters
+ │    │         └── z = y
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+D:
+scan dz
+
+C:
+scan bx
+
+B:
+scan abc
+
+----Edges----
+z = y [semi]
+x = y [semi]
+a = y [inner]
+
+----Joining AD----
+A D    refs [AD] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ADC----
+AC D    refs [AD] [semi]
+AD C    refs [AC] [semi]
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+----Joining ADB----
+AB D    refs [AD] [semi]
+AD B    refs [AB] [inner]
+B AD    refs [AB] [inner]
+----Joining ACB----
+AB C    refs [AC] [semi]
+AC B    refs [AB] [inner]
+B AC    refs [AB] [inner]
+----Joining ADCB----
+ACB D    refs [AD] [semi]
+ADB C    refs [AC] [semi]
+ADC B    refs [AB] [inner]
+B ADC    refs [AB] [inner]
+
+Joins Considered: 16
+--------------------------------------------------------------------------------
+----Join Tree #9----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan dz
+ │    │    └── filters
+ │    │         └── z = y
+ │    ├── scan abc
+ │    └── filters
+ │         └── a = y
+ ├── distinct-on
+ │    └── scan bx
+ └── filters
+      └── x = y
+
+----Vertexes----
+A:
+scan cy
+
+D:
+scan dz
+
+B:
+scan abc
+
+C:
+distinct-on
+ └── scan bx
+
+----Edges----
+z = y [semi]
+a = y [semi]
+x = y [inner]
+
+----Joining AD----
+A D    refs [AD] [semi]
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining ADB----
+AB D    refs [AD] [semi]
+AD B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [inner]
+C A    refs [AC] [inner]
+----Joining ADC----
+AC D    refs [AD] [semi]
+AD C    refs [AC] [inner]
+C AD    refs [AC] [inner]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [inner]
+C AB    refs [AC] [inner]
+----Joining ADBC----
+ABC D    refs [AD] [semi]
+ADC B    refs [AB] [semi]
+ADB C    refs [AC] [inner]
+C ADB    refs [AC] [inner]
+
+Joins Considered: 16
+--------------------------------------------------------------------------------
+----Final Plan----
+project
+ └── semi-join (hash)
+      ├── project
+      │    └── inner-join (hash)
+      │         ├── inner-join (hash)
+      │         │    ├── scan cy
+      │         │    ├── distinct-on
+      │         │    │    └── scan dz
+      │         │    └── filters
+      │         │         └── z = y
+      │         ├── distinct-on
+      │         │    └── scan bx
+      │         └── filters
+      │              └── x = y
+      ├── scan abc
+      └── filters
+           └── a = y
 --------------------------------------------------------------------------------
 ----
 ----

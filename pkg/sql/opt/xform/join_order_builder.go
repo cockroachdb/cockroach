@@ -289,6 +289,13 @@ type JoinOrderBuilder struct {
 	// once does not exceed the session limit.
 	joinCount int
 
+	// alreadyOrdered tracks which joins are produced by JoinOrderBuilder so that
+	// ReorderJoins does not match on them again.
+	alreadyOrdered map[memo.RelExpr]struct{}
+
+	// root keeps track of the join that forms the root of the original join tree.
+	root memo.RelExpr
+
 	onReorderFunc OnReorderFunc
 
 	onAddJoinFunc OnAddJoinFunc
@@ -301,11 +308,12 @@ func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *tree.EvalContext) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*jb = JoinOrderBuilder{
-		f:             f,
-		evalCtx:       evalCtx,
-		plans:         make(map[vertexSet]memo.RelExpr),
-		onReorderFunc: jb.onReorderFunc,
-		onAddJoinFunc: jb.onAddJoinFunc,
+		f:              f,
+		evalCtx:        evalCtx,
+		plans:          make(map[vertexSet]memo.RelExpr),
+		alreadyOrdered: make(map[memo.RelExpr]struct{}),
+		onReorderFunc:  jb.onReorderFunc,
+		onAddJoinFunc:  jb.onAddJoinFunc,
 	}
 }
 
@@ -318,6 +326,8 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		if !flags.Empty() {
 			panic(errors.AssertionFailedf("join with hints cannot be reordered"))
 		}
+
+		jb.root = join
 
 		// Populate the vertexes and edges of the join hypergraph.
 		jb.populateGraph(join)
@@ -721,6 +731,8 @@ func (jb *JoinOrderBuilder) addToGroup(
 		jb.f.Memo().AddSelectToGroup(selectExpr, grp)
 		return
 	}
+
+	var ordered memo.RelExpr
 	switch op {
 	case opt.InnerJoinOp:
 		newJoin := &memo.InnerJoinExpr{
@@ -729,7 +741,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			On:          on,
 			JoinPrivate: memo.JoinPrivate{},
 		}
-		jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
+		ordered = jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
 
 	case opt.SemiJoinOp:
 		newJoin := &memo.SemiJoinExpr{
@@ -738,7 +750,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			On:          on,
 			JoinPrivate: memo.JoinPrivate{},
 		}
-		jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
+		ordered = jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
 
 	case opt.AntiJoinOp:
 		newJoin := &memo.AntiJoinExpr{
@@ -747,7 +759,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			On:          on,
 			JoinPrivate: memo.JoinPrivate{},
 		}
-		jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
+		ordered = jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
 
 	case opt.LeftJoinOp:
 		newJoin := &memo.LeftJoinExpr{
@@ -756,7 +768,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			On:          on,
 			JoinPrivate: memo.JoinPrivate{},
 		}
-		jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
+		ordered = jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
 
 	case opt.FullJoinOp:
 		newJoin := &memo.FullJoinExpr{
@@ -765,10 +777,18 @@ func (jb *JoinOrderBuilder) addToGroup(
 			On:          on,
 			JoinPrivate: memo.JoinPrivate{},
 		}
-		jb.f.Memo().AddFullJoinToGroup(newJoin, grp)
+		ordered = jb.f.Memo().AddFullJoinToGroup(newJoin, grp)
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator: %v", op))
+	}
+
+	// Add the expression to the alreadyOrdered map to prevent ReorderJoins from
+	// re-matching on it. Don't add to the map if this is the originally matched
+	// root of the join tree, because we want to match on any new join groups
+	// which are generated from it.
+	if grp != jb.root || ordered != grp.FirstExpr() {
+		jb.alreadyOrdered[ordered] = struct{}{}
 	}
 }
 
@@ -781,19 +801,19 @@ func (jb *JoinOrderBuilder) memoize(
 	var join memo.RelExpr
 	switch op {
 	case opt.InnerJoinOp:
-		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{})
 
 	case opt.SemiJoinOp:
-		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{})
 
 	case opt.AntiJoinOp:
-		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{})
 
 	case opt.LeftJoinOp:
-		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{})
 
 	case opt.FullJoinOp:
-		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{})
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator: %v", op))
@@ -801,6 +821,11 @@ func (jb *JoinOrderBuilder) memoize(
 	if len(selectFilters) > 0 {
 		return jb.f.Memo().MemoizeSelect(join, selectFilters)
 	}
+
+	// Add the expression to the alreadyOrdered map to prevent ReorderJoins from
+	// re-matching on it.
+	jb.alreadyOrdered[join] = struct{}{}
+
 	return join
 }
 
@@ -862,6 +887,21 @@ func (jb *JoinOrderBuilder) checkSize() {
 			),
 		)
 	}
+}
+
+// WasReordered returns true if the given expression was constructed by
+// JoinOrderBuilder. It is used to prevent rematching of the ReorderJoins rule.
+func (jb *JoinOrderBuilder) WasReordered(expr memo.RelExpr) bool {
+	_, ok := jb.alreadyOrdered[expr]
+	return ok
+}
+
+// PreventReordering adds the given expression to the alreadyOrdered map to
+// prevent ReorderJoins from matching on it. It should be called when a rule
+// creates a new join group from a join that has already been reordered (for
+// example, CommuteSemiJoin).
+func (jb *JoinOrderBuilder) PreventReordering(expr memo.RelExpr) {
+	jb.alreadyOrdered[expr] = struct{}{}
 }
 
 // NotifyOnReorder sets a callback function that is called when a join is passed
