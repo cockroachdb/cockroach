@@ -43,7 +43,7 @@ import (
 // happen yet).
 
 // DisallowSeparatedIntents is true when separated intents have never been allowed.
-const DisallowSeparatedIntents = true
+const DisallowSeparatedIntents = false
 
 const enabledSeparatedIntents = false
 

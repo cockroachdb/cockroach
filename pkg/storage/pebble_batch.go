@@ -523,6 +523,10 @@ func (p *pebbleBatch) Commit(sync bool) error {
 	return err
 }
 
+func (p *pebbleBatch) IsIndexed() bool {
+	return p.batch.Indexed()
+}
+
 // Distinct implements the Batch interface.
 func (p *pebbleBatch) Distinct() ReadWriter {
 	if p.distinctOpen {

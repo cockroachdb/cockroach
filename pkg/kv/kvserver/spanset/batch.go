@@ -666,6 +666,10 @@ func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
 }
 
+func (s spanSetBatch) IsIndexed() bool {
+	return s.b.IsIndexed()
+}
+
 func (s spanSetBatch) Distinct() storage.ReadWriter {
 	if s.spansOnly {
 		return NewReadWriter(s.b.Distinct(), s.spans)

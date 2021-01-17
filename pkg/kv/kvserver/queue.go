@@ -1084,7 +1084,7 @@ func (bq *baseQueue) finishProcessingReplica(
 
 		// If not a benign or purgatory error, log.
 		if !benign {
-			log.Errorf(ctx, "%v", err)
+			log.Infof(ctx, "%v", err)
 		}
 	}
 

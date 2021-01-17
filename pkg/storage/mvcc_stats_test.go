@@ -1530,10 +1530,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		max := s.rng.Int63n(5)
 		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
 		keyMin := roachpb.KeyMin
-		if !s.isLocalKey {
+		keyMax := roachpb.KeyMax
+		if s.isLocalKey {
+			keyMax = keys.LocalMax
+		} else {
 			keyMin = keys.LocalMax
 		}
-		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, keyMin, roachpb.KeyMax, max, s.TS, s.Txn, returnKeys); err != nil {
+		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, keyMin, keyMax, max, s.TS, s.Txn, returnKeys); err != nil {
 			return desc + ": " + err.Error()
 		}
 		return desc
