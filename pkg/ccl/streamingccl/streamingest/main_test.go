@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package streamingest
 
 import (
 	"os"
@@ -31,4 +31,4 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../../util/leaktest/add-leaktest.sh *_test.go
