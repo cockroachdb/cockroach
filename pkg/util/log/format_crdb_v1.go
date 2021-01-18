@@ -446,9 +446,24 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 			entry.Tags = string(r.msg)
 		}
 
-		// Process the log message itself
+		// If there's an entry counter at the start of the message, process it.
+		msg := b[len(m[0]):]
+		i := 0
+		for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
+			entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
+		}
+		if i > 0 && i < len(msg) && msg[i] == ' ' {
+			// Only accept the entry counter if followed by a space. In all
+			// other cases, the number was part of the message string.
+			msg = msg[i+1:]
+		} else {
+			// This was not truly an entry counter. Ignore the work done previously.
+			entry.Counter = 0
+		}
+
+		// Process the remainder of the log message.
 		r := redactablePackage{
-			msg:        trimFinalNewLines(b[len(m[0]):]),
+			msg:        trimFinalNewLines(msg),
 			redactable: redactable,
 		}
 		r = d.sensitiveEditor(r)
