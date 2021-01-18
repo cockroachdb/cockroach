@@ -150,6 +150,7 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ## SQL Logical Schema Changes
 
@@ -185,6 +186,7 @@ An event of type `alter_database_add_region` is recorded when a region is added 
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_database_primary_region`
 
@@ -207,6 +209,7 @@ An event of type `alter_database_primary_region` is recorded when a primary regi
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_database_survival_goal`
 
@@ -229,6 +232,7 @@ An event of type `alter_database_survival_goal` is recorded when the survival go
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_index`
 
@@ -252,6 +256,7 @@ An event of type `alter_index` is recorded when an index is altered.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_sequence`
 
@@ -273,6 +278,7 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_table`
 
@@ -296,6 +302,7 @@ An event of type `alter_table` is recorded when a table is altered.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_type`
 
@@ -317,6 +324,7 @@ EventAlterType is recorded when a user-defined type is altered.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_column`
 
@@ -341,6 +349,7 @@ An event of type `comment_on_column` is recorded when a column is commented.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_database`
 
@@ -364,6 +373,7 @@ CommentOnTable is recorded when a database is commented.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_index`
 
@@ -388,6 +398,7 @@ An event of type `comment_on_index` is recorded when an index is commented.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `comment_on_table`
 
@@ -411,6 +422,7 @@ An event of type `comment_on_table` is recorded when a table is commented.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `convert_to_schema`
 
@@ -433,6 +445,7 @@ An event of type `convert_to_schema` is recorded when a database is converted to
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_database`
 
@@ -454,6 +467,7 @@ An event of type `create_database` is recorded when a database is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_index`
 
@@ -477,6 +491,7 @@ An event of type `create_index` is recorded when an index is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_schema`
 
@@ -499,6 +514,7 @@ An event of type `create_schema` is recorded when a schema is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_sequence`
 
@@ -521,6 +537,7 @@ An event of type `create_sequence` is recorded when a sequence is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_statistics`
 
@@ -546,6 +563,7 @@ Events of this type are only collected when the cluster setting
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_table`
 
@@ -568,6 +586,7 @@ An event of type `create_table` is recorded when a table is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_type`
 
@@ -590,6 +609,7 @@ An event of type `create_type` is recorded when a user-defined type is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_view`
 
@@ -613,6 +633,7 @@ An event of type `create_view` is recorded when a view is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_database`
 
@@ -635,6 +656,7 @@ An event of type `drop_database` is recorded when a database is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_index`
 
@@ -659,6 +681,7 @@ An event of type `drop_index` is recorded when an index is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_schema`
 
@@ -680,6 +703,7 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_sequence`
 
@@ -701,6 +725,7 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_table`
 
@@ -723,6 +748,7 @@ An event of type `drop_table` is recorded when a table is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_type`
 
@@ -744,6 +770,7 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_view`
 
@@ -766,6 +793,7 @@ An event of type `drop_view` is recorded when a view is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `finish_schema_change`
 
@@ -824,6 +852,7 @@ An event of type `rename_database` is recorded when a database is renamed.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_schema`
 
@@ -846,6 +875,7 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_table`
 
@@ -868,6 +898,7 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `rename_type`
 
@@ -890,6 +921,7 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `reverse_schema_change`
 
@@ -933,6 +965,7 @@ An event of type `truncate_table` is recorded when a table is truncated.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_delete_descriptor`
 
@@ -962,6 +995,7 @@ patch releases without advance notice.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_delete_namespace_entry`
 
@@ -991,6 +1025,7 @@ patch releases without advance notice.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_upsert_descriptor`
 
@@ -1016,6 +1051,7 @@ using crdb_internal.unsafe_upsert_descriptor().
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `unsafe_upsert_namespace_entry`
 
@@ -1047,6 +1083,7 @@ patch releases without advance notice.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ## SQL Privilege changes
 
@@ -1082,6 +1119,7 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_schema_owner`
 
@@ -1104,6 +1142,7 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_table_owner`
 
@@ -1126,6 +1165,7 @@ An event of type `alter_table_owner` is recorded when the owner of a table, view
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `alter_type_owner`
 
@@ -1148,6 +1188,7 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `change_database_privilege`
 
@@ -1170,6 +1211,7 @@ added to / removed from a user for a database object.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -1195,6 +1237,7 @@ removed from a user for a schema object.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -1220,6 +1263,7 @@ from a user for a table, sequence or view object.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -1245,6 +1289,7 @@ removed from a user for a type object.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Grantee` | The user/role affected by the grant or revoke operation. | yes |
 | `GrantedPrivileges` | The privileges being granted to the grantee. | no |
 | `RevokedPrivileges` | The privileges being revoked from the grantee. | no |
@@ -1448,6 +1493,7 @@ An event of type `alter_role` is recorded when a role is altered.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `create_role`
 
@@ -1469,6 +1515,7 @@ An event of type `create_role` is recorded when a role is created.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ### `drop_role`
 
@@ -1490,6 +1537,7 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
 ## Zone config events
 
@@ -1524,6 +1572,7 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
@@ -1545,6 +1594,7 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 | `Target` | The target object of the zone config change. | yes |
 | `Config` | The applied zone config in YAML format. | yes |
 | `Options` | The SQL representation of the applied zone config options. | yes |
