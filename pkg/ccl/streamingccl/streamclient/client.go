@@ -47,7 +47,7 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 			return streamClient, err
 		}
 	default:
-		streamClient = &client{}
+		streamClient = &mockClient{}
 	}
 
 	return streamClient, nil
