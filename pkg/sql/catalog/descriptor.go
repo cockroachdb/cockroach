@@ -91,6 +91,7 @@ type DatabaseDescriptor interface {
 	IsMultiRegion() bool
 	PrimaryRegion() (descpb.RegionName, error)
 	Validate() error
+	MultiRegionEnumID() (descpb.ID, error)
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -364,6 +365,7 @@ type TypeDescriptor interface {
 	GetIDClosure() map[descpb.ID]struct{}
 
 	PrimaryRegion() (descpb.RegionName, error)
+	Regions() (descpb.RegionNames, error)
 	Validate(ctx context.Context, dg DescGetter) error
 }
 
