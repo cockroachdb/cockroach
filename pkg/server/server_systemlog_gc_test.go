@@ -29,6 +29,7 @@ import (
 
 func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#57277") // Test flake; underlying cause fixed in v21.1.
 	a := assert.New(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
