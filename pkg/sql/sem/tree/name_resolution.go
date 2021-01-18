@@ -116,9 +116,6 @@ const (
 	PublicSchema string = sessiondata.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
 	PublicSchemaName Name = Name(PublicSchema)
-	// RegionEnum is the name of the per-database region enum required for
-	// multi-region.
-	RegionEnum string = "crdb_internal_region"
 )
 
 // NumResolutionResults represents the number of results in the lookup

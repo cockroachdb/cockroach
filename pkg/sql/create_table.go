@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -378,7 +379,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		if err := params.p.applyZoneConfigFromTableLocalityConfig(
 			params.ctx,
 			n.n.Table,
-			*desc.LocalityConfig,
+			desc.TableDesc(),
 			*dbDesc.RegionConfig,
 		); err != nil {
 			return err
@@ -1349,6 +1350,114 @@ func NewTableDesc(
 		}
 	}
 
+	// Add implied columns under REGIONAL BY ROW.
+	locality := n.Locality
+	var partitionByAll *tree.PartitionBy
+	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
+		// TODO(#multiregion): consider decoupling implicit column partitioning from the
+		// REGIONAL BY ROW experimental flag.
+		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+			return nil, errors.WithHint(
+				pgerror.New(
+					pgcode.FeatureNotSupported,
+					"REGIONAL BY ROW is currently experimental",
+				),
+				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
+			)
+		}
+
+		// Check no PARTITION BY is set on any field.
+		if n.PartitionByTable.ContainsPartitions() {
+			return nil, pgerror.New(
+				pgcode.FeatureNotSupported,
+				"REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported",
+			)
+		}
+		for _, def := range n.Defs {
+			switch d := def.(type) {
+			case *tree.IndexTableDef:
+				if d.PartitionByIndex.ContainsPartitions() {
+					return nil, pgerror.New(
+						pgcode.FeatureNotSupported,
+						"REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported",
+					)
+				}
+			case *tree.UniqueConstraintTableDef:
+				if d.PartitionByIndex.ContainsPartitions() {
+					return nil, pgerror.New(
+						pgcode.FeatureNotSupported,
+						"REGIONAL BY ROW on a table with an UNIQUE constraint containing PARTITION BY is not supported",
+					)
+				}
+			}
+		}
+		if n.Locality.RegionalByRowColumn != "" {
+			return nil, unimplemented.New(
+				"REGIONAL BY ROW AS",
+				"REGIONAL BY ROW AS is not yet supported",
+			)
+		}
+
+		// Check the table is multi-region enabled.
+		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+		if err != nil {
+			return nil, err
+		}
+		if !dbDesc.IsMultiRegion() {
+			return nil, pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot set LOCALITY on a database that is not multi-region enabled",
+			)
+		}
+
+		// Add implicit crdb_region column.
+		oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
+		// TODO(#multiregion): set the column visibility to be hidden.
+		c := &tree.ColumnTableDef{
+			Name: tree.RegionalByRowRegionDefaultColName,
+			Type: &tree.OIDTypeReference{OID: oid},
+		}
+		c.Nullable.Nullability = tree.NotNull
+		c.DefaultExpr.Expr = &tree.CastExpr{
+			Expr: &tree.FuncExpr{
+				Func: tree.WrapFunction("gateway_region"),
+			},
+			Type:       &tree.OIDTypeReference{OID: oid},
+			SyntaxMode: tree.CastShort,
+		}
+		n.Defs = append(n.Defs, c)
+		columnDefaultExprs = append(columnDefaultExprs, nil)
+
+		// Construct the partitioning for the PARTITION ALL BY.
+		listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
+		for i, region := range dbDesc.RegionConfig.Regions {
+			listPartition[i] = tree.ListPartition{
+				Name:  tree.UnrestrictedName(region.Name),
+				Exprs: tree.Exprs{tree.NewStrVal(string(region.Name))},
+			}
+		}
+
+		desc.PartitionAllBy = true
+		partitionByAll = &tree.PartitionBy{
+			Fields: tree.NameList{tree.RegionalByRowRegionDefaultColName},
+			List:   listPartition,
+		}
+	}
+
+	if n.PartitionByTable != nil && n.PartitionByTable.All {
+		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
+			return nil, errors.WithHint(
+				pgerror.New(
+					pgcode.FeatureNotSupported,
+					"PARTITION ALL BY LIST/RANGE is currently experimental",
+				),
+				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
+			)
+		}
+		desc.PartitionAllBy = true
+		partitionByAll = n.PartitionByTable.PartitionBy
+	}
+
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			// NewTableDesc is called sometimes with a nil SemaCtx (for example
@@ -1510,21 +1619,6 @@ func NewTableDesc(
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
 		return nil
-	}
-
-	var partitionByAll *tree.PartitionBy
-	if n.PartitionByTable != nil && n.PartitionByTable.All {
-		if !evalCtx.SessionData.ImplicitColumnPartitioningEnabled {
-			return nil, errors.WithHint(
-				pgerror.New(
-					pgcode.FeatureNotSupported,
-					"PARTITION ALL BY LIST/RANGE is currently experimental",
-				),
-				"to enable, use SET experimental_enable_implicit_column_partitioning = true",
-			)
-		}
-		desc.PartitionAllBy = true
-		partitionByAll = n.PartitionByTable.PartitionBy
 	}
 
 	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
@@ -1794,12 +1888,17 @@ func NewTableDesc(
 		}
 	}
 
-	if n.PartitionByTable.ContainsPartitions() {
+	if n.PartitionByTable.ContainsPartitions() || partitionByAll != nil {
+		partitionBy := partitionByAll
+		if partitionBy == nil {
+			partitionBy = n.PartitionByTable.PartitionBy
+		}
+
 		newPrimaryIndex, numImplicitColumns, err := detectImplicitPartitionColumns(
 			evalCtx,
 			&desc,
 			*desc.GetPrimaryIndex().IndexDesc(),
-			n.PartitionByTable.PartitionBy,
+			partitionBy,
 		)
 		if err != nil {
 			return nil, err
@@ -1811,7 +1910,7 @@ func NewTableDesc(
 			&desc,
 			&newPrimaryIndex,
 			numImplicitColumns,
-			n.PartitionByTable.PartitionBy,
+			partitionBy,
 		)
 		if err != nil {
 			return nil, err
@@ -2026,12 +2125,6 @@ func NewTableDesc(
 		case tree.LocalityLevelRow:
 			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
 				RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
-			}
-			if n.Locality.RegionalByRowColumn != "" {
-				return nil, unimplemented.New(
-					"REGIONAL BY ROW AS",
-					"REGIONAL BY ROW AS is not yet supported",
-				)
 			}
 		default:
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
