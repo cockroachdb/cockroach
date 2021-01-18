@@ -179,13 +179,13 @@ func TestCheckCanReceiveLease(t *testing.T) {
 					Type:      &tc.leaseholderType,
 				}},
 			}
-			err := CheckCanReceiveLease(1, &rngDesc)
+			err := roachpb.CheckCanReceiveLease(1, &rngDesc)
 			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
 		})
 	}
 
 	t.Run("replica not in range desc", func(t *testing.T) {
 		rngDesc := roachpb.RangeDescriptor{}
-		require.Regexp(t, "replica.*not found", CheckCanReceiveLease(1, &rngDesc))
+		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(1, &rngDesc))
 	})
 }
