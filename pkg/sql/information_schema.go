@@ -403,6 +403,26 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		// Get the collations for all comments of current database.
+		comments, err := getComments(ctx, p)
+		if err != nil {
+			return err
+		}
+		// Push all comments of columns into map.
+		commentMap := make(map[tree.DInt]map[tree.DInt]string)
+		for _, comment := range comments {
+			objID := tree.MustBeDInt(comment[0])
+			objSubID := tree.MustBeDInt(comment[1])
+			description := comment[2].String()
+			commentType := tree.MustBeDInt(comment[3])
+			if commentType == 2 {
+				if commentMap[objID] == nil {
+					commentMap[objID] = make(map[tree.DInt]string)
+				}
+				commentMap[objID][objSubID] = description
+			}
+		}
+
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
@@ -433,11 +453,18 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+
+				// Match the comment belonging to current column from map,using table id and column id
+				tableID := tree.DInt(table.GetID())
+				columnID := tree.DInt(column.ID)
+				description := commentMap[tableID][columnID]
+
 				return addRow(
 					dbNameStr,                        // table_catalog
 					scNameStr,                        // table_schema
 					tree.NewDString(table.GetName()), // table_name
 					tree.NewDString(column.Name),     // column_name
+					tree.NewDString(description),     // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                    // column_default
 					yesOrNoDatum(column.Nullable), // is_nullable
