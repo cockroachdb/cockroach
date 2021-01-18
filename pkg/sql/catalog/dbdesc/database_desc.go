@@ -225,6 +225,16 @@ func (desc *Immutable) Regions() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
+// MultiRegionEnumID returns the ID of the multi-region enum if the database
+// is a multi-region database, and an error otherwise.
+func (desc *Immutable) MultiRegionEnumID() (descpb.ID, error) {
+	if !desc.IsMultiRegion() {
+		return descpb.InvalidID, errors.AssertionFailedf(
+			"can not get multi-region enum ID of a non multi-region database")
+	}
+	return desc.RegionConfig.RegionEnumID, nil
+}
+
 // PrimaryRegion returns the primary region for a multi-region database.
 func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
 	if !desc.IsMultiRegion() {

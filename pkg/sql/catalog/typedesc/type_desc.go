@@ -210,6 +210,22 @@ func (desc *Immutable) PrimaryRegion() (descpb.RegionName, error) {
 	return desc.RegionConfig.PrimaryRegion, nil
 }
 
+// Regions returns all the regions on the multi-region type descriptor.
+// This includes regions that are in `READ_ONLY` state as well, if they've just
+// been added or are in the process of being removed (pre-validation).
+func (desc *Immutable) Regions() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region type desc %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
+}
+
 // SetDrainingNames implements the MutableDescriptor interface.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
