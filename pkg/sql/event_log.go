@@ -34,9 +34,10 @@ func (p *planner) logEvent(
 	// Compute the common fields from data already known to the planner.
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
 
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, event)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, pl, event)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -83,6 +84,7 @@ func logEventInternalForSQLStatements(
 	user security.SQLUsername,
 	appName string,
 	stmt string,
+	placeholders tree.QueryArguments,
 	event eventpb.EventPayload,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
@@ -96,6 +98,12 @@ func logEventInternalForSQLStatements(
 	m.ApplicationName = appName
 	m.User = user.Normalized()
 	m.DescriptorID = uint32(descID)
+	if len(placeholders) > 0 {
+		m.PlaceholderValues = make([]string, len(placeholders))
+		for idx, val := range placeholders {
+			m.PlaceholderValues[idx] = val.String()
+		}
+	}
 
 	// Delegate the storing of the event to the regular event logic.
 	return InsertEventRecord(ctx, execCfg.InternalExecutor,
