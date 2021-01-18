@@ -196,3 +196,19 @@ func TestSpan_LogStructured(t *testing.T) {
 	require.NoError(t, types.UnmarshalAny(item, &d1))
 	require.IsType(t, (*types.Int32Value)(nil), d1.Message)
 }
+
+func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
+	tr := NewTracer()
+	tr._mode = int32(modeBackground)
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp), WithForceRealSpan())
+	defer ch.Finish()
+	require.Len(t, sp.crdb.mu.recording.children, 1)
+	require.Equal(t, ch.crdb, sp.crdb.mu.recording.children[0])
+	ch.LogStructured(&types.Int32Value{Value: 5})
+	// Check that the child span (incl its payload) is in the recording.
+	rec := sp.GetRecording()
+	require.Len(t, rec, 2)
+	require.Len(t, rec[1].InternalStructured, 1)
+}
