@@ -10,6 +10,7 @@ SELECT node_id, name FROM crdb_internal.leases ORDER BY name
 ----
 0  role_members
 0  role_options
+0  system
 0  test
 0  users
 

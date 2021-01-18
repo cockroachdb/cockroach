@@ -194,7 +194,12 @@ func (p *planner) removeTypeBackReference(
 func (p *planner) addBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+	typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
 		if err != nil {
 			return nil, err
@@ -216,7 +221,12 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 func (p *planner) removeBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+	typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
 		if err != nil {
 			return nil, err

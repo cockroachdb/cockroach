@@ -1059,13 +1059,23 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
-			if err != nil {
-				return nil, err
-			}
-			return desc, nil
-		})
+		dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx,
+			txn,
+			scTable.GetParentID(),
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return err
+		}
+		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(dbDesc,
+			func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+				if err != nil {
+					return nil, err
+				}
+				return desc, nil
+			})
 		if err != nil {
 			return err
 		}
@@ -1163,16 +1173,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// configurations removes spans for indexes in the dropping state,
 				// which we don't want. So, set up the zone configs before we swap.
 				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					dbDesc, err := descsCol.GetImmutableDatabaseByID(
-						ctx,
-						txn,
-						scTable.GetParentID(),
-						tree.DatabaseLookupFlags{Required: true},
-					)
-					if err != nil {
-						return err
-					}
-
 					// We will add up to two options - one for the table itself, and one
 					// for all the new indexes associated with the table.
 					opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 2)
@@ -1290,7 +1290,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				// For locality swaps, ensure the table descriptor fields are correctly filled.
 				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					newConfig := &lcSwap.NewLocalityConfig
+					localityConfigToSwapTo := lcSwap.NewLocalityConfig
 					if mutation.Direction == descpb.DescriptorMutation_ADD {
 						// Sanity check that locality has not been changed during backfill.
 						if !scTable.LocalityConfig.Equal(lcSwap.OldLocalityConfig) {
@@ -1302,10 +1302,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						}
 					} else {
 						// DROP is hit on cancellation, in which case we must roll back.
-						newConfig = &lcSwap.OldLocalityConfig
+						localityConfigToSwapTo = lcSwap.OldLocalityConfig
 					}
-					scTable.LocalityConfig = newConfig
-					switch newConfig.Locality.(type) {
+					if err := setNewLocalityConfig(
+						ctx, scTable, txn, b, localityConfigToSwapTo, kvTrace, descsCol); err != nil {
+						return err
+					}
+					switch localityConfigToSwapTo.Locality.(type) {
 					case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_,
 						*descpb.TableDescriptor_LocalityConfig_Global_:
 						scTable.PartitionAllBy = false
@@ -1314,7 +1317,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					default:
 						return errors.AssertionFailedf(
 							"unknown locality on PK swap: %T",
-							newConfig.Locality,
+							localityConfigToSwapTo,
 						)
 					}
 
@@ -1408,13 +1411,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
-				if err != nil {
-					return nil, err
-				}
-				return typ, err
-			})
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+				func(id descpb.ID) (catalog.TypeDescriptor, error) {
+					typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+					if err != nil {
+						return nil, err
+					}
+					return typ, err
+				})
 			if err != nil {
 				return err
 			}

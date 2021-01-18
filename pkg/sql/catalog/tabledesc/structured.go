@@ -787,8 +787,47 @@ func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *st
 // this table references. It takes in a function that returns the TypeDescriptor
 // with the desired ID.
 func (desc *wrapper) GetAllReferencedTypeIDs(
-	getType func(descpb.ID) (catalog.TypeDescriptor, error),
+	dbDesc catalog.DatabaseDescriptor, getType func(descpb.ID) (catalog.TypeDescriptor, error),
 ) (descpb.IDs, error) {
+	ids, err := desc.getAllReferencedTypesInTableColumns(getType)
+	if err != nil {
+		return nil, err
+	}
+
+	// REGIONAL BY TABLE tables may have a dependency with the multi-region enum.
+	exists := desc.GetMultiRegionEnumDependencyIfExists()
+	if exists {
+		regionEnumID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		ids[regionEnumID] = struct{}{}
+	}
+
+	// Construct the output.
+	result := make(descpb.IDs, 0, len(ids))
+	for id := range ids {
+		result = append(result, id)
+	}
+
+	// Sort the output so that the order is deterministic.
+	sort.Sort(result)
+	return result, nil
+}
+
+// getAllReferencedTypesInTableColumns returns a map of all user defined
+// type descriptor IDs that this table references. Consider using
+// GetAllReferencedTypeIDs when constructing the list of type descriptor IDs
+// referenced by a table -- being used by a column is a sufficient but not
+// necessary condition for a table to reference a type.
+// One example of a table having a type descriptor dependency but no column to
+// show for it is a REGIONAL BY TABLE table (homed in the non-primary region).
+// These use a value from the multi-region enum to denote the homing region, but
+// do so in the locality config as opposed to through a column.
+// GetAllReferencedTypesByID accounts for this dependency.
+func (desc *wrapper) getAllReferencedTypesInTableColumns(
+	getType func(descpb.ID) (catalog.TypeDescriptor, error),
+) (map[descpb.ID]struct{}, error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
 	visitor := &tree.TypeCollectorVisitor{
@@ -836,14 +875,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		}
 	}
 
-	// Construct the output.
-	result := make(descpb.IDs, 0, len(ids))
-	for id := range ids {
-		result = append(result, id)
-	}
-	// Sort the output so that the order is deterministic.
-	sort.Sort(result)
-	return result, nil
+	return ids, nil
 }
 
 func (desc *Mutable) initIDs() {
@@ -1555,23 +1587,18 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 	}
 	// TODO(dan): Also validate SharedPrefixLen in the interleaves.
 
-	// Validate the all types present in the descriptor exist. typeMap caches
-	// accesses to TypeDescriptors, and is wrapped by getType.
-	// TODO(ajwerner): generalize this to a cached implementation of the
-	// DescGetter.
-	typeMap := make(map[descpb.ID]catalog.TypeDescriptor)
-	getType := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-		if typeDesc, ok := typeMap[id]; ok {
-			return typeDesc, nil
-		}
-		typeDesc, err := catalog.GetTypeDescFromID(ctx, dg, id)
-		if err != nil {
-			return nil, errors.Wrapf(err, "type ID %d in descriptor not found", id)
-		}
-		typeMap[id] = typeDesc
-		return typeDesc, nil
+	// Validate the all types present in the descriptor exist.
+	getType := getTypeGetter(ctx, dg)
+	parentDesc, err := dg.GetDesc(ctx, desc.ParentID)
+	if err != nil {
+		return err
 	}
-	typeIDs, err := desc.GetAllReferencedTypeIDs(getType)
+	dbDesc, isDB := parentDesc.(catalog.DatabaseDescriptor)
+	if !isDB {
+		return errors.AssertionFailedf("parent id %d is not a database", dbDesc.GetID())
+	}
+
+	typeIDs, err := desc.GetAllReferencedTypeIDs(dbDesc, getType)
 	if err != nil {
 		return err
 	}
@@ -1668,13 +1695,47 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 			errors.Safe(regionsEnumID))
 	}
 
+	// REGIONAL BY TABLE tables homed in the primary region should include a
+	// reference to the multi-region type descriptor and a corresponding
+	// backreference. All other patterns should only contain a reference if there
+	// is an explicit column which uses the multi-region type descriptor as its
+	// *types.T. While the specific cases are validated below, we search for the
+	// region enum ID in the references list just once, up top here.
+	getTypes := getTypeGetter(ctx, dg)
+	typeIDs, err := desc.GetAllReferencedTypeIDs(db, getTypes)
+	if err != nil {
+		return err
+	}
+	regionEnumIDReferenced := false
+	for _, typeID := range typeIDs {
+		if typeID == regionsEnumID {
+			regionEnumIDReferenced = true
+			break
+		}
+	}
+	columnTypesTypeIDs, err := desc.getAllReferencedTypesInTableColumns(getTypes)
+	if err != nil {
+		return err
+	}
 	switch lc := desc.LocalityConfig.Locality.(type) {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
+		if regionEnumIDReferenced {
+			if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
+				return errors.AssertionFailedf(
+					"expected no region Enum ID to be referenced by a GLOBAL TABLE: %q"+
+						" but found: %d",
+					desc.GetName(),
+					regionsEnumDesc.GetID(),
+				)
+			}
+		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 		if !desc.IsPartitionAllBy() {
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+
+		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
 			regions, err := regionsEnumDesc.RegionNames()
@@ -1699,6 +1760,28 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 					strings.Join(regions.ToStrings(), ", "),
 				)
 			}
+			if !regionEnumIDReferenced {
+				return errors.AssertionFailedf(
+					"expected multi-region enum ID %d to be referenced on REGIONAL BY TABLE: %q locality "+
+						"config, but did not find it",
+					regionsEnumID,
+					desc.GetName(),
+				)
+			}
+		} else {
+			if regionEnumIDReferenced {
+				// It may be the case that the multi-region type descriptor is used
+				// as the type of the table column. Validations should only fail if
+				// that is not the case.
+				if _, found := columnTypesTypeIDs[regionsEnumID]; !found {
+					return errors.AssertionFailedf(
+						"expected no region Enum ID to be referenced by a REGIONAL BY TABLE: %q homed in the "+
+							"primary region, but found: %d",
+						desc.GetName(),
+						regionsEnumDesc.GetID(),
+					)
+				}
+			}
 		}
 	default:
 		return pgerror.Newf(
@@ -1708,6 +1791,26 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 		)
 	}
 	return nil
+}
+
+func getTypeGetter(
+	ctx context.Context, dg catalog.DescGetter,
+) func(descpb.ID) (catalog.TypeDescriptor, error) {
+	// typeMap caches accesses to TypeDescriptors, and is wrapped by getType.
+	// TODO(ajwerner): generalize this to a cached implementation of the
+	// DescGetter.
+	typeMap := make(map[descpb.ID]catalog.TypeDescriptor)
+	return func(id descpb.ID) (catalog.TypeDescriptor, error) {
+		if typeDesc, ok := typeMap[id]; ok {
+			return typeDesc, nil
+		}
+		typeDesc, err := catalog.GetTypeDescFromID(ctx, dg, id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "type ID %d in descriptor not found", id)
+		}
+		typeMap[id] = typeDesc
+		return typeDesc, nil
+	}
 }
 
 // ValidateIndexNameIsUnique validates that the index name does not exist.
@@ -3888,10 +3991,41 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 	return desc.LocalityConfig.GetGlobal() != nil
 }
 
+// GetRegionalTableRegion returns the region a REGIONAL BY TABLE table is
+// homed in.
+func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
+	if !desc.IsLocalityRegionalByTable() {
+		return "", errors.New("is not REGIONAL BY TABLE")
+	}
+	region := desc.LocalityConfig.GetRegionalByTable().Region
+	if region == nil {
+		return descpb.RegionName(tree.PrimaryRegionLocalityName), nil
+	}
+	return *region, nil
+}
+
+// GetMultiRegionEnumDependency returns true if the given table has an "implicit"
+// dependency on the multi-region enum. An implicit dependency exists for
+// REGIONAL BY TABLE table's which are homed in an explicit region
+// (i.e non-primary region). Even though these tables don't have a column
+// denoting their locality, their region config uses a value from the
+// multi-region enum. As such, any drop validation or locality switches must
+// honor this implicit dependency.
+func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() bool {
+	if desc.IsLocalityRegionalByTable() {
+		regionName, _ := desc.GetRegionalByTableRegion()
+		return regionName != descpb.RegionName(tree.PrimaryRegionLocalityName)
+	}
+	return false
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
-// (or its alias PrimaryRegionLocalityName) denotes that the table has affinity
-// to the primary region.
+// (or its alias PrimaryRegionLocalityName) denotes that the table is homed in
+// the primary region.
+// SetTableLocalityRegionalByTable doesn't account for the locality config that
+// was previously set on the descriptor. Instead, you may want to use:
+// (planner) alterTableDescLocalityToRegionalByTable.
 func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
 	lc := LocalityConfigRegionalByTable(region)
 	desc.LocalityConfig = &lc
@@ -3912,6 +4046,9 @@ func LocalityConfigRegionalByTable(region tree.Name) descpb.TableDescriptor_Loca
 // SetTableLocalityRegionalByRow sets the descriptor's locality config to
 // regional at the row level. An empty regionColName denotes the default
 // crdb_region partitioning column.
+// SetTableLocalityRegionalByRow doesn't account for the locality config that
+// was previously set on the descriptor, and the dependency unlinking that it
+// entails.
 func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
 	lc := LocalityConfigRegionalByRow(regionColName)
 	desc.LocalityConfig = &lc
@@ -3932,6 +4069,9 @@ func LocalityConfigRegionalByRow(regionColName tree.Name) descpb.TableDescriptor
 
 // SetTableLocalityGlobal sets the descriptor's locality config to a global
 // table.
+// SetLocalityGlobal doesn't account for the locality config that was previously
+// set on the descriptor. Instead, you may want to use
+// (planner) alterTableDescLocalityToGlobal.
 func (desc *Mutable) SetTableLocalityGlobal() {
 	lc := LocalityConfigGlobal()
 	desc.LocalityConfig = &lc

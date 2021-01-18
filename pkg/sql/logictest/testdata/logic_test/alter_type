@@ -82,11 +82,11 @@ statement ok
 CREATE TYPE names AS ENUM ('james', 'johnny')
 
 # Cannot rename a value to a value that already a member of the type.
-statement error enum label johnny already exists
+statement error enum value johnny already exists
 ALTER TYPE names RENAME VALUE 'james' TO 'johnny'
 
 # Cannot rename a value that is not a member of the type.
-statement error jim is not an existing enum label
+statement error jim is not an existing enum value
 ALTER TYPE names RENAME VALUE 'jim' TO 'jimmy'
 
 statement ok
@@ -142,13 +142,13 @@ SELECT enum_range('c'::build)
 {c}
 
 # Test some error cases.
-statement error pq: enum label \"c\" already exists
+statement error pq: enum value \"c\" already exists
 ALTER TYPE build ADD VALUE 'c'
 
-statement error pq: \"b\" is not an existing enum label
+statement error pq: \"b\" is not an existing enum value
 ALTER TYPE build ADD VALUE 'a' BEFORE 'b'
 
-statement error pq: \"b\" is not an existing enum label
+statement error pq: \"b\" is not an existing enum value
 ALTER TYPE build ADD VALUE 'a' AFTER 'b'
 
 statement ok
@@ -219,7 +219,7 @@ SELECT enum_last('c'::build)
 ----
 f
 
-statement error pq: enum label \"g\" is not yet public
+statement error pq: enum value \"g\" is not yet public
 INSERT INTO new_enum_values VALUES ('g')
 
 statement ok
@@ -371,7 +371,7 @@ statement ok
 CREATE VIEW v as SELECT 'd':::alphabets;
 CREATE TABLE uses_alphabets_2(k INT PRIMARY KEY, v alphabets DEFAULT 'e');
 
-statement error pq: could not validate enum value removal for "d": count-value-usage: enum label "d" is not yet public
+statement error pq: could not validate removal of enum value "d": count-value-usage: enum value "d" is not yet public
 ALTER TYPE alphabets DROP VALUE 'd'
 
 statement ok
@@ -408,7 +408,7 @@ subtest add_drop_same_value_in_txn
 statement ok
 CREATE TYPE a AS ENUM('a')
 
-statement error enum label "b" is being added, try again later
+statement error enum value "b" is being added, try again later
 BEGIN;
 ALTER TYPE a ADD VALUE 'b';
 ALTER TYPE a DROP VALUE 'b';
@@ -416,7 +416,7 @@ ALTER TYPE a DROP VALUE 'b';
 statement ok
 ROLLBACK
 
-statement error enum label "a" is being dropped, try again later
+statement error enum value "a" is being dropped, try again later
 BEGIN;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a ADD VALUE 'a';
@@ -425,7 +425,7 @@ statement ok
 ROLLBACK
 
 
-statement error pq: enum label "a" is already being dropped
+statement error pq: enum value "a" is already being dropped
 BEGIN;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a DROP VALUE 'a'
@@ -435,7 +435,7 @@ ROLLBACK
 
 subtest if_not_exists_in_same_txn
 
-statement error enum label "a" is being dropped, try again later
+statement error enum value "a" is being dropped, try again later
 BEGIN;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a ADD VALUE IF NOT EXISTS 'a';
@@ -451,7 +451,7 @@ COMMIT
 
 subtest add_rename_in_same_txn
 
-statement error enum label "c" is being added, try again later
+statement error enum value "c" is being added, try again later
 BEGIN;
 ALTER TYPE a ADD VALUE 'c';
 ALTER TYPE a RENAME VALUE 'c' TO 'new_name';
@@ -461,7 +461,7 @@ ROLLBACK
 
 subtest drop_rename_in_same_txn
 
-statement error enum label "a" is being dropped
+statement error enum value "a" is being dropped
 BEGIN;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a RENAME VALUE 'a' TO 'new_name';

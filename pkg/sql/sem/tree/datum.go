@@ -4015,7 +4015,7 @@ func MakeDEnumFromLogicalRepresentation(typ *types.T, rep string) (*DEnum, error
 	// representation. This is to ensure that it will not be written until all
 	// nodes in the cluster are able to decode the physical representation.
 	if typ.TypeMeta.EnumData.IsMemberReadOnly[idx] {
-		return nil, errors.Newf("enum label %q is not yet public", rep)
+		return nil, errors.Newf("enum value %q is not yet public", rep)
 	}
 	return &DEnum{
 		EnumTyp:     typ,
