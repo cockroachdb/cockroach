@@ -88,17 +88,21 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	sip := &streamIngestionProcessor{
 		flowCtx:  flowCtx,
 		spec:     spec,
 		output:   output,
 		curBatch: make([]storage.MVCCKeyValue, 0),
-		client:   streamclient.NewStreamClient(),
+		client:   streamClient,
 	}
 
 	evalCtx := flowCtx.EvalCtx
 	db := flowCtx.Cfg.DB
-	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(sip.Ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
 	if err != nil {

@@ -8,9 +8,16 @@
 
 package streamingccl
 
+import "net/url"
+
 // StreamAddress is the location of the stream. The topology of a stream should
 // be resolvable given a stream address.
 type StreamAddress string
+
+// URL parses the stream address as a URL.
+func (sa StreamAddress) URL() (*url.URL, error) {
+	return url.Parse(string(sa))
+}
 
 // PartitionAddress is the address where the stream client should be able to
 // read the events produced by a partition of a stream.

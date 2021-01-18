@@ -20,11 +20,6 @@ type client struct{}
 
 var _ Client = &client{}
 
-// NewStreamClient returns a new mock stream client.
-func NewStreamClient() Client {
-	return &client{}
-}
-
 // GetTopology implements the Client interface.
 func (m *client) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topology, error) {
 	return streamingccl.Topology{
