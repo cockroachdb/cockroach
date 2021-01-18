@@ -741,3 +741,11 @@ at or near "detached": syntax error: detached option specified multiple times
 DETAIL: source SQL:
 RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
                                                           ^
+
+error
+SELECT ARRAY[]::unknown[]
+----
+at or near "EOF": syntax error: type unknown[] does not exist
+DETAIL: source SQL:
+SELECT ARRAY[]::unknown[]
+                         ^
