@@ -1059,13 +1059,19 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
-			if err != nil {
-				return nil, err
-			}
-			return desc, nil
-		})
+		dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx, txn, scTable.GetParentID(), tree.DatabaseLookupFlags{})
+		if err != nil {
+			return err
+		}
+		referencedTypeIDs, err = scTable.GetAllReferencedTypeIDs(dbDesc,
+			func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+				if err != nil {
+					return nil, err
+				}
+				return desc, nil
+			})
 		if err != nil {
 			return err
 		}
@@ -1269,7 +1275,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				// For locality swaps, ensure the table descriptor fields are correctly filled.
 				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					scTable.LocalityConfig = &lcSwap.NewLocalityConfig
+					if err := setNewLocalityConfig(
+						ctx, scTable, txn, b, lcSwap.NewLocalityConfig, kvTrace, descsCol); err != nil {
+						return err
+					}
 					switch lcSwap.NewLocalityConfig.Locality.(type) {
 					case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 						scTable.PartitionAllBy = true
@@ -1370,13 +1379,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
-				if err != nil {
-					return nil, err
-				}
-				return typ, err
-			})
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(dbDesc,
+				func(id descpb.ID) (catalog.TypeDescriptor, error) {
+					typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+					if err != nil {
+						return nil, err
+					}
+					return typ, err
+				})
 			if err != nil {
 				return err
 			}
