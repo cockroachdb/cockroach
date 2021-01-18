@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -95,8 +94,8 @@ func (p *planner) checkCanAlterDatabaseAndSetNewOwner(
 	privs := desc.GetPrivileges()
 	privs.SetOwner(newOwner)
 
-	// Log Alter Database Owner event. This is an auditable log event and is recorded
-	// in the same transaction as the table descriptor update.
+	// Log Alter Database Owner event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
 	return p.logEvent(ctx,
 		desc.GetID(),
 		&eventpb.AlterDatabaseOwner{
@@ -160,7 +159,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// Add the region to the database descriptor. This function validates that the region
 	// we're adding is an active member of the cluster and isn't already present in the
 	// RegionConfig.
-	if err := params.p.addRegionToRegionConfig(n.desc, n.n); err != nil {
+	if err := params.p.addActiveRegionToRegionConfig(n.desc, n.n); err != nil {
 		return err
 	}
 
@@ -233,9 +232,9 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Log Alter Database Add Region event. This is an auditable log event and is recorded
-	// in the same transaction as the database descriptor, type descriptor, and zone
-	// configuration updates.
+	// Log Alter Database Add Region event. This is an auditable log event and is
+	// recorded in the same transaction as the database descriptor, type
+	// descriptor, and zone configuration updates.
 	return params.p.logEvent(params.ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabaseAddRegion{
@@ -248,6 +247,11 @@ func (n *alterDatabaseAddRegionNode) Next(runParams) (bool, error) { return fals
 func (n *alterDatabaseAddRegionNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
 
+type alterDatabaseDropRegionNode struct {
+	n    *tree.AlterDatabaseDropRegion
+	desc *dbdesc.Mutable
+}
+
 // AlterDatabaseDropRegion transforms a tree.AlterDatabaseDropRegion into a plan node.
 func (p *planner) AlterDatabaseDropRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropRegion,
@@ -259,13 +263,80 @@ func (p *planner) AlterDatabaseDropRegion(
 	); err != nil {
 		return nil, err
 	}
-	return nil, unimplemented.New("alter database drop region", "implementation pending")
+	_, dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, n.Name.String(),
+		tree.DatabaseLookupFlags{Required: true})
+	if err != nil {
+		return nil, err
+	}
+
+	if !dbDesc.IsMultiRegion() {
+		return nil, errors.New("database has no regions to drop")
+	}
+
+	if dbDesc.RegionConfig.PrimaryRegion == descpb.RegionName(n.Region) {
+		return nil, errors.WithHint(
+			errors.Newf("cannot drop primary region %q", dbDesc.RegionConfig.PrimaryRegion),
+			"you must designate another region as the primary region or remove all other regions "+
+				"before attempting to drop the primary region",
+		)
+	}
+
+	return &alterDatabaseDropRegionNode{n, dbDesc}, nil
 }
 
 type alterDatabasePrimaryRegionNode struct {
 	n    *tree.AlterDatabasePrimaryRegion
 	desc *dbdesc.Mutable
 }
+
+func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+		return err
+	}
+
+	idx := -1
+	for i, region := range n.desc.RegionConfig.Regions {
+		if region.Name == descpb.RegionName(n.n.Region) {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return errors.Newf("could not find region %s on the database", n.n.Region)
+	}
+	n.desc.RegionConfig.Regions = append(n.desc.RegionConfig.Regions[:idx],
+		n.desc.RegionConfig.Regions[idx+1:]...)
+
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Log Alter Database Drop Region event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	return params.p.logEvent(params.ctx,
+		n.desc.GetID(),
+		&eventpb.AlterDatabaseDropRegion{
+			DatabaseName: n.desc.GetName(),
+			RegionName:   n.n.Region.String(),
+		})
+}
+
+func (n *alterDatabaseDropRegionNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseDropRegionNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseDropRegionNode) Close(context.Context)        {}
 
 // AlterDatabasePrimaryRegion transforms a tree.AlterDatabasePrimaryRegion into a plan node.
 func (p *planner) AlterDatabasePrimaryRegion(
@@ -413,8 +484,9 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 		}
 	}
 
-	// Log Alter Database Primary Region event. This is an auditable log event and is recorded
-	// in the same transaction as the database descriptor, and zone configuration updates.
+	// Log Alter Database Primary Region event. This is an auditable log event and
+	// is recorded in the same transaction as the database descriptor, and zone
+	// configuration updates.
 	return params.p.logEvent(params.ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabasePrimaryRegion{
@@ -520,8 +592,9 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Log Alter Database Survival Goal event. This is an auditable log event and is recorded
-	// in the same transaction as the database descriptor, and zone configuration updates.
+	// Log Alter Database Survival Goal event. This is an auditable log event and
+	// is recorded in the same transaction as the database descriptor, and zone
+	// configuration updates.
 	return params.p.logEvent(params.ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabaseSurvivalGoal{

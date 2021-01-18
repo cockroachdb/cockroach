@@ -932,6 +932,10 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 	for id := range ids {
 		result = append(result, id)
 	}
+
+	if desc.LocalityConfig != nil {
+		result = append(result, desc.LocalityConfig.RegionEnumID)
+	}
 	// Sort the output so that the order is deterministic.
 	sort.Sort(result)
 	return result, nil

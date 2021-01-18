@@ -116,7 +116,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 			err = pgerror.DangerousStatementf(
 				"DROP VALUE is unsafe if the enum label is used in view/default/computed expressions")
 		} else {
-			err = params.p.dropEnumValue(params.ctx, n, t)
+			err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
 		}
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
@@ -179,18 +179,19 @@ func (p *planner) addEnumValue(
 }
 
 func (p *planner) dropEnumValue(
-	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeDropValue,
+	ctx context.Context, desc *typedesc.Mutable, val tree.EnumValue,
 ) error {
-	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
-		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	if desc.Kind != descpb.TypeDescriptor_ENUM &&
+		desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 
-	if !enumValueExists(n.desc, node.Val) {
-		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", node.Val)
+	if !enumValueExists(desc, val) {
+		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", val)
 	}
 
-	n.desc.DropEnumValue(node.Val)
-	return p.writeTypeSchemaChange(ctx, n.desc, tree.AsStringWithFQNames(n.n, p.Ann()))
+	desc.DropEnumValue(val)
+	return p.writeTypeSchemaChange(ctx, desc, desc.Name)
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {

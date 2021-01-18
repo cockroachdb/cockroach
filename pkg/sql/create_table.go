@@ -384,6 +384,21 @@ func (n *createTableNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
+		// Save the back-reference of the table on the multi-region enum.
+		typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+			params.ctx,
+			params.p.txn,
+			dbDesc.RegionConfig.RegionEnumID,
+		)
+		if err != nil {
+			return errors.Wrap(err, "error resolving multi-region enum")
+		}
+		typeDesc.AddReferencingDescriptorID(desc.ID)
+		err = params.p.writeTypeSchemaChange(
+			params.ctx, typeDesc, "add regional by table back reference")
+		if err != nil {
+			return errors.Wrap(err, "error adding backreference to multi-region enum")
+		}
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
@@ -1313,7 +1328,7 @@ func NewTableDesc(
 	vt resolver.SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
+	parentID, parentSchemaID, id, regionEnumID descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -2103,6 +2118,7 @@ func NewTableDesc(
 
 	if n.Locality != nil {
 		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+		desc.LocalityConfig.RegionEnumID = regionEnumID
 		switch n.Locality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
 			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
@@ -2195,6 +2211,20 @@ func newTableDesc(
 		}
 	}
 
+	regionEnumID := descpb.InvalidID
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if dbDesc.IsMultiRegion() {
+		regionEnumID, err = dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// We need to run NewTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
@@ -2209,6 +2239,7 @@ func newTableDesc(
 			parentID,
 			parentSchemaID,
 			id,
+			regionEnumID,
 			creationTime,
 			privileges,
 			affected,
