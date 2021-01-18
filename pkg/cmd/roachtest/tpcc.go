@@ -38,6 +38,7 @@ type tpccSetupType int
 const (
 	usingImport tpccSetupType = iota
 	usingInit
+	usingExistingData // skips import
 )
 
 type tpccOptions struct {
@@ -46,19 +47,16 @@ type tpccOptions struct {
 	ExtraSetupArgs string
 	Chaos          func() Chaos                // for late binding of stopper
 	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration
+	Duration       time.Duration               // if zero, TPCC is not invoked
 	SetupType      tpccSetupType
-
-	// The CockroachDB versions to deploy. The first one indicates the first node,
-	// etc. To use the main binary, specify "". When Versions is nil, it defaults
-	// to "" for all nodes. When it is specified, len(Versions) needs to match the
-	// number of CRDB nodes in the cluster.
+	// If specified, called to stage+start cockroach. If not
+	// specified, defaults to uploading the default binary to
+	// all nodes, and starting it on all but the last node.
 	//
-	// TODO(tbg): for better coverage at scale of the migration process, we
-	// should also be doing a rolling-restart into the new binary while the
-	// cluster is running, but that feels like jamming too much into the tpcc
-	// setup.
-	Versions []string
+	// TODO(tbg): for better coverage at scale of the migration process, we should
+	// also be doing a rolling-restart into the new binary while the cluster
+	// is running, but that feels like jamming too much into the tpcc setup.
+	Start func(context.Context, *test, *cluster)
 }
 
 // tpccImportCmd generates the command string to load tpcc data for the
@@ -70,8 +68,14 @@ type tpccOptions struct {
 // instance to ensure that the workload version matches the gateway version in a
 // mixed version cluster.
 func tpccImportCmd(warehouses int, extraArgs ...string) string {
-	return fmt.Sprintf("./cockroach workload fixtures import tpcc --warehouses=%d %s",
-		warehouses, strings.Join(extraArgs, " "))
+	return tpccImportCmdWithCockroachBinary("./cockroach", warehouses, extraArgs...)
+}
+
+func tpccImportCmdWithCockroachBinary(
+	crdbBinary string, warehouses int, extraArgs ...string,
+) string {
+	return fmt.Sprintf("./%s workload fixtures import tpcc --warehouses=%d %s",
+		crdbBinary, warehouses, strings.Join(extraArgs, " "))
 }
 
 func setupTPCC(
@@ -85,36 +89,26 @@ func setupTPCC(
 		opts.Warehouses = 1
 	}
 
-	if n := len(opts.Versions); n == 0 {
-		opts.Versions = make([]string, c.spec.NodeCount-1)
-	} else if n != c.spec.NodeCount-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
-	}
-
-	{
-		var regularNodes []option
-		for i, v := range opts.Versions {
-			if v == "" {
-				regularNodes = append(regularNodes, c.Node(i+1))
-			} else {
-				if err := c.Stage(ctx, c.l, "release", v, "", c.Node(i+1)); err != nil {
-					t.Fatal(err)
-				}
-			}
+	if opts.Start == nil {
+		opts.Start = func(ctx context.Context, t *test, c *cluster) {
+			// NB: workloadNode also needs ./cockroach because
+			// of `./cockroach workload` for usingImport.
+			c.Put(ctx, cockroach, "./cockroach", c.All())
+			// We still use bare workload, though we could likely replace
+			// those with ./cockroach workload as well.
+			c.Put(ctx, workload, "./workload", workloadNode)
+			c.Start(ctx, t, crdbNodes)
 		}
-		c.Put(ctx, cockroach, "./cockroach", regularNodes...)
 	}
-
-	// Fixture import needs ./cockroach workload on workloadNode.
-	c.Put(ctx, cockroach, "./cockroach", workloadNode)
-	c.Put(ctx, workload, "./workload", workloadNode)
 
 	func() {
+		opts.Start(ctx, t, c)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
-		c.Start(ctx, t, crdbNodes)
 		waitForFullReplication(t, c.Conn(ctx, crdbNodes[0]))
 		switch opts.SetupType {
+		case usingExistingData:
+			// Do nothing.
 		case usingImport:
 			t.Status("loading fixture")
 			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
@@ -141,7 +135,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
-		opts.Duration = time.Minute
+		if opts.Duration > time.Minute {
+			opts.Duration = time.Minute
+		}
 		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
@@ -150,7 +146,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
-			"./workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
+			"./cockroach workload run tpcc --warehouses=%d --histograms="+perfArtifactsDir+"/stats.json "+
 				opts.ExtraRunArgs+" --ramp=%s --duration=%s {pgurl:1-%d}",
 			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
@@ -166,7 +162,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	m.Wait()
 
 	c.Run(ctx, workloadNode, fmt.Sprintf(
-		"./workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+		"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
 }
 
 // tpccSupportedWarehouses returns our claim for the maximum number of tpcc
@@ -236,14 +232,13 @@ func registerTPCC(r *testRegistry) {
 	})
 	mixedHeadroomSpec := makeClusterSpec(5, cpu(16))
 
-	// TODO(tbg): rewrite and extend this using the harness in versionupgrade.go.
 	r.Add(testSpec{
-		// mixed-headroom is similar to w=headroom, but with an additional node
-		// and on a mixed version cluster. It simulates a real production
+		// mixed-headroom is similar to w=headroom, but with an additional
+		// node and on a mixed version cluster which runs its long-running
+		// migrations while TPCC runs. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
-		Name:       "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Owner:      OwnerKV,
-		MinVersion: "v19.1.0",
+		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		Owner: OwnerKV,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		Tags:    []string{`default`},
@@ -255,18 +250,55 @@ func registerTPCC(r *testRegistry) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Make a git tag out of the version.
-			oldV = "v" + oldV
-			t.l.Printf("computed headroom warehouses of %d; running mixed with %s\n", headroomWarehouses, oldV)
-			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: headroomWarehouses,
-				Duration:   120 * time.Minute,
-				Versions:   []string{oldV, "", oldV, ""},
-				SetupType:  usingImport,
-			})
-			// TODO(tbg): run another TPCC with the final binaries here and
-			// teach TPCC to re-use the dataset (seems easy enough) to at least
-			// somewhat test the full migration at scale?
+
+			crdbNodes := c.Range(1, 4)
+			workloadNode := c.Node(5)
+
+			// We'll need this below.
+			tpccBackgroundStepper := backgroundStepper{
+				nodes: crdbNodes,
+				run: func(ctx context.Context, u *versionUpgradeTest) error {
+					const duration = 120 * time.Minute
+					c.l.Printf("running background TPCC workload")
+					runTPCC(ctx, t, c, tpccOptions{
+						Warehouses: headroomWarehouses,
+						Duration:   duration,
+						SetupType:  usingExistingData,
+						Start: func(ctx context.Context, t *test, c *cluster) {
+							// Noop - we don't let tpcc upload or start binaries in this test.
+						},
+					})
+					return nil
+				}}
+			const (
+				mainBinary = ""
+				n1         = 1
+			)
+
+			newVersionUpgradeTest(c,
+				uploadAndStartFromCheckpointFixture(crdbNodes, oldV),
+				waitForUpgradeStep(crdbNodes), // let predecessor version settle (gossip etc)
+				preventAutoUpgradeStep(n1),
+				// Load TPCC dataset, don't run TPCC yet. We do this while in the old
+				// version to load some data and hopefully create some state that will
+				// need work by long-running migrations.
+				importTPCCStep(oldV, headroomWarehouses, crdbNodes),
+				// Upload and restart cluster into the new
+				// binary (stays at old cluster version).
+				binaryUpgradeStep(crdbNodes, mainBinary),
+				uploadVersion(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
+				// Now start running TPCC in the background.
+				tpccBackgroundStepper.launch,
+				// While tpcc is running in the background, bump the cluster
+				// version manually. We do this over allowing automatic upgrades
+				// to get a better idea of what errors come back here, if any.
+				// This will block until the long-running migrations have run.
+				allowAutoUpgradeStep(n1),
+				setClusterSettingVersionStep,
+				// Wait until TPCC background run terminates
+				// and fail if it reports an error.
+				tpccBackgroundStepper.stop,
+			).run(ctx, t)
 		},
 	})
 	r.Add(testSpec{
@@ -648,7 +680,7 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
-	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
+	cmd = fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
 		"--wait=false --duration=%s --scatter --tolerate-errors {pgurl%s}",
 		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
@@ -809,7 +841,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
-				cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
+				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s}",
 					b.LoadWarehouses, activeWarehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways)
