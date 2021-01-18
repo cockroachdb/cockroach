@@ -30,13 +30,15 @@ type streamIngestionResumer struct {
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	streamAddress streamingccl.PartitionAddress,
+	streamAddress streamingccl.StreamAddress,
 	job *jobs.Job,
 ) error {
 	// Initialize a stream client and resolve topology.
-	client := streamclient.NewStreamClient()
-	sa := streamingccl.StreamAddress(streamAddress)
-	topology, err := client.GetTopology(sa)
+	client, err := streamclient.NewStreamClient(streamAddress)
+	if err != nil {
+		return err
+	}
+	topology, err := client.GetTopology(streamAddress)
 	if err != nil {
 		return err
 	}
@@ -73,7 +75,7 @@ func (s *streamIngestionResumer) Resume(
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, streamingccl.PartitionAddress(details.StreamAddress), s.job)
+	err := ingest(ctx, p, details.StreamAddress, s.job)
 	if err != nil {
 		return err
 	}
