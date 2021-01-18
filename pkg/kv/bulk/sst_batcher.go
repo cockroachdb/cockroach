@@ -143,7 +143,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
+	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && b.disallowShadowing {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
 		}

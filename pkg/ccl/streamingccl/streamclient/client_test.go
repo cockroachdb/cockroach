@@ -10,6 +10,7 @@ package streamclient
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -89,9 +90,15 @@ func TestExampleClientUsage(t *testing.T) {
 // Ensure that all implementations specified in this test properly close the
 // eventChannel when the given context is canceled.
 func TestImplementationsCloseChannel(t *testing.T) {
+	streamURL, err := url.Parse("test://52")
+	require.NoError(t, err)
+	randomClient, err := newRandomStreamClient(streamURL)
+	require.NoError(t, err)
+
 	// TODO: Add SQL client and file client here when implemented.
 	impls := []Client{
 		&client{},
+		randomClient,
 	}
 
 	for _, impl := range impls {
