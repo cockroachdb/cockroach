@@ -2152,11 +2152,6 @@ func NewTableDesc(
 	}
 
 	if n.Locality != nil {
-		db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
-		if err != nil {
-			return nil, errors.Wrap(err, "error fetching database descriptor for locality checks")
-		}
-
 		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
 		switch n.Locality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -2184,11 +2179,8 @@ func NewTableDesc(
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
 		}
 
-		if err := tabledesc.ValidateTableLocalityConfig(
-			n.Table.Table(),
-			desc.LocalityConfig,
-			db,
-		); err != nil {
+		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
+		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
 			return nil, err
 		}
 	}

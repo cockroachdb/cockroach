@@ -1368,16 +1368,14 @@ func (desc *wrapper) validateCrossReferences(ctx context.Context, dg catalog.Des
 		if err != nil {
 			return err
 		}
-		db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+		_, isDB := dbDesc.(catalog.DatabaseDescriptor)
 
 		if !isDB {
 			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 		}
 
-		if desc.LocalityConfig != nil {
-			if err := ValidateTableLocalityConfig(desc.Name, desc.LocalityConfig, db); err != nil {
-				return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
-			}
+		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
+			return errors.AssertionFailedf("invalid locality config: %v", errors.Safe(err))
 		}
 	}
 
@@ -1697,19 +1695,33 @@ func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree
 	return nil
 }
 
-// ValidateTableLocalityConfig validates whether a given locality config is valid
-// under the given database.
-func ValidateTableLocalityConfig(
-	tblName string,
-	localityConfig *descpb.TableDescriptor_LocalityConfig,
-	db catalog.DatabaseDescriptor,
-) error {
+// ValidateTableLocalityConfig validates whether the descriptor's locality
+// config is valid under the given database.
+func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog.DescGetter) error {
+	// There's no validation to do if the locality config is unset. It's worth
+	// noting that this may be the case even if the enclosing database is a
+	// multi-region DB. This is because tables inside are assumed to Regional By
+	// Table tables homed in the primary region if no locality was set explicitly
+	// or the table was created before the first region was added.
+	if desc.LocalityConfig == nil {
+		return nil
+	}
+
+	dbDesc, err := dg.GetDesc(ctx, desc.ParentID)
+	if err != nil {
+		return err
+	}
+	db, isDB := dbDesc.(catalog.DatabaseDescriptor)
+	if !isDB {
+		return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+	}
+
 	if !db.IsMultiRegion() {
 		s := tree.NewFmtCtx(tree.FmtSimple)
 		var locality string
 		// This should never happen; if so, the error message is more clear if we
 		// return a dummy locality here.
-		if err := FormatTableLocalityConfig(localityConfig, s); err != nil {
+		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
 			locality = "INVALID LOCALITY"
 		}
 		locality = s.String()
@@ -1717,16 +1729,31 @@ func ValidateTableLocalityConfig(
 			pgcode.InvalidTableDefinition,
 			"database %s is not multi-region enabled, but table %s has locality %s set",
 			db.DatabaseDesc().Name,
-			tblName,
+			desc.Name,
 			locality,
 		)
 	}
-	switch lc := localityConfig.Locality.(type) {
+
+	regionsEnumID, err := db.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	regionsEnum, err := dg.GetDesc(ctx, regionsEnumID)
+	if err != nil {
+		return err
+	}
+	regionsEnumDesc, isTypeDesc := regionsEnum.(catalog.TypeDescriptor)
+	if !isTypeDesc {
+		return errors.AssertionFailedf("region enum with ID %d does not exist",
+			errors.Safe(regionsEnumID))
+	}
+
+	switch lc := desc.LocalityConfig.Locality.(type) {
 	case *descpb.TableDescriptor_LocalityConfig_Global_, *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := db.Regions()
+			regions, err := regionsEnumDesc.Regions()
 			if err != nil {
 				return err
 			}
