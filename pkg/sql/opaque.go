@@ -265,6 +265,7 @@ func init() {
 		&tree.CreateChangefeed{},
 		&tree.Import{},
 		&tree.ScheduledBackup{},
+		&tree.StreamIngestion{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

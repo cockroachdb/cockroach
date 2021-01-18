@@ -1720,6 +1720,9 @@ func TestParse(t *testing.T) {
 
 		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
+		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'`},
+		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1`},
+
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
 		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached`},
 

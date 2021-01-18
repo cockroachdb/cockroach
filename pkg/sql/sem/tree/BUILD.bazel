@@ -76,6 +76,7 @@ go_library(
         "split.go",
         "statementtype_string.go",
         "stmt.go",
+        "stream_ingestion.go",
         "survival_goal.go",
         "table_name.go",
         "table_pattern.go",
