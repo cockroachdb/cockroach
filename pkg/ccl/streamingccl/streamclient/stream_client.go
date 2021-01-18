@@ -15,20 +15,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 )
 
-// client is a mock stream client.
-type client struct{}
+// mockClient is a mock stream client.
+type mockClient struct{}
 
-var _ Client = &client{}
+var _ Client = &mockClient{}
 
 // GetTopology implements the Client interface.
-func (m *client) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topology, error) {
+func (m *mockClient) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topology, error) {
 	return streamingccl.Topology{
 		Partitions: []streamingccl.PartitionAddress{"some://address"},
 	}, nil
 }
 
 // ConsumePartition implements the Client interface.
-func (m *client) ConsumePartition(
+func (m *mockClient) ConsumePartition(
 	ctx context.Context, _ streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
 	eventCh := make(chan streamingccl.Event)

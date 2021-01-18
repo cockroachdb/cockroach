@@ -97,7 +97,7 @@ func TestImplementationsCloseChannel(t *testing.T) {
 
 	// TODO: Add SQL client and file client here when implemented.
 	impls := []Client{
-		&client{},
+		&mockClient{},
 		randomClient,
 	}
 
