@@ -98,12 +98,16 @@ func (s *crdbSpan) recordingType() RecordingType {
 // If separate recording is specified, the child is not registered with the
 // parent. Thus, the parent's recording will not include this child.
 func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.recording.recordingType.swap(recType)
 	if parent != nil {
 		parent.addChild(s)
 	}
+	if recType == RecordingOff {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.recording.recordingType.swap(recType)
 	if recType == RecordingVerbose {
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
