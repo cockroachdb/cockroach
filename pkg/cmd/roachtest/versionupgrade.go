@@ -219,6 +219,10 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 			u.conns = append(u.conns, u.c.Conn(ctx, i))
 		}
 	}
+	db := u.conns[i-1]
+	// Run a trivial query to shake out errors that can occur when the server has
+	// restarted in the meantime.
+	_, _ = db.ExecContext(ctx, `SELECT 1`)
 	return u.conns[i-1]
 }
 
