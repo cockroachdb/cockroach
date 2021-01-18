@@ -262,17 +262,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				}
 			}
 			// Next, deal with all the members that need to be removed from the slice.
-			idx := 0
-			for _, member := range typeDesc.EnumMembers {
-				if t.isTransitioningInCurrentJob(&member) && enumMemberIsRemoving(&member) {
-					// Truncation logic below will remove all members that need to be
-					// removed.
-					continue
-				}
-				typeDesc.EnumMembers[idx] = member
-				idx++
-			}
-			typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
+			filterEnumMembers(typeDesc, func(member *descpb.TypeDescriptor_EnumMember) bool {
+				return t.isTransitioningInCurrentJob(member) && enumMemberIsRemoving(member)
+			})
 
 			b := txn.NewBatch()
 			if err := descsCol.WriteDescToBatch(
@@ -324,6 +316,24 @@ func (t *typeSchemaChanger) isTransitioningInCurrentJob(
 	return false
 }
 
+// filterEnumMembers modifies the supplied typeDesc by removing all enum members
+// as dictated by shouldRemove.
+func filterEnumMembers(
+	typeDesc *typedesc.Mutable, shouldRemove func(member *descpb.TypeDescriptor_EnumMember) bool,
+) {
+	idx := 0
+	for _, member := range typeDesc.EnumMembers {
+		if shouldRemove(&member) {
+			// By not updating the index, the truncation logic below will remove
+			// this label from the list of members.
+			continue
+		}
+		typeDesc.EnumMembers[idx] = member
+		idx++
+	}
+	typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
+}
+
 // cleanupEnumLabels performs cleanup if any of the enum label transitions
 // fails. In particular:
 // 1. If an enum label was being added as part of this txn, we remove it
@@ -337,6 +347,7 @@ func (t *typeSchemaChanger) cleanupEnumLabels(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		b := txn.NewBatch()
 		// No cleanup required.
 		if !enumHasNonPublic(&typeDesc.Immutable) {
 			return nil
@@ -348,23 +359,33 @@ func (t *typeSchemaChanger) cleanupEnumLabels(ctx context.Context) error {
 			if t.isTransitioningInCurrentJob(member) && enumMemberIsRemoving(member) {
 				member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 				member.Direction = descpb.TypeDescriptor_EnumMember_NONE
+
+				if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+					dbDesc, err := descsCol.GetMutableDatabaseByID(
+						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+					if err != nil {
+						return err
+					}
+					err = addRegionToRegionConfig(dbDesc, descpb.RegionName(member.LogicalRepresentation))
+					if err != nil {
+						return err
+					}
+					if err := dbDesc.Validate(); err != nil {
+						return errors.Wrapf(err, "could not re-add region to the db desc")
+					}
+
+					if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		// Now deal with all members that we initially hoped to add but now need
 		// to be removed from the descriptor.
-		idx := 0
-		for _, member := range typeDesc.EnumMembers {
-			if t.isTransitioningInCurrentJob(&member) && enumMemberIsAdding(&member) {
-				// By not updating the index, the truncation logic below will remove
-				// this label from the list of members.
-				continue
-			}
-			typeDesc.EnumMembers[idx] = member
-			idx++
-		}
-		typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
+		filterEnumMembers(typeDesc, func(member *descpb.TypeDescriptor_EnumMember) bool {
+			return t.isTransitioningInCurrentJob(member) && enumMemberIsAdding(member)
+		})
 
-		b := txn.NewBatch()
 		if err := descsCol.WriteDescToBatch(
 			ctx, true /* kvTrace */, typeDesc, b,
 		); err != nil {
@@ -432,32 +453,52 @@ func (t *typeSchemaChanger) canRemoveEnumLabel(
 		}
 		query.WriteString(" LIMIT 1")
 
-		// We need to override the internal executors current database (which would
-		// be unset by default) when executing the query constructed above. This is
-		// because the enum label may be used in a view expression, which is
-		// name resolved in the context of the type's database.
-		dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
-		if err != nil {
-			return errors.Wrapf(err,
-				"could not validate enum value removal for %q", member.LogicalRepresentation)
+		// NB: A type descriptor reference does not imply a column in the table uses
+		// the type whose value is being removed, the notable exception being multi
+		// region tables which have locality set at the table level. In this case,
+		// no valid query is constructed and there's nothing to execute. The
+		// validation for them is handled as a special case below.
+		if !firstClause {
+			// We need to override the internal executors current database (which would
+			// be unset by default) when executing the query constructed above. This is
+			// because the enum label may be used in a view expression, which is
+			// name resolved in the context of the type's database.
+			dbDesc, err := descsCol.GetImmutableDatabaseByID(
+				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+			if err != nil {
+				return errors.Wrapf(err,
+					"could not validate enum value removal for %q", member.LogicalRepresentation)
+			}
+			override := sessiondata.InternalExecutorOverride{
+				User:     security.RootUserName(),
+				Database: dbDesc.Name,
+			}
+			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
+			if err != nil {
+				return errors.Wrapf(err,
+					"could not validate enum value removal for %q", member.LogicalRepresentation)
+			}
+			// Check if the above query returned a result. If it did, then the
+			// enum value is being used by some place.
+			if len(rows) > 0 {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used by %q in row: %s",
+					member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.GetPublicColumns(), rows))
+			}
 		}
-		override := sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
-			Database: dbDesc.Name,
-		}
-		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
-			ctx, "count-value-usage", txn, override, query.String())
-		if err != nil {
-			return errors.Wrapf(err,
-				"could not validate enum value removal for %q", member.LogicalRepresentation)
-		}
-		// Check if the above query returned a result. If it did, then the
-		// enum value is being used by some place.
-		if len(rows) > 0 {
-			return pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"could not remove enum value %q as it is being used by %q in row: %s",
-				member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.GetPublicColumns(), rows))
+
+		// If the type descriptor is a multi-region enum and the table descriptor
+		// belongs to a regional (by table) table, we disallow dropping the region
+		// if it is being used as the homed region for that table.
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM && desc.IsLocalityRegionalByTable() {
+			homedRegion, err := desc.GetRegionalByTableRegion()
+			if err != nil {
+				return err
+			}
+			if descpb.RegionName(member.LogicalRepresentation) == homedRegion {
+				return errors.Newf("could not remove enum value %q as it is being used by %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
 		}
 	}
 	// We have ascertained that the value is not in use, and can therefore be

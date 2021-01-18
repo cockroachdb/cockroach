@@ -114,10 +114,10 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeDropValue:
 		if params.p.SessionData().SafeUpdates {
 			err = pgerror.DangerousStatementf(
-				"DROP VALUE is may cause view/default/computed expressions to stop working if the " +
+				"DROP VALUE may cause view/default/computed expressions to stop working if the " +
 					"enum label is used inside them")
 		} else {
-			err = params.p.dropEnumValue(params.ctx, n, t)
+			err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
 		}
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
@@ -187,28 +187,29 @@ func (p *planner) addEnumValue(
 }
 
 func (p *planner) dropEnumValue(
-	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeDropValue,
+	ctx context.Context, desc *typedesc.Mutable, val tree.EnumValue,
 ) error {
-	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
-		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	if desc.Kind != descpb.TypeDescriptor_ENUM &&
+		desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 
-	found, member := findMemberByName(n.desc, node.Val)
+	found, member := findMemberByName(desc, val)
 	if !found {
-		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", node.Val)
+		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", val)
 	}
 	// Do not allow drops if the enum label isn't public yet.
 	if enumMemberIsRemoving(member) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is already being dropped", node.Val)
+			"enum label %q is already being dropped", val)
 	}
 	if enumMemberIsAdding(member) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is being added, try again later", node.Val)
+			"enum label %q is being added, try again later", val)
 	}
 
-	n.desc.DropEnumValue(node.Val)
-	return p.writeTypeSchemaChange(ctx, n.desc, tree.AsStringWithFQNames(n.n, p.Ann()))
+	desc.DropEnumValue(val)
+	return p.writeTypeSchemaChange(ctx, desc, desc.Name)
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {

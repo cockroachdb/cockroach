@@ -933,6 +933,10 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 	for id := range ids {
 		result = append(result, id)
 	}
+
+	if desc.LocalityConfig != nil {
+		result = append(result, desc.LocalityConfig.RegionEnumID)
+	}
 	// Sort the output so that the order is deterministic.
 	sort.Sort(result)
 	return result, nil
@@ -4233,12 +4237,26 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 	return desc.LocalityConfig.GetGlobal() != nil
 }
 
+// GetRegionalTableRegion returns the region a regional by table is homed in.
+func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
+	if !desc.IsLocalityRegionalByTable() {
+		return "", errors.New("is not regional by table")
+	}
+	region := desc.LocalityConfig.GetRegionalByTable().Region
+	if region == nil {
+		return descpb.RegionName(tree.PrimaryRegionLocalityName), nil
+	}
+	return *region, nil
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
 // (or its alias PrimaryRegionLocalityName) denotes that the table has affinity
 // to the primary region.
-func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name, regionEnumID descpb.ID) {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
+		RegionEnumID: regionEnumID,
+	}
 	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
 	}
@@ -4252,8 +4270,12 @@ func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
 // SetTableLocalityRegionalByRow sets the descriptor's locality config to
 // regional at the row level. An empty regionColName denotes the default
 // crdb_region partitioning column.
-func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+func (desc *Mutable) SetTableLocalityRegionalByRow(
+	regionColName tree.Name, regionEnumID descpb.ID,
+) {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
+		RegionEnumID: regionEnumID,
+	}
 	rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
 	if regionColName != "" {
 		rbr.As = proto.String(string(regionColName))
@@ -4265,8 +4287,10 @@ func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName tree.Name) {
 
 // SetTableLocalityGlobal sets the descriptor's locality config to a global
 // table.
-func (desc *Mutable) SetTableLocalityGlobal() {
-	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+func (desc *Mutable) SetTableLocalityGlobal(regionEnumID descpb.ID) {
+	desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
+		RegionEnumID: regionEnumID,
+	}
 	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
 		Global: &descpb.TableDescriptor_LocalityConfig_Global{},
 	}

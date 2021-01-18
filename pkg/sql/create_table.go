@@ -382,6 +382,21 @@ func (n *createTableNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
+		// Save the back-reference of the table on the multi-region enum.
+		typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+			params.ctx,
+			params.p.txn,
+			dbDesc.RegionConfig.RegionEnumID,
+		)
+		if err != nil {
+			return errors.Wrap(err, "error resolving multi-region enum")
+		}
+		typeDesc.AddReferencingDescriptorID(desc.ID)
+		err = params.p.writeTypeSchemaChange(
+			params.ctx, typeDesc, "add regional by table back reference")
+		if err != nil {
+			return errors.Wrap(err, "error adding backreference to multi-region enum")
+		}
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
@@ -1415,8 +1430,7 @@ func NewTableDesc(
 	vt resolver.SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
-	regionEnumID descpb.ID,
+	parentID, parentSchemaID, id, regionEnumID descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -2203,13 +2217,13 @@ func NewTableDesc(
 		if n.Locality == nil {
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
-			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName, regionEnumID)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
-			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
+			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion, regionEnumID)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {
-			desc.SetTableLocalityGlobal()
+			desc.SetTableLocalityGlobal(regionEnumID)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelRow {
-			desc.SetTableLocalityRegionalByRow(n.Locality.RegionalByRowColumn)
+			desc.SetTableLocalityRegionalByRow(n.Locality.RegionalByRowColumn, regionEnumID)
 		} else {
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
 		}
