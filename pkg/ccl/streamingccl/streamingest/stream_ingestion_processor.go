@@ -87,12 +87,17 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	sip := &streamIngestionProcessor{
 		flowCtx:  flowCtx,
 		spec:     spec,
 		output:   output,
 		curBatch: make([]storage.MVCCKeyValue, 0),
-		client:   streamclient.NewStreamClient(),
+		client:   streamClient,
 		// TODO: This channel size was chosen arbitrarily.
 		progressCh: make(chan jobspb.ResolvedSpan, 10),
 	}
