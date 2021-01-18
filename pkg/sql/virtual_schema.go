@@ -165,6 +165,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		0, /* parentID */
 		parentSchemaID,
 		id,
+		descpb.InvalidID,
 		startTime, /* creationTime */
 		publicSelectPrivileges,
 		nil,                        /* affected */

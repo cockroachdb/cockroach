@@ -272,6 +272,7 @@ func cleanupEnumLabels(
 ) error {
 	// Cleanup:
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		b := txn.NewBatch()
 		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typeID)
 		if err != nil {
 			return err
@@ -287,6 +288,25 @@ func cleanupEnumLabels(
 			if enumMemberIsRemoving(member) {
 				member.Capability = descpb.TypeDescriptor_EnumMember_ALL
 				member.Direction = descpb.TypeDescriptor_EnumMember_NONE
+
+				if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+					dbDesc, err := descsCol.GetMutableDatabaseByID(
+						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+					if err != nil {
+						return err
+					}
+					err = addRegionToRegionConfig(dbDesc, descpb.RegionName(member.LogicalRepresentation))
+					if err != nil {
+						return err
+					}
+					if err := dbDesc.Validate(); err != nil {
+						return errors.Wrapf(err, "could not re-add region to the db desc")
+					}
+
+					if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		// Now deal with all members that we initially hoped to add but now need
@@ -300,7 +320,6 @@ func cleanupEnumLabels(
 		}
 		typeDesc.EnumMembers = typeDesc.EnumMembers[:idx]
 
-		b := txn.NewBatch()
 		if err := descsCol.WriteDescToBatch(
 			ctx, true /* kvTrace */, typeDesc, b,
 		); err != nil {
@@ -352,26 +371,39 @@ func (t *typeSchemaChanger) canRemoveEnumLabel(
 		}
 		query.WriteString(" LIMIT 1")
 
-		// We need to override the internal executors current database (which would
-		// be unset by default) when executing the query constructed above. This is
-		// because the enum label may be used in a view expression, which is
-		// name resolved in the context of the type's database.
-		dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
-		if err != nil {
-			return false, err
+		// NB: A type descriptor reference does not imply a column in the table uses
+		// the type whose value is being removed, the notable exception being multi
+		// region tables which have locality set at the table level. In this case,
+		// no valid query is constructed and there's nothing to execute. The
+		// validation for them is handled as a special case below.
+		if !firstClause {
+			// We need to override the internal executors current database (which would
+			// be unset by default) when executing the query constructed above. This is
+			// because the enum label may be used in a view expression, which is
+			// name resolved in the context of the type's database.
+			dbDesc, err := descsCol.GetImmutableDatabaseByID(
+				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+			if err != nil {
+				return false, err
+			}
+			override := sessiondata.InternalExecutorOverride{
+				User:     security.RootUserName(),
+				Database: dbDesc.Name,
+			}
+			res, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
+			if err != nil {
+				return false, err
+			}
+			if res != nil {
+				return false, nil
+			}
 		}
-		override := sessiondata.InternalExecutorOverride{
-			User:     security.RootUserName(),
-			Database: dbDesc.Name,
-		}
-		res, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
-		if err != nil {
-			return false, err
-		}
-		// Check if the above query returned a result. If it did, then the
-		// enum value is being used by some place.
-		if res != nil {
+
+		// If the type descriptor is a multi-region enum and the table descriptor
+		// belongs to a regional (by table) table, we forbid dropping the region if
+		// it is being used as the homed region for that table.
+		if desc.GetLocalityConfig() != nil && desc.GetLocalityConfig().GetRegionalByTable() != nil &&
+			*desc.GetLocalityConfig().GetRegionalByTable().Region == descpb.RegionName(member.LogicalRepresentation) {
 			return false, nil
 		}
 	}

@@ -428,6 +428,11 @@ func (e EnumMembers) Less(i, j int) bool {
 }
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
+func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
+	return member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+		member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE
+}
+
 // Validate performs validation on the TypeDescriptor.
 func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
 	// Validate local properties of the descriptor.
@@ -542,7 +547,14 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 				return err
 			}
 
-			if len(desc.EnumMembers) != len(dbRegions) {
+			// Count the number of regions that aren't being dropped.
+			numRegions := 0
+			for _, member := range desc.EnumMembers {
+				if !isBeingDropped(&member) {
+					numRegions++
+				}
+			}
+			if numRegions != len(dbRegions) {
 				return errors.AssertionFailedf(
 					"unexpected number of regions on db desc: %d expected %d",
 					len(dbRegions), len(desc.EnumMembers))
@@ -553,8 +565,11 @@ func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) erro
 				regions[region] = struct{}{}
 			}
 
-			for i := range desc.EnumMembers {
-				enumRegion := descpb.RegionName(desc.EnumMembers[i].LogicalRepresentation)
+			for _, member := range desc.EnumMembers {
+				if isBeingDropped(&member) {
+					continue
+				}
+				enumRegion := descpb.RegionName(member.LogicalRepresentation)
 				if _, ok := regions[enumRegion]; !ok {
 					return errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion)
 				}
