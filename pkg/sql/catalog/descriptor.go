@@ -240,7 +240,7 @@ type TableDescriptor interface {
 
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 	GetAllReferencedTypeIDs(
-		getType func(descpb.ID) (TypeDescriptor, error),
+		databaseDesc DatabaseDescriptor, getType func(descpb.ID) (TypeDescriptor, error),
 	) (descpb.IDs, error)
 
 	Validate(ctx context.Context, txn DescGetter) error
@@ -264,6 +264,7 @@ type TableDescriptor interface {
 	IsLocalityRegionalByRow() bool
 	IsLocalityRegionalByTable() bool
 	IsLocalityGlobal() bool
+	GetRegionalByTableRegion() (descpb.RegionName, error)
 }
 
 // Index is an interface around the index descriptor types.

@@ -114,10 +114,10 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeDropValue:
 		if params.p.SessionData().SafeUpdates {
 			err = pgerror.DangerousStatementf(
-				"DROP VALUE is may cause view/default/computed expressions to stop working if the " +
-					"enum label is used inside them")
+				"DROP VALUE may cause view/default/computed expressions to stop working if the " +
+					"enum value is used inside them")
 		} else {
-			err = params.p.dropEnumValue(params.ctx, n, t)
+			err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
 		}
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
@@ -145,7 +145,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	return nil
 }
 
-func findMemberByName(
+func findEnumMemberByName(
 	desc *typedesc.Mutable, val tree.EnumValue,
 ) (bool, *descpb.TypeDescriptor_EnumMember) {
 	for _, member := range desc.EnumMembers {
@@ -164,20 +164,20 @@ func (p *planner) addEnumValue(
 		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 	// See if the value already exists in the enum or not.
-	found, member := findMemberByName(desc, node.NewVal)
+	found, member := findEnumMemberByName(desc, node.NewVal)
 	if found {
 		if enumMemberIsRemoving(member) {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"enum label %q is being dropped, try again later", node.NewVal)
+				"enum value %q is being dropped, try again later", node.NewVal)
 		}
 		if node.IfNotExists {
 			p.BufferClientNotice(
 				ctx,
-				pgnotice.Newf("enum label %q already exists, skipping", node.NewVal),
+				pgnotice.Newf("enum value %q already exists, skipping", node.NewVal),
 			)
 			return nil
 		}
-		return pgerror.Newf(pgcode.DuplicateObject, "enum label %q already exists", node.NewVal)
+		return pgerror.Newf(pgcode.DuplicateObject, "enum value %q already exists", node.NewVal)
 	}
 
 	if err := desc.AddEnumValue(node); err != nil {
@@ -187,28 +187,29 @@ func (p *planner) addEnumValue(
 }
 
 func (p *planner) dropEnumValue(
-	ctx context.Context, n *alterTypeNode, node *tree.AlterTypeDropValue,
+	ctx context.Context, desc *typedesc.Mutable, val tree.EnumValue,
 ) error {
-	if n.desc.Kind != descpb.TypeDescriptor_ENUM {
-		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.desc.Name)
+	if desc.Kind != descpb.TypeDescriptor_ENUM &&
+		desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", desc.Name)
 	}
 
-	found, member := findMemberByName(n.desc, node.Val)
+	found, member := findEnumMemberByName(desc, val)
 	if !found {
-		return pgerror.Newf(pgcode.UndefinedObject, "enum label %q does not exist", node.Val)
+		return pgerror.Newf(pgcode.UndefinedObject, "enum value %q does not exist", val)
 	}
-	// Do not allow drops if the enum label isn't public yet.
+	// Do not allow drops if the enum value isn't public yet.
 	if enumMemberIsRemoving(member) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is already being dropped", node.Val)
+			"enum value %q is already being dropped", val)
 	}
 	if enumMemberIsAdding(member) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is being added, try again later", node.Val)
+			"enum value %q is being added, try again later", val)
 	}
 
-	n.desc.DropEnumValue(node.Val)
-	return p.writeTypeSchemaChange(ctx, n.desc, tree.AsStringWithFQNames(n.n, p.Ann()))
+	desc.DropEnumValue(val)
+	return p.writeTypeSchemaChange(ctx, desc, desc.Name)
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
@@ -320,23 +321,23 @@ func (p *planner) renameTypeValue(
 			enumMemberIndex = i
 		} else if member.LogicalRepresentation == newVal {
 			return pgerror.Newf(pgcode.DuplicateObject,
-				"enum label %s already exists", newVal)
+				"enum value %s already exists", newVal)
 		}
 	}
 
 	// An enum member with the name oldVal was not found.
 	if enumMemberIndex == -1 {
 		return pgerror.Newf(pgcode.InvalidParameterValue,
-			"%s is not an existing enum label", oldVal)
+			"%s is not an existing enum value", oldVal)
 	}
 
 	if enumMemberIsRemoving(&n.desc.EnumMembers[enumMemberIndex]) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is being dropped", oldVal)
+			"enum value %q is being dropped", oldVal)
 	}
 	if enumMemberIsAdding(&n.desc.EnumMembers[enumMemberIndex]) {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"enum label %q is being added, try again later", oldVal)
+			"enum value %q is being added, try again later", oldVal)
 
 	}
 

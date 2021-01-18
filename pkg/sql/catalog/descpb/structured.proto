@@ -1096,6 +1096,20 @@ message TableDescriptor {
 
   message LocalityConfig {
     option (gogoproto.equal) = true;
+    // REGIONAL BY TABLE tables have an "implicit" bidirectional dependency with
+    // the multi-region enum. The dependency is described "implicit" because
+    // even though no column on the table uses the multi-region type descriptor
+    // to store the homing region, a value from the type descriptor is stored in
+    // the locality config below (when the table is homed in the non-primary
+    // region).
+    // This changes how type dependencies are constructed for table descriptors.
+    // After the introduction of REGIONAL BY TABLE tables, a column on the table
+    // descriptor using a type is no longer a necessary (note it is still a
+    // sufficient) condition to establish a type dependency. As is the case with
+    // adding and dropping columns, this type dependency must be negotiated. As
+    // such, switching locality patterns or adding new locality configs must be
+    // done so that back references to the multi-region type descriptor are
+    // kept sane.
     message RegionalByTable {
       option (gogoproto.equal) = true;
       // Region is set if the table has an affinity with a non-primary region.
