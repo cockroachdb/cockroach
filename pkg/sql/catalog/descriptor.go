@@ -264,6 +264,7 @@ type TableDescriptor interface {
 	IsLocalityRegionalByRow() bool
 	IsLocalityRegionalByTable() bool
 	IsLocalityGlobal() bool
+	GetRegionalByTableRegion() (descpb.RegionName, error)
 }
 
 // Index is an interface around the index descriptor types.

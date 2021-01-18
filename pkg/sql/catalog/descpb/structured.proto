@@ -1100,6 +1100,14 @@ message TableDescriptor {
       option (gogoproto.equal) = true;
       // Region is set if the table has an affinity with a non-primary region.
       optional string region = 1 [(gogoproto.casttype)="RegionName"];
+
+      // RegionEnumID is set if the table table is homed in an explicit region
+      // (and not the primary region). A Regional By Table table doesn't have a
+      // column which uses the multi-region Enum to denote locality, yet, if it
+      // is homed in a (non-primary) region this dependency needs to be
+      // captured. This is done by storing a reference to the MultiRegion enum
+      // in the locality.
+      optional uint32 region_enum_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
     }
     message RegionalByRow {
       option (gogoproto.equal) = true;

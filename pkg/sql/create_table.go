@@ -382,6 +382,24 @@ func (n *createTableNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
+		// Save the reference on the multi-region enum if there is a dependency with
+		// the descriptor.
+		if _, dependencyExists := desc.GetMultiRegionEnumDependencyIfExists(); dependencyExists {
+			typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+				params.ctx,
+				params.p.txn,
+				dbDesc.RegionConfig.RegionEnumID,
+			)
+			if err != nil {
+				return errors.Wrap(err, "error resolving multi-region enum")
+			}
+			typeDesc.AddReferencingDescriptorID(desc.ID)
+			err = params.p.writeTypeSchemaChange(
+				params.ctx, typeDesc, "add regional by table back reference")
+			if err != nil {
+				return errors.Wrap(err, "error adding backreference to multi-region enum")
+			}
+		}
 	}
 
 	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
@@ -1421,8 +1439,7 @@ func NewTableDesc(
 	vt resolver.SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, parentSchemaID, id descpb.ID,
-	regionEnumID descpb.ID,
+	parentID, parentSchemaID, id, regionEnumID descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -2201,9 +2218,9 @@ func NewTableDesc(
 		if n.Locality == nil {
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
-			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName, regionEnumID)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
-			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
+			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion, regionEnumID)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {
 			desc.SetTableLocalityGlobal()
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelRow {
@@ -2627,4 +2644,44 @@ func CreateInheritedPrivilegesFromDBDesc(
 	privs.SetOwner(user)
 
 	return privs
+}
+
+// setTableLocalityToRegionalByTable changes the locality of the given tableDesc
+// to Regional By Table homed in the specified region. It also handles the
+// dependency with the multi-region enum, if one exists.
+func (p *planner) setTableLocalityToRegionalByTable(
+	ctx context.Context, region tree.Name, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
+) error {
+	if _, exists := tableDesc.GetMultiRegionEnumDependencyIfExists(); exists {
+		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		); err != nil {
+			return err
+		}
+	}
+	tableDesc.SetTableLocalityRegionalByTable(region, regionEnumID)
+	if _, existsAfter := tableDesc.GetMultiRegionEnumDependencyIfExists(); existsAfter {
+		return p.addTypeBackReference(
+			ctx, regionEnumID, tableDesc.ID,
+			fmt.Sprintf("add backref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		)
+	}
+	return nil
+}
+
+// setTableLocalityToGlobal changes the locality of the given tableDesc to
+// global. It also removes the dependency to the multi-region enum, if it
+// existed before the locality switch.
+func (p *planner) setTableLocalityToGlobal(
+	ctx context.Context, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
+) error {
+	if _, exists := tableDesc.GetMultiRegionEnumDependencyIfExists(); exists {
+		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		); err != nil {
+			return err
+		}
+	}
+	tableDesc.SetTableLocalityGlobal()
+	return nil
 }
