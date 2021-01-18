@@ -841,6 +841,12 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 	for id := range ids {
 		result = append(result, id)
 	}
+
+	// Regional by table tables ma
+	id, exists := desc.GetMultiRegionEnumDependencyIfExists()
+	if exists {
+		result = append(result, id)
+	}
 	// Sort the output so that the order is deterministic.
 	sort.Sort(result)
 	return result, nil
@@ -1675,6 +1681,7 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
 			regions, err := regionsEnumDesc.RegionNames()
@@ -1697,6 +1704,22 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 					),
 					"available regions: %s",
 					strings.Join(regions.ToStrings(), ", "),
+				)
+			}
+			if lc.RegionalByTable.RegionEnumID != regionsEnumDesc.GetID() {
+				return errors.AssertionFailedf(
+					"expected multi-region enum ID %d to be stored on regional by table locality config, "+
+						"but found %d",
+					regionsEnumDesc.GetID(),
+					lc.RegionalByTable.RegionEnumID,
+				)
+			}
+		} else {
+			if lc.RegionalByTable.RegionEnumID != descpb.InvalidID {
+				return errors.AssertionFailedf(
+					"expected no region Enum ID to be stored on a regional by table homed in the "+
+						"primary region, but found: %d",
+					regionsEnumDesc.GetID(),
 				)
 			}
 		}
@@ -3888,23 +3911,54 @@ func (desc *wrapper) IsLocalityGlobal() bool {
 	return desc.LocalityConfig.GetGlobal() != nil
 }
 
+// GetRegionalTableRegion returns the region a regional by table table is
+// homed in.
+func (desc *wrapper) GetRegionalByTableRegion() (descpb.RegionName, error) {
+	if !desc.IsLocalityRegionalByTable() {
+		return "", errors.New("is not regional by table")
+	}
+	region := desc.LocalityConfig.GetRegionalByTable().Region
+	if region == nil {
+		return descpb.RegionName(tree.PrimaryRegionLocalityName), nil
+	}
+	return *region, nil
+}
+
+// GetMultiRegionEnumDependency returns the ID of the multi-region enum if the
+// given table has an "implicit" dependency on the multi-region enum and a
+// boolean value indicating as such. An implicit dependency exists for regional
+// by table table's which are homed in an explicit region (non-primary region).
+// Even though these tables don't have a column denoting their locality, their
+// region config uses a value from the multi region enum. Thus, any drop
+// validation must honour this implicit dependency.
+func (desc *wrapper) GetMultiRegionEnumDependencyIfExists() (descpb.ID, bool) {
+	if desc.IsLocalityRegionalByTable() {
+		regionEnumID := desc.GetLocalityConfig().GetRegionalByTable().RegionEnumID
+		return regionEnumID, regionEnumID != descpb.InvalidID
+	}
+	return descpb.InvalidID, false
+}
+
 // SetTableLocalityRegionalByTable sets the descriptor's locality config to
 // regional at the table level in the supplied region. An empty region name
-// (or its alias PrimaryRegionLocalityName) denotes that the table has affinity
-// to the primary region.
-func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
-	lc := LocalityConfigRegionalByTable(region)
+// (or its alias PrimaryRegionLocalityName) denotes that the table is homed in
+// the primary region.
+func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name, regionEnumID descpb.ID) {
+	lc := LocalityConfigRegionalByTable(region, regionEnumID)
 	desc.LocalityConfig = &lc
 }
 
 // LocalityConfigRegionalByTable returns a config for a REGIONAL BY TABLE table.
-func LocalityConfigRegionalByTable(region tree.Name) descpb.TableDescriptor_LocalityConfig {
+func LocalityConfigRegionalByTable(
+	region tree.Name, regionEnumID descpb.ID,
+) descpb.TableDescriptor_LocalityConfig {
 	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
 		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
 	}
 	if region != tree.PrimaryRegionLocalityName {
 		regionName := descpb.RegionName(region)
 		l.RegionalByTable.Region = &regionName
+		l.RegionalByTable.RegionEnumID = regionEnumID
 	}
 	return descpb.TableDescriptor_LocalityConfig{Locality: l}
 }

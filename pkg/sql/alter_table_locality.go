@@ -110,7 +110,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion, regionEnumID)
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
 	// configuration.
@@ -135,7 +146,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 			n.tableDesc.LocalityConfig,
 		)
 	}
-
 	n.tableDesc.SetTableLocalityGlobal()
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
@@ -162,7 +172,17 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion, regionEnumID)
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
