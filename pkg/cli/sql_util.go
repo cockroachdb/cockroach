@@ -551,6 +551,7 @@ func (c *sqlConn) Close() {
 
 type sqlRowsI interface {
 	driver.RowsColumnTypeScanType
+	driver.RowsColumnTypeDatabaseTypeName
 	Result() driver.Result
 	Tag() string
 
@@ -618,6 +619,10 @@ func (r *sqlRows) NextResultSet() (bool, error) {
 
 func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 	return r.rows.ColumnTypeScanType(index)
+}
+
+func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
+	return r.rows.ColumnTypeDatabaseTypeName(index)
 }
 
 func makeSQLConn(url string) *sqlConn {
@@ -1087,6 +1092,12 @@ func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
 
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
+		databaseType := rows.ColumnTypeDatabaseTypeName(i)
+		if databaseType == "NAME" {
+			if bytes, ok := v.([]byte); ok {
+				v = string(bytes)
+			}
+		}
 		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil

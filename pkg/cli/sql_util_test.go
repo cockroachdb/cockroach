@@ -223,6 +223,62 @@ SET
 	b.Reset()
 }
 
+func TestUtfName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	setCLIDefaultsForTests()
+
+	var b bytes.Buffer
+
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`CREATE DATABASE test_utf;
+CREATE TABLE test_utf.żółw (id INT PRIMARY KEY, value INT);
+ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
+		t.Fatal(err)
+	}
+
+	b.Reset()
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SHOW TABLES FROM test_utf;`)); err != nil {
+		t.Fatal(err)
+	}
+	expected := `
+  schema_name | table_name | type  | owner | estimated_row_count | locality
+--------------+------------+-------+-------+---------------------+-----------
+  public      | żółw       | table | root  |                NULL | NULL
+(1 row)
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Errorf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+
+	if err := runQueryAndFormatResults(conn, &b,
+		makeQuery(`SHOW CONSTRAINTS FROM test_utf.żółw;`)); err != nil {
+		t.Fatal(err)
+	}
+	expected = `
+  table_name | constraint_name | constraint_type |       details        | validated
+-------------+-----------------+-----------------+----------------------+------------
+  żółw       | primary         | PRIMARY KEY     | PRIMARY KEY (id ASC) |   true
+  żółw       | żó              | UNIQUE          | UNIQUE (value ASC)   |   true
+(2 rows)
+`
+	if a, e := b.String(), expected[1:]; a != e {
+		t.Errorf("expected output:\n%s\ngot:\n%s", e, a)
+	}
+	b.Reset()
+}
+
 func TestTransactionRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
