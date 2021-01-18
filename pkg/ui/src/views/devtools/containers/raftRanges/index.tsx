@@ -18,6 +18,7 @@ import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import CheckboxInput from "oss/src/components/input/form/CheckboxInput";
 
 /******************************
  *   RAFT RANGES MAIN COMPONENT
@@ -111,48 +112,26 @@ export class RangesMain extends React.Component<
 
   // renderFilterSettings renders the filter settings box.
   renderFilterSettings(): React.ReactNode {
-    return (
-      <div className="section raft-filters">
-        <b>Filters</b>
-        <label>
-          <input
-            type="checkbox"
-            checked={this.state.showState}
-            onChange={() => this.setState({ showState: !this.state.showState })}
-          />
-          State
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={this.state.showReplicas}
-            onChange={() =>
-              this.setState({ showReplicas: !this.state.showReplicas })
-            }
-          />
-          Replicas
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={this.state.showPending}
-            onChange={() =>
-              this.setState({ showPending: !this.state.showPending })
-            }
-          />
-          Pending
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={this.state.showOnlyErrors}
-            onChange={() =>
-              this.setState({ showOnlyErrors: !this.state.showOnlyErrors })
-            }
-          />
-          Only Error Ranges
-        </label>
-      </div>
+    return 
+    (
+    <div className="section raft-filters">
+      <b>Filters</b>
+      <div className="inline-filters">
+        <CheckboxInput id="state" label="State" value={this.state.showState} onChange={() => 
+          this.setState({ showState: !this.state.showState })
+        } />
+      
+        <CheckboxInput id="replicas" label="Replicas" value={this.state.showReplicas}
+          onChange={() => this.setState({ showReplicas: !this.state.showReplicas })} />
+      
+        <CheckboxInput id="pending" label="Pending" value={this.state.showPending}
+          onChange={() => this.setState({ showPending: !this.state.showPending })} />
+        
+      
+        <CheckboxInput id="error" label="Only Error Ranges" value={this.state.showOnlyErrors}
+          onChange={() => this.setState({ showOnlyErrors: !this.state.showOnlyErrors })} />
+        </div>
+    </div>
     );
   }
 

@@ -20,6 +20,7 @@ import { MetricOption } from "./metricOption";
 
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
+import { CheckboxInput } from "oss/src/components/input/form";
 
 const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
@@ -203,11 +204,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
           </div>
         </td>
         <td className="metric-table__cell">
-          <input
-            type="checkbox"
-            checked={perNode}
-            onChange={this.changePerNode}
-          />
+          <CheckboxInput checked={perNode} onChange={this.changePerNode} />
         </td>
         <td className="metric-table__cell">
           <button
