@@ -12,10 +12,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -110,7 +113,22 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+
+	if err := params.p.alterTableDescLocalityToRegionalByTable(
+		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+	); err != nil {
+		return err
+	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
 	// configuration.
@@ -135,8 +153,14 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 			n.tableDesc.LocalityConfig,
 		)
 	}
-
-	n.tableDesc.SetTableLocalityGlobal()
+	regionEnumID, err := n.dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	err = params.p.alterTableDescLocalityToGlobal(params.ctx, n.tableDesc, regionEnumID)
+	if err != nil {
+		return err
+	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
 	// configuration.
@@ -162,7 +186,22 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, n.tableDesc.ParentID, tree.DatabaseLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+
+	if err := params.p.alterTableDescLocalityToRegionalByTable(
+		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+	); err != nil {
+		return err
+	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
@@ -361,5 +400,96 @@ func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfi
 		return err
 	}
 
+	return nil
+}
+
+// alterTableDescLocalityToRegionalByTable changes the locality of the given tableDesc
+// to Regional By Table homed in the specified region. It also handles the
+// dependency with the multi-region enum, if one exists.
+func (p *planner) alterTableDescLocalityToRegionalByTable(
+	ctx context.Context, region tree.Name, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
+) error {
+	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
+		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		); err != nil {
+			return err
+		}
+	}
+	tableDesc.SetTableLocalityRegionalByTable(region)
+	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
+		return p.addTypeBackReference(
+			ctx, regionEnumID, tableDesc.ID,
+			fmt.Sprintf("add backref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		)
+	}
+	return nil
+}
+
+// alterTableDescLocalityToGlobal changes the locality of the given tableDesc to
+// global. It also removes the dependency to the multi-region enum, if it
+// existed before the locality switch.
+func (p *planner) alterTableDescLocalityToGlobal(
+	ctx context.Context, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
+) error {
+	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
+		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
+		); err != nil {
+			return err
+		}
+	}
+	tableDesc.SetTableLocalityGlobal()
+	return nil
+}
+
+// setNewLocalityConfig sets the locality config of the given table descriptor to
+// the provided config. It also removes the dependency to the multi-region enum,
+// if it existed before the locality switch.
+func setNewLocalityConfig(
+	ctx context.Context,
+	desc *tabledesc.Mutable,
+	txn *kv.Txn,
+	b *kv.Batch,
+	config descpb.TableDescriptor_LocalityConfig,
+	kvTrace bool,
+	descsCol *descs.Collection,
+) error {
+	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
+		dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{})
+		if err != nil {
+			return nil, err
+		}
+
+		regionEnumID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		return descsCol.GetMutableTypeVersionByID(ctx, txn, regionEnumID)
+	}
+	// If there was a dependency before on the multi-region enum before the
+	// new locality is set, we must unlink the dependency.
+	if desc.GetMultiRegionEnumDependencyIfExists() {
+		typ, err := getMultiRegionTypeDesc()
+		if err != nil {
+			return nil
+		}
+		typ.RemoveReferencingDescriptorID(desc.GetID())
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+			return err
+		}
+	}
+	desc.LocalityConfig = &config
+	// If there is a dependency after the new locality is set, we must add it.
+	if desc.GetMultiRegionEnumDependencyIfExists() {
+		typ, err := getMultiRegionTypeDesc()
+		if err != nil {
+			return err
+		}
+		typ.AddReferencingDescriptorID(desc.GetID())
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+			return err
+		}
+	}
 	return nil
 }

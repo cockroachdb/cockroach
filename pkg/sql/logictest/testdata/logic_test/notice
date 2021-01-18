@@ -42,7 +42,7 @@ ALTER TYPE color ADD VALUE 'black'
 query T noticetrace
 ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
 ----
-NOTICE: enum label "black" already exists, skipping
+NOTICE: enum value "black" already exists, skipping
 
 statement ok
 CREATE MATERIALIZED VIEW v AS SELECT 1

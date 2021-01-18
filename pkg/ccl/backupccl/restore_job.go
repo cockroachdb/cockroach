@@ -1065,7 +1065,14 @@ func createImportingDescriptors(
 				// to the new tables being restored.
 				for _, table := range mutableTables {
 					// Collect all types used by this table.
-					typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
+					dbDesc, err := descsCol.GetImmutableDatabaseByID(
+						ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
+							IncludeOffline: true,
+						})
+					if err != nil {
+						return err
+					}
+					typeIDs, err := table.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
 						return typesByID[id], nil
 					})
 					if err != nil {
@@ -1793,8 +1800,13 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 			return typ, nil
 		}
 
+		dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx, txn, tbl.GetParentID(), tree.DatabaseLookupFlags{
+				IncludeOffline: true,
+			})
+
 		// Get all types that this descriptor references.
-		referencedTypes, err := tbl.GetAllReferencedTypeIDs(lookup)
+		referencedTypes, err := tbl.GetAllReferencedTypeIDs(dbDesc, lookup)
 		if err != nil {
 			return err
 		}
