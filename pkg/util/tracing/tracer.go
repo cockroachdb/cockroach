@@ -393,16 +393,16 @@ func (t *Tracer) startSpanGeneric(
 
 	s := &helper.span
 
-	// Start recording if necessary. We inherit the recording type of the local parent, if any,
-	// over the remote parent, if any. If neither are specified, we're not recording.
-	recordingType := opts.recordingType()
-
-	if recordingType != RecordingOff {
+	{
+		// Link the newly created span to the parent, if necessary,
+		// and start recording, if requested.
+		// We inherit the recording type of the local parent, if any,
+		// over the remote parent, if any. If neither are specified, we're not recording.
 		var p *crdbSpan
 		if opts.Parent != nil {
 			p = opts.Parent.crdb
 		}
-		s.crdb.enableRecording(p, recordingType)
+		s.crdb.enableRecording(p, opts.recordingType())
 	}
 
 	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
