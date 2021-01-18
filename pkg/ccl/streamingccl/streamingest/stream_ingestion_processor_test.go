@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,10 +44,11 @@ type interceptableStreamClient interface {
 	RegisterInterception(func(event streamingccl.Event))
 }
 
-// mockStreamClient will always return the given slice of events when consuming
-// a stream partition.
+// mockStreamClient will return the slice of events associated to the stream
+// partition being consumed. Stream partitions are identified by unique
+// partition addresses.
 type mockStreamClient struct {
-	partitionEvents []streamingccl.Event
+	partitionEvents map[streamingccl.PartitionAddress][]streamingccl.Event
 }
 
 var _ streamclient.Client = &mockStreamClient{}
@@ -60,11 +62,17 @@ func (m *mockStreamClient) GetTopology(
 
 // ConsumePartition implements the StreamClient interface.
 func (m *mockStreamClient) ConsumePartition(
-	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, address streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
-	eventCh := make(chan streamingccl.Event, len(m.partitionEvents))
+	var events []streamingccl.Event
+	var ok bool
+	if events, ok = m.partitionEvents[address]; !ok {
+		return nil, errors.Newf("no events found for paritition %s", address)
+	}
 
-	for _, event := range m.partitionEvents {
+	eventCh := make(chan streamingccl.Event, len(events))
+
+	for _, event := range events {
 		eventCh <- event
 	}
 	close(eventCh)
@@ -72,32 +80,29 @@ func (m *mockStreamClient) ConsumePartition(
 	return eventCh, nil
 }
 
-// Close implements the StreamClient interface.
-func (m *mockStreamClient) Close() {}
-
 func TestStreamIngestionProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	defer tc.Stopper().Stop(context.Background())
 	kvDB := tc.Server(0).DB()
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
 	sampleKV := roachpb.KeyValue{Key: roachpb.Key("key_1"), Value: v}
-	mockClient := &mockStreamClient{
-		partitionEvents: []streamingccl.Event{
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeKVEvent(sampleKV),
-			streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-		},
+	pa1 := streamingccl.PartitionAddress("partition1")
+	pa2 := streamingccl.PartitionAddress("partition2")
+	events := []streamingccl.Event{
+		streamingccl.MakeKVEvent(sampleKV),
+		streamingccl.MakeKVEvent(sampleKV),
+		streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+		streamingccl.MakeKVEvent(sampleKV),
+		streamingccl.MakeKVEvent(sampleKV),
+		streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
 	}
+	mockClient := &mockStreamClient{partitionEvents: map[streamingccl.
+		PartitionAddress][]streamingccl.Event{pa1: events, pa2: events}}
 
 	startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	out, err := runStreamIngestionProcessor(ctx, t, kvDB, "some://stream", startTime,

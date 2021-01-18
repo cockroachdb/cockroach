@@ -32,7 +32,10 @@ func init() {
 }
 
 func distStreamIngestionPlanSpecs(
-	topology streamingccl.Topology, nodes []roachpb.NodeID, jobID int64,
+	streamAddress streamingccl.StreamAddress,
+	topology streamingccl.Topology,
+	nodes []roachpb.NodeID,
+	jobID int64,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -45,6 +48,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
+				StreamAddress:      streamAddress,
 				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
@@ -114,7 +118,7 @@ func distStreamIngest(
 		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
-	// TODO(adityamaru): Once result types are updated, add PlanToStreamColMap.
+	p.PlanToStreamColMap = []int{0}
 	dsp.FinalizePlan(planCtx, p)
 
 	rw := makeStreamIngestionResultWriter(ctx, jobID, execCfg.JobRegistry)
@@ -133,7 +137,7 @@ func distStreamIngest(
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
-	return nil
+	return rw.Err()
 }
 
 type streamIngestionResultWriter struct {
@@ -155,6 +159,10 @@ func makeStreamIngestionResultWriter(
 }
 
 func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	// Copy the row because it's not guaranteed to exist after this function
+	// returns.
+	row = append(tree.Datums(nil), row...)
+
 	job, err := s.registry.LoadJob(ctx, s.jobID)
 	if err != nil {
 		return err

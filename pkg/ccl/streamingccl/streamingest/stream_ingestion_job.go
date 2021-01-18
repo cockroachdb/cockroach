@@ -58,8 +58,8 @@ func ingest(
 	}
 
 	// Construct stream ingestion processor specs.
-	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(topology,
-		nodes, jobID)
+	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
+		streamAddress, topology, nodes, jobID)
 	if err != nil {
 		return err
 	}

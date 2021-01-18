@@ -6,10 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package streamingest
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,11 +63,11 @@ func newStreamIngestionFrontierProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	sf := &streamIngestionFrontier{
-		flowCtx:  flowCtx,
-		spec:     spec,
-		input:    input,
+		flowCtx:          flowCtx,
+		spec:             spec,
+		input:            input,
 		highWaterAtStart: spec.HighWaterAtStart,
-		frontier: span.MakeFrontier(spec.TrackedSpans...),
+		frontier:         span.MakeFrontier(spec.TrackedSpans...),
 	}
 	if err := sf.Init(
 		sf,

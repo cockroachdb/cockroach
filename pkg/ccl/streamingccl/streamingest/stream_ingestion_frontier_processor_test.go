@@ -6,14 +6,14 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package streamingest
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type partitionToEvent map[streamclient.PartitionAddress][]streamclient.Event
+type partitionToEvent map[streamingccl.PartitionAddress][]streamingccl.Event
 
 func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -61,8 +61,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	pa1 := streamclient.PartitionAddress("s3://my_streams/stream/partition1")
-	pa2 := streamclient.PartitionAddress("s3://my_streams/stream/partition2")
+	pa1 := streamingccl.PartitionAddress("s3://my_streams/stream/partition1")
+	pa2 := streamingccl.PartitionAddress("s3://my_streams/stream/partition2")
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
@@ -75,12 +75,12 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	}{
 		{
 			name: "same-resolved-ts-across-partitions",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-			}, pa2: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
@@ -88,56 +88,56 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// No progress should be reported to the job since partition 2 has not
 			// emitted a resolved ts.
 			name: "no-checkpoints",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeKVEvent(sampleKV),
-			}, pa2: []streamclient.Event{
-				streamclient.MakeKVEvent(sampleKV),
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeKVEvent(sampleKV),
+			}, pa2: []streamingccl.Event{
+				streamingccl.MakeKVEvent(sampleKV),
 			}},
 		},
 		{
 			// No progress should be reported to the job since partition 2 has not
 			// emitted a resolved ts.
 			name: "no-checkpoint-from-one-partition",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-			}, pa2: []streamclient.Event{}},
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamingccl.Event{}},
 		},
 		{
 			name: "one-partition-ahead-of-the-other",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-			}, pa2: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
 		},
 		{
 			name: "some-interleaved-timestamps",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
-			}, pa2: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 3}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 5}),
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+			}, pa2: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 3}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 5}),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
 		{
 			name: "some-interleaved-logical-timestamps",
-			events: partitionToEvent{pa1: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}),
-			}, pa2: []streamclient.Event{
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 1}),
-				streamclient.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
+			events: partitionToEvent{pa1: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}),
+			}, pa2: []streamingccl.Event{
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			spec.PartitionAddress = []streamclient.PartitionAddress{pa1, pa2}
+			spec.PartitionAddresses = []streamingccl.PartitionAddress{pa1, pa2}
 			proc, err := newStreamIngestionDataProcessor(&flowCtx, 0 /* processorID */, spec, &post, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)

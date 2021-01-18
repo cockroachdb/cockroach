@@ -77,7 +77,7 @@ func (m *ProcessorSpec) Reset()         { *m = ProcessorSpec{} }
 func (m *ProcessorSpec) String() string { return proto.CompactTextString(m) }
 func (*ProcessorSpec) ProtoMessage()    {}
 func (*ProcessorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{0}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{0}
 }
 func (m *ProcessorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -141,7 +141,7 @@ func (m *ProcessorCoreUnion) Reset()         { *m = ProcessorCoreUnion{} }
 func (m *ProcessorCoreUnion) String() string { return proto.CompactTextString(m) }
 func (*ProcessorCoreUnion) ProtoMessage()    {}
 func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{1}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{1}
 }
 func (m *ProcessorCoreUnion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -176,7 +176,7 @@ func (m *NoopCoreSpec) Reset()         { *m = NoopCoreSpec{} }
 func (m *NoopCoreSpec) String() string { return proto.CompactTextString(m) }
 func (*NoopCoreSpec) ProtoMessage()    {}
 func (*NoopCoreSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{2}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{2}
 }
 func (m *NoopCoreSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -218,7 +218,7 @@ func (m *LocalPlanNodeSpec) Reset()         { *m = LocalPlanNodeSpec{} }
 func (m *LocalPlanNodeSpec) String() string { return proto.CompactTextString(m) }
 func (*LocalPlanNodeSpec) ProtoMessage()    {}
 func (*LocalPlanNodeSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{3}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{3}
 }
 func (m *LocalPlanNodeSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -251,7 +251,7 @@ func (m *MetadataTestSenderSpec) Reset()         { *m = MetadataTestSenderSpec{}
 func (m *MetadataTestSenderSpec) String() string { return proto.CompactTextString(m) }
 func (*MetadataTestSenderSpec) ProtoMessage()    {}
 func (*MetadataTestSenderSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{4}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{4}
 }
 func (m *MetadataTestSenderSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -284,7 +284,7 @@ func (m *MetadataTestReceiverSpec) Reset()         { *m = MetadataTestReceiverSp
 func (m *MetadataTestReceiverSpec) String() string { return proto.CompactTextString(m) }
 func (*MetadataTestReceiverSpec) ProtoMessage()    {}
 func (*MetadataTestReceiverSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_501335764544f05e, []int{5}
+	return fileDescriptor_processors_5e45e1d8c39180fc, []int{5}
 }
 func (m *MetadataTestReceiverSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3061,10 +3061,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/execinfrapb/processors.proto", fileDescriptor_processors_501335764544f05e)
+	proto.RegisterFile("sql/execinfrapb/processors.proto", fileDescriptor_processors_5e45e1d8c39180fc)
 }
 
-var fileDescriptor_processors_501335764544f05e = []byte{
+var fileDescriptor_processors_5e45e1d8c39180fc = []byte{
 	// 1265 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x97, 0xdf, 0x72, 0x13, 0xb7,
 	0x17, 0xc7, 0xe3, 0xc4, 0x24, 0xb6, 0x9c, 0x10, 0x23, 0x02, 0xe8, 0xe7, 0x5f, 0xeb, 0xa4, 0x2e,
