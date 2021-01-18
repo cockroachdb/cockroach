@@ -1104,6 +1104,7 @@ message TableDescriptor {
       RegionalByTable regional_by_table = 2;
       RegionalByRow regional_by_row = 3;
     }
+    optional uint32 region_enum_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "RegionEnumID", (gogoproto.casttype) = "ID"];
   }
   optional LocalityConfig locality_config = 42;
 
