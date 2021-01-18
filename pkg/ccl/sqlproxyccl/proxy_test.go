@@ -31,6 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const FrontendError = "Frontend error!"
+const BackendError = "Backend error!"
+
 func setupTestProxyWithCerts(
 	t *testing.T, opts *Options,
 ) (server *Server, addr string, done func()) {
@@ -402,13 +405,27 @@ func TestProxyModifyRequestParams(t *testing.T) {
 }
 
 func newInsecureProxyServer(
-	t *testing.T, outgoingAddr string, outgoingTLSConfig *tls.Config,
+	t *testing.T,
+	outgoingAddr string,
+	outgoingTLSConfig *tls.Config,
+	errorFrontend bool,
+	errorBackend bool,
 ) (server *Server, addr string, cleanup func()) {
-	s := NewServer(Options{
+	op := Options{
 		BackendDialer: func(message *pgproto3.StartupMessage) (net.Conn, error) {
 			return BackendDial(message, outgoingAddr, outgoingTLSConfig)
-		},
-	})
+		}}
+	if errorFrontend {
+		op.FrontendAdmitter = func(incoming net.Conn) (net.Conn, *pgproto3.StartupMessage, error) {
+			return nil, nil, errors.New(FrontendError)
+		}
+	}
+	if errorBackend {
+		op.BackendDialer = func(message *pgproto3.StartupMessage) (net.Conn, error) {
+			return nil, errors.New(BackendError)
+		}
+	}
+	s := NewServer(op)
 	const listenAddress = "127.0.0.1:0"
 	ln, err := net.Listen("tcp", listenAddress)
 	require.NoError(t, err)
@@ -435,7 +452,7 @@ func TestInsecureProxy(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	s, addr, cleanup := newInsecureProxyServer(
-		t, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true})
+		t, tc.Server(0).ServingSQLAddr(), &tls.Config{InsecureSkipVerify: true}, false, false)
 	defer cleanup()
 
 	u := fmt.Sprintf("postgres://bob:wrong@%s?sslmode=disable", addr)
@@ -467,9 +484,9 @@ func TestInsecureDoubleProxy(t *testing.T) {
 
 	// Test multiple proxies:  proxyB -> proxyA -> tc
 	_, proxyA, cleanupA := newInsecureProxyServer(t, tc.Server(0).ServingSQLAddr(),
-		nil /* tls config */)
+		nil /* tls config */, false, false)
 	defer cleanupA()
-	_, proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */)
+	_, proxyB, cleanupB := newInsecureProxyServer(t, proxyA, nil /* tls config */, false, false)
 	defer cleanupB()
 
 	u := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable", proxyB)
@@ -479,6 +496,44 @@ func TestInsecureDoubleProxy(t *testing.T) {
 		require.NoError(t, conn.Close(ctx))
 	}()
 	require.NoError(t, runTestQuery(conn))
+}
+
+func TestErroneousFrontend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	_, addr, cleanup := newInsecureProxyServer(
+		t, tc.Server(0).ServingSQLAddr(), nil /* tls config */, true, false)
+	defer cleanup()
+
+	u := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable", addr)
+
+	_, err := pgx.Connect(ctx, u)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, FrontendError))
+}
+
+func TestErroneousBackend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	_, addr, cleanup := newInsecureProxyServer(
+		t, tc.Server(0).ServingSQLAddr(), nil /* tls config */, false, true)
+	defer cleanup()
+
+	u := fmt.Sprintf("postgres://bob:builder@%s/?sslmode=disable", addr)
+
+	_, err := pgx.Connect(ctx, u)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, BackendError))
 }
 
 func TestProxyRefuseConn(t *testing.T) {
