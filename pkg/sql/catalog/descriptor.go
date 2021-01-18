@@ -246,6 +246,8 @@ type TableDescriptor interface {
 	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	FindActiveColumnByName(s string) (*descpb.ColumnDescriptor, error)
 	WritableColumns() []descpb.ColumnDescriptor
+
+	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
 }
 
 // Index is an interface around the index descriptor types.

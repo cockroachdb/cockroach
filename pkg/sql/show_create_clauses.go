@@ -336,6 +336,13 @@ func ShowCreatePartitioning(
 	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idxDesc.ID {
 		return nil
 	}
+	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
+	if c := tableDesc.GetLocalityConfig(); c != nil {
+		switch c.Locality.(type) {
+		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+			return nil
+		}
+	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we
 	// only use the tree.Datums part of the output.
