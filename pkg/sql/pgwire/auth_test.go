@@ -312,14 +312,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								// t.Logf("found log entry: %+v", *entry)
 
-								parts := strings.SplitN(entry.Message, " ", 4)
-								if len(parts) < 4 || parts[1] != "Structured" || parts[2] != "entry:" {
+								parts := strings.SplitN(entry.Message, " ", 3)
+								if len(parts) < 3 || parts[0] != "Structured" || parts[1] != "entry:" {
 									// TODO(knz): Enhance this when the log file
 									// contains proper markers for structured entries.
 									t.Errorf("malformed structured message: %q", entry.Message)
 								}
 
-								jsonPayload := []byte(parts[3])
+								jsonPayload := []byte(parts[2])
 								if entry.Redactable {
 									jsonPayload = redact.RedactableBytes(jsonPayload).StripMarkers()
 								}
@@ -337,7 +337,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								fmt.Fprintf(&buf, "%s %s\n", parts[0], msg)
+								fmt.Fprintf(&buf, "%d %s\n", entry.Counter, msg)
 							}
 							lastLogMsg := entries[0].Message
 							if !re.MatchString(lastLogMsg) {
