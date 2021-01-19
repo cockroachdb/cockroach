@@ -74,6 +74,13 @@ CREATE TABLE uniq_enum (
 )
 
 statement ok
+CREATE TABLE uniq_partial (
+  i INT,
+  UNIQUE WITHOUT INDEX (i),
+  UNIQUE INDEX (i) WHERE i > 0
+)
+
+statement ok
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 
 # Insert some data into the other table.
@@ -120,23 +127,29 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 INSERT INTO uniq SELECT k, v, w, x, y FROM other
 
 # On conflict do nothing with constant input, conflict on UNIQUE WITHOUT INDEX
-# column.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
-query error pq: there is no unique or exclusion constraint matching the ON CONFLICT specification
-INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO NOTHING
+# column. The only row that is successfully inserted here is (400, 40, 4).
+statement ok
+INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2), (400, 40, 4) ON CONFLICT (w) DO NOTHING
+
+# On conflict do nothing with constant input, no conflict columns.
+# The only row that is successfully inserted here is (20, 20, 20, 20, 20).
+statement ok
+INSERT INTO uniq VALUES (1, 20, 20, 20, 20), (20, 1, 20, 20, 20), (20, 20, 20, 20, 20),
+                        (20, 20, 1, 20, 20), (20, 20, 20, 1, 1) ON CONFLICT DO NOTHING
 
 query IIIII colnames,rowsort
 SELECT * FROM uniq
 ----
-k  v  w     x     y
-1  1  1     1     1
-2  2  2     2     2
-3  3  3     3     1
-4  4  NULL  NULL  1
-5  5  NULL  2     NULL
-6  6  NULL  NULL  1
-7  7  NULL  2     NULL
+k    v   w     x     y
+1    1   1     1     1
+2    2   2     2     2
+3    3   3     3     1
+4    4   NULL  NULL  1
+5    5   NULL  2     NULL
+6    6   NULL  NULL  1
+7    7   NULL  2     NULL
+20   20  20    20    20
+400  40  4     NULL  5
 
 
 # Insert into a table in which the primary key overlaps some of the unique
@@ -255,15 +268,17 @@ UPDATE uniq SET k = 11, v = 11 WHERE k = 10
 query IIIII colnames,rowsort
 SELECT * FROM uniq
 ----
-k   v   w     x     y
-1   1   1     2     1
-2   2   2     2     2
-3   3   3     3     1
-4   4   NULL  NULL  1
-5   5   NULL  2     NULL
-6   6   NULL  NULL  1
-7   7   NULL  2     NULL
-11  11  10    NULL  2
+k    v   w     x     y
+1    1   1     2     1
+2    2   2     2     2
+3    3   3     3     1
+4    4   NULL  NULL  1
+5    5   NULL  2     NULL
+6    6   NULL  NULL  1
+7    7   NULL  2     NULL
+11   11  10    NULL  2
+20   20  20    20    20
+400  40  4     NULL  5
 
 
 # Update a table with multiple primary key columns.
@@ -387,26 +402,37 @@ INSERT INTO uniq SELECT k, v FROM other ON CONFLICT (v) DO UPDATE SET x = 5
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
-query error pq: there is no unique or exclusion constraint matching the ON CONFLICT specification
-INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO UPDATE SET w = 10
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_w"\nDETAIL: Key \(w\)=\(10\) already exists\.
+INSERT INTO uniq VALUES (100, 100, 1), (200, 200, 2) ON CONFLICT (w) DO UPDATE SET w = 10
+
+# On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
+# column.
+statement ok
+INSERT INTO uniq VALUES (100, 100, 1), (200, 200, 2) ON CONFLICT (w) DO UPDATE SET w = 12
+
+# On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
+# columns.
+statement ok
+INSERT INTO uniq (k, v, x, y) VALUES (200, 200, 5, 5) ON CONFLICT (x, y) DO UPDATE SET w = 13, y = excluded.y + 1
 
 query IIIII colnames,rowsort
 SELECT * FROM uniq
 ----
-k   v   w     x     y
-1   1   NULL  1     1
-2   2   2     2     2
-3   3   3     3     2
-4   4   NULL  NULL  1
-5   5   5     5     5
-6   6   NULL  NULL  1
-7   7   NULL  2     NULL
-8   8   NULL  NULL  1
-9   9   NULL  1     NULL
-10  10  11    NULL  5
-11  11  10    NULL  2
+k    v    w     x     y
+1    1    NULL  1     1
+2    2    12    2     2
+3    3    3     3     2
+4    4    NULL  NULL  1
+5    5    13    5     6
+6    6    NULL  NULL  1
+7    7    NULL  2     NULL
+8    8    NULL  NULL  1
+9    9    NULL  1     NULL
+10   10   11    NULL  5
+11   11   10    NULL  2
+20   20   20    20    20
+100  100  1     NULL  5
+400  40   4     NULL  5
 
 
 # Upsert into a table in which the primary key overlaps some of the unique
@@ -492,6 +518,18 @@ SELECT * FROM uniq_enum
 r        s    i  j
 us-west  foo  1  1
 eu-west  bar  2  2
+
+# Ensure that we do not choose a partial index as the arbiter when there is a
+# UNIQUE WITHOUT INDEX constraint.
+statement ok
+INSERT INTO uniq_partial VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 1;
+INSERT INTO uniq_partial VALUES (-1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
+
+query I colnames
+SELECT * FROM uniq_partial
+----
+i
+2
 
 # -- Tests with DELETE --
 subtest Delete

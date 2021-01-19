@@ -219,6 +219,195 @@ insert uniq
       ├── (1, 1, NULL::INT8, NULL::INT8, NULL::INT8)
       └── (2, 2, NULL::INT8, NULL::INT8, NULL::INT8)
 
+# Use all the unique indexes and constraints as arbiters for DO NOTHING with no
+# conflict columns.
+# TODO(rytaft): we should be able to remove the unique checks in this case
+# (see #59119).
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT DO NOTHING
+----
+insert uniq
+ ├── columns: <none>
+ ├── arbiter indexes: primary uniq_v_key
+ ├── arbiter constraints: unique_w unique_x_y
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => v:2
+ │    ├── column3:9 => w:3
+ │    ├── column4:10 => x:4
+ │    └── column5:11 => y:5
+ ├── input binding: &1
+ ├── upsert-distinct-on
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    ├── grouping columns: column4:10!null column5:11!null
+ │    ├── upsert-distinct-on
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    ├── grouping columns: column3:9!null
+ │    │    ├── upsert-distinct-on
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    ├── grouping columns: column2:8!null
+ │    │    │    ├── upsert-distinct-on
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    ├── grouping columns: column1:7!null
+ │    │    │    │    ├── anti-join (hash)
+ │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    ├── anti-join (hash)
+ │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    │    ├── anti-join (hash)
+ │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    │    │    ├── anti-join (hash)
+ │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    │    │    │    ├── values
+ │    │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    │    │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    │    │    │    │    │    ├── scan uniq
+ │    │    │    │    │    │    │    │    │    └── columns: k:12!null v:13 w:14 x:15 y:16
+ │    │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │    │         └── column1:7 = k:12
+ │    │    │    │    │    │    │    ├── scan uniq
+ │    │    │    │    │    │    │    │    └── columns: k:18!null v:19 w:20 x:21 y:22
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── column2:8 = v:19
+ │    │    │    │    │    │    ├── scan uniq
+ │    │    │    │    │    │    │    └── columns: k:24!null v:25 w:26 x:27 y:28
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── column3:9 = w:26
+ │    │    │    │    │    ├── scan uniq
+ │    │    │    │    │    │    └── columns: k:30!null v:31 w:32 x:33 y:34
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── column4:10 = x:33
+ │    │    │    │    │         └── column5:11 = y:34
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column2:8]
+ │    │    │    │         │    └── column2:8
+ │    │    │    │         ├── first-agg [as=column3:9]
+ │    │    │    │         │    └── column3:9
+ │    │    │    │         ├── first-agg [as=column4:10]
+ │    │    │    │         │    └── column4:10
+ │    │    │    │         └── first-agg [as=column5:11]
+ │    │    │    │              └── column5:11
+ │    │    │    └── aggregations
+ │    │    │         ├── first-agg [as=column1:7]
+ │    │    │         │    └── column1:7
+ │    │    │         ├── first-agg [as=column3:9]
+ │    │    │         │    └── column3:9
+ │    │    │         ├── first-agg [as=column4:10]
+ │    │    │         │    └── column4:10
+ │    │    │         └── first-agg [as=column5:11]
+ │    │    │              └── column5:11
+ │    │    └── aggregations
+ │    │         ├── first-agg [as=column1:7]
+ │    │         │    └── column1:7
+ │    │         ├── first-agg [as=column2:8]
+ │    │         │    └── column2:8
+ │    │         ├── first-agg [as=column4:10]
+ │    │         │    └── column4:10
+ │    │         └── first-agg [as=column5:11]
+ │    │              └── column5:11
+ │    └── aggregations
+ │         ├── first-agg [as=column1:7]
+ │         │    └── column1:7
+ │         ├── first-agg [as=column2:8]
+ │         │    └── column2:8
+ │         └── first-agg [as=column3:9]
+ │              └── column3:9
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── semi-join (hash)
+      │         ├── columns: column3:36!null column1:37!null
+      │         ├── with-scan &1
+      │         │    ├── columns: column3:36!null column1:37!null
+      │         │    └── mapping:
+      │         │         ├──  column3:9 => column3:36
+      │         │         └──  column1:7 => column1:37
+      │         ├── scan uniq
+      │         │    └── columns: k:38!null w:40
+      │         └── filters
+      │              ├── column3:36 = w:40
+      │              └── column1:37 != k:38
+      └── unique-checks-item: uniq(x,y)
+           └── semi-join (hash)
+                ├── columns: column4:44!null column5:45!null column1:46!null
+                ├── with-scan &1
+                │    ├── columns: column4:44!null column5:45!null column1:46!null
+                │    └── mapping:
+                │         ├──  column4:10 => column4:44
+                │         ├──  column5:11 => column5:45
+                │         └──  column1:7 => column1:46
+                ├── scan uniq
+                │    └── columns: k:47!null x:50 y:51
+                └── filters
+                     ├── column4:44 = x:50
+                     ├── column5:45 = y:51
+                     └── column1:46 != k:47
+
+# On conflict clause references unique without index constraint.
+# TODO(rytaft): we should be able to remove the unique check for w in this case
+# (see #59119).
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w) DO NOTHING
+----
+insert uniq
+ ├── columns: <none>
+ ├── arbiter constraints: unique_w
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => v:2
+ │    ├── column3:9 => w:3
+ │    ├── column4:10 => x:4
+ │    └── column5:11 => y:5
+ ├── input binding: &1
+ ├── upsert-distinct-on
+ │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    ├── grouping columns: column3:9!null
+ │    ├── anti-join (hash)
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    ├── values
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    ├── scan uniq
+ │    │    │    └── columns: k:12!null v:13 w:14 x:15 y:16
+ │    │    └── filters
+ │    │         └── column3:9 = w:14
+ │    └── aggregations
+ │         ├── first-agg [as=column1:7]
+ │         │    └── column1:7
+ │         ├── first-agg [as=column2:8]
+ │         │    └── column2:8
+ │         ├── first-agg [as=column4:10]
+ │         │    └── column4:10
+ │         └── first-agg [as=column5:11]
+ │              └── column5:11
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── semi-join (hash)
+      │         ├── columns: column3:18!null column1:19!null
+      │         ├── with-scan &1
+      │         │    ├── columns: column3:18!null column1:19!null
+      │         │    └── mapping:
+      │         │         ├──  column3:9 => column3:18
+      │         │         └──  column1:7 => column1:19
+      │         ├── scan uniq
+      │         │    └── columns: k:20!null w:22
+      │         └── filters
+      │              ├── column3:18 = w:22
+      │              └── column1:19 != k:20
+      └── unique-checks-item: uniq(x,y)
+           └── semi-join (hash)
+                ├── columns: column4:26!null column5:27!null column1:28!null
+                ├── with-scan &1
+                │    ├── columns: column4:26!null column5:27!null column1:28!null
+                │    └── mapping:
+                │         ├──  column4:10 => column4:26
+                │         ├──  column5:11 => column5:27
+                │         └──  column1:7 => column1:28
+                ├── scan uniq
+                │    └── columns: k:29!null x:32 y:33
+                └── filters
+                     ├── column4:26 = x:32
+                     ├── column5:27 = y:33
+                     └── column1:28 != k:29
+
 exec-ddl
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
 ----
