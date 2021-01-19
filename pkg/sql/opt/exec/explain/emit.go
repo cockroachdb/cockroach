@@ -590,9 +590,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.Arbiters) > 0 {
+		if len(a.ArbiterIndexes) > 0 {
 			var sb strings.Builder
-			for i, idx := range a.Arbiters {
+			for i, idx := range a.ArbiterIndexes {
 				index := a.Table.Index(idx)
 				if i > 0 {
 					sb.WriteString(", ")
@@ -600,6 +600,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				sb.WriteString(string(index.Name()))
 			}
 			ob.Attr("arbiter indexes", sb.String())
+		}
+		if len(a.ArbiterConstraints) > 0 {
+			var sb strings.Builder
+			for i, uc := range a.ArbiterConstraints {
+				uniqueConstraint := a.Table.Unique(uc)
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(uniqueConstraint.Name())
+			}
+			ob.Attr("arbiter constraints", sb.String())
 		}
 
 	case insertFastPathOp:
@@ -629,9 +640,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.Arbiters) > 0 {
+		if len(a.ArbiterIndexes) > 0 {
 			var sb strings.Builder
-			for i, idx := range a.Arbiters {
+			for i, idx := range a.ArbiterIndexes {
 				index := a.Table.Index(idx)
 				if i > 0 {
 					sb.WriteString(", ")
@@ -639,6 +650,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				sb.WriteString(string(index.Name()))
 			}
 			ob.Attr("arbiter indexes", sb.String())
+		}
+		if len(a.ArbiterConstraints) > 0 {
+			var sb strings.Builder
+			for i, uc := range a.ArbiterConstraints {
+				uniqueConstraint := a.Table.Unique(uc)
+				if i > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(uniqueConstraint.Name())
+			}
+			ob.Attr("arbiter constraints", sb.String())
 		}
 
 	case updateOp:
