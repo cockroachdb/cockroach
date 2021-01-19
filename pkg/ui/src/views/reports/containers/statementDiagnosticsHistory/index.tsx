@@ -17,15 +17,7 @@ import Long from "long";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
-import {
-  Anchor,
-  Button,
-  DownloadFile,
-  DownloadFileRef,
-  Text,
-  TextTypes,
-  Tooltip,
-} from "src/components";
+import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
 import { getStatementDiagnostics } from "src/util/api";
@@ -45,7 +37,6 @@ import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
-import { getDiagnosticsStatus } from "src/views/statements/diagnostics";
 import {
   SortedTable,
   ColumnDescriptor,
@@ -53,10 +44,15 @@ import {
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
-import { shortStatement } from "src/views/statements/statementsTable";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
-import { EmptyTable } from "@cockroachlabs/admin-ui-components";
+import {
+  DownloadFile,
+  DownloadFileRef,
+  EmptyTable,
+  shortStatement,
+  getDiagnosticsStatus,
+} from "@cockroachlabs/admin-ui-components";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;

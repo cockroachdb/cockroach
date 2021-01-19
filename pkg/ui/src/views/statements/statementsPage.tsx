@@ -42,11 +42,11 @@ import {
   createStatementDiagnosticsReportAction,
 } from "src/redux/statements";
 import {
+  trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
   trackStatementsSearchAction,
   trackTableSortAction,
 } from "src/redux/analyticsActions";
-import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -187,7 +187,7 @@ export const selectLastReset = createSelector(
   },
 );
 
-const StatementsPageConnected = withRouter(
+export default withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
       statements: selectStatements(state, props),
@@ -208,9 +208,7 @@ const StatementsPageConnected = withRouter(
       onPageChanged: trackStatementsPaginationAction,
       onSortingChange: trackTableSortAction,
       onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
-        trackDownloadDiagnosticsBundle(report.statement_fingerprint),
+        trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
     },
   )(StatementsPage),
 );
-
-export default StatementsPageConnected;

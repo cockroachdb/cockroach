@@ -1806,14 +1806,14 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.28":
-  version "0.1.28"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.28.tgz#6dc00be6d4ea41dd9853e2f754c85936f701950c"
-  integrity sha512-i12d+wtCgxBM25ZpkcLtyuIRlhl/jZreFmJV1SpQYLVLV7OxLTb5WHlUCMMQFC85+UFVPs7evr2l575Ne5AzvA==
+"@cockroachlabs/admin-ui-components@^0.1.37":
+  version "0.1.37"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.37.tgz#0862de4864777e0ddf1201febba24cfbd7f897f8"
+  integrity sha512-tvZ0skbITu4uky9xPxrq5kVXbSgLKikOKqUflH05o/Li8wudoJX4Br71S3lwENeTKlOB2FF3YvXwQYtdDhdB9A==
   dependencies:
-    "@cockroachlabs/crdb-protobuf-client" "^0.0.3"
-    "@cockroachlabs/icons" "^0.2.2"
-    "@cockroachlabs/ui-components" "^0.2.11"
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.4"
+    "@cockroachlabs/icons" "0.3.0"
+    "@cockroachlabs/ui-components" "0.2.14-alpha.0"
     "@popperjs/core" "^2.4.0"
     "@reduxjs/toolkit" "^1.5.0"
     babel-polyfill "^6.26.0"
@@ -1822,15 +1822,16 @@
     d3-scale "^3.2.3"
     highlight.js "^10.2.0"
     long "^4.0.0"
+    npm-run-all "^4.1.5"
     react-helmet "^5.2.0"
     react-popper "^2.2.3"
     react-select "^1.2.1"
     reselect "^4.0.0"
 
-"@cockroachlabs/crdb-protobuf-client@^0.0.3":
-  version "0.0.3"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.3.tgz#3ce8dd4953a1209f1895c713cf90595a15c54ab1"
-  integrity sha512-AXHWWW7hI05hj5fTdXgIIjfZrqfacQ/zsT83LoUsrnFUOeWZCa6qSF3qVonaR2h8FloRfEeFhC+27TDsi8RI0A==
+"@cockroachlabs/crdb-protobuf-client@^0.0.4":
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.4.tgz#9b53ef7cbb187cd7d73b4269c95b0f573caafd45"
+  integrity sha512-n/SEmLzU7i9h5m8cAw9NPRAcQSgzHNdm5+F0dN3myfQSCuEMTgTlbWsfm6EnjTRL1FnZlieqY2gZzgyx4Ke0Ug==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"
@@ -1840,20 +1841,15 @@
     "@typescript-eslint/parser" "^2.34.0"
     eslint-config-prettier "^6.11.0"
 
-"@cockroachlabs/icons@^0.2.2":
-  version "0.2.9"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.2.9.tgz#b626fe409ea49be66b19a9a0358a082d50ade2d0"
-  integrity sha512-s1kH8sU/DeIGrGUwUMVMAjxGTOn6SHAK8q0tmJY6zcIUaoYb/5UfnQjzdG+ybflgBdyMTB41/bWTXnpsYxxSpw==
-
-"@cockroachlabs/icons@^0.3.0":
+"@cockroachlabs/icons@0.3.0", "@cockroachlabs/icons@^0.3.0":
   version "0.3.0"
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
   integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
 
-"@cockroachlabs/ui-components@^0.2.11":
-  version "0.2.12"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.12.tgz#617f97351606026a0a8e5f17730f313b6cc6000c"
-  integrity sha512-RHRvKAsaUDJpCefA3VqmQSbu1jc1/TM2cEKkhN9G4gg2KgePcaqHupUc4wTD+rw6OqZHwbOHQe9ESXBMhiMVLw==
+"@cockroachlabs/ui-components@0.2.14-alpha.0":
+  version "0.2.14-alpha.0"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.14-alpha.0.tgz#d90a7ce6fbede9d8b177d9a940f24218c262d267"
+  integrity sha512-8zOZswstmBbJQxXmQ7yfEXEOEUJ4JT5xlzGQ5FD7z8sjy67UDXFoe6FMqFXrkpiFwlCrkK2Vd36LKhLvGY2xkA==
   dependencies:
     "@cockroachlabs/icons" "^0.3.0"
     "@popperjs/core" "^2.4.3"
@@ -5121,7 +5117,7 @@ create-react-context@0.3.0, create-react-context@^0.3.0:
     gud "^1.0.0"
     warning "^4.0.3"
 
-cross-spawn@6.0.5, cross-spawn@^6.0.0:
+cross-spawn@6.0.5, cross-spawn@^6.0.0, cross-spawn@^6.0.5:
   version "6.0.5"
   resolved "https://registry.yarnpkg.com/cross-spawn/-/cross-spawn-6.0.5.tgz#4a5ec7c64dfae22c3a14124dbacdee846d80cbc4"
   integrity sha512-eTVLrBSt7fjbDygz805pMnstIs2VTBNkRm0qxZd+M7A5XDdxVRWO5MxGBXZhjY4cqLYLdtrGqRf8mBPmzwSpWQ==
@@ -8683,6 +8679,16 @@ load-json-file@^1.0.0, load-json-file@^1.1.0:
     pinkie-promise "^2.0.0"
     strip-bom "^2.0.0"
 
+load-json-file@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/load-json-file/-/load-json-file-4.0.0.tgz#2f5f45ab91e33216234fd53adab668eb4ec0993b"
+  integrity sha1-L19Fq5HjMhYjT9U62rZo607AmTs=
+  dependencies:
+    graceful-fs "^4.1.2"
+    parse-json "^4.0.0"
+    pify "^3.0.0"
+    strip-bom "^3.0.0"
+
 loader-runner@^2.3.1, loader-runner@^2.4.0:
   version "2.4.0"
   resolved "https://registry.yarnpkg.com/loader-runner/-/loader-runner-2.4.0.tgz#ed47066bfe534d7e84c4c7b9998c2a75607d9357"
@@ -9024,6 +9030,11 @@ memory-fs@^0.5.0:
   dependencies:
     errno "^0.1.3"
     readable-stream "^2.0.1"
+
+memorystream@^0.3.1:
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/memorystream/-/memorystream-0.3.1.tgz#86d7090b30ce455d63fbae12dda51a47ddcaf9b2"
+  integrity sha1-htcJCzDORV1j+64S3aUaR93K+bI=
 
 merge-deep@^3.0.2:
   version "3.0.2"
@@ -9568,6 +9579,21 @@ npm-packlist@^1.1.6:
   dependencies:
     ignore-walk "^3.0.1"
     npm-bundled "^1.0.1"
+
+npm-run-all@^4.1.5:
+  version "4.1.5"
+  resolved "https://registry.yarnpkg.com/npm-run-all/-/npm-run-all-4.1.5.tgz#04476202a15ee0e2e214080861bff12a51d98fba"
+  integrity sha512-Oo82gJDAVcaMdi3nuoKFavkIHBRVqQ1qvMb+9LHk/cF4P6B2m8aP04hGf7oL6wZ9BuGwX1onlLhpuoofSyoQDQ==
+  dependencies:
+    ansi-styles "^3.2.1"
+    chalk "^2.4.1"
+    cross-spawn "^6.0.5"
+    memorystream "^0.3.1"
+    minimatch "^3.0.4"
+    pidtree "^0.3.0"
+    read-pkg "^3.0.0"
+    shell-quote "^1.6.1"
+    string.prototype.padend "^3.0.0"
 
 npm-run-path@^2.0.0:
   version "2.0.2"
@@ -10211,6 +10237,11 @@ picomatch@^2.2.1:
   version "2.2.2"
   resolved "https://registry.yarnpkg.com/picomatch/-/picomatch-2.2.2.tgz#21f333e9b6b8eaff02468f5146ea406d345f4dad"
   integrity sha512-q0M/9eZHzmr0AulXyPwNfZjtwZ/RBZlbN3K3CErVrk50T2ASYI7Bye0EvekFY3IP1Nt2DHu0re+V2ZHIpMkuWg==
+
+pidtree@^0.3.0:
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/pidtree/-/pidtree-0.3.1.tgz#ef09ac2cc0533df1f3250ccf2c4d366b0d12114a"
+  integrity sha512-qQbW94hLHEqCg7nhby4yRC7G2+jYHY4Rguc2bjw7Uug4GIJuu1tvf2uHaZv5Q8zdt+WKJ6qK1FOI6amaWUo5FA==
 
 pify@^2.0.0:
   version "2.3.0"
@@ -11607,6 +11638,15 @@ read-pkg@^1.0.0:
     normalize-package-data "^2.3.2"
     path-type "^1.0.0"
 
+read-pkg@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/read-pkg/-/read-pkg-3.0.0.tgz#9cbc686978fee65d16c00e2b19c237fcf6e38389"
+  integrity sha1-nLxoaXj+5l0WwA4rGcI3/Pbjg4k=
+  dependencies:
+    load-json-file "^4.0.0"
+    normalize-package-data "^2.3.2"
+    path-type "^3.0.0"
+
 "readable-stream@1 || 2", readable-stream@^2.0.0, readable-stream@^2.0.1, readable-stream@^2.0.4, readable-stream@^2.1.5, readable-stream@^2.2.2, readable-stream@^2.3.3, readable-stream@^2.3.6:
   version "2.3.6"
   resolved "https://registry.yarnpkg.com/readable-stream/-/readable-stream-2.3.6.tgz#b11c27d88b8ff1fbe070643cf94b0c79ae1b0aaf"
@@ -12369,6 +12409,11 @@ shell-quote@1.6.1:
     array-reduce "~0.0.0"
     jsonify "~0.0.0"
 
+shell-quote@^1.6.1:
+  version "1.7.2"
+  resolved "https://registry.yarnpkg.com/shell-quote/-/shell-quote-1.7.2.tgz#67a7d02c76c9da24f99d20808fcaded0e0e04be2"
+  integrity sha512-mRz/m/JVscCrkMyPqHc/bczi3OQHkLTqXHEFu0zDhK/qfv3UcOA4SVmRCLmos4bhjr9ekVQubj/R7waKapmiQg==
+
 shelljs@^0.8.2:
   version "0.8.3"
   resolved "https://registry.yarnpkg.com/shelljs/-/shelljs-0.8.3.tgz#a7f3319520ebf09ee81275b2368adb286659b097"
@@ -12964,6 +13009,11 @@ strip-bom@^2.0.0:
   integrity sha1-YhmoVhZSBJHzV4i9vxRHqZx+aw4=
   dependencies:
     is-utf8 "^0.2.0"
+
+strip-bom@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/strip-bom/-/strip-bom-3.0.0.tgz#2334c18e9c759f7bdd56fdef7e9ae3d588e68ed3"
+  integrity sha1-IzTBjpx1n3vdVv3vfprj1YjmjtM=
 
 strip-eof@^1.0.0:
   version "1.0.0"
