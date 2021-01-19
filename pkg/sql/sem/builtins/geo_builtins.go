@@ -1499,7 +1499,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					ctx,
 					tuple,
 					string(tree.MustBeDString(args[1])),
-					int(tree.MustBeDInt(args[2])),
+					fitMaxDecimalDigitsToBounds(int(tree.MustBeDInt(args[2]))),
 					false, /* pretty */
 				)
 			},
@@ -1525,7 +1525,7 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 					ctx,
 					tuple,
 					string(tree.MustBeDString(args[1])),
-					int(tree.MustBeDInt(args[2])),
+					fitMaxDecimalDigitsToBounds(int(tree.MustBeDInt(args[2]))),
 					bool(tree.MustBeDBool(args[3])),
 				)
 			},
