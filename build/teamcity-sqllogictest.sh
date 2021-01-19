@@ -16,9 +16,9 @@ export BUILDER_HIDE_GOPATH_SRC=0
 # numeric typing differences.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$'
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$' TAGS=crdb_test_off
 
 # Run the tests with a multitenant configuration.
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
-  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/ccl/logictestccl' TESTS='^TestTenantSQLLiteLogic$$'
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/ccl/logictestccl' TESTS='^TestTenantSQLLiteLogic$$' TAGS=crdb_test_off
