@@ -807,14 +807,15 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, nil, err
 			}
 
-			var latency time.Duration
-			// If LatencyGetter doesn't exist, latency's nil value of 0 is used.
-			// If latency is 0, it is not included in the displayed stats for
-			// EXPLAIN ANALYZE diagrams.
-			if flowCtx.Cfg.LatencyGetter != nil {
-				latency = time.Duration(flowCtx.Cfg.LatencyGetter.GetLatency(
-					ctx, inputStream.OriginNodeID, inputStream.TargetNodeID,
-				))
+			latency, err := s.nodeDialer.Latency(inputStream.TargetNodeID)
+			if err != nil {
+				// If an error occurred, latency's nil value of 0 is used. If latency is
+				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
+				// diagrams.
+				latency = 0
+				if log.V(1) {
+					log.Infof(ctx, "an error occurred during vectorized planning while getting latency: %v", err)
+				}
 			}
 
 			inbox, err := s.remoteComponentCreator.newInbox(
