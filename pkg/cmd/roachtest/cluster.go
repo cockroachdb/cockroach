@@ -2169,6 +2169,8 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 			if rng.Intn(2) == 1 {
 				c.l.Printf("starting with encryption at rest enabled")
 				args = append(args, "--encrypt")
+				// Force encryption in future calls of Start with the same cluster.
+				c.encryptDefault = true
 			}
 		}
 	}
