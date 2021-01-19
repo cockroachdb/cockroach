@@ -208,9 +208,26 @@ func (m *MemBatch) SetSelection(b bool) {
 // SetLength implements the Batch interface.
 func (m *MemBatch) SetLength(n int) {
 	m.n = n
-	for _, v := range m.b {
-		if v != nil && v.Type() == coltypes.Bytes {
-			v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
+	if n > 0 {
+		// In order to maintain the invariant of Bytes vectors we need to update
+		// offsets up to the element with the largest index that can be accessed
+		// by the batch.
+		maxIdx := n - 1
+		if m.useSel && m.sel[n-1] > maxIdx {
+			// Note that here we rely on the fact that selection vectors are
+			// increasing sequences.
+			//
+			// This assumption is only enforced by the invariantsChecker
+			// starting from 21.1 branches, so we have a "safe" conditional to
+			// not have a correctness regression, yet we deliberately do not
+			// want to iterate over the selection vector to find the largest
+			// index since that could be a performance regression.
+			maxIdx = m.sel[n-1]
+		}
+		for _, v := range m.b {
+			if v != nil && v.Type() == coltypes.Bytes {
+				v.Bytes().UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
+			}
 		}
 	}
 }
