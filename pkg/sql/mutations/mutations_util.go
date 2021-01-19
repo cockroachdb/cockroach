@@ -20,7 +20,7 @@ var maxBatchSize = defaultMaxBatchSize
 
 var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
 	10000, /* defaultValue */
-	1,     /* min */
+	10000, /* min */
 	10000, /* max */
 ))
 
