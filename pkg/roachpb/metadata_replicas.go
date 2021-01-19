@@ -53,6 +53,13 @@ func ReplicaTypeLearner() *ReplicaType {
 	return &t
 }
 
+// ReplicaTypeNonVoter returns a NON_VOTER pointer suitable for use in
+// a nullable proto field.
+func ReplicaTypeNonVoter() *ReplicaType {
+	t := NON_VOTER
+	return &t
+}
+
 // ReplicaSet is a set of replicas, usually the nodes/stores on which
 // replicas of a range are stored.
 type ReplicaSet struct {
