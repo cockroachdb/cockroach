@@ -15,7 +15,7 @@ import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { NonTableStatsResponseMessage } from "src/util/api";
 import { TimeSeriesTooltip } from "src/views/databases/containers/databases/tooltips";

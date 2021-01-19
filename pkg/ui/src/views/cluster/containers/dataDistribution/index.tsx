@@ -15,7 +15,7 @@ import { connect } from "react-redux";
 import Helmet from "react-helmet";
 import { withRouter } from "react-router-dom";
 
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";

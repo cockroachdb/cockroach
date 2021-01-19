@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 
 import { generateLocalityRoute } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
-import { util } from "@cockroachlabs/admin-ui-components";
+import { util } from "@cockroachlabs/cluster-ui";
 import { getLocalityLabel } from "src/util/localities";
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 import { trustIcon } from "src/util/trust";

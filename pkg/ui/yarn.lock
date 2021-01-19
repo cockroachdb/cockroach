@@ -1806,10 +1806,10 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/admin-ui-components@^0.1.37":
-  version "0.1.37"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/admin-ui-components/-/admin-ui-components-0.1.37.tgz#0862de4864777e0ddf1201febba24cfbd7f897f8"
-  integrity sha512-tvZ0skbITu4uky9xPxrq5kVXbSgLKikOKqUflH05o/Li8wudoJX4Br71S3lwENeTKlOB2FF3YvXwQYtdDhdB9A==
+"@cockroachlabs/cluster-ui@^0.1.38":
+  version "0.1.39"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.1.39.tgz#609f7983568b59e8ab0bb82580df47612ea1dfb9"
+  integrity sha512-eMQ76DA+rkFhGVP0sWaWUlPoEdOz8ARCaoniPSAxlqtohRLXm+rl+3PB5OzT+Qcb6w0o6lsH3hiVg1lxrH3fFw==
   dependencies:
     "@cockroachlabs/crdb-protobuf-client" "^0.0.4"
     "@cockroachlabs/icons" "0.3.0"

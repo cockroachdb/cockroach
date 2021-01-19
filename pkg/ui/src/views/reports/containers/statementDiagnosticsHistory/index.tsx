@@ -52,7 +52,7 @@ import {
   EmptyTable,
   shortStatement,
   getDiagnosticsStatus,
-} from "@cockroachlabs/admin-ui-components";
+} from "@cockroachlabs/cluster-ui";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;

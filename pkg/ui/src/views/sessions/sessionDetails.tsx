@@ -19,11 +19,7 @@ import { SessionsResponseMessage } from "src/util/api";
 import { connect } from "react-redux";
 import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
-
-import {
-  SessionDetails,
-  byteArrayToUuid,
-} from "@cockroachlabs/admin-ui-components";
+import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
 import { terminateQueryAction } from "src/redux/sessions/sessionsSagas";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
@@ -46,7 +42,6 @@ export const selectSession = createSelector(
     };
   },
 );
-// tslint:disable-next-line:variable-name
 const SessionDetailsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({

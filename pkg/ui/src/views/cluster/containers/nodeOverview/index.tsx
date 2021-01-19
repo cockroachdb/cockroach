@@ -33,7 +33,7 @@ import {
   SummaryLabel,
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import "./nodeOverview.styl";
 import {

@@ -40,7 +40,7 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { NodeCanvas } from "./nodeCanvas";
 
 type Liveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;

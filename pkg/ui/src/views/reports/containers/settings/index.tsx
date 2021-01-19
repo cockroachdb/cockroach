@@ -17,7 +17,7 @@ import { withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import "./index.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
