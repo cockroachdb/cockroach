@@ -12,6 +12,7 @@ package props
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -21,8 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -664,6 +667,51 @@ func getFilteredBucket(
 // given bucket is filtered by the given span. If swap is true, the upper and
 // lower bounds should be swapped for the bucket and the span. Returns ok=true
 // if these range sizes are calculated successfully, and false otherwise.
+// The calculations for rangeBefore and rangeAfter are datatype dependent.
+//
+// For numeric types, we can simply find the difference between the bucket/span
+// bounds for rangeBefore/rangeAfter.
+//
+// For non-numeric types, we can convert each bound into sorted key bytes
+// (CRDB key representation) to find their range. As we do need a lot of
+// precision in our range estimate, we can remove the common prefix between
+// bucket/span bounds, and limit the byte array to 8 bytes. This also simplifies
+// our implementation since we won't need to handle an arbitrary length of
+// bounds. Following the conversion, we must zero extend the byte arrays to
+// ensure the length is uniform between bucket/span bounds. This process is
+// highlighted below, where [\bear - \bobcat] represents the original bucket and
+// [\bluejay - \boar] represents the span.
+//
+//   bear    := [18  98  101 97  114 0   1          ]
+//           => [101 97  114 0   0   0   0   0      ]
+//
+//   bluejay := [18  98  108 117 101 106 97  121 0 1]
+//           => [108 117 101 106 97  121 0   0      ]
+//
+//   boar    := [18  98  111 97  114 0   1          ]
+//           => [111 97  114 0   0   0   0   0      ]
+//
+//   bobcat  := [18  98  111 98  99  97  116 0   1  ]
+//           => [111 98  99  97  116 0   0   0      ]
+//
+// We can now find the range before/after by finding the difference between
+// the bucket/span bounds:
+//
+//	 rangeBefore := [111 98  99  97  116 0   1   0] -
+//                  [101 97  114 0   1   0   0   0]
+//
+//   rangeAfter  := [111 97  114 0   1   0   0   0] -
+//                  [108 117 101 106 97  121 0   1]
+//
+// Subtracting the uint64 representations of the byte arrays, the resulting
+// rangeBefore and rangeAfter are:
+//
+//	 rangeBefore := 8,026,086,756,136,779,776 - 7,305,245,414,897,221,632
+//               := 720,841,341,239,558,100
+//
+//	 rangeAfter := 8,025,821,355,276,500,992 - 7,815,264,235,947,622,400
+//              := 210,557,119,328,878,600
+//
 func getRangesBeforeAndAfter(
 	bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound tree.Datum, swap bool,
 ) (rangeBefore, rangeAfter float64, ok bool) {
@@ -730,15 +778,68 @@ func getRangesBeforeAndAfter(
 			rng = float64(upper.Sub(lower))
 			return rng, true
 
+		case types.TimeFamily:
+			lower := lowerBound.(*tree.DTime)
+			upper := upperBound.(*tree.DTime)
+			rng = float64(*upper) - float64(*lower)
+			return rng, true
+
+		case types.TimeTZFamily:
+			lower := lowerBound.(*tree.DTimeTZ).TimeOfDay
+			upper := upperBound.(*tree.DTimeTZ).TimeOfDay
+			rng = float64(upper) - float64(lower)
+			return rng, true
+
 		default:
 			return 0, false
 		}
 	}
 
-	rangeBefore, okBefore := getRange(bucketLowerBound, bucketUpperBound)
-	rangeAfter, okAfter := getRange(spanLowerBound, spanUpperBound)
-	ok = okBefore && okAfter
+	getRangeNonNumeric := func(
+		lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter tree.Datum,
+	) (rngBefore, rngAfter float64, ok bool) {
 
+		// Utilizes an array to simplify number of repetitive calls.
+		boundArr := []tree.Datum{lowerBoundBefore, upperBoundBefore, lowerBoundAfter,
+			upperBoundAfter}
+		boundArrByte := make([][]byte, 4)
+
+		for i := range boundArr {
+			var err error
+			// Encode each bound value into a sortable byte format.
+			boundArrByte[i], err = rowenc.EncodeTableKey(nil, boundArr[i], encoding.Ascending)
+			if err != nil {
+				return 0, 0, false
+			}
+		}
+
+		// Remove common prefix.
+		ind := getCommonPrefix(boundArrByte)
+		for i := range boundArrByte {
+			// Fix length of byte arrays to 8 bytes.
+			boundArrByte[i] = getFixedLenArr(boundArrByte[i], ind, 8 /* fixLen */)
+		}
+
+		rngBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
+			binary.BigEndian.Uint64(boundArrByte[0]))
+		rngAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
+			binary.BigEndian.Uint64(boundArrByte[2]))
+
+		return rngBefore, rngAfter, true
+	}
+
+	// For non-numeric types, compute the prefix across all bucket/span bounds.
+	ok = false
+	if isNonNumeric(bucketLowerBound.ResolvedType()) {
+		rangeBefore, rangeAfter, ok = getRangeNonNumeric(
+			bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound,
+		)
+	} else {
+		okBefore, okAfter := false, false
+		rangeBefore, okBefore = getRange(bucketLowerBound, bucketUpperBound)
+		rangeAfter, okAfter = getRange(spanLowerBound, spanUpperBound)
+		ok = okBefore && okAfter
+	}
 	return rangeBefore, rangeAfter, ok
 }
 
@@ -749,6 +850,71 @@ func isDiscrete(typ *types.T) bool {
 		return true
 	}
 	return false
+}
+
+// isNonNumeric returns true if the given data type is non-numeric.
+// Note: this function does not support all non-numeric data-types within
+// cockroach db.
+func isNonNumeric(typ *types.T) bool {
+	switch typ.Family() {
+	case types.StringFamily, types.UuidFamily, types.INetFamily:
+		return true
+	}
+	return false
+}
+
+// getCommonPrefix returns the first index where the value at said index differs
+// across all byte arrays in byteArr. byteArr must contain at least one element
+// to compute a common prefix.
+func getCommonPrefix(byteArr [][]byte) int {
+
+	if len(byteArr) <= 0 {
+		panic(errors.AssertionFailedf("byteArr must have at least one element"))
+	}
+
+	// Checks if the current value at index is the same between all byte arrays.
+	currIndMatching := func(ind int) bool {
+		for i := 0; i < len(byteArr); i++ {
+			if ind >= len(byteArr[i]) || byteArr[0][ind] != byteArr[i][ind] {
+				return false
+			}
+		}
+		return true
+	}
+
+	ind := 0
+	for currIndMatching(ind) {
+		ind++
+	}
+
+	return ind
+}
+
+// getFixedLenArr returns a byte array of size fixLen starting from specified
+// index within the original byte array.
+func getFixedLenArr(byteArr []byte, ind, fixLen int) []byte {
+
+	if len(byteArr) <= 0 {
+		panic(errors.AssertionFailedf("byteArr must have at least one element"))
+	}
+
+	if fixLen <= 0 {
+		panic(errors.AssertionFailedf("desired fixLen must be greater than 0"))
+	}
+
+	if ind < 0 || ind > len(byteArr) {
+		panic(errors.AssertionFailedf("ind must be contained within byteArr"))
+	}
+
+	// If byteArr is insufficient to hold desired size of byte array (fixLen),
+	// allocate new array, else return subarray of size fixLen starting at ind
+	if len(byteArr) < ind+fixLen {
+		byteArrFix := make([]byte, fixLen)
+		copy(byteArrFix, byteArr[ind:])
+		return byteArrFix
+	}
+
+	return byteArr[ind : ind+fixLen]
 }
 
 // histogramWriter prints histograms with the following formatting:
