@@ -777,6 +777,19 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 			memo.EmptyProjectionsExpr,
 			insertColSet,
 		)
+	}
+
+	// Loop over each arbiter index, creating an upsert-distinct-on for each one.
+	// This must happen after all conflicting rows are removed with the left-join
+	// filters created above, to avoid removing valid rows (see #59125).
+	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
+		// Skip non-arbiter indexes.
+		if !arbiterIndexes.Contains(idx) {
+			continue
+		}
+
+		index := mb.tab.Index(idx)
+		_, isPartial := index.Predicate()
 
 		// If the index is a partial index, project a new column that allows the
 		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
