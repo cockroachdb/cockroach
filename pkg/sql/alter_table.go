@@ -882,12 +882,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-		case *tree.AlterTableOwner:
-			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
-			if err != nil {
-				return err
-			}
-			descriptorChanged = descriptorChanged || changed
 		default:
 			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
@@ -1289,56 +1283,6 @@ func (p *planner) updateFKBackReferenceName(
 		}
 	}
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
-}
-
-// alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
-// was updated.
-func (p *planner) alterTableOwner(
-	ctx context.Context, n *alterTableNode, newOwner security.SQLUsername,
-) (bool, error) {
-	privs := n.tableDesc.GetPrivileges()
-
-	// If the owner we want to set to is the current owner, do a no-op.
-	if newOwner == privs.Owner() {
-		return false, nil
-	}
-
-	if err := p.checkCanAlterTableAndSetNewOwner(ctx, n.tableDesc, newOwner); err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-// checkCanAlterTableAndSetNewOwner handles privilege checking and setting new owner.
-// Called in ALTER TABLE and REASSIGN OWNED BY.
-func (p *planner) checkCanAlterTableAndSetNewOwner(
-	ctx context.Context, desc *tabledesc.Mutable, newOwner security.SQLUsername,
-) error {
-	if err := p.checkCanAlterToNewOwner(ctx, desc, newOwner); err != nil {
-		return err
-	}
-
-	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(
-		ctx, desc.GetParentSchemaID(), desc.ParentID, newOwner, checkPublicSchema); err != nil {
-		return err
-	}
-
-	privs := desc.GetPrivileges()
-	privs.SetOwner(newOwner)
-
-	tn, err := p.getQualifiedTableName(ctx, desc)
-	if err != nil {
-		return err
-	}
-
-	return p.logEvent(ctx,
-		desc.ID,
-		&eventpb.AlterTableOwner{
-			TableName: tn.String(),
-			Owner:     newOwner.Normalized(),
-		})
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint

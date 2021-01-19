@@ -60,9 +60,11 @@ type bool_OP_TYPE_AGGKINDAgg struct {
 	// {{else}}
 	hashAggregateFuncBase
 	// {{end}}
-	col        []bool
-	sawNonNull bool
-	curAgg     bool
+	col    []bool
+	curAgg bool
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &bool_OP_TYPE_AGGKINDAgg{}
@@ -134,7 +136,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	outputIdx = a.curIdx
 	a.curIdx++
 	// {{end}}
-	if !a.sawNonNull {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -151,6 +153,7 @@ func (a *bool_OP_TYPE_AGGKINDAgg) Reset() {
 	// _DEFAULT_VAL is false.
 	// */}}
 	a.curAgg = _DEFAULT_VAL
+	a.foundNonNullForCurrentGroup = false
 }
 
 type bool_OP_TYPE_AGGKINDAggAlloc struct {
@@ -190,7 +193,7 @@ func _ACCUMULATE_BOOLEAN(
 	// {{end}}
 	if groups[i] {
 		if !a.isFirstGroup {
-			if !a.sawNonNull {
+			if !a.foundNonNullForCurrentGroup {
 				a.nulls.SetNull(a.curIdx)
 			} else {
 				a.col[a.curIdx] = a.curAgg
@@ -199,7 +202,7 @@ func _ACCUMULATE_BOOLEAN(
 			// {{with .Global}}
 			a.curAgg = _DEFAULT_VAL
 			// {{end}}
-			a.sawNonNull = false
+			a.foundNonNullForCurrentGroup = false
 		}
 		a.isFirstGroup = false
 	}
@@ -218,7 +221,7 @@ func _ACCUMULATE_BOOLEAN(
 		// {{with .Global}}
 		_ASSIGN_BOOL_OP(a.curAgg, a.curAgg, col[i])
 		// {{end}}
-		a.sawNonNull = true
+		a.foundNonNullForCurrentGroup = true
 	}
 
 	// {{end}}

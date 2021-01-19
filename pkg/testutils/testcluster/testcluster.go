@@ -38,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -56,6 +58,8 @@ type TestCluster struct {
 	}
 	serverArgs  []base.TestServerArgs
 	clusterArgs base.TestClusterArgs
+
+	t testing.TB
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -105,11 +109,33 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	}
 	wg.Wait()
 
-	for i := range tc.mu.serverStoppers {
-		if tc.mu.serverStoppers[i] != nil {
-			tc.mu.serverStoppers[i].Stop(context.TODO())
-			tc.mu.serverStoppers[i] = nil
-		}
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.stopServerLocked(i)
+	}
+
+	// TODO(irfansharif): Instead of checking for empty tracing registries after
+	// shutting down each node, we're doing it after shutting down all nodes.
+	// This is because TestCluster share the same Tracer object. Perhaps a saner
+	// thing to do is to separate out individual TestServers entirely. The
+	// component sharing within TestCluster has bitten in the past as well, and
+	// it's not clear why it has to be this way.
+	for i := 0; i < tc.NumServers(); i++ {
+		// Wait until a server's span registry is emptied out. This helps us check
+		// to see that there are no un-Finish()ed spans. We need to wrap this in a
+		// SucceedsSoon block because it's possible for us to issue requests during
+		// server shut down, where the requests in turn would create (registered)
+		// spans. Cleaning up temporary objects created by the session[1] is one
+		// example of this.
+		//
+		// [1]: cleanupSessionTempObjects
+		tracer := tc.Server(i).Tracer().(*tracing.Tracer)
+		testutils.SucceedsSoon(tc.t, func() error {
+			var err error
+			tracer.VisitSpans(func(span *tracing.Span) {
+				err = errors.Newf("expected to find no active spans, found %s", span.Meta())
+			})
+			return err
+		})
 	}
 }
 
@@ -117,6 +143,11 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 func (tc *TestCluster) StopServer(idx int) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	tc.stopServerLocked(idx)
+}
+
+func (tc *TestCluster) stopServerLocked(idx int) {
 	if tc.mu.serverStoppers[idx] != nil {
 		tc.mu.serverStoppers[idx].Stop(context.TODO())
 		tc.mu.serverStoppers[idx] = nil
@@ -155,6 +186,7 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 	tc := &TestCluster{
 		stopper:     stop.NewStopper(),
 		clusterArgs: clusterArgs,
+		t:           t,
 	}
 
 	// Check if any of the args have a locality set.
@@ -409,8 +441,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	thisStopper := s.Stopper()
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, thisStopper)
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, s.Stopper())
 	return s, nil
 }
 
@@ -1098,7 +1129,7 @@ func (tc *TestCluster) Restart() error {
 // RestartServer uses the cached ServerArgs to restart a Server specified by
 // the passed index.
 func (tc *TestCluster) RestartServer(idx int) error {
-	if !tc.serverStopped(idx) {
+	if !tc.ServerStopped(idx) {
 		return errors.Errorf("server %d must be stopped before attempting to restart", idx)
 	}
 	serverArgs := tc.serverArgs[idx]
@@ -1116,7 +1147,7 @@ func (tc *TestCluster) RestartServer(idx int) error {
 		serverArgs.Addr = ""
 		// Try and point the server to a live server in the cluster to join.
 		for i := range tc.Servers {
-			if !tc.serverStopped(i) {
+			if !tc.ServerStopped(i) {
 				serverArgs.JoinAddr = tc.Servers[i].ServingRPCAddr()
 			}
 		}
@@ -1151,12 +1182,51 @@ func (tc *TestCluster) RestartServer(idx int) error {
 	return nil
 }
 
-// serverStopped determines if a server has been explicitly
+// ServerStopped determines if a server has been explicitly
 // stopped by StopServer(s).
-func (tc *TestCluster) serverStopped(idx int) bool {
+func (tc *TestCluster) ServerStopped(idx int) bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.mu.serverStoppers[idx] == nil
+}
+
+// GetRaftLeader returns the replica that is the current raft leader for the
+// specified key.
+func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.Replica {
+	t.Helper()
+	var raftLeaderRepl *kvserver.Replica
+	testutils.SucceedsSoon(t, func() error {
+		var latestTerm uint64
+		for i := range tc.Servers {
+			err := tc.Servers[i].Stores().VisitStores(func(store *kvserver.Store) error {
+				repl := store.LookupReplica(key)
+				if repl == nil {
+					// Replica does not exist on this store or there is no raft
+					// status yet.
+					return nil
+				}
+				raftStatus := repl.RaftStatus()
+				if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
+					// If we find any newer term, it means any previous election is
+					// invalid.
+					raftLeaderRepl = nil
+					latestTerm = raftStatus.Term
+					if raftStatus.RaftState == raft.StateLeader {
+						raftLeaderRepl = repl
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if latestTerm == 0 || raftLeaderRepl == nil {
+			return errors.Errorf("could not find a raft leader for key %s", key)
+		}
+		return nil
+	})
+	return raftLeaderRepl
 }
 
 type testClusterFactoryImpl struct{}

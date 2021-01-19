@@ -31,9 +31,11 @@ func newBoolAndHashAggAlloc(
 
 type boolAndHashAgg struct {
 	hashAggregateFuncBase
-	col        []bool
-	sawNonNull bool
-	curAgg     bool
+	col    []bool
+	curAgg bool
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &boolAndHashAgg{}
@@ -59,7 +61,7 @@ func (a *boolAndHashAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						a.curAgg = a.curAgg && col[i]
-						a.sawNonNull = true
+						a.foundNonNullForCurrentGroup = true
 					}
 
 				}
@@ -70,7 +72,7 @@ func (a *boolAndHashAgg) Compute(
 					isNull = false
 					if !isNull {
 						a.curAgg = a.curAgg && col[i]
-						a.sawNonNull = true
+						a.foundNonNullForCurrentGroup = true
 					}
 
 				}
@@ -85,7 +87,7 @@ func (a *boolAndHashAgg) Compute(
 }
 
 func (a *boolAndHashAgg) Flush(outputIdx int) {
-	if !a.sawNonNull {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -94,6 +96,7 @@ func (a *boolAndHashAgg) Flush(outputIdx int) {
 
 func (a *boolAndHashAgg) Reset() {
 	a.curAgg = true
+	a.foundNonNullForCurrentGroup = false
 }
 
 type boolAndHashAggAlloc struct {
@@ -129,9 +132,11 @@ func newBoolOrHashAggAlloc(
 
 type boolOrHashAgg struct {
 	hashAggregateFuncBase
-	col        []bool
-	sawNonNull bool
-	curAgg     bool
+	col    []bool
+	curAgg bool
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
 }
 
 var _ AggregateFunc = &boolOrHashAgg{}
@@ -157,7 +162,7 @@ func (a *boolOrHashAgg) Compute(
 					isNull = nulls.NullAt(i)
 					if !isNull {
 						a.curAgg = a.curAgg || col[i]
-						a.sawNonNull = true
+						a.foundNonNullForCurrentGroup = true
 					}
 
 				}
@@ -168,7 +173,7 @@ func (a *boolOrHashAgg) Compute(
 					isNull = false
 					if !isNull {
 						a.curAgg = a.curAgg || col[i]
-						a.sawNonNull = true
+						a.foundNonNullForCurrentGroup = true
 					}
 
 				}
@@ -183,7 +188,7 @@ func (a *boolOrHashAgg) Compute(
 }
 
 func (a *boolOrHashAgg) Flush(outputIdx int) {
-	if !a.sawNonNull {
+	if !a.foundNonNullForCurrentGroup {
 		a.nulls.SetNull(outputIdx)
 	} else {
 		a.col[outputIdx] = a.curAgg
@@ -192,6 +197,7 @@ func (a *boolOrHashAgg) Flush(outputIdx int) {
 
 func (a *boolOrHashAgg) Reset() {
 	a.curAgg = false
+	a.foundNonNullForCurrentGroup = false
 }
 
 type boolOrHashAggAlloc struct {

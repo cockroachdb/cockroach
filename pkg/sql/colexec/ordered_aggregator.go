@@ -367,7 +367,9 @@ func (a *orderedAggregator) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	a.state = orderedAggregatorAggregating
-	a.scratch.shouldResetInternalBatch = true
+	// In some cases we might reset the aggregator before Next() is called for
+	// the first time, so there might not be a scratch batch allocated yet.
+	a.scratch.shouldResetInternalBatch = a.scratch.Batch != nil
 	a.scratch.resumeIdx = 0
 	a.lastReadBatch = nil
 	a.seenNonEmptyBatch = false

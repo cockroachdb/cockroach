@@ -76,7 +76,6 @@ func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
-func (*AlterTableOwner) alterTableCmd()              {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -93,7 +92,6 @@ var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
-var _ AlterTableCmd = &AlterTableOwner{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -604,9 +602,14 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
+	Name *UnresolvedObjectName
 	// TODO(solon): Adjust this, see
 	// https://github.com/cockroachdb/cockroach/issues/54696
-	Owner security.SQLUsername
+	Owner          security.SQLUsername
+	IfExists       bool
+	IsView         bool
+	IsMaterialized bool
+	IsSequence     bool
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
@@ -616,6 +619,21 @@ func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER")
+	if node.IsView {
+		if node.IsMaterialized {
+			ctx.WriteString(" MATERIALIZED")
+		}
+		ctx.WriteString(" VIEW ")
+	} else if node.IsSequence {
+		ctx.WriteString(" SEQUENCE ")
+	} else {
+		ctx.WriteString(" TABLE ")
+	}
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	node.Name.Format(ctx)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatUsername(node.Owner)
 }
