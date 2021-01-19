@@ -2467,6 +2467,15 @@ func (s *Store) relocateReplicas(
 	}
 }
 
+type relocationArgs struct {
+	targetsToAdd, targetsToRemove []roachpb.ReplicaDescriptor
+	addOp, removeOp               roachpb.ReplicaChangeType
+	allocateFn                    chooseReplicaToAddFn
+	removeFn                      chooseReplicaToRemoveFn
+	relocationTargets             []roachpb.ReplicationTarget
+	noVotersToRelocate            bool
+}
+
 func (s *Store) relocateOne(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -2491,17 +2500,34 @@ func (s *Store) relocateOne(
 	storeList, _, _ := s.allocator.storePool.getStoreList(storeFilterNone)
 	storeMap := storeListToMap(storeList)
 
-	getTargetsToRelocate := func() (targetsToAdd, targetsToRemove []roachpb.ReplicaDescriptor,
-		addOp, removeOp roachpb.ReplicaChangeType, votersRelocated bool) {
+	getRelocationArgs := func() relocationArgs {
 		votersToAdd := subtractTargets(voterTargets, desc.Replicas().Voters().ReplicationTargets())
 		votersToRemove := subtractTargets(desc.Replicas().Voters().ReplicationTargets(), voterTargets)
 		// If there are no voters to relocate, we relocate the non-voters.
 		if len(votersToAdd) == 0 && len(votersToRemove) == 0 {
 			nonVotersToAdd := subtractTargets(nonVoterTargets, desc.Replicas().NonVoters().ReplicationTargets())
 			nonVotersToRemove := subtractTargets(desc.Replicas().NonVoters().ReplicationTargets(), nonVoterTargets)
-			return nonVotersToAdd, nonVotersToRemove, roachpb.ADD_NON_VOTER, roachpb.REMOVE_NON_VOTER, true
+			return relocationArgs{
+				targetsToAdd:       nonVotersToAdd,
+				targetsToRemove:    nonVotersToRemove,
+				addOp:              roachpb.ADD_NON_VOTER,
+				removeOp:           roachpb.REMOVE_NON_VOTER,
+				allocateFn:         s.allocator.allocateNonVotersFromList,
+				removeFn:           s.allocator.RemoveNonVoter,
+				relocationTargets:  nonVoterTargets,
+				noVotersToRelocate: true,
+			}
 		}
-		return votersToAdd, votersToRemove, roachpb.ADD_VOTER, roachpb.REMOVE_VOTER, false
+		return relocationArgs{
+			targetsToAdd:       votersToAdd,
+			targetsToRemove:    votersToRemove,
+			addOp:              roachpb.ADD_VOTER,
+			removeOp:           roachpb.REMOVE_VOTER,
+			allocateFn:         s.allocator.allocateVotersFromList,
+			removeFn:           s.allocator.RemoveVoter,
+			relocationTargets:  voterTargets,
+			noVotersToRelocate: false,
+		}
 	}
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
@@ -2513,24 +2539,20 @@ func (s *Store) relocateOne(
 	// same node, and this code doesn't do anything to specifically avoid that
 	// case (although the allocator will avoid even trying to send snapshots to
 	// such stores), so it could cause some failures.
-	targetsToAdd, targetsToRemove, addOp, removeOp, votersRelocated := getTargetsToRelocate()
-	relocationTargets := voterTargets
-	existingReplicas := desc.Replicas().VoterDescriptors()
-	if votersRelocated {
-		relocationTargets = nonVoterTargets
-		existingReplicas = desc.Replicas().NonVoterDescriptors()
-	}
+	args := getRelocationArgs()
+	existingVoters, existingNonVoters := desc.Replicas().VoterDescriptors(), desc.Replicas().NonVoterDescriptors()
+	existingReplicas := desc.Replicas().Descriptors()
 
 	var ops roachpb.ReplicationChanges
-	if len(targetsToAdd) > 0 {
+	if len(args.targetsToAdd) > 0 {
 		// Each iteration, pick the most desirable replica to add. However,
 		// prefer the first target because it's the one that should hold the
 		// lease in the end; it helps to add it early so that the lease doesn't
 		// have to move too much.
-		candidateTargets := targetsToAdd
-		if !votersRelocated && storeHasReplica(relocationTargets[0].StoreID, candidateTargets) {
+		candidateTargets := args.targetsToAdd
+		if !args.noVotersToRelocate && storeHasReplica(args.relocationTargets[0].StoreID, candidateTargets) {
 			candidateTargets = []roachpb.ReplicaDescriptor{
-				{NodeID: relocationTargets[0].NodeID, StoreID: relocationTargets[0].StoreID},
+				{NodeID: args.relocationTargets[0].NodeID, StoreID: args.relocationTargets[0].StoreID},
 			}
 		}
 
@@ -2548,46 +2570,48 @@ func (s *Store) relocateOne(
 		}
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		targetStore, _ := s.allocator.allocateTargetFromList(
-			ctx,
-			candidateStoreList,
-			zone,
-			existingReplicas,
-			s.allocator.scorerOptions())
-		if targetStore == nil {
-			return nil, nil, fmt.Errorf("none of the remaining relocationTargets %v are legal additions to %v",
-				targetsToAdd, desc.Replicas())
-		}
+		targetStore, _ := args.allocateFn(ctx, candidateStoreList, zone, existingVoters, existingNonVoters, s.allocator.scorerOptions())
 
 		target := roachpb.ReplicationTarget{
 			NodeID:  targetStore.Node.NodeID,
 			StoreID: targetStore.StoreID,
 		}
-		ops = append(ops, roachpb.MakeReplicationChanges(addOp, target)...)
+		ops = append(ops, roachpb.MakeReplicationChanges(args.addOp, target)...)
+
 		// Pretend the replica is already there so that the removal logic below will
 		// take it into account when deciding which replica to remove.
-		existingReplicas = append(existingReplicas, roachpb.ReplicaDescriptor{
-			NodeID:    target.NodeID,
-			StoreID:   target.StoreID,
-			ReplicaID: desc.NextReplicaID,
-			Type:      roachpb.ReplicaTypeVoterFull(),
-		})
+		if args.noVotersToRelocate {
+			existingNonVoters = append(existingNonVoters, roachpb.ReplicaDescriptor{
+				NodeID:    target.NodeID,
+				StoreID:   target.StoreID,
+				ReplicaID: desc.NextReplicaID,
+				Type:      roachpb.ReplicaTypeNonVoter(),
+			})
+		} else {
+			existingVoters = append(existingVoters, roachpb.ReplicaDescriptor{
+				NodeID:    target.NodeID,
+				StoreID:   target.StoreID,
+				ReplicaID: desc.NextReplicaID,
+				Type:      roachpb.ReplicaTypeVoterFull(),
+			})
+		}
 	}
 
 	var transferTarget *roachpb.ReplicationTarget
-	if len(targetsToRemove) > 0 {
-		// Pick a replica to remove. Note that existingReplicas may already reflect
-		// a replica we're adding in the current round. This is the right thing
-		// to do. For example, consider relocating from (s1,s2,s3) to (s1,s2,s4)
-		// where targetsToAdd will be (s4) and targetsToRemove is (s3). In this code,
-		// we'll want the allocator to see if s3 can be removed from
+	if len(args.targetsToRemove) > 0 {
+		// Pick a replica to remove. Note that existingVoters/existingNonVoters may
+		// already reflect a replica we're adding in the current round. This is the
+		// right thing to do. For example, consider relocating from (s1,s2,s3) to
+		// (s1,s2,s4) where targetsToAdd will be (s4) and targetsToRemove is (s3).
+		// In this code, we'll want the allocator to see if s3 can be removed from
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
-		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3)
-		// it may not want to do that due to constraints.
-		targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, targetsToRemove, existingReplicas)
+		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
+		// may not want to do that due to constraints.
+		targetStore, _, err := args.removeFn(ctx, zone, args.targetsToRemove, existingVoters,
+			existingNonVoters)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
-				targetsToRemove, existingReplicas)
+				args.targetsToRemove, existingReplicas)
 		}
 		removalTarget := roachpb.ReplicationTarget{
 			NodeID:  targetStore.NodeID,
@@ -2617,7 +2641,7 @@ func (s *Store) relocateOne(
 			sort.Slice(sortedTargetReplicas, func(i, j int) bool {
 				sl := sortedTargetReplicas
 				// relocationTargets[0] goes to the front (if it's present).
-				return sl[i].StoreID == relocationTargets[0].StoreID
+				return sl[i].StoreID == args.relocationTargets[0].StoreID
 			})
 			for _, rDesc := range sortedTargetReplicas {
 				if rDesc.StoreID != curLeaseholder.StoreID {
@@ -2638,7 +2662,7 @@ func (s *Store) relocateOne(
 		// illegal).
 		if ok {
 			ops = append(ops, roachpb.MakeReplicationChanges(
-				removeOp,
+				args.removeOp,
 				removalTarget)...)
 		}
 	}
