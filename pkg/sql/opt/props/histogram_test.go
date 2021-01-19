@@ -578,23 +578,267 @@ func TestFilterBucket(t *testing.T) {
 		runTest(h, testData, types.TimestampFamily)
 	})
 
-	t.Run("string", func(t *testing.T) {
+	t.Run("time", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTime(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTime(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
 		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
-			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("baq"))},
-			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("foo")},
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
 		}}
+
+		ub1, _, err := tree.ParseDTime(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		testData := []testCase{
 			{
-				span:     "[/bar - /baz]",
-				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("baz")},
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
 			},
 			{
-				span:     "[/baz - /foo]",
-				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDString("foo")},
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
 			},
 		}
 
-		runTest(h, testData, types.StringFamily)
+		runTest(h, testData, types.TimeFamily)
+	})
+
+	t.Run("timetz", func(t *testing.T) {
+		upperBound, _, err := tree.ParseDTimeTZ(&evalCtx, "05:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lowerBound, _, err := tree.ParseDTimeTZ(&evalCtx, "04:00:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(lowerBound)},
+			{NumEq: 1, NumRange: 62, DistinctRange: 31, UpperBound: upperBound},
+		}}
+
+		ub1, _, err := tree.ParseDTimeTZ(&evalCtx, "04:15:00", time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		testData := []testCase{
+			{
+				span:     "[/04:00:00 - /04:15:00]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 15.5, DistinctRange: 7.75, UpperBound: ub1},
+			},
+			{
+				span:     "[/04:30:00 - /05:00:00]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 31, DistinctRange: 15.5, UpperBound: upperBound},
+			},
+		}
+
+		runTest(h, testData, types.TimeTZFamily)
+	})
+
+	t.Run("string", func(t *testing.T) {
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("bear"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("bobcat")},
+		}}
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("a"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+		}}
+		h3 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("aaaaaaaaaaaa"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("cccccccccccc")},
+		}}
+
+		t1 := []testCase{
+			{
+				span:     "[/bluejay - /boar]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.92, DistinctRange: 2.92, UpperBound: tree.NewDString("boar")},
+			},
+			{
+				span:     "[/beer - /bobcat]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 9.98, DistinctRange: 9.98, UpperBound: tree.NewDString("bobcat")},
+			},
+		}
+
+		t2 := []testCase{
+			// Within the CRDB encoding, all null bytes are followed by an escape byte,
+			// (255) which are left in for the rangeAfter calculations. For this
+			// reason, the resulting NumRange is slightly lower than expected at 4.99
+			// instead of 5.
+			{
+				span:     "[/a\x00 - /b]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: tree.NewDString("b")},
+			},
+			{
+				span:     "[/as - /b]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDString("b")},
+			},
+			{
+				span:     "[/as - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.77, DistinctRange: 7.77, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/bs - /c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 2.76, DistinctRange: 2.76, UpperBound: tree.NewDString("c")},
+			},
+		}
+
+		// The initial 8 bytes for lowerBound and upperBound of the span is the same.
+		// Hence, the resulting NumRange/DistinctRange should be 0, as rangeAfter
+		// only considers the first 8 bytes of the bounds.
+		t3 := []testCase{
+			{
+				span:     "[/aaaaaaaabbbb - /aaaaaaaacccc]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("aaaaaaaacccc")},
+			},
+		}
+
+		runTest(h1, t1, types.StringFamily)
+		runTest(h2, t2, types.StringFamily)
+		runTest(h3, t3, types.StringFamily)
+	})
+
+	t.Run("uuid", func(t *testing.T) {
+		l1, err := tree.ParseDUuidFromString("2189ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u1, err := tree.ParseDUuidFromString("4589ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+		l2, err := tree.ParseDUuidFromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u2, err := tree.ParseDUuidFromString("cccccccc-cccc-cccc-cccc-cccccccccccc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u3, err := tree.ParseDUuidFromString("4289ad07-52f2-4d60-83e8-4a8347fef718")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(l1)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u1},
+		}}
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(l2)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u2},
+		}}
+
+		t1 := []testCase{
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4289ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.72, DistinctRange: 4.72, UpperBound: u3},
+			},
+			{
+				span:     "[/3189ad07-52f2-4d60-83e8-4a8347fef718 - /4589ad07-52f2-4d60-83e8-4a8347fef718]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.56, DistinctRange: 5.56, UpperBound: u1},
+			},
+		}
+
+		t2 := []testCase{
+			{
+				span:     "[/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb - /cccccccc-cccc-cccc-cccc-cccccccccccc]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: u2},
+			},
+			{
+				span:     "[/b3333333-aaaa-aaaa-aaaa-aaaaaaaaaaaa - /cccccccc-cccc-cccc-cccc-cccccccccccc]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.5, DistinctRange: 7.5, UpperBound: u2},
+			},
+		}
+
+		runTest(h1, t1, types.UuidFamily)
+		runTest(h2, t2, types.UuidFamily)
+	})
+
+	t.Run("inet", func(t *testing.T) {
+		l1, err := tree.ParseDIPAddrFromINetString("0.0.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u1, err := tree.ParseDIPAddrFromINetString("255.255.255.255")
+		if err != nil {
+			t.Fatal(err)
+		}
+		l2, err := tree.ParseDIPAddrFromINetString("0:0:0:0:0:0:0:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u2, err := tree.ParseDIPAddrFromINetString("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		u3, err := tree.ParseDIPAddrFromINetString("0:0:0:0:ffff:ffff:ffff:ffff")
+		if err != nil {
+			t.Fatal(err)
+		}
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(l1)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u1},
+		}}
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(l2)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u2},
+		}}
+		h3 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(l1)},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u2},
+		}}
+
+		t1 := []testCase{
+			{
+				span:     "[/128.128.128.128 - /255.255.255.255]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5, DistinctRange: 5, UpperBound: u1},
+			},
+			{
+				span:     "[/63.63.63.63 - /255.255.255.255]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 7.56, DistinctRange: 7.56, UpperBound: u1},
+			},
+		}
+		t2 := []testCase{
+			{
+				span:     "[/7777:7777:7777:7777:7777:7777:7777:7777 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 5.35, DistinctRange: 5.35, UpperBound: u2},
+			},
+			{
+				span:     "[/3333:3333:3333:3333:3333:3333:3333:3333 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8.03, DistinctRange: 8.03, UpperBound: u2},
+			},
+		}
+		t3 := []testCase{
+			// Due to the large address space of IPV6, when the lower bound (IPV4) is
+			// updated, but the upper bound (IPV6) stays the same, there is no
+			// difference in the range estimate.
+			{
+				span:     "[/255.255.255.255 - /ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: u2},
+			},
+			// The dominant factor in the range difference between IPV4 & IPV6 is the
+			// family-tag/mask which make up the first 2 bytes of the CRDB encoding.
+			// Hence, there is still a very minor difference in NumRange even when the
+			// upperbound is updated.
+			{
+				span:     "[/0.0.0.0 - /0000:0000:0000:0000:ffff:ffff:ffff:ffff]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 9.92, DistinctRange: 9.92, UpperBound: u3},
+			},
+		}
+
+		runTest(h1, t1, types.INetFamily)
+		runTest(h2, t2, types.INetFamily)
+		runTest(h3, t3, types.INetFamily)
 	})
 
 }

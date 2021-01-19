@@ -1981,6 +1981,26 @@ select
  └── filters
       └── created:3 = '2020-04-11 06:25:41+00:00' [type=bool, outer=(3), constraints=(/3: [/'2020-04-11 06:25:41+00:00' - /'2020-04-11 06:25:41+00:00']; tight), fd=()-->(3)]
 
+# Make sure that using a histogram produces correct stats with range
+# calculations for non-numeric types.
+norm
+SELECT * FROM data WHERE name >= 'bbb'
+----
+select
+ ├── columns: user_id:1(uuid!null) name:2(varchar!null) created:3(timestamptz)
+ ├── stats: [rows=3090.89689, distinct(2)=309.433397, null(2)=0]
+ │   histogram(2)=  0    0    3089.9   1
+ │                <--- 'bbb' -------- 'c'
+ ├── scan data
+ │    ├── columns: user_id:1(uuid!null) name:2(varchar) created:3(timestamptz)
+ │    └── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+ │        histogram(1)=  0                    1                     4998                    1                     4999                    1
+ │                     <--- '3b57b3e4-a68a-9b47-2752-e365d7d8954e' ------ '6b49a786-387b-d5a2-6582-4e963eb4d537' ------ 'd9739a48-d5be-9a62-e752-34d877e56ba5'
+ │        histogram(2)=  0   1   4998   1   4999   1
+ │                     <--- 'a' ------ 'b' ------ 'c'
+ └── filters
+      └── name:2 >= 'bbb' [type=bool, outer=(2), constraints=(/2: [/'bbb' - ]; tight)]
+
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
   {
