@@ -16,6 +16,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/subtle"
 	gojson "encoding/json"
 	"fmt"
 	"hash"
@@ -71,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
+	"golang.org/x/crypto/argon2"
 )
 
 var (
@@ -1045,6 +1047,90 @@ var builtins = map[string]builtinDefinition{
 	"crc32c": hash32Builtin(
 		func() hash.Hash32 { return crc32.New(crc32.MakeTable(crc32.Castagnoli)) },
 		"Calculates the CRC-32 hash using the Castagnoli polynomial.",
+	),
+
+	"argon2_idkey": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"password", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				time := uint32(5)
+				memory := uint32(64 * 1024) //64Mb
+				threads := uint8(1)
+				keyLen := uint32(64)
+				saltLen := uint32(32)
+				password := tree.MustBeDString(args[0])
+				salt := make([]byte, saltLen)
+				_, err := rand.Read(salt)
+				if err != nil {
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"Error calculating salt - "+err.Error())
+				}
+				hash := argon2.IDKey([]byte(password), salt, time, memory, threads, keyLen)
+				return tree.NewDString(
+						fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+							argon2.Version,
+							memory,
+							time,
+							threads,
+							lex.EncodeByteArrayToRawBytes(string(salt), sessiondatapb.BytesEncodeBase64, true /* skipHexPrefix */),
+							lex.EncodeByteArrayToRawBytes(string(hash), sessiondatapb.BytesEncodeBase64, true /* skipHexPrefix */),
+						)),
+					nil
+			},
+			Info:       "Calculates the argon2 hash of `password`",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"argon2_compare_password": makeBuiltin(
+		tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"hash", types.String}, {"password", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				time := uint32(5)
+				memory := uint32(64 * 1024) //64Mb
+				threads := uint8(1)
+				keyLen := uint32(64)
+				hashraw := tree.MustBeDString(args[0])
+				vals := strings.Split(string(hashraw), "$")
+				if len(vals) != 6 {
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"Invalid hash input")
+				}
+				var version int
+				_, err := fmt.Sscanf(vals[2], "v=%d", &version)
+				if err != nil {
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"Invalid hash version - "+err.Error())
+				}
+				if version != argon2.Version {
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"Invalid hash version")
+				}
+				_, err = fmt.Sscanf(vals[3], "m=%d,t=%d,p=%d", &memory, &time, &threads)
+				if err != nil {
+					return nil, pgerror.New(pgcode.InvalidParameterValue,
+						"Invalid hash parameters - "+err.Error())
+				}
+				salt, err := lex.DecodeRawBytesToByteArray(vals[4], sessiondatapb.BytesEncodeBase64)
+				if err != nil {
+					return nil, err
+				}
+				key, err := lex.DecodeRawBytesToByteArray(vals[5], sessiondatapb.BytesEncodeBase64)
+				if err != nil {
+					return nil, err
+				}
+				keyLen = uint32(len(key))
+				password := tree.MustBeDString(args[1])
+				newHash := argon2.IDKey([]byte(password), salt, time, memory, threads, keyLen)
+				return tree.MakeDBool(subtle.ConstantTimeCompare(key, newHash) == 1), nil
+			},
+			Info:       "Compares the argon2 `hash` against the supplied `password`",
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 
 	"to_hex": makeBuiltin(
