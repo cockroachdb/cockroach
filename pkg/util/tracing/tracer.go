@@ -87,7 +87,7 @@ trace sink will cause verbose traces to be created for all
 operations, which may lead to high memory consumption. It is not
 currently possible to send non-verbose traces to auxiliary sinks.
 `,
-	"legacy",
+	"background",
 	map[int64]string{
 		int64(modeLegacy):     "legacy",
 		int64(modeBackground): "background",
