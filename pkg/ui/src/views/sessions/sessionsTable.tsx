@@ -23,7 +23,7 @@ import { Link } from "react-router-dom";
 import React from "react";
 import { Button, Tooltip } from "src/components";
 import { Moment } from "moment";
-import { StatementLink } from "src/views/statements/statementsTableContent";
+import { StatementLink } from "@cockroachlabs/admin-ui-components";
 import ISession = cockroach.server.serverpb.ISession;
 import { TerminateSessionModalRef } from "src/views/sessions/terminateSessionModal";
 import { TerminateQueryModalRef } from "src/views/sessions/terminateQueryModal";
