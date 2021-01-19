@@ -404,6 +404,9 @@ func (rq *replicateQueue) processOneChange(
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
+	case AllocatorAddNonVoter, AllocatorRemoveNonVoter:
+		return false, errors.Errorf("allocator actions pertaining to non-voters are"+
+			" currently not supported: %v", action)
 	default:
 		return false, errors.Errorf("unknown allocator action %v", action)
 	}
@@ -478,7 +481,7 @@ func (rq *replicateQueue) addOrReplace(
 	}
 
 	clusterNodes := rq.allocator.storePool.ClusterNodeCount()
-	need := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+	need := GetNeededVoters(*zone.NumReplicas, clusterNodes)
 
 	// Only up-replicate if there are suitable allocation targets such that,
 	// either the replication goal is met, or it is possible to get to the next
