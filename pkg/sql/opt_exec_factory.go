@@ -1148,7 +1148,8 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
@@ -1399,7 +1400,8 @@ func (ef *execFactory) ConstructUpdate(
 func (ef *execFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	canaryCol exec.NodeColumnOrdinal,
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	fetchColOrdSet exec.TableColumnOrdinalSet,
