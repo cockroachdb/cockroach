@@ -20,7 +20,7 @@ import { storesRequestKey, refreshStores } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 
 interface StoresOwnProps {

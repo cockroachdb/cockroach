@@ -17,7 +17,7 @@ import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 import { createSelector } from "reselect";
 import { SessionsResponseMessage } from "src/util/api";
 
-import { SessionsPage } from "@cockroachlabs/admin-ui-components";
+import { SessionsPage } from "@cockroachlabs/cluster-ui";
 import { terminateQueryAction } from "src/redux/sessions/sessionsSagas";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
@@ -38,7 +38,6 @@ export const selectSessions = createSelector(
   },
 );
 
-// tslint:disable-next-line:variable-name
 const SessionsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({

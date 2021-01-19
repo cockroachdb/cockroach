@@ -13,7 +13,7 @@ import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
-import { util } from "@cockroachlabs/admin-ui-components";
+import { util } from "@cockroachlabs/cluster-ui";
 import { Pick } from "src/util/pick";
 import { NoConnection } from "src/views/reports/containers/network";
 import { nullOfReturnType } from "src/util/types";

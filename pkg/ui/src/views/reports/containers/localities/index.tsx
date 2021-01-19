@@ -29,7 +29,7 @@ import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import "./localities.styl";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 

@@ -24,7 +24,7 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 
 type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;

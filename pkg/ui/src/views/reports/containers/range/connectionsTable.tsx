@@ -14,7 +14,7 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 
 interface ConnectionsTableProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;

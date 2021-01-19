@@ -18,7 +18,7 @@ import "src/enzymeInit";
 import { NonTableSummary } from "./nonTableSummary";
 import { refreshNonTableStats } from "src/redux/apiReducers";
 import { cockroach } from "src/js/protos";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import NonTableStatsResponse = cockroach.server.serverpb.NonTableStatsResponse;
 
 describe("NonTableSummary", () => {
