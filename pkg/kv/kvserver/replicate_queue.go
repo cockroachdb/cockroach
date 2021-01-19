@@ -120,6 +120,7 @@ func (e *quorumError) Error() string {
 func (*quorumError) purgatoryErrorMarker() {}
 
 // ReplicateQueueMetrics is the set of metrics for the replicate queue.
+// TODO(aayush): Track metrics for non-voting replicas separately here.
 type ReplicateQueueMetrics struct {
 	AddReplicaCount           *metric.Counter
 	RemoveReplicaCount        *metric.Counter
@@ -322,7 +323,9 @@ func (rq *replicateQueue) processOneChange(
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
 	voterReplicas := desc.Replicas().VoterDescriptors()
+	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
+	liveNonVoterReplicas, _ := rq.allocator.storePool.liveAndDeadReplicas(nonVoterReplicas)
 
 	// NB: the replication layer ensures that the below operations don't cause
 	// unavailability; see:
@@ -345,9 +348,14 @@ func (rq *replicateQueue) processOneChange(
 		// Let the scanner requeue it again later.
 		return false, nil
 	case AllocatorAddVoter:
-		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, -1 /* removeIdx */, dryRun)
+		return rq.addOrReplaceVoters(ctx, repl, voterReplicas, liveVoterReplicas, liveNonVoterReplicas,
+			-1 /* removeIdx */, dryRun)
+	case AllocatorAddNonVoter:
+		return rq.addNonVoter(ctx, repl, nonVoterReplicas, liveVoterReplicas, liveNonVoterReplicas, dryRun)
 	case AllocatorRemoveVoter:
-		return rq.remove(ctx, repl, voterReplicas, dryRun)
+		return rq.removeVoter(ctx, repl, voterReplicas, nonVoterReplicas, dryRun)
+	case AllocatorRemoveNonVoter:
+		return rq.removeNonVoter(ctx, repl, voterReplicas, nonVoterReplicas, dryRun)
 	case AllocatorReplaceDeadVoter:
 		if len(deadVoterReplicas) == 0 {
 			// Nothing to do.
@@ -365,7 +373,7 @@ func (rq *replicateQueue) processOneChange(
 				"dead voter %v unexpectedly not found in %v",
 				deadVoterReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceVoters(ctx, repl, voterReplicas, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
 	case AllocatorReplaceDecommissioningVoter:
 		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(voterReplicas)
 		if len(decommissioningReplicas) == 0 {
@@ -384,7 +392,7 @@ func (rq *replicateQueue) processOneChange(
 				"decommissioning voter %v unexpectedly not found in %v",
 				decommissioningReplicas[0], voterReplicas)
 		}
-		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
+		return rq.addOrReplaceVoters(ctx, repl, voterReplicas, liveVoterReplicas, liveNonVoterReplicas, removeIdx, dryRun)
 	case AllocatorRemoveDecommissioningVoter:
 		// NB: this path will only be hit when the range is over-replicated and
 		// has decommissioning replicas; in the common case we'll hit
@@ -404,51 +412,50 @@ func (rq *replicateQueue) processOneChange(
 		// Requeue because either we failed to transition out of a joint state
 		// (bad) or we did and there might be more to do for that range.
 		return true, err
-	case AllocatorAddNonVoter, AllocatorRemoveNonVoter:
-		return false, errors.Errorf("allocator actions pertaining to non-voters are"+
-			" currently not supported: %v", action)
 	default:
 		return false, errors.Errorf("unknown allocator action %v", action)
 	}
 }
 
-// addOrReplace adds or replaces a replica. If removeIdx is -1, an addition is
-// carried out. Otherwise, removeIdx must be a valid index into existingReplicas
-// and specifies which replica to replace with a new one.
+// addOrReplaceVoters adds or replaces a voting replica. If removeIdx is -1, an
+// addition is carried out. Otherwise, removeIdx must be a valid index into
+// existingVoters and specifies which voter to replace with a new one.
 //
 // The method preferably issues an atomic replica swap, but may not be able to
 // do this in all cases, such as when atomic replication changes are not
 // available, or when the range consists of a single replica. As a fall back,
 // only the addition is carried out; the removal is then a follow-up step for
 // the next scanner cycle.
-func (rq *replicateQueue) addOrReplace(
+func (rq *replicateQueue) addOrReplaceVoters(
 	ctx context.Context,
 	repl *Replica,
-	existingReplicas []roachpb.ReplicaDescriptor,
+	existingVoters []roachpb.ReplicaDescriptor,
 	liveVoterReplicas []roachpb.ReplicaDescriptor,
+	liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int, // -1 for no removal
 	dryRun bool,
 ) (requeue bool, _ error) {
-	if len(existingReplicas) == 1 {
+	if len(existingVoters) == 1 {
 		// If only one replica remains, that replica is the leaseholder and
 		// we won't be able to swap it out. Ignore the removal and simply add
 		// a replica.
 		removeIdx = -1
 	}
 
-	remainingLiveReplicas := liveVoterReplicas
+	remainingLiveVoters := liveVoterReplicas
+	remainingLiveNonVoters := liveNonVoterReplicas
 	if removeIdx >= 0 {
-		replToRemove := existingReplicas[removeIdx]
+		replToRemove := existingVoters[removeIdx]
 		for i, r := range liveVoterReplicas {
 			if r.ReplicaID == replToRemove.ReplicaID {
-				remainingLiveReplicas = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
+				remainingLiveVoters = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
 				break
 			}
 		}
 		// See about transferring the lease away if we're about to remove the
 		// leaseholder.
 		done, err := rq.maybeTransferLeaseAway(
-			ctx, repl, existingReplicas[removeIdx].StoreID, dryRun, nil /* canTransferLease */)
+			ctx, repl, existingVoters[removeIdx].StoreID, dryRun, nil /* canTransferLease */)
 		if err != nil {
 			return false, err
 		}
@@ -464,15 +471,11 @@ func (rq *replicateQueue) addOrReplace(
 	// there is a reason we're removing it (i.e. dead or decommissioning). If we
 	// left the replica in the slice, the allocator would not be guaranteed to
 	// pick a replica that fills the gap removeRepl leaves once it's gone.
-	newStore, details, err := rq.allocator.AllocateTarget(
-		ctx,
-		zone,
-		remainingLiveReplicas,
-	)
+	newStore, details, err := rq.allocator.AllocateVoter(ctx, zone, remainingLiveVoters, remainingLiveNonVoters)
 	if err != nil {
 		return false, err
 	}
-	if removeIdx >= 0 && newStore.StoreID == existingReplicas[removeIdx].StoreID {
+	if removeIdx >= 0 && newStore.StoreID == existingVoters[removeIdx].StoreID {
 		return false, errors.AssertionFailedf("allocator suggested to replace replica on s%d with itself", newStore.StoreID)
 	}
 	newReplica := roachpb.ReplicationTarget{
@@ -481,7 +484,7 @@ func (rq *replicateQueue) addOrReplace(
 	}
 
 	clusterNodes := rq.allocator.storePool.ClusterNodeCount()
-	need := GetNeededVoters(*zone.NumReplicas, clusterNodes)
+	neededVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
 
 	// Only up-replicate if there are suitable allocation targets such that,
 	// either the replication goal is met, or it is possible to get to the next
@@ -490,28 +493,24 @@ func (rq *replicateQueue) addOrReplace(
 	// quorum. For example, up-replicating from 1 to 2 replicas only makes sense
 	// if it is possible to be able to go to 3 replicas.
 	//
-	// NB: If willHave > need, then always allow up-replicating as that
+	// NB: If willHave > neededVoters, then always allow up-replicating as that
 	// will be the case when up-replicating a range with a decommissioning
 	// replica.
 	//
 	// We skip this check if we're swapping a replica, since that does not
 	// change the quorum size.
-	if willHave := len(existingReplicas) + 1; removeIdx < 0 && willHave < need && willHave%2 == 0 {
+	if willHave := len(existingVoters) + 1; removeIdx < 0 && willHave < neededVoters && willHave%2 == 0 {
 		// This means we are going to up-replicate to an even replica state.
 		// Check if it is possible to go to an odd replica state beyond it.
-		oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
+		oldPlusNewReplicas := append([]roachpb.ReplicaDescriptor(nil), existingVoters...)
 		oldPlusNewReplicas = append(oldPlusNewReplicas, roachpb.ReplicaDescriptor{
 			NodeID:  newStore.Node.NodeID,
 			StoreID: newStore.StoreID,
 		})
-		_, _, err := rq.allocator.AllocateTarget(
-			ctx,
-			zone,
-			oldPlusNewReplicas,
-		)
+		_, _, err := rq.allocator.AllocateVoter(ctx, zone, oldPlusNewReplicas, remainingLiveNonVoters)
 		if err != nil {
 			// It does not seem possible to go to the next odd replica state. Note
-			// that AllocateTarget returns an allocatorError (a purgatoryError)
+			// that AllocateVoter returns an allocatorError (a purgatoryError)
 			// when purgatory is requested.
 			return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
 		}
@@ -520,12 +519,12 @@ func (rq *replicateQueue) addOrReplace(
 	ops := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newReplica)
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding replica %+v: %s",
-			newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+			newReplica, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	} else {
 		rq.metrics.RemoveReplicaCount.Inc(1)
-		removeReplica := existingReplicas[removeIdx]
+		removeReplica := existingVoters[removeIdx]
 		log.VEventf(ctx, 1, "replacing replica %s with %+v: %s",
-			removeReplica, newReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+			removeReplica, newReplica, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 		ops = append(ops,
 			roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, roachpb.ReplicationTarget{
 				StoreID: removeReplica.StoreID,
@@ -549,17 +548,57 @@ func (rq *replicateQueue) addOrReplace(
 	return true, nil
 }
 
-// findRemoveTarget takes a list of replicas and picks one to remove, making
-// sure to not remove a newly added replica or to violate the zone configs in
-// the progress.
-func (rq *replicateQueue) findRemoveTarget(
+// addNonVoter adds a non-voting replica to `repl`s range.
+func (rq *replicateQueue) addNonVoter(
+	ctx context.Context,
+	repl *Replica,
+	existingReplicas, liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
+	dryRun bool,
+) (requeue bool, _ error) {
+	desc, zone := repl.DescAndZone()
+
+	newStore, details, err := rq.allocator.AllocateNonVoter(ctx, zone, liveVoterReplicas, liveNonVoterReplicas)
+	if err != nil {
+		return false, err
+	}
+	newNonVoter := roachpb.ReplicationTarget{
+		NodeID:  newStore.Node.NodeID,
+		StoreID: newStore.StoreID,
+	}
+
+	ops := roachpb.MakeReplicationChanges(roachpb.ADD_NON_VOTER, newNonVoter)
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		ops,
+		desc,
+		SnapshotRequest_RECOVERY,
+		kvserverpb.ReasonRangeUnderReplicated,
+		details,
+		dryRun,
+	); err != nil {
+		return false, err
+	}
+	// Always requeue to see if more work needs to be done.
+	return true, nil
+}
+
+// findRemoveVoter takes a list of voting replicas and picks one to remove,
+// making sure to not remove a newly added voter or to violate the zone configs
+// in the process.
+//
+// TODO(aayush): The structure around replica removal is not great. The entire
+// logic of this method should probably live inside Allocator.RemoveVoter. Doing
+// so also makes the flow of adding new replicas and removing replicas more
+// symmetric.
+func (rq *replicateQueue) findRemoveVoter(
 	ctx context.Context,
 	repl interface {
 		DescAndZone() (*roachpb.RangeDescriptor, *zonepb.ZoneConfig)
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
-	existingReplicas []roachpb.ReplicaDescriptor,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	_, zone := repl.DescAndZone()
 	// This retry loop involves quick operations on local state, so a
@@ -587,9 +626,9 @@ func (rq *replicateQueue) findRemoveTarget(
 			// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
 			return roachpb.ReplicaDescriptor{}, "", &benignError{errors.Errorf("not raft leader while range needs removal")}
 		}
-		candidates = filterUnremovableReplicas(ctx, raftStatus, existingReplicas, lastReplAdded)
+		candidates = filterUnremovableReplicas(ctx, raftStatus, existingVoters, lastReplAdded)
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
-			existingReplicas, candidates, rangeRaftProgress(raftStatus, existingReplicas))
+			existingVoters, candidates, rangeRaftProgress(raftStatus, existingVoters))
 		if len(candidates) > 0 {
 			break
 		}
@@ -617,10 +656,10 @@ func (rq *replicateQueue) findRemoveTarget(
 	if len(candidates) == 0 {
 		// If we timed out and still don't have any valid candidates, give up.
 		return roachpb.ReplicaDescriptor{}, "", &benignError{errors.Errorf("no removable replicas from range that needs a removal: %s",
-			rangeRaftProgress(repl.RaftStatus(), existingReplicas))}
+			rangeRaftProgress(repl.RaftStatus(), existingVoters))}
 	}
 
-	return rq.allocator.RemoveTarget(ctx, zone, candidates, existingReplicas)
+	return rq.allocator.RemoveVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
 }
 
 // maybeTransferLeaseAway is called whenever a replica on a given store is
@@ -668,15 +707,18 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 	return transferred == transferOK, err
 }
 
-func (rq *replicateQueue) remove(
-	ctx context.Context, repl *Replica, existingReplicas []roachpb.ReplicaDescriptor, dryRun bool,
+func (rq *replicateQueue) removeVoter(
+	ctx context.Context,
+	repl *Replica,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	dryRun bool,
 ) (requeue bool, _ error) {
-	removeReplica, details, err := rq.findRemoveTarget(ctx, repl, existingReplicas)
+	removeVoter, details, err := rq.findRemoveVoter(ctx, repl, existingVoters, existingNonVoters)
 	if err != nil {
 		return false, err
 	}
 	done, err := rq.maybeTransferLeaseAway(
-		ctx, repl, removeReplica.StoreID, dryRun, nil /* canTransferLease */)
+		ctx, repl, removeVoter.StoreID, dryRun, nil /* canTransferLease */)
 	if err != nil {
 		return false, err
 	}
@@ -687,11 +729,11 @@ func (rq *replicateQueue) remove(
 
 	// Remove a replica.
 	rq.metrics.RemoveReplicaCount.Inc(1)
-	log.VEventf(ctx, 1, "removing replica %+v due to over-replication: %s",
-		removeReplica, rangeRaftProgress(repl.RaftStatus(), existingReplicas))
+	log.VEventf(ctx, 1, "removing voting replica %+v due to over-replication: %s",
+		removeVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 	target := roachpb.ReplicationTarget{
-		NodeID:  removeReplica.NodeID,
-		StoreID: removeReplica.StoreID,
+		NodeID:  removeVoter.NodeID,
+		StoreID: removeVoter.StoreID,
 	}
 	desc, _ := repl.DescAndZone()
 	if err := rq.changeReplicas(
@@ -700,6 +742,47 @@ func (rq *replicateQueue) remove(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
+		kvserverpb.ReasonRangeOverReplicated,
+		details,
+		dryRun,
+	); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (rq *replicateQueue) removeNonVoter(
+	ctx context.Context,
+	repl *Replica,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	dryRun bool,
+) (requeue bool, _ error) {
+	rq.metrics.RemoveReplicaCount.Inc(1)
+
+	desc, zone := repl.DescAndZone()
+	removeNonVoter, details, err := rq.allocator.RemoveNonVoter(
+		ctx,
+		zone,
+		existingNonVoters,
+		existingVoters, existingNonVoters,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	log.VEventf(ctx, 1, "removing non-voting replica %+v due to over-replication: %s",
+		removeNonVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
+	target := roachpb.ReplicationTarget{
+		NodeID:  removeNonVoter.NodeID,
+		StoreID: removeNonVoter.StoreID,
+	}
+
+	if err := rq.changeReplicas(
+		ctx,
+		repl,
+		roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
+		desc,
+		SnapshotRequest_UNKNOWN,
 		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
