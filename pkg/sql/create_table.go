@@ -1429,19 +1429,11 @@ func NewTableDesc(
 		columnDefaultExprs = append(columnDefaultExprs, nil)
 
 		// Construct the partitioning for the PARTITION ALL BY.
-		listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
-		for i, region := range dbDesc.RegionConfig.Regions {
-			listPartition[i] = tree.ListPartition{
-				Name:  tree.UnrestrictedName(region.Name),
-				Exprs: tree.Exprs{tree.NewStrVal(string(region.Name))},
-			}
-		}
-
 		desc.PartitionAllBy = true
-		partitionByAll = &tree.PartitionBy{
-			Fields: tree.NameList{tree.RegionalByRowRegionDefaultColName},
-			List:   listPartition,
-		}
+		partitionByAll = constructPartitionByForRegionalByRow(
+			tree.RegionalByRowRegionDefaultColName,
+			dbDesc.RegionConfig.Regions,
+		)
 	}
 
 	if n.PartitionByTable != nil && n.PartitionByTable.All {

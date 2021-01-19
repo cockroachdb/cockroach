@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -2400,6 +2401,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 			return i, nil
 		}
 	}
+	debug.PrintStack()
 	return 0, pgerror.Newf(
 		pgcode.InvalidTextRepresentation, "invalid input value for enum %s: %q", t, logical)
 }

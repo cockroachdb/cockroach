@@ -12,12 +12,16 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -340,16 +344,19 @@ func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
 	)
 }
 
-// updateZoneConfigsForLocalityRegionalByTable loops through all of the tables in the
-// specified database, and refreshes the zone configs for all REGIONAL BY TABLE tables.
+// forEachLocalityConfiguredTableIndatabase loops through each schema and table
+// for a table with a LocalityConfig configured.
 // NOTE: this function uses cached table and schema descriptors. As a result, it may
 // not be safe to run within a schema change.
-func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
+func (p *planner) forEachTableWithLocalityConfigInDatabase(
+	ctx context.Context,
+	desc *dbdesc.Mutable,
+	f func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error,
+) error {
 	// No work to be done if the database isn't a multi-region database.
 	if !desc.IsMultiRegion() {
 		return nil
 	}
-
 	lookupFlags := p.CommonLookupFlags(true /*required*/)
 	lookupFlags.AvoidCached = false
 	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, desc.GetID())
@@ -357,8 +364,11 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 		return err
 	}
 
-	// Loop over all schemas, then loop over all tables to find all of the REGIONAL BY
-	// TABLE tables.
+	tblLookupFlags := p.CommonLookupFlags(true /*required*/)
+	tblLookupFlags.AvoidCached = false
+	tblLookupFlags.Required = false
+
+	// Loop over all schemas, then loop over all tables.
 	for _, schema := range schemas {
 		tbNames, err := p.Descriptors().GetObjectNames(
 			ctx,
@@ -373,10 +383,9 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 		if err != nil {
 			return err
 		}
-		lookupFlags.Required = false
 		for i := range tbNames {
-			found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
-				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+			found, tbDesc, err := p.Descriptors().GetMutableTableByName(
+				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: tblLookupFlags},
 			)
 			if err != nil {
 				return err
@@ -388,18 +397,89 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 				continue
 			}
 
-			// Update the zone configuration
-			if err := p.applyZoneConfigFromTableLocalityConfig(
-				ctx,
-				tbNames[i],
-				tbDesc.TableDesc(),
-				*desc.RegionConfig,
-			); err != nil {
+			if err := f(ctx, schema, tbNames[i], tbDesc); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// updateZoneConfigsForLocalityRegionalByTable loops through all of the tables in the
+// specified database and refreshes the zone configs for all tables.
+func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
+	return p.forEachTableWithLocalityConfigInDatabase(
+		ctx,
+		desc,
+		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
+			return p.applyZoneConfigFromTableLocalityConfig(
+				ctx,
+				tbName,
+				tbDesc.TableDesc(),
+				*desc.RegionConfig,
+			)
+		},
+	)
+}
+
+// updatePartitioningForRegionalByRowTables loops through all tables with REGIONAL BY ROW
+// set and updates the partitioning of all indexes.
+func (p *planner) updatePartitioningForRegionalByRowTables(
+	ctx context.Context,
+	st *cluster.Settings,
+	evalCtx *tree.EvalContext,
+	typeDesc *typedesc.Mutable,
+	desc *dbdesc.Mutable,
+) error {
+	return p.forEachTableWithLocalityConfigInDatabase(
+		ctx,
+		desc,
+		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
+			switch tbDesc.LocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+				partitionBy := constructPartitionByForRegionalByRow(
+					tree.RegionalByRowRegionDefaultColName,
+					desc.RegionConfig.Regions,
+				)
+
+				// Re-partition the primary index.
+				newPartitioning, err := CreatePartitioning(
+					ctx,
+					st,
+					evalCtx,
+					tbDesc,
+					tbDesc.GetPrimaryIndex().IndexDesc(),
+					int(tbDesc.GetPrimaryIndex().IndexDesc().Partitioning.NumImplicitColumns),
+					partitionBy,
+				)
+				if err != nil {
+					return err
+				}
+				{
+					newPrimaryIndex := *tbDesc.GetPrimaryIndex().IndexDesc()
+					newPrimaryIndex.Partitioning = newPartitioning
+					tbDesc.SetPrimaryIndex(newPrimaryIndex)
+				}
+
+				// Write the schema change and apply zone config changes.
+				if err := p.writeSchemaChange(
+					ctx,
+					tbDesc,
+					descpb.InvalidMutationID,
+					fmt.Sprintf("REGIONAL BY ROW update for %s", tbName),
+				); err != nil {
+					return err
+				}
+				return p.applyZoneConfigFromTableLocalityConfig(
+					ctx,
+					tbName,
+					tbDesc.TableDesc(),
+					*desc.RegionConfig,
+				)
+			}
+			return nil
+		},
+	)
 }
 
 // initializeMultiRegionDatabase initializes a multi-region database by creating
@@ -436,4 +516,22 @@ func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdes
 	}
 
 	return nil
+}
+
+// constructPartitionByForRegionalByRow constructs a tree.PartitionBy clause
+// for REGIONAL BY ROW tables.
+func constructPartitionByForRegionalByRow(
+	colName tree.Name, regions []descpb.DatabaseDescriptor_RegionConfig_Region,
+) *tree.PartitionBy {
+	listPartition := make([]tree.ListPartition, len(regions))
+	for i, region := range regions {
+		listPartition[i] = tree.ListPartition{
+			Name:  tree.UnrestrictedName(region.Name),
+			Exprs: tree.Exprs{tree.NewStrVal(string(region.Name))},
+		}
+	}
+	return &tree.PartitionBy{
+		Fields: tree.NameList{tree.RegionalByRowRegionDefaultColName},
+		List:   listPartition,
+	}
 }

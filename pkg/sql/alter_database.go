@@ -233,6 +233,17 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Re-partition all REGIONAL BY ROW tables.
+	if err := params.p.updatePartitioningForRegionalByRowTables(
+		params.ctx,
+		params.p.ExecCfg().Settings,
+		params.EvalContext(),
+		typeDesc,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
 	// Log Alter Database Add Region event. This is an auditable log event and is recorded
 	// in the same transaction as the database descriptor, type descriptor, and zone
 	// configuration updates.
@@ -244,6 +255,10 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		})
 }
 
+// ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
+// This is because ALTER DATABASE ADD REGION performs multiple KV operations on descriptors
+// and expects to see its own writes.
+func (n *alterDatabaseAddRegionNode) ReadingOwnWrites()            {}
 func (n *alterDatabaseAddRegionNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabaseAddRegionNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
