@@ -266,10 +266,10 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	// are disabled. See IsActive() and its callers for details.
 	setActive()
 	var fatalTrigger chan struct{}
-	extraSync := false
+	extraFlush := false
 
 	if entry.sev == severity.FATAL {
-		extraSync = true
+		extraFlush = true
 		logging.signalFatalCh()
 
 		switch traceback {
@@ -379,7 +379,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.sink.output(extraSync, bufs.b[i].Bytes()); err != nil {
+			if err := s.sink.output(extraFlush, bufs.b[i].Bytes()); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
 					// the error and move on.

@@ -8,7 +8,7 @@ sinks:
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
-      sync-writes: false
+      buffered-writes: true
       filter: INFO
       format: crdb-v1
       redact: false
@@ -40,7 +40,7 @@ sinks:
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
-      sync-writes: true
+      buffered-writes: false
       filter: INFO
       format: crdb-v1-count
       redact: false
@@ -50,7 +50,7 @@ sinks:
       dir: TMPDIR
       max-file-size: 10MiB
       max-group-size: 100MiB
-      sync-writes: false
+      buffered-writes: true
       filter: INFO
       format: crdb-v1
       redact: false

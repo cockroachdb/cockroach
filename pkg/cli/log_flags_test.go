@@ -35,21 +35,22 @@ func TestSetupLogging(t *testing.T) {
 	reSimplify := regexp.MustCompile(`(?ms:^\s*(auditable: false|redact: false|exit-on-error: true|max-group-size: 100MiB)\n)`)
 
 	const defaultFluentConfig = `fluent-defaults: {` +
+		`buffered-writes: true, ` +
 		`filter: INFO, ` +
 		`format: json-fluent-compact, ` +
 		`redactable: true, ` +
 		`exit-on-error: false` +
 		`}, `
 	stdFileDefaultsRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, filter: INFO, format: crdb-v1, redactable: true\}`)
+		`file-defaults: \{dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true\}`)
 	fileDefaultsNoMaxSizeRe := regexp.MustCompile(
-		`file-defaults: \{dir: (?P<path>[^,]+), filter: INFO, format: crdb-v1, redactable: true\}`)
-	const fileDefaultsNoDir = `file-defaults: {filter: INFO, format: crdb-v1, redactable: true}`
+		`file-defaults: \{dir: (?P<path>[^,]+), buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true\}`)
+	const fileDefaultsNoDir = `file-defaults: {buffered-writes: true, filter: INFO, format: crdb-v1, redactable: true}`
 	const defaultLogDir = `PWD/cockroach-data/logs`
 	stdCaptureFd2Re := regexp.MustCompile(
 		`capture-stray-errors: \{enable: true, dir: (?P<path>[^}]+)\}`)
 	fileCfgRe := regexp.MustCompile(
-		`\{channels: (?P<chans>[^ ]+), dir: (?P<path>[^,]+), max-file-size: 10MiB, sync-writes: (?P<sync>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
+		`\{channels: (?P<chans>[^ ]+), dir: (?P<path>[^,]+), max-file-size: 10MiB, buffered-writes: (?P<buf>[^,]+), filter: INFO, format: (?P<format>[^,]+), redactable: true\}`)
 
 	stderrCfgRe := regexp.MustCompile(
 		`stderr: {channels: all, filter: (?P<level>[^,]+), format: crdb-v1-tty, redactable: (?P<redactable>[^}]+)}`)
@@ -110,7 +111,7 @@ func TestSetupLogging(t *testing.T) {
 		actual = fileDefaultsNoMaxSizeRe.ReplaceAllString(actual, "<fileDefaultsNoMaxSize($path)>")
 		actual = strings.ReplaceAll(actual, fileDefaultsNoDir, "<fileDefaultsNoDir>")
 		actual = stdCaptureFd2Re.ReplaceAllString(actual, "<stdCaptureFd2($path)>")
-		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg([$chans],$path,$sync,$format)>")
+		actual = fileCfgRe.ReplaceAllString(actual, "<fileCfg([$chans],$path,$buf,$format)>")
 		actual = stderrCfgRe.ReplaceAllString(actual, "<stderrCfg($level,$redactable)>")
 		actual = strings.ReplaceAll(actual, `<stderrCfg(NONE,true)>`, `<stderrDisabled>`)
 		actual = strings.ReplaceAll(actual, `<stderrCfg(INFO,false)>`, `<stderrEnabledInfoNoRedaction>`)

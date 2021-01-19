@@ -32,7 +32,7 @@ type flushSyncWriter interface {
 // user signal.
 func Flush() {
 	_ = allSinkInfos.iterFileSinks(func(l *fileSink) error {
-		l.lockAndFlushAndSync(true /*doSync*/)
+		l.lockAndFlushAndMaybeSync(true /*doSync*/)
 		return nil
 	})
 }
@@ -84,7 +84,7 @@ func flushDaemon() {
 		if !disableDaemons {
 			// Flush the loggers.
 			_ = allSinkInfos.iterFileSinks(func(l *fileSink) error {
-				l.lockAndFlushAndSync(doSync)
+				l.lockAndFlushAndMaybeSync(doSync)
 				return nil
 			})
 		}
@@ -101,13 +101,13 @@ func signalFlusher() {
 	}
 }
 
-// StartSync configures all loggers to start synchronizing writes.
+// StartAlwaysFlush configures all loggers to start flushing writes.
 // This is used e.g. in `cockroach start` when an error occurs,
 // to ensure that all log writes from the point the error
 // occurs are flushed to logs (in case the error degenerates
 // into a panic / segfault on the way out).
-func StartSync() {
-	logging.syncWrites.Set(true)
+func StartAlwaysFlush() {
+	logging.flushWrites.Set(true)
 	// There may be something in the buffers already; flush it.
 	Flush()
 }

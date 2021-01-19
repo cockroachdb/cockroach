@@ -19,6 +19,7 @@ component sources {
 cloud stray as "stray\nerrors"
 }
 queue stderr
+card buffer2 as "buffer"
 card p__1 as "format:crdb-v1"
 artifact files {
  folder "/default-dir" {
@@ -38,17 +39,18 @@ SENSITIVE_ACCESS --> p__1
 SQL_EXEC --> p__1
 SQL_PERF --> p__1
 SQL_INTERNAL_PERF --> p__1
-p__1 --> f1
+p__1 --> buffer2
+buffer2 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/L59DZvim5BpxLpnnQW-qohM7QX5vtI1bWMAAUgY4N7_ieXAyVPXALPN_NjcGTJXvPjxmW1a_p4wGMouZ6xLnu2pGyFpYG0safHlinAIzlDf9Jmvckv3KC_nZxzx34Jj_L3NtnmcpStloYBTLaprYWCXvKPN1mB-UUvwVy2dpx1l7fi-EJqNfMTqKNN76HroTMFAYBJhiipn7_lOqViVyXcjiljnmKRRObDacoj4k2cP7uY-86PA0VaoQoDASi2lxlUX5m-oK9c9Ia8BNlZy4hx5q4UwJ9FKp_ND8c20t624Tc64Clmt6ZaeJ91-LDc8PNQe6IlmWMC2iUwILlyWA-V9XjC_9RRY-Ci2TALq7c_VAhko87QJfv_1XhAfv96lCaMzXtmbRv7VAM_1HY_57BPPmlsrVnNwhBsIl-0RsogwSE0gHUsOEREtAavWGUz2JyfVoVm000F__
+# http://www.plantuml.com/plantuml/uml/L99FZzCm4CNl_XIZdE0GK3boG1krmpPIDornYJWWHLx_sOr8usNY827Kxuvi9tLpydjlNYnhVdaOdI0tNNhMQ-F0MQ3kvTM1waXBrzc1INjviuCU78ns8gb7-CVUlOSTDluudhW_zbWSpdkl-FbO5uyO979U7gjGuDyEBT_kyQdmxZl7kYrsJsNbtQakc_A0ZnYRMF7oN3RO5jijyjlN-0EtYpvX_NNHPNN6kYhcKFPsKZ0w4dz1Z905zNFGH9R6Z5tPxqbF6aQdD16JWXGyJyPe-XJgKMTnyDQscv0QInVXFajIp_cVJSO4kSu8wS1qVTW76DihJP1zLDg8gNUvwYZpWr014--HLluYA-JhXzw-PCimlYN8LIcFWxbxPLUsmmRo_4ju63kUU39n_ydF5Ew2cSLTSYEIiiGbPOdE_MrhHkjRFQbruj6ianMrD0ehzsw6mXOuFZCR5i5waxR67lIW_1_yFm00__y0
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS
 sinks:
   file-groups:
     everything:
-      sync-writes: true
+      buffered-writes: false
       redact: true
       channels: ALL
   stderr:
@@ -62,7 +64,6 @@ component sources {
 cloud stray as "stray\nerrors"
 }
 queue stderr
-card sync2 as "sync"
 card p__1 as "redact"
 card p__2 as "format:crdb-v1"
 card p__3 as "format:crdb-v1-tty"
@@ -75,13 +76,12 @@ artifact files {
 }
 DEV --> p__2
 SESSIONS --> p__2
-p__1 --> sync2
+p__1 --> f1
 p__2 --> p__1
-sync2 --> f1
 stray --> stderrfile
 DEV --> p__4
 SESSIONS --> p__4
 p__3 --> stderr
 p__4 --> p__3
 @enduml
-# http://www.plantuml.com/plantuml/uml/R98nJ_Cm48Rt-nKdJzyt11JQgGFgq0uiC4Gg2r9bx7DhuThbVAaKeVvt5Bib89XYl-yJ9_V8oooQfJy42EG49I7xtLxGUYOZFaKmwN1CaQ9WJZqRolW1__xZQhqP7zswwnwU7Zim8VKMix0UK6TKPVKIYJbnLd26zvvwmYoMcC5ejfY7QEugF4IZQdZSRjkICLbjP4ehwH8Vj2mCszVcr4xjx8-s4HacObu97uHuyQn0itYdZQ3peGo5BWLBZEhMajDzaCPwLcDH47JrlqmoRvoqsJTq8Xvax-Fk9gITkd9rnBByoTVYmfxX3Alr1flclam7LvDJKbICko8AYeDBsKALDsvT2rLxGRy-_ltq-Q_Jvr2aJQz0KNHfPx2aQCTRyHa00F__
+# http://www.plantuml.com/plantuml/uml/R94nJpCn38Pt_mehq_SD1phQgGFgq0uiC9nK5gGg94uRaPwBuwjKeVvtTBah1u8fjjydZlrccTMATeS4YOAYCahSxHLz578QkGN7XoEtr2fcxiHHnW_uznzNwqr_DEkcUNXwRC0bxZnc5Nj6cz6KwAKb4PPiu0Bl7NM4MJs9WBFYyRZTreKLyjQf-QhUbMfWELXTEF6lrQcUrDaVQgLwdeZvGCIa98jd0rOq1kiKGqnbVWoSF0cQMq_1Taah7yNqGa4m37CvTc_2rkqhEf6STH_RtKtYdRbompOb_CaFmiXUu0AhzGQhwhvi1rVJfagneiz23SM0KQbXSBHFfyU-Tvl_wZQ7Oj9q1Oebepg39RM-__3F0000__y0
