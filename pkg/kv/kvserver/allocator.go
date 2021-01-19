@@ -49,14 +49,14 @@ const (
 	minReplicaWeight = 0.001
 
 	// Priorities for various repair operations.
-	finalizeAtomicReplicationChangePriority float64 = 12002
-	removeLearnerReplicaPriority            float64 = 12001
-	addDeadReplacementPriority              float64 = 12000
-	addMissingReplicaPriority               float64 = 10000
-	addDecommissioningReplacementPriority   float64 = 5000
-	removeDeadReplicaPriority               float64 = 1000
-	removeDecommissioningReplicaPriority    float64 = 200
-	removeExtraReplicaPriority              float64 = 100
+	finalizeAtomicReplicationChangePriority    float64 = 12002
+	removeLearnerReplicaPriority               float64 = 12001
+	addDeadReplacementVoterPriority            float64 = 12000
+	addMissingVoterPriority                    float64 = 10000
+	addDecommissioningReplacementVoterPriority float64 = 5000
+	removeDeadVoterPriority                    float64 = 1000
+	removeDecommissioningVoterPriority         float64 = 200
+	removeExtraVoterPriority                   float64 = 100
 )
 
 // MinLeaseTransferStatsDuration configures the minimum amount of time a
@@ -99,12 +99,12 @@ type AllocatorAction int
 const (
 	_ AllocatorAction = iota
 	AllocatorNoop
-	AllocatorRemove
-	AllocatorAdd
-	AllocatorReplaceDead
-	AllocatorRemoveDead
-	AllocatorReplaceDecommissioning
-	AllocatorRemoveDecommissioning
+	AllocatorRemoveVoter
+	AllocatorAddVoter
+	AllocatorReplaceDeadVoter
+	AllocatorRemoveDeadVoter
+	AllocatorReplaceDecommissioningVoter
+	AllocatorRemoveDecommissioningVoter
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
@@ -112,14 +112,16 @@ const (
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
-	AllocatorNoop:                            "noop",
-	AllocatorRemove:                          "remove",
-	AllocatorAdd:                             "add",
-	AllocatorReplaceDead:                     "replace dead",
-	AllocatorRemoveDead:                      "remove dead",
-	AllocatorReplaceDecommissioning:          "replace decommissioning",
-	AllocatorRemoveDecommissioning:           "remove decommissioning",
-	AllocatorRemoveLearner:                   "remove learner",
+	AllocatorNoop:                        "noop",
+	AllocatorRemoveVoter:                 "remove voter",
+	AllocatorAddVoter:                    "add voter",
+	AllocatorReplaceDeadVoter:            "replace dead voter",
+	AllocatorRemoveDeadVoter:             "remove dead voter",
+	AllocatorReplaceDecommissioningVoter: "replace decommissioning voter",
+	AllocatorRemoveDecommissioningVoter:  "remove decommissioning voter",
+	AllocatorRemoveLearner:               "remove learner",
+	// TODO(aayush): Rationalize whether or not rebalancing of non-voters needs to
+	// be dictated by a distinct allocator action.
 	AllocatorConsiderRebalance:               "consider rebalance",
 	AllocatorRangeUnavailable:                "range unavailable",
 	AllocatorFinalizeAtomicReplicationChange: "finalize conf change",
@@ -350,8 +352,8 @@ func (a *Allocator) ComputeAction(
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
-		// from happening (like addDeadReplacementPriority) by queueing this at a
-		// low priority so until this TODO is done, keep
+		// from happening (like addDeadReplacementVoterPriority) by queueing this at
+		// a low priority so until this TODO is done, keep
 		// removeLearnerReplicaPriority as the highest priority.
 		return AllocatorRemoveLearner, removeLearnerReplicaPriority
 	}
@@ -373,8 +375,8 @@ func (a *Allocator) computeAction(
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
-		priority := addMissingReplicaPriority + float64(desiredQuorum-have)
-		action := AllocatorAdd
+		priority := addMissingVoterPriority + float64(desiredQuorum-have)
+		action := AllocatorAddVoter
 		log.VEventf(ctx, 3, "%s - missing replica need=%d, have=%d, priority=%.2f",
 			action, need, have, priority)
 		return action, priority
@@ -397,8 +399,8 @@ func (a *Allocator) computeAction(
 		// where the node is only temporarily dead, but we remove it from the range
 		// and lose a second node before we can up-replicate (#25392).
 		// The dead replica(s) will be down-replicated later.
-		priority := addDeadReplacementPriority
-		action := AllocatorReplaceDead
+		priority := addDeadReplacementVoterPriority
+		action := AllocatorReplaceDeadVoter
 		log.VEventf(ctx, 3, "%s - replacement for %d dead replicas priority=%.2f",
 			action, len(deadVoterReplicas), priority)
 		return action, priority
@@ -406,8 +408,8 @@ func (a *Allocator) computeAction(
 
 	if have == need && len(decommissioningReplicas) > 0 {
 		// Range has decommissioning replica(s), which should be replaced.
-		priority := addDecommissioningReplacementPriority
-		action := AllocatorReplaceDecommissioning
+		priority := addDecommissioningReplacementVoterPriority
+		action := AllocatorReplaceDecommissioningVoter
 		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning replicas priority=%.2f",
 			action, len(decommissioningReplicas), priority)
 		return action, priority
@@ -421,8 +423,8 @@ func (a *Allocator) computeAction(
 	// replicas.
 	if len(deadVoterReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
-		priority := removeDeadReplicaPriority + float64(quorum-len(liveVoterReplicas))
-		action := AllocatorRemoveDead
+		priority := removeDeadVoterPriority + float64(quorum-len(liveVoterReplicas))
+		action := AllocatorRemoveDeadVoter
 		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
 			action, len(deadVoterReplicas), len(liveVoterReplicas), quorum, priority)
 		return action, priority
@@ -431,8 +433,8 @@ func (a *Allocator) computeAction(
 	if len(decommissioningReplicas) > 0 {
 		// Range is over-replicated, and has a decommissioning replica which
 		// should be removed.
-		priority := removeDecommissioningReplicaPriority
-		action := AllocatorRemoveDecommissioning
+		priority := removeDecommissioningVoterPriority
+		action := AllocatorRemoveDecommissioningVoter
 		log.VEventf(ctx, 3,
 			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
 			action, need, have, len(decommissioningReplicas), priority)
@@ -443,8 +445,8 @@ func (a *Allocator) computeAction(
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because
 		// they have a more fragile quorum.
-		priority := removeExtraReplicaPriority - float64(have%2)
-		action := AllocatorRemove
+		priority := removeExtraVoterPriority - float64(have%2)
+		action := AllocatorRemoveVoter
 		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, need, have, priority)
 		return action, priority
 	}
