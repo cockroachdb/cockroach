@@ -758,6 +758,16 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[]}          {"type":"Point","coordinates":[]}          {"type":"Point","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::4326"}},"coordinates":[]}
 NULL                                       NULL                                       NULL
 
+query T
+select st_asgeojson(
+  ('0101000000000000000000F03F000000000000F03F':::GEOMETRY,),
+  '':::STRING::STRING,
+  2088580099783884006:::INT8::INT8,
+  false::BOOL
+)::STRING AS regression_57983
+----
+{"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {}, "type": "Feature"}
+
 query TTT
 SELECT ST_AsEWKT(g), ST_GeoHash(g), ST_GeoHash(g, 8) FROM ( VALUES
   ('POINT (0 0)'::geography),
@@ -5716,4 +5726,3 @@ LINESTRING (57.73791181125825 33.624956576975762, 10 125.599999999999994, 13.606
 LINESTRING (64 21.5, 22 102)
 POINT (22 102)
 POINT (0 0)
-
