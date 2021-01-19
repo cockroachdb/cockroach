@@ -867,6 +867,18 @@ define RegressionSXX {
 }
 
 [Scalar, Aggregate]
+define RegressionSX {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
+define RegressionSY {
+    Y ScalarExpr
+    X ScalarExpr
+}
+
+[Scalar, Aggregate]
 define RegressionSXY {
     Y ScalarExpr
     X ScalarExpr

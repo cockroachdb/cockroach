@@ -290,4 +290,123 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			},
 		},
 	},
+
+	execinfrapb.AggregatorSpec_STDDEV_POP: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SQRDIFF,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_FINAL_STDDEV_POP,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_VAR_POP: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SQRDIFF,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_FINAL_VAR_POP,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_REGR_COUNT: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_REGR_COUNT},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_REGR_AVGX: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_REGR_SX,
+			execinfrapb.AggregatorSpec_REGR_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_SUM,
+				LocalIdxs: []uint32{0},
+			},
+			{
+				Fn:        execinfrapb.AggregatorSpec_SUM_INT,
+				LocalIdxs: []uint32{1},
+			},
+		},
+		FinalRendering: func(h *tree.IndexedVarHelper, varIdxs []int) (tree.TypedExpr, error) {
+			if len(varIdxs) < 2 {
+				panic("fewer than two final aggregation values passed into final render")
+			}
+			sum := h.IndexedVar(varIdxs[0])
+			count := h.IndexedVar(varIdxs[1])
+
+			expr := &tree.BinaryExpr{
+				Operator: tree.Div,
+				Left:     sum,
+				Right:    count,
+			}
+			if sum.ResolvedType().Family() == types.FloatFamily {
+				expr.Right = &tree.CastExpr{
+					Expr: count,
+					Type: types.Float,
+				}
+			}
+			semaCtx := tree.MakeSemaContext()
+			semaCtx.IVarContainer = h.Container()
+			return expr.TypeCheck(context.TODO(), &semaCtx, types.Any)
+		},
+	},
+
+	execinfrapb.AggregatorSpec_SQRDIFF: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_SQRDIFF,
+			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_FINAL_SQRDIFF,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_REGR_SXX: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_REGR_SXX,
+			execinfrapb.AggregatorSpec_REGR_SX,
+			execinfrapb.AggregatorSpec_REGR_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_FINAL_REGR_SXX,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	execinfrapb.AggregatorSpec_REGR_SYY: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AggregatorSpec_REGR_SYY,
+			execinfrapb.AggregatorSpec_REGR_SY,
+			execinfrapb.AggregatorSpec_REGR_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.AggregatorSpec_FINAL_REGR_SYY,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
 }

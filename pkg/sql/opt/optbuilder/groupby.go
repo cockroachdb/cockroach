@@ -820,6 +820,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructRegressionR2(args[0], args[1])
 	case "regr_slope":
 		return b.factory.ConstructRegressionSlope(args[0], args[1])
+	case "regr_sx":
+		return b.factory.ConstructRegressionSX(args[0], args[1])
+	case "regr_sy":
+		return b.factory.ConstructRegressionSY(args[0], args[1])
 	case "regr_sxx":
 		return b.factory.ConstructRegressionSXX(args[0], args[1])
 	case "regr_sxy":

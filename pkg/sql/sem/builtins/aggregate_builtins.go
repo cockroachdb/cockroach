@@ -201,6 +201,14 @@ var aggregates = map[string]builtinDefinition{
 		newRegressionSlopeAggregate, "Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs.",
 	),
 
+	"regr_sx": makeRegressionAggregateBuiltin(
+		newRegressionSXAggregate, "Calculates sum of the independent variable.",
+	),
+
+	"regr_sy": makeRegressionAggregateBuiltin(
+		newRegressionSYAggregate, "Calculates sum of the independent variable.",
+	),
+
 	"regr_sxx": makeRegressionAggregateBuiltin(
 		newRegressionSXXAggregate, "Calculates sum of squares of the independent variable.",
 	),
@@ -353,6 +361,91 @@ var aggregates = map[string]builtinDefinition{
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_stddev_pop": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalStddevPopAggregate,
+			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalStddevPopAggregate,
+			"Calculates the population standard deviation from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_var_pop": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalVarPopAggregate,
+			"Calculates the population variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalVarPopAggregate,
+			"Calculates the population variance from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_sqrdiff": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalSqrdiffAggregate,
+			"Calculates the sum of squared differences from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalSqrdiffAggregate,
+			"Calculates the sum of squared differences from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_sxx": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalRegressionSxxAggregate,
+			"Calculates sum of squares of the independent variable from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalRegressionSxxAggregate,
+			"Calculates sum of squares of the independent variable from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_syy": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalRegressionSyyAggregate,
+			"Calculates sum of squares of the dependent variable from the selected locally-computed squared difference values.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalRegressionSyyAggregate,
+			"Calculates sum of squares of the dependent variable from the selected locally-computed squared difference values.",
 			tree.VolatilityImmutable,
 		),
 	)),
@@ -1843,6 +1936,30 @@ type regressionAccumulatorBase struct {
 	sxy float64
 }
 
+func newDecimalFinalRegressionSxxAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newDecimalSumSqrDiffs(evalCtx)
+}
+
+func newFloatFinalRegressionSxxAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newFloatSumSqrDiffs()
+}
+
+func newDecimalFinalRegressionSyyAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newDecimalSumSqrDiffs(evalCtx)
+}
+
+func newFloatFinalRegressionSyyAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newFloatSumSqrDiffs()
+}
+
 // Add implements tree.AggregateFunc interface.
 func (a *regressionAccumulatorBase) Add(
 	_ context.Context, datumY tree.Datum, otherArgs ...tree.Datum,
@@ -2130,6 +2247,43 @@ func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
 
 	return tree.NewDFloat(tree.DFloat(a.sxy / a.sxx)), nil
 }
+
+// regressionSXAggregate represents sum of the independent variable.
+type regressionSXAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSXAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSXAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSXAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sx)), nil
+}
+
+// regressionSXAggregate represents sum of the dependent variable.
+type regressionSYAggregate struct {
+	regressionAccumulatorBase
+}
+
+func newRegressionSYAggregate([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc {
+	return &regressionSYAggregate{}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *regressionSYAggregate) Result() (tree.Datum, error) {
+	if a.n < 1 {
+		return tree.DNull, nil
+	}
+
+	return tree.NewDFloat(tree.DFloat(a.sy)), nil
+}
+
 
 // regressionSXXAggregate represents sum of squares of the independent variable.
 type regressionSXXAggregate struct {
@@ -2791,6 +2945,18 @@ func newFloatSqrDiffAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) 
 	return newFloatSqrDiff()
 }
 
+func newDecimalFinalSqrdiffAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newDecimalSumSqrDiffs(evalCtx)
+}
+
+func newFloatFinalSqrdiffAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newFloatSumSqrDiffs()
+}
+
 // Count is part of the floatSqrDiff interface.
 func (a *floatSqrDiffAggregate) Count() int64 {
 	return a.count
@@ -3300,6 +3466,16 @@ func newDecimalVarPopAggregate(
 	return &decimalVarPopAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
+func newFloatFinalVarPopAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &floatVarPopAggregate{agg: newFloatSumSqrDiffs()}
+}
+
+func newDecimalFinalVarPopAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
+}
+
 // Add is part of the tree.AggregateFunc interface.
 //  Population Variance: VALUE(float)
 func (a *floatVarPopAggregate) Add(
@@ -3409,6 +3585,18 @@ func newDecimalStdDevAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx, arguments)}
+}
+
+func newFloatFinalStddevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx, arguments)}
+}
+
+func newDecimalFinalStddevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatFinalStdDevAggregate(

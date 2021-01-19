@@ -195,6 +195,8 @@ var AggregateOpReverseMap = map[Operator]string{
 	RegressionInterceptOp: "regr_intercept",
 	RegressionR2Op:        "regr_r2",
 	RegressionSlopeOp:     "regr_slope",
+	RegressionSXOp:        "regr_sx",
+	RegressionSYOp:        "regr_sy",
 	RegressionSXXOp:       "regr_sxx",
 	RegressionSXYOp:       "regr_sxy",
 	RegressionSYYOp:       "regr_syy",
@@ -375,6 +377,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		StringAggOp, SumOp, SumIntOp, XorAggOp, PercentileDiscOp, PercentileContOp,
 		JsonObjectAggOp, JsonbObjectAggOp, StdDevPopOp, STCollectOp, STExtentOp, STUnionOp,
 		VarPopOp, CovarPopOp, RegressionAvgXOp, RegressionAvgYOp, RegressionSXXOp,
+		RegressionSXOp, RegressionSYOp,
 		RegressionSXYOp, RegressionSYYOp, RegressionCountOp:
 		return true
 
