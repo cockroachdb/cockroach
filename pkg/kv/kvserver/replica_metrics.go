@@ -176,7 +176,7 @@ func calcRangeCounter(
 		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		})
-		needed := GetNeededReplicas(numReplicas, clusterNodes)
+		needed := GetNeededVoters(numReplicas, clusterNodes)
 		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)
 		if needed > liveVoterReplicas {
 			underreplicated = true

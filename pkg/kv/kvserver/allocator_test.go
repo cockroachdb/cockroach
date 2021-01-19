@@ -4306,6 +4306,68 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorReplaceDeadVoter,
 		},
+		// Need 1 non-voter but a voter is on a dead store.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(5),
+				NumVoters:     proto.Int32(3),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction: AllocatorReplaceDeadVoter,
+		},
+		// Need 3 replicas, have 2, but one of them is dead so we don't have quorum.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(3),
+				Constraints:   []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "us-east", Type: zonepb.Constraint_DEPRECATED_POSITIVE}}}},
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+					},
+				},
+			},
+			// TODO(aayush): This test should be returning an
+			// AllocatorRangeUnavailable.
+			expectedAction: AllocatorAddVoter,
+		},
+
 		// Need three replicas, have two.
 		{
 			zone: zonepb.ZoneConfig{
@@ -4325,6 +4387,36 @@ func TestAllocatorComputeAction(t *testing.T) {
 						StoreID:   2,
 						NodeID:    2,
 						ReplicaID: 2,
+					},
+				},
+			},
+			expectedAction: AllocatorAddVoter,
+		},
+		// Need a voter and a non-voter.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(5),
+				NumVoters:     proto.Int32(3),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.ReplicaTypeNonVoter(),
 					},
 				},
 			},
@@ -4587,6 +4679,66 @@ func TestAllocatorComputeAction(t *testing.T) {
 				},
 			},
 			expectedAction: AllocatorRemoveVoter,
+		},
+		// Need 2 non-voting replicas, have none.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(5),
+				NumVoters:     proto.Int32(3),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction: AllocatorAddNonVoter,
+		},
+		// Need 1 non-voting replicas, have 2.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(2),
+				NumVoters:     proto.Int32(1),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveNonVoter,
 		},
 		// Need three replicas, two are on dead stores. Should
 		// be a noop because there aren't enough live replicas for
@@ -5261,7 +5413,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 				desc.EndKey = prefixKey
 
 				clusterNodes := a.storePool.ClusterNodeCount()
-				effectiveNumReplicas := GetNeededReplicas(*zone.NumReplicas, clusterNodes)
+				effectiveNumReplicas := GetNeededVoters(*zone.NumReplicas, clusterNodes)
 				require.Equal(t, c.expectedNumReplicas, effectiveNumReplicas, "clusterNodes=%d", clusterNodes)
 
 				action, _ := a.ComputeAction(ctx, zone, &desc)
@@ -5280,7 +5432,7 @@ func TestAllocatorGetNeededReplicas(t *testing.T) {
 		availNodes int
 		expected   int
 	}{
-		// If zone.NumReplicas <= 3, GetNeededReplicas should always return zone.NumReplicas.
+		// If zone.NumReplicas <= 3, GetNeededVoters should always return zone.NumReplicas.
 		{1, 0, 1},
 		{1, 1, 1},
 		{2, 0, 2},
@@ -5315,9 +5467,9 @@ func TestAllocatorGetNeededReplicas(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if e, a := tc.expected, GetNeededReplicas(tc.zoneRepls, tc.availNodes); e != a {
+		if e, a := tc.expected, GetNeededVoters(tc.zoneRepls, tc.availNodes); e != a {
 			t.Errorf(
-				"GetNeededReplicas(zone.NumReplicas=%d, availNodes=%d) got %d; want %d",
+				"GetNeededVoters(zone.NumReplicas=%d, availNodes=%d) got %d; want %d",
 				tc.zoneRepls, tc.availNodes, a, e)
 		}
 	}
