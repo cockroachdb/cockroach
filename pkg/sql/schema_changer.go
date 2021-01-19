@@ -1820,6 +1820,7 @@ func CreateGCJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
+		RunningStatus: RunningStatusWaitingGC,
 		NonCancelable: true,
 	}
 }
