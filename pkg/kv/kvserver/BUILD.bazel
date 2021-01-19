@@ -63,7 +63,6 @@ go_library(
         "replica_send.go",
         "replica_sideload.go",
         "replica_sideload_disk.go",
-        "replica_sideload_inmem.go",
         "replica_split_load.go",
         "replica_sst_snapshot_storage.go",
         "replica_stats.go",
