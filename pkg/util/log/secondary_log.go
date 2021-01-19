@@ -20,8 +20,8 @@ import (
 // whose logging events go to a different file than the main logging
 // facility.
 type SecondaryLogger struct {
-	logger          loggerT
-	forceSyncWrites bool
+	logger           loggerT
+	forceFlushWrites bool
 }
 
 var secondaryLogRegistry struct {
@@ -46,7 +46,7 @@ func NewSecondaryLogger(
 	dirName *DirName,
 	fileNamePrefix string,
 	enableGc bool,
-	forceSyncWrites bool,
+	forceFlushWrites bool,
 	enableMsgCount bool,
 ) *SecondaryLogger {
 	mainLog.mu.Lock()
@@ -73,10 +73,10 @@ func NewSecondaryLogger(
 			logCounter:      EntryCounter{EnableMsgCount: enableMsgCount},
 			gcNotify:        make(chan struct{}, 1),
 		},
-		forceSyncWrites: forceSyncWrites,
+		forceFlushWrites: forceFlushWrites,
 	}
 	l.logger.redactableLogs.Set(mainLog.redactableLogs.Get())
-	l.logger.mu.syncWrites = forceSyncWrites || mainLog.mu.syncWrites
+	l.logger.mu.flushWrites = forceFlushWrites || mainLog.mu.flushWrites
 
 	// Ensure the registry knows about this logger.
 	secondaryLogRegistry.mu.Lock()

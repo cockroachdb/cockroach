@@ -53,7 +53,7 @@ func TestSecondaryGC(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	l := NewSecondaryLogger(ctx, &tmpDirName, "woo", false /*enableGc*/, false /*syncWrites*/, true /*msgCount*/)
+	l := NewSecondaryLogger(ctx, &tmpDirName, "woo", false /*enableGc*/, false /*flushWrites*/, true /*msgCount*/)
 	defer l.Close()
 
 	testLogGC(t, &l.logger, l.Logf)
