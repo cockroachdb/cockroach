@@ -29,8 +29,8 @@ func init() {
 }
 
 func declareKeysMigrate(
-	desc *roachpb.RangeDescriptor,
-	header roachpb.Header,
+	rs ImmutableRangeState,
+	_ roachpb.Header,
 	_ roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
@@ -40,10 +40,10 @@ func declareKeysMigrate(
 	// define the allow authors for specific set of keys each migration needs to
 	// grab latches and locks over.
 
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(header.RangeID)})
-	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
-	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(header.RangeID)})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeVersionKey(rs.GetRangeID())})
+	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
+	lockSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateLegacyKey(rs.GetRangeID())})
 }
 
 // migrationRegistry is a global registry of all KV-level migrations. See

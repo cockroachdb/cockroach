@@ -639,8 +639,7 @@ func (r *DistSQLReceiver) Push(
 		if len(meta.TraceData) > 0 {
 			span := tracing.SpanFromContext(r.ctx)
 			if span == nil {
-				r.resultWriter.SetError(
-					errors.New("trying to ingest remote spans but there is no recording span set up"))
+				// Nothing to do.
 			} else if err := span.ImportRemoteSpans(meta.TraceData); err != nil {
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
