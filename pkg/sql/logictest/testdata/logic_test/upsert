@@ -1246,3 +1246,29 @@ query I
 WITH cte(c) AS (UPSERT INTO t54456 SELECT i FROM generate_series(25001, 40000) AS i RETURNING c) SELECT count(*) FROM cte
 ----
 15000
+
+# Regression test for #59125. Ensure that valid rows don't get filtered out
+# from ON CONFLICT DO NOTHING.
+statement ok
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT UNIQUE,
+  w INT UNIQUE,
+  x INT,
+  y INT DEFAULT 5,
+  UNIQUE (x, y)
+)
+
+statement ok
+INSERT INTO uniq VALUES (1, 1, 1, 1, 1)
+
+statement ok
+INSERT INTO uniq VALUES (1, 20, 20, 20, 20), (20, 1, 20, 20, 20), (20, 20, 20, 20, 20),
+                        (20, 20, 1, 20, 20), (20, 20, 20, 20, 20), (20, 20, 20, 1, 1)
+ON CONFLICT DO NOTHING
+
+query IIIII rowsort
+SELECT * FROM uniq
+----
+1   1   1   1   1
+20  20  20  20  20

@@ -65,6 +65,17 @@ CREATE TABLE decimals (
 )
 ----
 
+exec-ddl
+CREATE TABLE uniq (
+  k INT PRIMARY KEY,
+  v INT UNIQUE,
+  w INT UNIQUE,
+  x INT,
+  y INT DEFAULT 5,
+  UNIQUE (x, y)
+)
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -541,16 +552,16 @@ insert xyz
  └── upsert-distinct-on
       ├── columns: column1:5!null column2:6!null column3:7!null
       ├── grouping columns: column2:6!null column3:7!null
-      ├── anti-join (hash)
+      ├── upsert-distinct-on
       │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    ├── grouping columns: column2:6!null column3:7!null
       │    ├── upsert-distinct-on
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    ├── grouping columns: column2:6!null column3:7!null
+      │    │    ├── grouping columns: column1:5!null
       │    │    ├── anti-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    │    ├── upsert-distinct-on
+      │    │    │    ├── anti-join (hash)
       │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── anti-join (hash)
       │    │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    │    │    │    ├── values
@@ -561,24 +572,24 @@ insert xyz
       │    │    │    │    │    │    └── columns: x:8!null y:9 z:10
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── column1:5 = x:8
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=column2:6]
-      │    │    │    │         │    └── column2:6
-      │    │    │    │         └── first-agg [as=column3:7]
-      │    │    │    │              └── column3:7
+      │    │    │    │    ├── scan xyz
+      │    │    │    │    │    └── columns: x:12!null y:13 z:14
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:6 = y:13
+      │    │    │    │         └── column3:7 = z:14
       │    │    │    ├── scan xyz
-      │    │    │    │    └── columns: x:12!null y:13 z:14
+      │    │    │    │    └── columns: x:16!null y:17 z:18
       │    │    │    └── filters
-      │    │    │         ├── column2:6 = y:13
-      │    │    │         └── column3:7 = z:14
+      │    │    │         ├── column3:7 = z:18
+      │    │    │         └── column2:6 = y:17
       │    │    └── aggregations
-      │    │         └── first-agg [as=column1:5]
-      │    │              └── column1:5
-      │    ├── scan xyz
-      │    │    └── columns: x:16!null y:17 z:18
-      │    └── filters
-      │         ├── column3:7 = z:18
-      │         └── column2:6 = y:17
+      │    │         ├── first-agg [as=column2:6]
+      │    │         │    └── column2:6
+      │    │         └── first-agg [as=column3:7]
+      │    │              └── column3:7
+      │    └── aggregations
+      │         └── first-agg [as=column1:5]
+      │              └── column1:5
       └── aggregations
            └── first-agg [as=column1:5]
                 └── column1:5
@@ -613,6 +624,98 @@ insert xyz
       └── aggregations
            └── first-agg [as=column1:5]
                 └── column1:5
+
+build
+INSERT INTO uniq VALUES (1, 20, 20, 20, 20), (20, 1, 20, 20, 20), (20, 20, 20, 20, 20),
+                        (20, 20, 1, 20, 20), (20, 20, 20, 1, 1) ON CONFLICT DO NOTHING
+----
+insert uniq
+ ├── columns: <none>
+ ├── arbiter indexes: primary uniq_v_key uniq_w_key secondary
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => v:2
+ │    ├── column3:9 => w:3
+ │    ├── column4:10 => x:4
+ │    └── column5:11 => y:5
+ └── upsert-distinct-on
+      ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      ├── grouping columns: column4:10!null column5:11!null
+      ├── upsert-distinct-on
+      │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    ├── grouping columns: column3:9!null
+      │    ├── upsert-distinct-on
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    ├── grouping columns: column2:8!null
+      │    │    ├── upsert-distinct-on
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    ├── anti-join (hash)
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    │    │    │    ├── anti-join (hash)
+      │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+      │    │    │    │    │    │    │    │    ├── (1, 20, 20, 20, 20)
+      │    │    │    │    │    │    │    │    ├── (20, 1, 20, 20, 20)
+      │    │    │    │    │    │    │    │    ├── (20, 20, 20, 20, 20)
+      │    │    │    │    │    │    │    │    ├── (20, 20, 1, 20, 20)
+      │    │    │    │    │    │    │    │    └── (20, 20, 20, 1, 1)
+      │    │    │    │    │    │    │    ├── scan uniq
+      │    │    │    │    │    │    │    │    └── columns: k:12!null v:13 w:14 x:15 y:16
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── column1:7 = k:12
+      │    │    │    │    │    │    ├── scan uniq
+      │    │    │    │    │    │    │    └── columns: k:18!null v:19 w:20 x:21 y:22
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── column2:8 = v:19
+      │    │    │    │    │    ├── scan uniq
+      │    │    │    │    │    │    └── columns: k:24!null v:25 w:26 x:27 y:28
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── column3:9 = w:26
+      │    │    │    │    ├── scan uniq
+      │    │    │    │    │    └── columns: k:30!null v:31 w:32 x:33 y:34
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column4:10 = x:33
+      │    │    │    │         └── column5:11 = y:34
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:8]
+      │    │    │         │    └── column2:8
+      │    │    │         ├── first-agg [as=column3:9]
+      │    │    │         │    └── column3:9
+      │    │    │         ├── first-agg [as=column4:10]
+      │    │    │         │    └── column4:10
+      │    │    │         └── first-agg [as=column5:11]
+      │    │    │              └── column5:11
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column1:7]
+      │    │         │    └── column1:7
+      │    │         ├── first-agg [as=column3:9]
+      │    │         │    └── column3:9
+      │    │         ├── first-agg [as=column4:10]
+      │    │         │    └── column4:10
+      │    │         └── first-agg [as=column5:11]
+      │    │              └── column5:11
+      │    └── aggregations
+      │         ├── first-agg [as=column1:7]
+      │         │    └── column1:7
+      │         ├── first-agg [as=column2:8]
+      │         │    └── column2:8
+      │         ├── first-agg [as=column4:10]
+      │         │    └── column4:10
+      │         └── first-agg [as=column5:11]
+      │              └── column5:11
+      └── aggregations
+           ├── first-agg [as=column1:7]
+           │    └── column1:7
+           ├── first-agg [as=column2:8]
+           │    └── column2:8
+           └── first-agg [as=column3:9]
+                └── column3:9
 
 # ------------------------------------------------------------------------------
 # Test excluded columns.
@@ -1879,11 +1982,11 @@ insert partial_indexes
       ├── upsert-distinct-on
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    ├── grouping columns: column2:6!null column3:7!null
-      │    ├── anti-join (hash)
+      │    ├── upsert-distinct-on
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    ├── upsert-distinct-on
+      │    │    ├── grouping columns: column1:5!null
+      │    │    ├── anti-join (hash)
       │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │    │    │    ├── grouping columns: column1:5!null
       │    │    │    ├── anti-join (hash)
       │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    │    │    ├── values
@@ -1902,25 +2005,25 @@ insert partial_indexes
       │    │    │    │    │              └── c:10 = 'write-only'
       │    │    │    │    └── filters
       │    │    │    │         └── column1:5 = a:8
-      │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=column2:6]
-      │    │    │         │    └── column2:6
-      │    │    │         └── first-agg [as=column3:7]
-      │    │    │              └── column3:7
-      │    │    ├── scan partial_indexes
-      │    │    │    ├── columns: a:12!null b:13 c:14
-      │    │    │    └── partial index predicates
-      │    │    │         ├── secondary: filters
-      │    │    │         │    └── c:14 = 'foo'
-      │    │    │         ├── secondary: filters
-      │    │    │         │    └── (a:12 > b:13) AND (c:14 = 'bar')
-      │    │    │         ├── b: filters
-      │    │    │         │    └── c:14 = 'delete-only'
-      │    │    │         └── b: filters
-      │    │    │              └── c:14 = 'write-only'
-      │    │    └── filters
-      │    │         ├── column2:6 = b:13
-      │    │         └── column3:7 = c:14
+      │    │    │    ├── scan partial_indexes
+      │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         ├── secondary: filters
+      │    │    │    │         │    └── c:14 = 'foo'
+      │    │    │    │         ├── secondary: filters
+      │    │    │    │         │    └── (a:12 > b:13) AND (c:14 = 'bar')
+      │    │    │    │         ├── b: filters
+      │    │    │    │         │    └── c:14 = 'delete-only'
+      │    │    │    │         └── b: filters
+      │    │    │    │              └── c:14 = 'write-only'
+      │    │    │    └── filters
+      │    │    │         ├── column2:6 = b:13
+      │    │    │         └── column3:7 = c:14
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=column2:6]
+      │    │         │    └── column2:6
+      │    │         └── first-agg [as=column3:7]
+      │    │              └── column3:7
       │    └── aggregations
       │         └── first-agg [as=column1:5]
       │              └── column1:5
@@ -2095,11 +2198,11 @@ insert unique_partial_indexes
       │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
       │         ├── project
       │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
-      │         │    ├── anti-join (hash)
+      │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    ├── upsert-distinct-on
+      │         │    │    ├── grouping columns: column1:5!null
+      │         │    │    ├── anti-join (hash)
       │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    │    ├── grouping columns: column1:5!null
       │         │    │    │    ├── anti-join (hash)
       │         │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │    │    ├── values
@@ -2112,23 +2215,23 @@ insert unique_partial_indexes
       │         │    │    │    │    │              └── c:10 = 'foo'
       │         │    │    │    │    └── filters
       │         │    │    │    │         └── column1:5 = a:8
-      │         │    │    │    └── aggregations
-      │         │    │    │         ├── first-agg [as=column2:6]
-      │         │    │    │         │    └── column2:6
-      │         │    │    │         └── first-agg [as=column3:7]
-      │         │    │    │              └── column3:7
-      │         │    │    ├── select
-      │         │    │    │    ├── columns: a:12!null b:13 c:14!null
-      │         │    │    │    ├── scan unique_partial_indexes
-      │         │    │    │    │    ├── columns: a:12!null b:13 c:14
-      │         │    │    │    │    └── partial index predicates
-      │         │    │    │    │         └── secondary: filters
-      │         │    │    │    │              └── c:14 = 'foo'
+      │         │    │    │    ├── select
+      │         │    │    │    │    ├── columns: a:12!null b:13 c:14!null
+      │         │    │    │    │    ├── scan unique_partial_indexes
+      │         │    │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │         │    │    │    │    │    └── partial index predicates
+      │         │    │    │    │    │         └── secondary: filters
+      │         │    │    │    │    │              └── c:14 = 'foo'
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         └── c:14 = 'foo'
       │         │    │    │    └── filters
-      │         │    │    │         └── c:14 = 'foo'
-      │         │    │    └── filters
-      │         │    │         ├── column2:6 = b:13
-      │         │    │         └── column3:7 = 'foo'
+      │         │    │    │         ├── column2:6 = b:13
+      │         │    │    │         └── column3:7 = 'foo'
+      │         │    │    └── aggregations
+      │         │    │         ├── first-agg [as=column2:6]
+      │         │    │         │    └── column2:6
+      │         │    │         └── first-agg [as=column3:7]
+      │         │    │              └── column3:7
       │         │    └── projections
       │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
       │         └── aggregations
@@ -2164,55 +2267,55 @@ insert unique_partial_indexes
       │         ├── grouping columns: column2:6!null upsert_partial_index_distinct2:17
       │         ├── project
       │         │    ├── columns: upsert_partial_index_distinct2:17 column1:5!null column2:6!null column3:7!null
-      │         │    ├── anti-join (hash)
+      │         │    ├── project
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    ├── project
-      │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    │    └── upsert-distinct-on
-      │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:12
-      │         │    │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:12
-      │         │    │    │         ├── project
-      │         │    │    │         │    ├── columns: upsert_partial_index_distinct1:12 column1:5!null column2:6!null column3:7!null
-      │         │    │    │         │    ├── anti-join (hash)
-      │         │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    │         │    │    ├── values
-      │         │    │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
-      │         │    │    │         │    │    │    └── (1, 1, 'bar')
-      │         │    │    │         │    │    ├── select
-      │         │    │    │         │    │    │    ├── columns: a:8!null b:9 c:10!null
-      │         │    │    │         │    │    │    ├── scan unique_partial_indexes
-      │         │    │    │         │    │    │    │    ├── columns: a:8!null b:9 c:10
-      │         │    │    │         │    │    │    │    └── partial index predicates
-      │         │    │    │         │    │    │    │         ├── secondary: filters
-      │         │    │    │         │    │    │    │         │    └── c:10 = 'foo'
-      │         │    │    │         │    │    │    │         └── u2: filters
-      │         │    │    │         │    │    │    │              └── c:10 = 'bar'
-      │         │    │    │         │    │    │    └── filters
-      │         │    │    │         │    │    │         └── c:10 = 'foo'
-      │         │    │    │         │    │    └── filters
-      │         │    │    │         │    │         ├── column2:6 = b:9
-      │         │    │    │         │    │         └── column3:7 = 'foo'
-      │         │    │    │         │    └── projections
-      │         │    │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:12]
-      │         │    │    │         └── aggregations
-      │         │    │    │              ├── first-agg [as=column1:5]
-      │         │    │    │              │    └── column1:5
-      │         │    │    │              └── first-agg [as=column3:7]
-      │         │    │    │                   └── column3:7
-      │         │    │    ├── select
-      │         │    │    │    ├── columns: a:13!null b:14 c:15!null
-      │         │    │    │    ├── scan unique_partial_indexes
-      │         │    │    │    │    ├── columns: a:13!null b:14 c:15
-      │         │    │    │    │    └── partial index predicates
-      │         │    │    │    │         ├── secondary: filters
-      │         │    │    │    │         │    └── c:15 = 'foo'
-      │         │    │    │    │         └── u2: filters
-      │         │    │    │    │              └── c:15 = 'bar'
-      │         │    │    │    └── filters
-      │         │    │    │         └── c:15 = 'bar'
-      │         │    │    └── filters
-      │         │    │         ├── column2:6 = b:14
-      │         │    │         └── column3:7 = 'bar'
+      │         │    │    └── upsert-distinct-on
+      │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:16
+      │         │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
+      │         │    │         ├── project
+      │         │    │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
+      │         │    │         │    ├── anti-join (hash)
+      │         │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    ├── anti-join (hash)
+      │         │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    │    ├── values
+      │         │    │         │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    │    │    └── (1, 1, 'bar')
+      │         │    │         │    │    │    ├── select
+      │         │    │         │    │    │    │    ├── columns: a:8!null b:9 c:10!null
+      │         │    │         │    │    │    │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │    │    │    ├── columns: a:8!null b:9 c:10
+      │         │    │         │    │    │    │    │    └── partial index predicates
+      │         │    │         │    │    │    │    │         ├── secondary: filters
+      │         │    │         │    │    │    │    │         │    └── c:10 = 'foo'
+      │         │    │         │    │    │    │    │         └── u2: filters
+      │         │    │         │    │    │    │    │              └── c:10 = 'bar'
+      │         │    │         │    │    │    │    └── filters
+      │         │    │         │    │    │    │         └── c:10 = 'foo'
+      │         │    │         │    │    │    └── filters
+      │         │    │         │    │    │         ├── column2:6 = b:9
+      │         │    │         │    │    │         └── column3:7 = 'foo'
+      │         │    │         │    │    ├── select
+      │         │    │         │    │    │    ├── columns: a:12!null b:13 c:14!null
+      │         │    │         │    │    │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │    │    ├── columns: a:12!null b:13 c:14
+      │         │    │         │    │    │    │    └── partial index predicates
+      │         │    │         │    │    │    │         ├── secondary: filters
+      │         │    │         │    │    │    │         │    └── c:14 = 'foo'
+      │         │    │         │    │    │    │         └── u2: filters
+      │         │    │         │    │    │    │              └── c:14 = 'bar'
+      │         │    │         │    │    │    └── filters
+      │         │    │         │    │    │         └── c:14 = 'bar'
+      │         │    │         │    │    └── filters
+      │         │    │         │    │         ├── column2:6 = b:13
+      │         │    │         │    │         └── column3:7 = 'bar'
+      │         │    │         │    └── projections
+      │         │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
+      │         │    │         └── aggregations
+      │         │    │              ├── first-agg [as=column1:5]
+      │         │    │              │    └── column1:5
+      │         │    │              └── first-agg [as=column3:7]
+      │         │    │                   └── column3:7
       │         │    └── projections
       │         │         └── (column3:7 = 'bar') OR NULL::BOOL [as=upsert_partial_index_distinct2:17]
       │         └── aggregations
