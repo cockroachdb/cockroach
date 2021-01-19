@@ -73,13 +73,9 @@ func (m *memColumn) Append(args SliceArgs) {
 				// whether the value is NULL. It is possible that Bytes' invariant of
 				// non-decreasing offsets on the source is currently not maintained, so
 				// we explicitly enforce it.
-				maxIdx := 0
-				for _, selIdx := range sel {
-					if selIdx > maxIdx {
-						maxIdx = selIdx
-					}
-				}
-				fromCol.UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
+				// Note that here we rely on the fact that selection vectors are
+				// increasing sequences.
+				fromCol.UpdateOffsetsToBeNonDecreasing(sel[len(sel)-1] + 1)
 				for _, selIdx := range sel {
 					val := fromCol.Get(selIdx)
 					toCol.AppendVal(val)
