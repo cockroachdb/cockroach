@@ -1303,6 +1303,11 @@ func (p *planner) alterTableOwner(
 		return false, nil
 	}
 
+	if p.User() != privs.Owner() {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of table %s", n.tableDesc.Name)
+	}
+
 	if err := p.checkCanAlterTableAndSetNewOwner(ctx, n.tableDesc, newOwner); err != nil {
 		return false, err
 	}
