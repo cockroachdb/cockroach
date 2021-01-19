@@ -36,12 +36,16 @@ func TestSpillingQueue(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	for _, rewindable := range []bool{false, true} {
-		for _, memoryLimit := range []int64{10 << 10 /* 10 KiB */, 1<<20 + int64(rng.Intn(64<<20)) /* 1 MiB up to 64 MiB */} {
+		for _, memoryLimit := range []int64{
+			10 << 10,                        /* 10 KiB */
+			1<<20 + int64(rng.Intn(63<<20)), /* 1 MiB up to 64 MiB */
+			1 << 30,                         /* 1 GiB */
+		} {
 			alwaysCompress := rng.Float64() < 0.5
 			diskQueueCacheMode := colcontainer.DiskQueueCacheModeDefault
+			var dequeuedProbabilityBeforeAllEnqueuesAreDone float64
 			// testReuseCache will test the reuse cache modes.
 			testReuseCache := rng.Float64() < 0.5
-			dequeuedProbabilityBeforeAllEnqueuesAreDone := 0.5
 			if testReuseCache {
 				dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
 				if rng.Float64() < 0.5 {
@@ -49,17 +53,28 @@ func TestSpillingQueue(t *testing.T) {
 				} else {
 					diskQueueCacheMode = colcontainer.DiskQueueCacheModeClearAndReuseCache
 				}
+			} else if rng.Float64() < 0.5 {
+				dequeuedProbabilityBeforeAllEnqueuesAreDone = 0.5
 			}
 			prefix := ""
 			if rewindable {
 				dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
 				prefix = "Rewindable/"
 			}
-			numBatches := 1 + rng.Intn(16)
+			numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(2)) + rng.Intn(int(spillingQueueInitialItemsLen))
+			inputBatchSize := 1 + rng.Intn(coldata.BatchSize())
+			const maxNumTuples = 10000
+			if numBatches*inputBatchSize > maxNumTuples {
+				// When we happen to choose very large value for
+				// coldata.BatchSize() and for spillingQueueInitialItemsLen, the
+				// test might take non-trivial amount of time, so we'll limit
+				// the number of tuples.
+				inputBatchSize = maxNumTuples / numBatches
+			}
 			// Add a limit on the number of batches added to the in-memory
 			// buffer of the spilling queue. We will set it to half of the total
 			// number of batches which allows us to exercise the case when the
-			// spilling to disk queue occurs after some batched were added to
+			// spilling to disk queue occurs after some batches were added to
 			// the in-memory buffer.
 			setInMemEnqueuesLimit := rng.Float64() < 0.5
 			log.Infof(context.Background(), "%sMemoryLimit=%s/DiskQueueCacheMode=%d/AlwaysCompress=%t/NumBatches=%d/InMemEnqueuesLimited=%t",
@@ -72,7 +87,7 @@ func TestSpillingQueue(t *testing.T) {
 			// Create random input.
 			op := coldatatestutils.NewRandomDataOp(testAllocator, rng, coldatatestutils.RandomDataOpArgs{
 				NumBatches: numBatches,
-				BatchSize:  1 + rng.Intn(coldata.BatchSize()),
+				BatchSize:  inputBatchSize,
 				Nulls:      true,
 				BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
 					if b.Length() == 0 {
@@ -125,6 +140,16 @@ func TestSpillingQueue(t *testing.T) {
 				b                        coldata.Batch
 				err                      error
 				numAlreadyDequeuedTuples int
+				// Apart from tracking all input tuples we will be tracking all
+				// of the dequeued batches and their lengths separately (without
+				// deep-copying them).
+				// The implementation of dequeue() method is such that if the
+				// queue doesn't spill to disk, we can safely keep the
+				// references to the dequeued batches because a new batch is
+				// allocated whenever it is kept in the in-memory buffer (which
+				// is not the case when dequeueing from disk).
+				dequeuedBatches      []coldata.Batch
+				dequeuedBatchLengths []int
 			)
 
 			windowedBatch := coldata.NewMemBatchNoCols(typs, coldata.BatchSize())
@@ -156,9 +181,12 @@ func TestSpillingQueue(t *testing.T) {
 						t.Fatal("queue incorrectly considered empty")
 					}
 					coldata.AssertEquivalentBatches(t, getNextWindowIntoTuples(b.Length()), b)
+					dequeuedBatches = append(dequeuedBatches, b)
+					dequeuedBatchLengths = append(dequeuedBatchLengths, b.Length())
 				}
 			}
 			numDequeuedTuplesBeforeReading := numAlreadyDequeuedTuples
+			numDequeuedBatchesBeforeReading := len(dequeuedBatches)
 			numReadIterations := 1
 			if rewindable {
 				numReadIterations = 2
@@ -173,11 +201,26 @@ func TestSpillingQueue(t *testing.T) {
 						break
 					}
 					coldata.AssertEquivalentBatches(t, getNextWindowIntoTuples(b.Length()), b)
+					dequeuedBatches = append(dequeuedBatches, b)
+					dequeuedBatchLengths = append(dequeuedBatchLengths, b.Length())
+				}
+
+				if !q.spilled() {
+					// Let's verify that all of the dequeued batches equal to
+					// all of the input tuples. We need to unset
+					// numAlreadyDequeuedTuples so that we start getting
+					// "windows" from the very beginning.
+					numAlreadyDequeuedTuples = 0
+					for i, b := range dequeuedBatches {
+						coldata.AssertEquivalentBatches(t, getNextWindowIntoTuples(dequeuedBatchLengths[i]), b)
+					}
 				}
 
 				if rewindable {
 					require.NoError(t, q.rewind())
 					numAlreadyDequeuedTuples = numDequeuedTuplesBeforeReading
+					dequeuedBatches = dequeuedBatches[:numDequeuedBatchesBeforeReading]
+					dequeuedBatchLengths = dequeuedBatchLengths[:numDequeuedBatchesBeforeReading]
 				}
 			}
 
