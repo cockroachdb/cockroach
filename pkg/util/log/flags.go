@@ -30,10 +30,10 @@ type config struct {
 	// used for testing.
 	showLogs bool
 
-	// syncWrites can be set asynchronously to force all file output to
-	// synchronize to disk. This is set via SetSync() and used e.g. in
-	// start.go upon encountering errors.
-	syncWrites syncutil.AtomicBool
+	// flushWrites can be set asynchronously to force all file output to
+	// be flushed to disk immediately. This is set via SetAlwaysFlush()
+	// and used e.g. in start.go upon encountering errors.
+	flushWrites syncutil.AtomicBool
 }
 
 var debugLog *loggerT
@@ -165,10 +165,10 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 				// impression to the entry parser.
 				Redactable: &bf,
 			},
-			Dir:          config.CaptureFd2.Dir,
-			MaxGroupSize: config.CaptureFd2.MaxGroupSize,
-			MaxFileSize:  &mf,
-			SyncWrites:   &bt,
+			Dir:            config.CaptureFd2.Dir,
+			MaxGroupSize:   config.CaptureFd2.MaxGroupSize,
+			MaxFileSize:    &mf,
+			BufferedWrites: &bf,
 		}
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig)
 		if err != nil {
@@ -295,7 +295,7 @@ func newFileSinkInfo(fileNamePrefix string, c logconfig.FileConfig) (*sinkInfo, 
 	fileSink := newFileSink(
 		*c.Dir,
 		fileNamePrefix,
-		*c.SyncWrites,
+		*c.BufferedWrites,
 		int64(*c.MaxFileSize),
 		int64(*c.MaxGroupSize),
 		info.getStartLines)
@@ -414,7 +414,7 @@ func DescribeAppliedConfig() string {
 		dir := fileSink.mu.logDir
 		fileSink.mu.Unlock()
 		fc.Dir = &dir
-		fc.SyncWrites = &fileSink.syncWrites
+		fc.BufferedWrites = &fileSink.bufferedWrites
 
 		// Describe the connections to this file sink.
 		for ch, logger := range chans {

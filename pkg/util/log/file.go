@@ -64,12 +64,12 @@ type fileSink struct {
 	// name prefix for log files.
 	prefix string
 
-	// syncWrites if true calls file.Flush and file.Sync on every log
+	// bufferedWrites if false calls file.Flush on every log
 	// write. This can be set per-logger e.g. for audit logging.
 	//
 	// Note that synchronization for all log files simultaneously can
-	// also be configured via logging.syncWrites, see SetSync().
-	syncWrites bool
+	// also be configured via logging.flushWrites, see SetAlwaysFlush().
+	bufferedWrites bool
 
 	// logFileMaxSize is the maximum size of a log file in bytes.
 	logFileMaxSize int64
@@ -128,7 +128,7 @@ type fileSink struct {
 // newFileSink creates a new file sink.
 func newFileSink(
 	dir, fileNamePrefix string,
-	forceSyncWrites bool,
+	bufferedWrites bool,
 	fileMaxSize, combinedMaxSize int64,
 	getStartLines func(time.Time) []*buffer,
 ) *fileSink {
@@ -138,7 +138,7 @@ func newFileSink(
 	}
 	f := &fileSink{
 		prefix:                  prefix,
-		syncWrites:              forceSyncWrites,
+		bufferedWrites:          bufferedWrites,
 		logFileMaxSize:          fileMaxSize,
 		logFilesCombinedMaxSize: combinedMaxSize,
 		gcNotify:                make(chan struct{}, 1),
@@ -168,7 +168,7 @@ func (l *fileSink) attachHints(stacks []byte) []byte {
 }
 
 // output implements the logSink interface.
-func (l *fileSink) output(extraSync bool, b []byte) error {
+func (l *fileSink) output(extraFlush bool, b []byte) error {
 	if !l.enabled.Get() {
 		// NB: we need to check filesink.enabled a second time here in
 		// case a test Scope() has disabled it asynchronously while
@@ -187,8 +187,8 @@ func (l *fileSink) output(extraSync bool, b []byte) error {
 		return err
 	}
 
-	if extraSync || l.syncWrites || logging.syncWrites.Get() {
-		l.flushAndSyncLocked(true /*doSync*/)
+	if extraFlush || !l.bufferedWrites || logging.flushWrites.Get() {
+		l.flushAndMaybeSyncLocked(false /*doSync*/)
 	}
 	return nil
 }
@@ -214,24 +214,24 @@ func (l *fileSink) emergencyOutput(b []byte) {
 	// During an emergency, we flush to get the data out to the OS, but
 	// we don't care as much about persistence. In fact, trying too hard
 	// to sync may cause additional stoppage.
-	l.flushAndSyncLocked(false /*doSync*/)
+	l.flushAndMaybeSyncLocked(false /*doSync*/)
 }
 
-// lockAndFlushAndSync is like flushAndSync but locks l.mu first.
-func (l *fileSink) lockAndFlushAndSync(doSync bool) {
+// lockAndFlushAndMaybeSync is like flushAndMaybeSyncLocked but locks l.mu first.
+func (l *fileSink) lockAndFlushAndMaybeSync(doSync bool) {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.flushAndSyncLocked(doSync)
+	l.flushAndMaybeSyncLocked(doSync)
 }
 
-// flushAndSync flushes the current log and, if doSync is set,
+// flushAndMaybeSyncLocked flushes the current log and, if doSync is set,
 // attempts to sync its data to disk.
 //
 // l.mu is held.
-func (l *fileSink) flushAndSyncLocked(doSync bool) {
+func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 	if l.mu.file == nil {
 		return
 	}
