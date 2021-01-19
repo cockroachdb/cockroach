@@ -12,7 +12,10 @@ go_library(
     embed = [":kvserverpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+    ],
 )
 
 proto_library(
