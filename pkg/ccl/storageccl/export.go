@@ -57,12 +57,12 @@ func init() {
 }
 
 func declareKeysExport(
-	desc *roachpb.RangeDescriptor,
+	rs batcheval.ImmutableRangeState,
 	header roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	batcheval.DefaultDeclareIsolatedKeys(desc, header, req, latchSpans, lockSpans)
+	batcheval.DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 

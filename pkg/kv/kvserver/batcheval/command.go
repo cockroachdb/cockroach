@@ -20,21 +20,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// declareKeysFunc adds all key spans that a command touches to the latchSpans
+// DeclareKeysFunc adds all key spans that a command touches to the latchSpans
 // set. It then adds all key spans within which that the command expects to have
 // isolation from conflicting transactions to the lockSpans set.
-type declareKeysFunc func(
-	_ *roachpb.RangeDescriptor, _ roachpb.Header, _ roachpb.Request, latchSpans, lockSpans *spanset.SpanSet,
+type DeclareKeysFunc func(
+	rs ImmutableRangeState,
+	header roachpb.Header,
+	request roachpb.Request,
+	latchSpans, lockSpans *spanset.SpanSet,
 )
+
+// ImmutableRangeState exposes the properties of a Range that cannot change
+// across a Range's lifetime. The interface is used to manage the visibility
+// that DeclareKeysFunc implementations have into the Range's descriptor, so
+// that implementations don't rely on information that can change between the
+// time that a command declares its keys and the time that it evaluates.
+//
+// The quintessential example of a property of a Range that is not immutable is
+// its end key. It would be incorrect to declare keys between a Range's start
+// key and its current end key as a means of latching the entire range, because
+// a merge of a right-hand neighbor could complete in between the time that a
+// request declares its keys and the time that it evaluates. This could lead to
+// a violation of the mutual exclusion that the command was expecting to have.
+type ImmutableRangeState interface {
+	GetRangeID() roachpb.RangeID
+	GetStartKey() roachpb.RKey
+}
 
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
 	// DeclareKeys adds all keys this command touches, and when (if applicable),
 	// to the given SpanSet.
-	//
-	// TODO(nvanbenschoten): rationalize this RangeDescriptor. Can it change
-	// between key declaration and cmd evaluation? Really, do it.
-	DeclareKeys declareKeysFunc
+	DeclareKeys DeclareKeysFunc
 
 	// Eval{RW,RO} evaluates a read-{write,only} command respectively on the
 	// given engine.{ReadWriter,Reader}. This is typically derived from
@@ -56,7 +73,7 @@ var cmds = make(map[roachpb.Method]Command)
 // It must only be called before any evaluation takes place.
 func RegisterReadWriteCommand(
 	method roachpb.Method,
-	declare declareKeysFunc,
+	declare DeclareKeysFunc,
 	impl func(context.Context, storage.ReadWriter, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{
@@ -69,7 +86,7 @@ func RegisterReadWriteCommand(
 // must only be called before any evaluation takes place.
 func RegisterReadOnlyCommand(
 	method roachpb.Method,
-	declare declareKeysFunc,
+	declare DeclareKeysFunc,
 	impl func(context.Context, storage.Reader, CommandArgs, roachpb.Response) (result.Result, error),
 ) {
 	register(method, Command{

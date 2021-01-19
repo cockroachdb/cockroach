@@ -575,7 +575,7 @@ const (
 // returned from now on. In this state, the processor is expected to drain its
 // inputs (commonly by using DrainHelper()).
 //
-// If the processor has no input (ProcStateOpts.intputToDrain was not specified
+// If the processor has no input (ProcStateOpts.inputToDrain was not specified
 // at init() time), then we move straight to the StateTrailingMeta.
 //
 // An error can be optionally passed. It will be the first piece of metadata
