@@ -92,7 +92,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	// Otherwise, update the timestamp cache and release the concurrency guard.
-	ec, g := endCmds{repl: r, g: g}, nil
+	ec, g := endCmds{repl: r, g: g, st: st}, nil
 	ec.done(ctx, ba, br, pErr)
 
 	// Semi-synchronously process any intents that need resolving here in

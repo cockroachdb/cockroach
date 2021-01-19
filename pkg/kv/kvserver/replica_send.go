@@ -702,6 +702,7 @@ func (r *Replica) collectSpans(
 type endCmds struct {
 	repl *Replica
 	g    *concurrency.Guard
+	st   kvserverpb.LeaseStatus
 }
 
 // move moves the endCmds into the return value, clearing and making a call to
@@ -726,10 +727,13 @@ func (ec *endCmds) done(
 	}
 	defer ec.move() // clear
 
-	// Update the timestamp cache if the request is not being re-evaluated. Each
-	// request is considered in turn; only those marked as affecting the cache
-	// are processed.
-	ec.repl.updateTimestampCache(ctx, ba, br, pErr)
+	// Update the timestamp cache. Each request within the batch is considered
+	// in turn; only those marked as affecting the cache are processed. However,
+	// only do so if the request is consistent and was operating on the
+	// leaseholder under a valid range lease.
+	if ba.ReadConsistency == roachpb.CONSISTENT && ec.st.State == kvserverpb.LeaseState_VALID {
+		ec.repl.updateTimestampCache(ctx, &ec.st, ba, br, pErr)
+	}
 
 	// Release the latches acquired by the request and exit lock wait-queues.
 	// Must be done AFTER the timestamp cache is updated. ec.g is only set when

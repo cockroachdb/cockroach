@@ -12,14 +12,13 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -38,19 +37,54 @@ func setTimestampCacheLowWaterMark(
 	}
 }
 
+// addToTSCacheChecked adds the specified timestamp to the timestamp cache
+// covering the range of keys from start to end. Before doing so, the function
+// performs a few assertions to check for proper use of the timestamp cache.
+func (r *Replica) addToTSCacheChecked(
+	ctx context.Context,
+	st *kvserverpb.LeaseStatus,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+	start, end roachpb.Key,
+	ts hlc.Timestamp,
+	txnID uuid.UUID,
+) {
+	// All updates to the timestamp cache must be performed below the expiration
+	// time of the leaseholder. This ensures correctness if the lease expires
+	// and is acquired by a new replica that begins serving writes immediately
+	// to the same keys at the next lease's start time.
+	if exp := st.Expiration(); exp.LessEq(ts) {
+		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
+			"cache update could be lost of a non-cooperative lease change.", ts, ba, br, pErr, exp)
+	}
+	// All updates the to timestamp cache with non-synthetic timestamps must be
+	// performed at or below the current time. This is no longer strictly
+	// required for correctness as lease transfers now read the timestamp cache
+	// directly instead of using the local HLC clock as a proxy for its high
+	// water-mark, but it serves as a good proxy for proper handling of HLC
+	// clock updates and, by extension, observed timestamps.
+	if !ts.Synthetic && st.Now.ToTimestamp().Less(ts) {
+		log.Fatalf(ctx, "Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
+			"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
+			"Non-synthetic timestamps should always lag the local hlc clock.", ts, ba, br, pErr, st.Now)
+	}
+	r.store.tsCache.Add(start, end, ts, txnID)
+}
+
 // updateTimestampCache updates the timestamp cache in order to set a low water
 // mark for the timestamp at which mutations to keys overlapping the provided
 // request can write, such that they don't re-write history.
 func (r *Replica) updateTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context,
+	st *kvserverpb.LeaseStatus,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
 ) {
-	if ba.ReadConsistency != roachpb.CONSISTENT {
-		// Inconsistent reads are excluded from the timestamp cache.
-		return
-	}
-	addToTSCache := r.store.tsCache.Add
-	if util.RaceEnabled {
-		addToTSCache = checkedTSCacheUpdate(r.store.Clock().Now(), r.store.tsCache, ba, br, pErr)
+	addToTSCache := func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
+		r.addToTSCacheChecked(ctx, st, ba, br, pErr, start, end, ts, txnID)
 	}
 	// Update the timestamp cache using the timestamp at which the batch
 	// was executed. Note this may have moved forward from ba.Timestamp,
@@ -210,25 +244,6 @@ func (r *Replica) updateTimestampCache(
 		default:
 			addToTSCache(start, end, ts, txnID)
 		}
-	}
-}
-
-// checkedTSCacheUpdate wraps tscache.Cache and asserts that any update to the
-// cache is at or below the specified time.
-func checkedTSCacheUpdate(
-	now hlc.Timestamp,
-	tc tscache.Cache,
-	ba *roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
-) func(roachpb.Key, roachpb.Key, hlc.Timestamp, uuid.UUID) {
-	return func(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
-		if now.Less(ts) && !ts.Synthetic {
-			panic(fmt.Sprintf("Unsafe timestamp cache update! Cannot add timestamp %s to timestamp "+
-				"cache after evaluating %v (resp=%v; err=%v) with local hlc clock at timestamp %s. "+
-				"The timestamp cache update could be lost on a lease transfer.", ts, ba, br, pErr, now))
-		}
-		tc.Add(start, end, ts, txnID)
 	}
 }
 
