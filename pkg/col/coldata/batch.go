@@ -245,8 +245,17 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(length int) {
 	m.length = length
 	if length > 0 {
+		// In order to maintain the invariant of Bytes vectors we need to update
+		// offsets up to the element with the largest index that can be accessed
+		// by the batch.
+		maxIdx := length - 1
+		if m.useSel {
+			// Note that here we rely on the fact that selection vectors are
+			// increasing sequences.
+			maxIdx = m.sel[length-1]
+		}
 		for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-			m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(length)
+			m.b[i].Bytes().UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 		}
 	}
 }

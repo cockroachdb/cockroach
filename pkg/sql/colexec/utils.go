@@ -206,6 +206,7 @@ func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
 // [startIdx, endIdx) from batch (paying attention to the selection vector)
 // into b.
 // NOTE: this does *not* perform memory accounting.
+// NOTE: batch must be of non-zero length.
 func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx int) {
 	for _, colIdx := range b.colsToStore {
 		b.colVecs[colIdx].Append(

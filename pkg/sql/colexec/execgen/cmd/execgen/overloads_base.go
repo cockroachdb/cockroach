@@ -481,12 +481,12 @@ func (b *argWidthOverloadBase) Set(target, i, new string) string {
 	return set(b.CanonicalTypeFamily, target, i, new)
 }
 
-// Slice is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Slice(target, start, end string) string {
+// slice is a function that should only be used in templates.
+func (b *argWidthOverloadBase) slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
 	case types.BytesFamily:
 		// Bytes vector doesn't support slicing.
-		colexecerror.InternalError(errors.AssertionFailedf("Slice method is attempted to be generated on Bytes vector"))
+		colexecerror.InternalError(errors.AssertionFailedf("slice method is attempted to be generated on Bytes vector"))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
 	}
@@ -608,7 +608,7 @@ func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	case types.BytesFamily:
 		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
 	}
-	return b.Slice(target, start, end)
+	return b.slice(target, start, end)
 }
 
 // setVariableSize is a function that should only be used in templates. It
@@ -651,7 +651,6 @@ var (
 	_    = awob.GoTypeSliceName
 	_    = awob.CopyVal
 	_    = awob.Set
-	_    = awob.Slice
 	_    = awob.Sliceable
 	_    = awob.CopySlice
 	_    = awob.AppendSlice
