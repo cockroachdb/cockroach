@@ -404,6 +404,14 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	return nil
 }
 
+// NodeDialer returns the NodeDialer used by the TestServer.
+func (ts *TestServer) NodeDialer() *nodedialer.Dialer {
+	if ts != nil {
+		return ts.nodeDialer
+	}
+	return nil
+}
+
 // Start starts the TestServer by bootstrapping an in-memory store
 // (defaults to maximum of 100M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
@@ -1272,6 +1280,11 @@ func (ts *TestServer) GetRangeLease(
 // ExecutorConfig is part of the TestServerInterface.
 func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
+}
+
+// Tracer is part of the TestServerInterface
+func (ts *TestServer) Tracer() interface{} {
+	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
 // GCSystemLog deletes entries in the given system log table between

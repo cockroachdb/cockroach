@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +55,8 @@ func TestExternalHashAggregator(t *testing.T) {
 		accounts []*mon.BoundAccount
 		monitors []*mon.BytesMonitor
 	)
+	rng, _ := randutil.NewPseudoRand()
+	numForcedRepartitions := rng.Intn(5)
 	// Test the case in which the default memory is used as well as the case in
 	// which the hash aggregator spills to disk.
 	for _, spillForced := range []bool{false, true} {
@@ -70,7 +73,7 @@ func TestExternalHashAggregator(t *testing.T) {
 				// aggregator in the fallback strategy.
 				continue
 			}
-			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.name)
+			log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.name)
 			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 			)
@@ -97,7 +100,7 @@ func TestExternalHashAggregator(t *testing.T) {
 							ConstArguments: constArguments,
 							OutputTypes:    outputTypes,
 						},
-						queueCfg, sem,
+						queueCfg, sem, numForcedRepartitions,
 					)
 					accounts = append(accounts, accs...)
 					monitors = append(monitors, mons...)
@@ -159,7 +162,8 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 					b, aggType{
 						new: func(args *colexecagg.NewAggregatorArgs) (ResettableOperator, error) {
 							op, accs, mons, _, err := createExternalHashAggregator(
-								ctx, flowCtx, args, queueCfg, &colexecbase.TestingSemaphore{},
+								ctx, flowCtx, args, queueCfg,
+								&colexecbase.TestingSemaphore{}, 0, /* numForcedRepartitions */
 							)
 							memAccounts = append(memAccounts, accs...)
 							memMonitors = append(memMonitors, mons...)
@@ -197,6 +201,7 @@ func createExternalHashAggregator(
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
+	numForcedRepartitions int,
 ) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecbase.Closer, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
@@ -213,6 +218,7 @@ func createExternalHashAggregator(
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
+	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }
