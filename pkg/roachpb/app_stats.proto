@@ -89,6 +89,15 @@ message StatementStatistics {
   // BytesSentOverNetwork collects the number of bytes sent over the network.
   optional NumericStat bytes_sent_over_network = 17 [(gogoproto.nullable) = false];
 
+  // MaxMemUsage collects the maximum memory usage that occurred on a node.
+  optional NumericStat max_mem_usage = 18 [(gogoproto.nullable) = false];
+
+	// StatCollectionCount keeps track of how many times execution stats were
+	// recorded for this statement. Since this collection follows a sampling
+	// approach, this number is not necessarily equal to Count. Used to calculate
+	// the mean of some NumericStat values.
+	optional int64 stat_collection_count = 19 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
