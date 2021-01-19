@@ -36,6 +36,10 @@ type AnalyzedConstraints struct {
 	Satisfies map[roachpb.StoreID][]int
 }
 
+// EmptyAnalyzedConstraints represents an empty set of constraints that are
+// satisfied by any given configuration of replicas.
+var EmptyAnalyzedConstraints = AnalyzedConstraints{}
+
 // AnalyzeConstraints processes the zone config constraints that apply to a
 // range along with the current replicas for a range, spitting back out
 // information about which constraints are satisfied by which replicas and
@@ -44,19 +48,20 @@ func AnalyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
-	zone *zonepb.ZoneConfig,
+	numReplicas int32,
+	constraints []zonepb.ConstraintsConjunction,
 ) AnalyzedConstraints {
 	result := AnalyzedConstraints{
-		Constraints: zone.Constraints,
+		Constraints: constraints,
 	}
 
-	if len(zone.Constraints) > 0 {
-		result.SatisfiedBy = make([][]roachpb.StoreID, len(zone.Constraints))
+	if len(constraints) > 0 {
+		result.SatisfiedBy = make([][]roachpb.StoreID, len(constraints))
 		result.Satisfies = make(map[roachpb.StoreID][]int)
 	}
 
 	var constrainedReplicas int32
-	for i, subConstraints := range zone.Constraints {
+	for i, subConstraints := range constraints {
 		constrainedReplicas += subConstraints.NumReplicas
 		for _, repl := range existing {
 			// If for some reason we don't have the store descriptor (which shouldn't
@@ -70,7 +75,7 @@ func AnalyzeConstraints(
 			}
 		}
 	}
-	if constrainedReplicas > 0 && constrainedReplicas < *zone.NumReplicas {
+	if constrainedReplicas > 0 && constrainedReplicas < numReplicas {
 		result.UnconstrainedReplicas = true
 	}
 	return result
