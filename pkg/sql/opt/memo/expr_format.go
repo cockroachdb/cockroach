@@ -509,7 +509,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
 			}
-			f.formatArbiters(tp, t.Arbiters, t.Table)
+			f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+			f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 			f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
@@ -535,7 +536,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Child("columns: <none>")
 			}
 			if t.CanaryCol != 0 {
-				f.formatArbiters(tp, t.Arbiters, t.Table)
+				f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+				f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
 				f.formatColList(e, tp, "canary column:", opt.ColList{t.CanaryCol})
 				f.formatOptionalColList(e, tp, "fetch columns:", t.FetchCols)
 				f.formatMutationCols(e, tp, "insert-mapping:", t.InsertCols, t.Table)
@@ -1099,9 +1101,9 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	}
 }
 
-// formatArbiters constructs a new treeprinter child containing the
+// formatArbiterIndexes constructs a new treeprinter child containing the
 // specified list of arbiter indexes.
-func (f *ExprFmtCtx) formatArbiters(
+func (f *ExprFmtCtx) formatArbiterIndexes(
 	tp treeprinter.Node, arbiters cat.IndexOrdinals, tabID opt.TableID,
 ) {
 	md := f.Memo.Metadata()
@@ -1112,6 +1114,26 @@ func (f *ExprFmtCtx) formatArbiters(
 		f.Buffer.WriteString("arbiter indexes:")
 		for _, idx := range arbiters {
 			name := string(tab.Index(idx).Name())
+			f.space()
+			f.Buffer.WriteString(name)
+		}
+		tp.Child(f.Buffer.String())
+	}
+}
+
+// formatArbiterConstraints constructs a new treeprinter child containing the
+// specified list of arbiter constraints.
+func (f *ExprFmtCtx) formatArbiterConstraints(
+	tp treeprinter.Node, arbiters cat.UniqueOrdinals, tabID opt.TableID,
+) {
+	md := f.Memo.Metadata()
+	tab := md.Table(tabID)
+
+	if len(arbiters) > 0 {
+		f.Buffer.Reset()
+		f.Buffer.WriteString("arbiter constraints:")
+		for _, uc := range arbiters {
+			name := tab.Unique(uc).Name()
 			f.space()
 			f.Buffer.WriteString(name)
 		}

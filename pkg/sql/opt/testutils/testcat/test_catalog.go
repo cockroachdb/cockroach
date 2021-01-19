@@ -732,7 +732,7 @@ func (tt *Table) UniqueCount() int {
 }
 
 // Unique is part of the cat.Table interface.
-func (tt *Table) Unique(i int) cat.UniqueConstraint {
+func (tt *Table) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	return &tt.uniqueConstraints[i]
 }
 

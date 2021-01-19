@@ -796,7 +796,8 @@ func (e *distSQLSpecExecFactory) ConstructShowTrace(
 func (e *distSQLSpecExecFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
@@ -833,7 +834,8 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 func (e *distSQLSpecExecFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
-	arbiters cat.IndexOrdinals,
+	arbiterIndexes cat.IndexOrdinals,
+	arbiterConstraints cat.UniqueOrdinals,
 	canaryCol exec.NodeColumnOrdinal,
 	insertCols exec.TableColumnOrdinalSet,
 	fetchCols exec.TableColumnOrdinalSet,

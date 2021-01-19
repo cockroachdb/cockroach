@@ -2338,17 +2338,16 @@ insert a
       ├── cardinality: [0 - 3]
       ├── lax-key: (8,10)
       ├── fd: ()-->(10,11), (8,10)~~>(7,9), (9,10)~~>(7,8,11)
-      ├── anti-join (hash)
+      ├── upsert-distinct-on
       │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
+      │    ├── grouping columns: column2:8!null column10:10
       │    ├── cardinality: [0 - 3]
       │    ├── lax-key: (8,10)
       │    ├── fd: ()-->(10,11), (8,10)~~>(7,9,11)
-      │    ├── upsert-distinct-on
+      │    ├── anti-join (hash)
       │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
-      │    │    ├── grouping columns: column2:8!null column10:10
       │    │    ├── cardinality: [0 - 3]
-      │    │    ├── lax-key: (8,10)
-      │    │    ├── fd: ()-->(10,11), (8,10)~~>(7,9,11)
+      │    │    ├── fd: ()-->(10,11)
       │    │    ├── anti-join (hash)
       │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
       │    │    │    ├── cardinality: [0 - 3]
@@ -2381,19 +2380,19 @@ insert a
       │    │    │    └── filters
       │    │    │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
       │    │    │         └── column10:10 = i:19 [outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
-      │    │    └── aggregations
-      │    │         ├── first-agg [as=column1:7, outer=(7)]
-      │    │         │    └── column1:7
-      │    │         ├── first-agg [as=column3:9, outer=(9)]
-      │    │         │    └── column3:9
-      │    │         └── first-agg [as=column11:11, outer=(11)]
-      │    │              └── column11:11
-      │    ├── scan a
-      │    │    ├── columns: i:25!null f:26
-      │    │    └── lax-key: (25,26)
-      │    └── filters
-      │         ├── column3:9 = f:26 [outer=(9,26), constraints=(/9: (/NULL - ]; /26: (/NULL - ]), fd=(9)==(26), (26)==(9)]
-      │         └── column10:10 = i:25 [outer=(10,25), constraints=(/10: (/NULL - ]; /25: (/NULL - ]), fd=(10)==(25), (25)==(10)]
+      │    │    ├── scan a
+      │    │    │    ├── columns: i:25!null f:26
+      │    │    │    └── lax-key: (25,26)
+      │    │    └── filters
+      │    │         ├── column3:9 = f:26 [outer=(9,26), constraints=(/9: (/NULL - ]; /26: (/NULL - ]), fd=(9)==(26), (26)==(9)]
+      │    │         └── column10:10 = i:25 [outer=(10,25), constraints=(/10: (/NULL - ]; /25: (/NULL - ]), fd=(10)==(25), (25)==(10)]
+      │    └── aggregations
+      │         ├── first-agg [as=column1:7, outer=(7)]
+      │         │    └── column1:7
+      │         ├── first-agg [as=column3:9, outer=(9)]
+      │         │    └── column3:9
+      │         └── first-agg [as=column11:11, outer=(11)]
+      │              └── column11:11
       └── aggregations
            ├── first-agg [as=column1:7, outer=(7)]
            │    └── column1:7
@@ -2420,8 +2419,9 @@ insert a
  │    └── column11:11 => j:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── anti-join (hash)
+ └── upsert-distinct-on
       ├── columns: column1:7 column2:8!null column3:9!null column4:10!null column11:11
+      ├── grouping columns: column1:7
       ├── cardinality: [0 - 2]
       ├── volatile
       ├── lax-key: (7)
@@ -2430,15 +2430,12 @@ insert a
       │    ├── columns: column1:7 column2:8!null column3:9!null column4:10!null column11:11
       │    ├── cardinality: [0 - 2]
       │    ├── volatile
-      │    ├── lax-key: (7)
-      │    ├── fd: ()-->(11), (7)~~>(8-11)
-      │    ├── upsert-distinct-on
+      │    ├── fd: ()-->(11)
+      │    ├── anti-join (hash)
       │    │    ├── columns: column1:7 column2:8!null column3:9!null column4:10!null column11:11
-      │    │    ├── grouping columns: column1:7
       │    │    ├── cardinality: [0 - 2]
       │    │    ├── volatile
-      │    │    ├── lax-key: (7)
-      │    │    ├── fd: ()-->(11), (7)~~>(8-11)
+      │    │    ├── fd: ()-->(11)
       │    │    ├── anti-join (hash)
       │    │    │    ├── columns: column1:7 column2:8!null column3:9!null column4:10!null column11:11
       │    │    │    ├── cardinality: [0 - 2]
@@ -2462,27 +2459,27 @@ insert a
       │    │    │    │    └── key: (12)
       │    │    │    └── filters
       │    │    │         └── column1:7 = k:12 [outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
-      │    │    └── aggregations
-      │    │         ├── first-agg [as=column2:8, outer=(8)]
-      │    │         │    └── column2:8
-      │    │         ├── first-agg [as=column3:9, outer=(9)]
-      │    │         │    └── column3:9
-      │    │         ├── first-agg [as=column4:10, outer=(10)]
-      │    │         │    └── column4:10
-      │    │         └── first-agg [as=column11:11, outer=(11)]
-      │    │              └── column11:11
+      │    │    ├── scan a
+      │    │    │    ├── columns: i:19!null s:21!null
+      │    │    │    └── key: (19,21)
+      │    │    └── filters
+      │    │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
+      │    │         └── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
       │    ├── scan a
-      │    │    ├── columns: i:19!null s:21!null
-      │    │    └── key: (19,21)
+      │    │    ├── columns: i:25!null f:26
+      │    │    └── lax-key: (25,26)
       │    └── filters
-      │         ├── column2:8 = s:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
-      │         └── column3:9 = i:19 [outer=(9,19), constraints=(/9: (/NULL - ]; /19: (/NULL - ]), fd=(9)==(19), (19)==(9)]
-      ├── scan a
-      │    ├── columns: i:25!null f:26
-      │    └── lax-key: (25,26)
-      └── filters
-           ├── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
-           └── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+      │         ├── column4:10 = f:26 [outer=(10,26), constraints=(/10: (/NULL - ]; /26: (/NULL - ]), fd=(10)==(26), (26)==(10)]
+      │         └── column3:9 = i:25 [outer=(9,25), constraints=(/9: (/NULL - ]; /25: (/NULL - ]), fd=(9)==(25), (25)==(9)]
+      └── aggregations
+           ├── first-agg [as=column2:8, outer=(8)]
+           │    └── column2:8
+           ├── first-agg [as=column3:9, outer=(9)]
+           │    └── column3:9
+           ├── first-agg [as=column4:10, outer=(10)]
+           │    └── column4:10
+           └── first-agg [as=column11:11, outer=(11)]
+                └── column11:11
 
 # DO NOTHING case with explicit conflict columns (only add upsert-distinct-on
 # for one index).
