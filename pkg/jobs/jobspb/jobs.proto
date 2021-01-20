@@ -78,10 +78,16 @@ message EncryptionInfo {
 }
 
 message StreamIngestionDetails {
-  // StreamAddress is the location of the stream which the ingestion job will
-  // read from.
-  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient.StreamAddress"];
+  // StreamAddress locates the stream. It enables the client to find the
+  // addresses of the stream's partitions.
+  string stream_address = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress"];
+  // Span is the keyspan into which this job will ingest KVs.
+  //
+  // The stream should emit all changes for a given span, and no changes outside
+  // a span. Note that KVs received from the stream may need to be re-keyed into
+  // this span.
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  // The job will ingest events from StartTime onwards.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 }
 

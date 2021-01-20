@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamclient
+package streamingccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

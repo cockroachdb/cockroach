@@ -6,11 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package streamingest
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -29,12 +30,12 @@ type streamIngestionResumer struct {
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	streamAddress streamclient.PartitionAddress,
+	streamAddress streamingccl.PartitionAddress,
 	job *jobs.Job,
 ) error {
 	// Initialize a stream client and resolve topology.
 	client := streamclient.NewStreamClient()
-	sa := streamclient.StreamAddress(streamAddress)
+	sa := streamingccl.StreamAddress(streamAddress)
 	topology, err := client.GetTopology(sa)
 	if err != nil {
 		return err
@@ -72,7 +73,7 @@ func (s *streamIngestionResumer) Resume(
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	p := execCtx.(sql.JobExecContext)
 
-	err := ingest(ctx, p, streamclient.PartitionAddress(details.StreamAddress), s.job)
+	err := ingest(ctx, p, streamingccl.PartitionAddress(details.StreamAddress), s.job)
 	if err != nil {
 		return err
 	}
