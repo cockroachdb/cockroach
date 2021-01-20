@@ -16,6 +16,7 @@ import {
 import { statementDiagnostics } from "src/util/docs";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
+import { getBasePath } from "../../api";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -91,7 +92,9 @@ export class DiagnosticsView extends React.Component<
                 )}
               >
                 <a
-                  href={`/_admin/v1/stmtbundle/${record.statement_diagnostics_id}`}
+                  href={`${getBasePath()}/_admin/v1/stmtbundle/${
+                    record.statement_diagnostics_id
+                  }`}
                   onClick={() =>
                     onDownloadDiagnosticBundleClick &&
                     onDownloadDiagnosticBundleClick(

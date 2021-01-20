@@ -22,7 +22,7 @@ export function rollupStoreMetrics(ns: INodeStatus): StatusMetrics {
 }
 
 export function accumulateMetrics(nodeStatuses: INodeStatus[]): INodeStatus[] {
-  return nodeStatuses.map(ns => ({
+  return (nodeStatuses || []).map(ns => ({
     ...ns,
     metrics: rollupStoreMetrics(ns),
   }));
