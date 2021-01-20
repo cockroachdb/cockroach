@@ -27,6 +27,7 @@ export class TableInfo {
   public mvccSize: protos.cockroach.storage.enginepb.IMVCCStats;
   public rangeCount: number;
   public createStatement: string;
+  public configureZoneStatement: string;
   public grants: protos.cockroach.server.serverpb.TableDetailsResponse.IGrant[];
   public numReplicas: number;
   constructor(
@@ -42,6 +43,7 @@ export class TableInfo {
     this.rangeCount =
       stats && stats.range_count && stats.range_count.toNumber();
     this.createStatement = details && details.create_table_statement;
+    this.configureZoneStatement = details && details.configure_zone_statement;
     this.grants = details && details.grants;
     this.numReplicas =
       details && details.zone_config && details.zone_config.num_replicas;
