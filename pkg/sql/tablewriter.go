@@ -120,11 +120,13 @@ type tableWriterBase struct {
 	rows *rowcontainer.RowContainer
 }
 
-func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc catalog.TableDescriptor) {
+func (tb *tableWriterBase) init(
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *tree.EvalContext,
+) {
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.b = txn.NewBatch()
-	tb.maxBatchSize = mutations.MaxBatchSize()
+	tb.maxBatchSize = mutations.MaxBatchSize(evalCtx.TestingKnobs.OverrideMaxBatchSize)
 }
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
