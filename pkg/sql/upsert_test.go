@@ -34,7 +34,7 @@ func TestUpsertFastPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if mutations.MaxBatchSize() == 1 {
+	if mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) == 1 {
 		// The fast path requires that the max batch size is at least 2, so
 		// we'll skip the test.
 		skip.UnderMetamorphic(t)

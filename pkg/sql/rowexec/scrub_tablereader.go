@@ -219,8 +219,8 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 	log.VEventf(ctx, 1, "starting")
 
 	if err := tr.fetcher.StartScan(
-		ctx, tr.FlowCtx.Txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.FlowCtx.TraceKV,
+		ctx, tr.FlowCtx.Txn, tr.spans, true /* limit batches */, tr.limitHint,
+		tr.FlowCtx.TraceKV, tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}

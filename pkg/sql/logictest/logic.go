@@ -1326,6 +1326,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 					OptimizerCostPerturbation:       *optimizerCostPerturbation,
+					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplainAnalyze: true,
@@ -1666,8 +1667,11 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 }
 
 // processConfigs, given a list of configNames, returns the list of
-// corresponding logicTestConfigIdxs.
-func processConfigs(t *testing.T, path string, defaults configSet, configNames []string) configSet {
+// corresponding logicTestConfigIdxs as well as a boolean indicating whether
+// the test works only in non-metamorphic setting.
+func processConfigs(
+	t *testing.T, path string, defaults configSet, configNames []string,
+) (_ configSet, onlyNonMetamorphic bool) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -1687,15 +1691,11 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 	}
 
 	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
-		// We have a metamorphic build and the file has !metamorphic
-		// blocklist directive which effectively skips the file, so we
-		// simply return empty configSet.
-		t.Logf("will skip test %s because it cannot run in a metamorphic build; pass TAGS=crdb_test_off to disable metamorphic builds", path)
-		return configSet{}
+		onlyNonMetamorphic = true
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist)
+		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic
 	}
 
 	var configs configSet
@@ -1722,7 +1722,7 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 		}
 	}
 
-	return configs
+	return configs, onlyNonMetamorphic
 }
 
 // readTestFileConfigs reads any LogicTest directive at the beginning of a
@@ -1734,7 +1734,9 @@ func processConfigs(t *testing.T, path string, defaults configSet, configNames [
 //   # LogicTest: default distsql
 //
 // If the file doesn't contain a directive, the default config is returned.
-func readTestFileConfigs(t *testing.T, path string, defaults configSet) configSet {
+func readTestFileConfigs(
+	t *testing.T, path string, defaults configSet,
+) (_ configSet, onlyNonMetamorphic bool) {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1762,7 +1764,7 @@ func readTestFileConfigs(t *testing.T, path string, defaults configSet) configSe
 		}
 	}
 	// No directive found, return the default config.
-	return defaults
+	return defaults, false
 }
 
 type subtestDetails struct {
@@ -3101,6 +3103,9 @@ type TestServerArgs struct {
 	// actually in-memory). If it is unset, then the default limit of 100MB
 	// will be used.
 	tempStorageDiskLimit int64
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	forceProductionBatchSizes bool
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -3167,6 +3172,9 @@ func RunLogicTestWithDefaultConfig(
 	// Read the configuration directives from all the files and accumulate a list
 	// of paths per config.
 	configPaths := make([][]string, len(logicTestConfigs))
+	// nonMetamorphic mirrors configPaths and indicates whether a particular
+	// config on a particular path can only run in non-metamorphic setting.
+	nonMetamorphic := make([][]bool, len(logicTestConfigs))
 	configDefaults := defaultConfig
 	var configFilter map[string]struct{}
 	if configOverride != "" {
@@ -3186,7 +3194,7 @@ func RunLogicTestWithDefaultConfig(
 		}
 	}
 	for _, path := range paths {
-		configs := readTestFileConfigs(t, path, configDefaults)
+		configs, onlyNonMetamorphic := readTestFileConfigs(t, path, configDefaults)
 		for _, idx := range configs {
 			config := logicTestConfigs[idx]
 			configName := config.name
@@ -3200,6 +3208,7 @@ func RunLogicTestWithDefaultConfig(
 				continue
 			}
 			configPaths[idx] = append(configPaths[idx], path)
+			nonMetamorphic[idx] = append(nonMetamorphic[idx], onlyNonMetamorphic)
 		}
 	}
 
@@ -3216,6 +3225,7 @@ func RunLogicTestWithDefaultConfig(
 	seenPaths := make(map[string]struct{})
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
+		nonMetamorphic := nonMetamorphic[idx]
 		if len(paths) == 0 {
 			continue
 		}
@@ -3230,8 +3240,9 @@ func RunLogicTestWithDefaultConfig(
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				skip.IgnoreLint(t, "config does not match env var")
 			}
-			for _, path := range paths {
+			for i, path := range paths {
 				path := path // Rebind range variable.
+				onlyNonMetamorphic := nonMetamorphic[i]
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
 					if *rewriteResultsInTestfiles {
@@ -3269,6 +3280,7 @@ func RunLogicTestWithDefaultConfig(
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
+					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
 					lt.setup(cfg, serverArgs)
 					lt.runFile(path, cfg)
 
