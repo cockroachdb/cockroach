@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "span",
@@ -20,5 +20,17 @@ go_library(
         "//pkg/util",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "span_test",
+    srcs = ["span_builder_test.go"],
+    embed = [":span"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/tree",
     ],
 )
