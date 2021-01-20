@@ -48,6 +48,8 @@ type SchemaResolver interface {
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
 	LookupTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Immutable, error)
+
+	tree.TypeReferenceResolver
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the

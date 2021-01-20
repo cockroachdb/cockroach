@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
+	"google.golang.org/protobuf/proto"
 )
 
 type createTableNode struct {
@@ -1366,15 +1367,63 @@ func NewTableDesc(
 			)
 		}
 
-		// Check no PARTITION BY is set on any field.
+		// Check the table is multi-region enabled.
+		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
+		if err != nil {
+			return nil, err
+		}
+		if !dbDesc.IsMultiRegion() {
+			return nil, pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot set LOCALITY on a database that is not multi-region enabled",
+			)
+		}
+
+		regionalByRowCol := tree.RegionalByRowRegionDefaultColName
+		if n.Locality.RegionalByRowColumn != "" {
+			regionalByRowCol = n.Locality.RegionalByRowColumn
+		}
+
+		// Check no PARTITION BY is set on the table.
 		if n.PartitionByTable.ContainsPartitions() {
 			return nil, pgerror.New(
 				pgcode.FeatureNotSupported,
 				"REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported",
 			)
 		}
+
+		// Check PARTITION BY is not set on anything partitionable, and also check
+		// for the existence of the column to partition by.
+		regionalByRowColExists := false
 		for _, def := range n.Defs {
 			switch d := def.(type) {
+			case *tree.ColumnTableDef:
+				if d.Name == regionalByRowCol {
+					regionalByRowColExists = true
+					t, err := tree.ResolveType(ctx, d.Type, vt)
+					if err != nil {
+						return nil, errors.Wrap(err, "error resolving REGIONAL BY ROW column type")
+					}
+					if t.Oid() != typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID) {
+						err = pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"cannot use column %s which has type %s in REGIONAL BY ROW AS",
+							d.Name,
+							t.SQLString(),
+						)
+						if t, terr := vt.ResolveTypeByOID(
+							ctx,
+							typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID),
+						); terr == nil {
+							err = errors.WithDetailf(
+								err,
+								"REGIONAL BY ROW AS must reference a column of type %s.",
+								t.Name(),
+							)
+						}
+						return nil, err
+					}
+				}
 			case *tree.IndexTableDef:
 				if d.PartitionByIndex.ContainsPartitions() {
 					return nil, pgerror.New(
@@ -1391,42 +1440,43 @@ func NewTableDesc(
 				}
 			}
 		}
-		if n.Locality.RegionalByRowColumn != "" {
-			return nil, unimplemented.New(
-				"REGIONAL BY ROW AS",
-				"REGIONAL BY ROW AS is not yet supported",
-			)
-		}
 
-		// Check the table is multi-region enabled.
-		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
-		if err != nil {
-			return nil, err
-		}
-		if !dbDesc.IsMultiRegion() {
+		if n.Locality.RegionalByRowColumn == "" {
+			// Implicitly create REGIONAL BY ROW column if no AS ... was defined.
+			if regionalByRowColExists {
+				return nil, errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`cannot specify %s column in REGIONAL BY ROW table as the column is implicitly created by the system`,
+						regionalByRowCol.String(),
+					),
+					"Use LOCALITY REGIONAL BY ROW AS %s instead.",
+					regionalByRowCol.String(),
+				)
+			}
+			oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
+			// TODO(#multiregion): set the column visibility to be hidden.
+			c := &tree.ColumnTableDef{
+				Name: tree.RegionalByRowRegionDefaultColName,
+				Type: &tree.OIDTypeReference{OID: oid},
+			}
+			c.Nullable.Nullability = tree.NotNull
+			c.DefaultExpr.Expr = &tree.CastExpr{
+				Expr: &tree.FuncExpr{
+					Func: tree.WrapFunction("gateway_region"),
+				},
+				Type:       &tree.OIDTypeReference{OID: oid},
+				SyntaxMode: tree.CastShort,
+			}
+			n.Defs = append(n.Defs, c)
+			columnDefaultExprs = append(columnDefaultExprs, nil)
+		} else if !regionalByRowColExists {
 			return nil, pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				"cannot set LOCALITY on a database that is not multi-region enabled",
+				pgcode.UndefinedColumn,
+				"column %s in REGIONAL BY ROW AS does not exist",
+				regionalByRowCol.String(),
 			)
 		}
-
-		// Add implicit crdb_region column.
-		oid := typedesc.TypeIDToOID(dbDesc.RegionConfig.RegionEnumID)
-		// TODO(#multiregion): set the column visibility to be hidden.
-		c := &tree.ColumnTableDef{
-			Name: tree.RegionalByRowRegionDefaultColName,
-			Type: &tree.OIDTypeReference{OID: oid},
-		}
-		c.Nullable.Nullability = tree.NotNull
-		c.DefaultExpr.Expr = &tree.CastExpr{
-			Expr: &tree.FuncExpr{
-				Func: tree.WrapFunction("gateway_region"),
-			},
-			Type:       &tree.OIDTypeReference{OID: oid},
-			SyntaxMode: tree.CastShort,
-		}
-		n.Defs = append(n.Defs, c)
-		columnDefaultExprs = append(columnDefaultExprs, nil)
 
 		// Construct the partitioning for the PARTITION ALL BY.
 		listPartition := make([]tree.ListPartition, len(dbDesc.RegionConfig.Regions))
@@ -1439,7 +1489,7 @@ func NewTableDesc(
 
 		desc.PartitionAllBy = true
 		partitionByAll = &tree.PartitionBy{
-			Fields: tree.NameList{tree.RegionalByRowRegionDefaultColName},
+			Fields: tree.NameList{regionalByRowCol},
 			List:   listPartition,
 		}
 	}
@@ -2123,8 +2173,12 @@ func NewTableDesc(
 			}
 			desc.LocalityConfig.Locality = l
 		case tree.LocalityLevelRow:
+			rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
+			if n.Locality.RegionalByRowColumn != "" {
+				rbr.As = proto.String(string(n.Locality.RegionalByRowColumn))
+			}
 			desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
-				RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+				RegionalByRow: rbr,
 			}
 		default:
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
