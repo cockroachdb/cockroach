@@ -18,7 +18,7 @@ import "jobs/jobspb/jobs.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
-import "server/diagnosticspb/diagnostics.proto";
+import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
@@ -1180,7 +1180,7 @@ service Status {
     };
   }
   rpc Diagnostics(DiagnosticsRequest)
-      returns (cockroach.server.diagnosticspb.DiagnosticReport) {
+      returns (cockroach.server.diagnostics.diagnosticspb.DiagnosticReport) {
     option (google.api.http) = {
       get : "/_status/diagnostics/{node_id}"
     };

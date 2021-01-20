@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -55,11 +56,11 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1)`, 1); err != nil {
 		t.Fatal(err)
 	}
-	s.ReportDiagnostics(ctx)
+	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ($1)`, 2); err != nil {
 		t.Fatal(err)
 	}
-	s.ReportDiagnostics(ctx)
+	s.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 	// Ensure that our SQL statement data was not affected by the telemetry report.
 	stats := sqlServer.GetUnscrubbedStmtStats()

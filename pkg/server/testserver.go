@@ -901,6 +901,16 @@ func (ts *TestServer) GetHTTPClient() (http.Client, error) {
 	return ts.Server.rpcContext.GetHTTPClient()
 }
 
+// UpdateChecker implements TestServerInterface.
+func (ts *TestServer) UpdateChecker() interface{} {
+	return ts.Server.updates
+}
+
+// DiagnosticsReporter implements TestServerInterface.
+func (ts *TestServer) DiagnosticsReporter() interface{} {
+	return ts.Server.sqlServer.diagnosticsReporter
+}
+
 const authenticatedUser = "authentic_user"
 
 func authenticatedUserName() security.SQLUsername {

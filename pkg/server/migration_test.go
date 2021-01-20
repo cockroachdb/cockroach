@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateTargetClusterVersion(t *testing.T) {
@@ -230,4 +233,37 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	if intercepted != numStores {
 		t.Fatalf("expected to have GC-ed replicas on %d stores, found %d", numStores, intercepted)
 	}
+}
+
+// TestUpgradeHappensAfterMigration is a regression test to ensure that
+// migrations run prior to attempting to upgrade the cluster to the current
+// version.
+func TestUpgradeHappensAfterMigrations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false, /* initializeVersion */
+	)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &TestingKnobs{
+				BinaryVersionOverride: clusterversion.TestingBinaryMinSupportedVersion,
+			},
+			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+				AfterEnsureMigrations: func() {
+					// Try to encourage other goroutines to run.
+					const N = 100
+					for i := 0; i < N; i++ {
+						runtime.Gosched()
+					}
+					require.True(t, st.Version.ActiveVersion(ctx).Less(clusterversion.TestingBinaryVersion))
+				},
+			},
+		},
+	})
+	s.Stopper().Stop(context.Background())
 }

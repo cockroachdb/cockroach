@@ -489,7 +489,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/diagnostics",
-        "//pkg/server/diagnosticspb",
         "//pkg/server/serverpb",
         "//pkg/server/status/statuspb:statuspb_go_proto",
         "//pkg/server/telemetry",

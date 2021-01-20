@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -14,8 +14,8 @@ import (
 	"bytes"
 	"context"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
+	"net/url"
 	"reflect"
 	"runtime"
 	"time"
@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -53,15 +53,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ReportFrequency is the interval at which diagnostics data should be reported.
-var ReportFrequency = settings.RegisterDurationSetting(
+var reportFrequency = settings.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
 	settings.NonNegativeDuration,
 ).WithPublic()
-
-const updateCheckJitterSeconds = 120
 
 // Reporter is a helper struct that phones home to report usage and diagnostics.
 type Reporter struct {
@@ -87,10 +84,11 @@ type Reporter struct {
 	Locality roachpb.Locality
 
 	// TestingKnobs is used for internal test controls only.
-	TestingKnobs *diagnosticspb.TestingKnobs
+	TestingKnobs *TestingKnobs
 }
 
-// PeriodicallyReportDiagnostics calls ReportDiagnostics on a regular schedule.
+// PeriodicallyReportDiagnostics starts a background worker that periodically
+// phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
@@ -106,9 +104,9 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 				r.ReportDiagnostics(ctx)
 			}
 
-			nextReport = nextReport.Add(ReportFrequency.Get(&r.Settings.SV))
+			nextReport = nextReport.Add(reportFrequency.Get(&r.Settings.SV))
 
-			timer.Reset(addJitter(nextReport.Sub(timeutil.Now()), updateCheckJitterSeconds))
+			timer.Reset(addJitter(nextReport.Sub(timeutil.Now())))
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
@@ -127,16 +125,10 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	ctx, span := r.AmbientCtx.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
-	report := r.getReportingInfo(ctx, telemetry.ResetCounts)
+	report := r.CreateReport(ctx, telemetry.ResetCounts)
 
-	clusterInfo := diagnosticspb.ClusterInfo{
-		ClusterID:  r.ClusterID(),
-		TenantID:   r.TenantID,
-		IsInsecure: r.Config.Insecure,
-		IsInternal: sql.ClusterIsInternal(&r.Settings.SV),
-	}
-	reportingURL := diagnosticspb.BuildReportingURL(&clusterInfo, report, r.TestingKnobs)
-	if reportingURL == nil {
+	url := r.buildReportingURL(report)
+	if url == nil {
 		return
 	}
 
@@ -147,7 +139,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	}
 
 	res, err := httputil.Post(
-		ctx, reportingURL.String(), "application/x-protobuf", bytes.NewReader(b),
+		ctx, url.String(), "application/x-protobuf", bytes.NewReader(b),
 	)
 	if err != nil {
 		if log.V(2) {
@@ -167,7 +159,9 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	r.SQLServer.ResetReportedStats(ctx)
 }
 
-func (r *Reporter) getReportingInfo(
+// CreateReport generates a new diagnostics report containing information about
+// the current node or tenant.
+func (r *Reporter) CreateReport(
 	ctx context.Context, reset telemetry.ResetCounters,
 ) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
@@ -287,17 +281,6 @@ func (r *Reporter) populateNodeInfo(
 		info.Node.Bytes += bytes
 		info.Stores[i].EncryptionAlgorithm = int64(r.Metrics["rocksdb.encryption.algorithm"])
 	}
-
-	// Fill in all deprecated NodeInfo fields with information that is now in
-	// other parts of the diagnostics report.
-	// TODO(andyk): Remove this code once the registration server gets this
-	// information from the other fields.
-	info.Node.Locality = info.Env.Locality
-	info.Node.Hardware = info.Env.Hardware
-	info.Node.Os = info.Env.Os
-	info.Node.Build = info.Env.Build
-	info.Node.LicenseType = info.Env.LicenseType
-	info.Node.Topology = info.Env.Topology
 }
 
 func (r *Reporter) populateSQLInfo(uptime int64, sql *diagnosticspb.SQLInstanceInfo) {
@@ -327,6 +310,23 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 		}
 	}
 	return tables, nil
+}
+
+// buildReportingURL creates a URL to report diagnostics.
+// If an empty updates URL is set (via empty environment variable), returns nil.
+func (r *Reporter) buildReportingURL(report *diagnosticspb.DiagnosticReport) *url.URL {
+	clusterInfo := ClusterInfo{
+		ClusterID:  r.ClusterID(),
+		TenantID:   r.TenantID,
+		IsInsecure: r.Config.Insecure,
+		IsInternal: sql.ClusterIsInternal(&r.Settings.SV),
+	}
+
+	url := reportingURL
+	if r.TestingKnobs != nil && r.TestingKnobs.OverrideReportingURL != nil {
+		url = *r.TestingKnobs.OverrideReportingURL
+	}
+	return addInfoToURL(url, &clusterInfo, &report.Env, report.Node.NodeID, &report.SQL)
 }
 
 func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
@@ -429,10 +429,4 @@ func (stringRedactor) Primitive(v reflect.Value) error {
 		v.Set(reflect.ValueOf("_").Convert(v.Type()))
 	}
 	return nil
-}
-
-// randomly shift `d` to be up to `jitterSec` shorter or longer.
-func addJitter(d time.Duration, jitterSec int) time.Duration {
-	j := time.Duration(rand.Intn(jitterSec*2)-jitterSec) * time.Second
-	return d + j
 }
