@@ -600,6 +600,14 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Schema)
 }
 
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterTableSetSchema) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"set_schema")
+}
+
 // AlterTableOwner represents an ALTER TABLE OWNER TO command.
 type AlterTableOwner struct {
 	Name *UnresolvedObjectName
@@ -612,9 +620,13 @@ type AlterTableOwner struct {
 	IsSequence     bool
 }
 
-// TelemetryCounter implements the AlterTableCmd interface.
+// TelemetryCounter returns the telemetry counter to increment
+// when this command is used.
 func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
-	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "owner to")
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra(
+		GetTableType(node.IsSequence, node.IsView, node.IsMaterialized),
+		"owner_to",
+	)
 }
 
 // Format implements the NodeFormatter interface.
@@ -636,4 +648,23 @@ func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	node.Name.Format(ctx)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatUsername(node.Owner)
+}
+
+// GetTableType returns a string representing the type of table the command
+// is operating on.
+// It is assumed if the table is not a sequence or a view, then it is a
+// regular table.
+func GetTableType(isSequence bool, isView bool, isMaterialized bool) string {
+	tableType := "table"
+	if isSequence {
+		tableType = "sequence"
+	} else if isView {
+		if isMaterialized {
+			tableType = "materialized_view"
+		} else {
+			tableType = "view"
+		}
+	}
+
+	return tableType
 }

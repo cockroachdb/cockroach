@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -57,6 +58,8 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// will return consistent data. The schema change process will backfill the
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
+
+	telemetry.Inc(n.n.TelemetryCounter())
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
