@@ -277,7 +277,7 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	switch t := expr.(type) {
 	// TODO(rytaft): Support JSON fetch val operator (->).
 	case *memo.ContainsExpr:
-		invertedExpr := j.extractJSONOrArrayFilterCondition(evalCtx, t.Left, t.Right)
+		invertedExpr := j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right)
 		if !invertedExpr.IsTight() {
 			remainingFilters = expr
 		}
@@ -291,11 +291,11 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	}
 }
 
-// extractJSONOrArrayFilterCondition extracts an InvertedExpression
+// extractJSONOrArrayContainsCondition extracts an InvertedExpression
 // representing an inverted filter over the given inverted index, based
 // on the given left and right expression arguments. Returns an empty
 // InvertedExpression if no inverted filter could be extracted.
-func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayFilterCondition(
+func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
 ) invertedexpr.InvertedExpression {
 	// The first argument should be a variable corresponding to the index
