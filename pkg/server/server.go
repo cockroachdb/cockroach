@@ -2001,6 +2001,9 @@ func (s *SQLServer) startServeSQL(
 			}))
 		})
 	}
+
+	s.acceptingClients.Set(true)
+
 	return nil
 }
 
