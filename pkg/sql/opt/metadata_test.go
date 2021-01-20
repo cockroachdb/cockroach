@@ -192,9 +192,9 @@ func TestMetadataTables(t *testing.T) {
 			cat.Ordinary,
 			types.Int,
 			false, /* nullable */
-			false, /* hidden */
-			nil,   /* defaultExpr */
-			nil,   /* computedExpr */
+			cat.Visible,
+			nil, /* defaultExpr */
+			nil, /* computedExpr */
 		)
 		return c
 	}
