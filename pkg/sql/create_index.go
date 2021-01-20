@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -23,12 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -432,29 +429,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	var partitionByAll *tree.PartitionBy
 	if n.tableDesc.IsPartitionAllBy() {
-		// Convert the PartitioningDescriptor back into tree.PartitionBy by
-		// re-parsing the SHOW CREATE partitioning statement.
-		// TODO(#multiregion): clean this up by translating the descriptor back into
-		// tree.PartitionBy directly.
-		a := &rowenc.DatumAlloc{}
-		f := tree.NewFmtCtx(tree.FmtSimple)
-		if err := ShowCreatePartitioning(
-			a,
-			params.p.ExecCfg().Codec,
-			n.tableDesc,
-			n.tableDesc.GetPrimaryIndex().IndexDesc(),
-			&n.tableDesc.GetPrimaryIndex().IndexDesc().Partitioning,
-			&f.Buffer,
-			0, /* indent */
-			0, /* colOffset */
-		); err != nil {
-			return errors.Wrap(err, "error recreating PARTITION BY clause for PARTITION ALL BY affected index")
-		}
-		stmt, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE t %s", f.CloseAndGetString()))
+		partitionByAll, err = partitionByFromTableDesc(params.p.ExecCfg().Codec, n.tableDesc)
 		if err != nil {
-			return errors.Wrap(err, "error recreating PARTITION BY clause for PARTITION ALL BY affected index")
+			return err
 		}
-		partitionByAll = stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTablePartitionByTable).PartitionByTable.PartitionBy
 	}
 	if n.n.PartitionByIndex.ContainsPartitions() || partitionByAll != nil {
 		partitionBy := partitionByAll
