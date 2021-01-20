@@ -270,12 +270,12 @@ project
       ├── stats: [rows=3]
       ├── fd: (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sj_idx [as=t1])
-      │    ├── columns: t1.k:1(int!null) s:3(string) t2.j:8(jsonb) "inverted_join_const_col_@3":11(string!null)
+      │    ├── columns: t1.k:1(int!null) s:3(string!null) t2.j:8(jsonb) "inverted_join_const_col_@3":11(string!null)
       │    ├── prefix key columns: [11] = [3]
       │    ├── inverted-expr
       │    │    └── t1.j:2 @> t2.j:8 [type=bool]
-      │    ├── stats: [rows=9, distinct(1)=8.9609594, null(1)=0, distinct(3)=3, null(3)=0]
-      │    ├── fd: (1)-->(3)
+      │    ├── stats: [rows=3, distinct(1)=2.99565406, null(1)=0, distinct(3)=3, null(3)=0, distinct(11)=3, null(11)=0]
+      │    ├── fd: (1)-->(3), (3)==(11), (11)==(3)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:8(jsonb) "inverted_join_const_col_@3":11(string!null)
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -321,12 +321,12 @@ project
       ├── stats: [rows=0.3]
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sij_idx [as=t1])
-      │    ├── columns: t1.k:1(int!null) s:3(string) i:4(int) t2.j:9(jsonb) "inverted_join_const_col_@3":12(string!null) "inverted_join_const_col_@4":13(int!null)
+      │    ├── columns: t1.k:1(int!null) s:3(string!null) i:4(int!null) t2.j:9(jsonb) "inverted_join_const_col_@3":12(string!null) "inverted_join_const_col_@4":13(int!null)
       │    ├── prefix key columns: [12 13] = [3 4]
       │    ├── inverted-expr
       │    │    └── t1.j:2 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=0.9, distinct(1)=0.89960861, null(1)=0, distinct(3)=0.9, null(3)=0, distinct(4)=0.9, null(4)=0, distinct(3,4)=0.9, null(3,4)=0]
-      │    ├── fd: ()-->(13), (1)-->(3,4)
+      │    ├── stats: [rows=0.3, distinct(1)=0.299956504, null(1)=0, distinct(3)=0.3, null(3)=0, distinct(4)=0.3, null(4)=0, distinct(12)=0.3, null(12)=0, distinct(13)=0.3, null(13)=0, distinct(3,4)=0.3, null(3,4)=0]
+      │    ├── fd: ()-->(4,13), (1)-->(3), (3)==(12), (12)==(3), (4)==(13), (13)==(4)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":13(int!null) t2.j:9(jsonb) "inverted_join_const_col_@3":12(string!null)
       │    │    ├── stats: [rows=30, distinct(12)=3, null(12)=0, distinct(13)=1, null(13)=0]
@@ -380,13 +380,13 @@ project
       ├── key: (1)
       ├── fd: (1)-->(2,4), (9)-->(10), (4)==(9), (9)==(4)
       ├── inner-join (inverted json_multi_col@ij_idx [as=t1])
-      │    ├── columns: t1.k:1(int!null) i:4(int) t2.k:9(int!null) t2.j:10(jsonb)
+      │    ├── columns: t1.k:1(int!null) i:4(int!null) t2.k:9(int!null) t2.j:10(jsonb)
       │    ├── prefix key columns: [9] = [4]
       │    ├── inverted-expr
       │    │    └── t1.j:2 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0, distinct(9)=9.99956829, null(9)=0]
-      │    ├── key: (1,9)
-      │    ├── fd: (9)-->(10), (1)-->(4)
+      │    ├── stats: [rows=10, distinct(1)=9.95511979, null(1)=0, distinct(4)=10, null(4)=0, distinct(9)=10, null(9)=0]
+      │    ├── key: (1)
+      │    ├── fd: (9)-->(10), (1)-->(4), (4)==(9), (9)==(4)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:9(int!null) t2.j:10(jsonb)
       │    │    ├── stats: [rows=10, distinct(9)=10, null(9)=0]

@@ -1993,6 +1993,20 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
+		// Apply the prefix column equalities.
+		md := join.Memo().Metadata()
+		index := md.Table(join.Table).Index(join.Index)
+		for i, colID := range join.PrefixKeyCols {
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
+			h.filterNotNullCols.Add(colID)
+			h.filterNotNullCols.Add(indexColID)
+			h.filtersFD.AddEquivalency(colID, indexColID)
+			if colID == indexColID {
+				// This can happen if an index join was converted into a lookup join.
+				h.selfJoinCols.Add(colID)
+			}
+		}
+
 		// Inverted join always has a filter condition on the index keys.
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
