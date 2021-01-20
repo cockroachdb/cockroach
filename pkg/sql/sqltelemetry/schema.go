@@ -131,6 +131,12 @@ func SchemaJobControlCounter(desiredStatus string) telemetry.Counter {
 	return telemetry.GetCounter("sql.schema.job.control." + desiredStatus)
 }
 
+// SchemaRefreshMaterializedView is to be incremented every time a materialized
+// view is refreshed.
+func SchemaRefreshMaterializedView() telemetry.Counter {
+	return telemetry.GetCounter("sql.schema.refresh_materialized_view")
+}
+
 // SchemaChangeInExplicitTxnCounter is to be incremented every time a schema change
 // is scheduled using an explicit transaction.
 var SchemaChangeInExplicitTxnCounter = telemetry.GetCounterOnce("sql.schema.change_in_explicit_txn")
