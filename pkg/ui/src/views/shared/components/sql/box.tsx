@@ -13,11 +13,11 @@ import { Highlight } from "./highlight";
 import classNames from "classnames/bind";
 
 import styles from "./sqlhighlight.module.styl";
-import * as protos from "src/js/protos";
+import {cockroach} from "src/js/protos";
 
 export interface SqlBoxProps {
   value: string;
-  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+  zone?: cockroach.config.zonepb.IZoneConfig;
 }
 
 const cx = classNames.bind(styles);

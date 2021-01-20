@@ -34,6 +34,7 @@ import { databaseDetails } from "../databaseSummary";
 import { Button } from "@cockroachlabs/admin-ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import SqlBox from "src/views/shared/components/sql/box";
+import {cockroach} from "src/js/protos";
 
 class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.IGrant> {}
 
@@ -61,7 +62,7 @@ interface TableMainActions {
   refreshTableStats: typeof refreshTableStats;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   setSort: typeof databaseTableGrantsSortSetting.set;
-  dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
+  zoneConfig: cockroach.config.zonepb.IZoneConfig;
 }
 
 /**
@@ -100,7 +101,8 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   prevPage = () => this.props.history.goBack();
 
   render() {
-    const { tableInfo, grantsSortSetting, match, dbResponse } = this.props;
+
+    const { tableInfo, grantsSortSetting, match, zoneConfig } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
 
@@ -130,7 +132,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                   <Col className="gutter-row" span={16}>
                     <SqlBox
                       value={tableInfo.createStatement || ""}
-                      zone={dbResponse}
+                      zone={zoneConfig}
                     />
                   </Col>
                   <Col className="gutter-row" span={8}>
@@ -218,20 +220,32 @@ export function selectTableInfo(
   return new TableInfo(table, details && details.data, stats && stats.data);
 }
 
+function zoneConfig(state: AdminUIState, props: RouteComponentProps) : cockroach.config.zonepb.IZoneConfig {
+  const db = getMatchParamByName(props.match, databaseNameAttr);
+  const table = getMatchParamByName(props.match, tableNameAttr);
+  const key = generateTableID(db, table);
+  const tableDetails =
+    state.cachedData.tableDetails[key] &&
+    state.cachedData.tableDetails[key].data;
+  const dbDetails =
+    databaseDetails(state)[db] &&
+    databaseDetails(state)[db].data;
+  return dbDetails && tableDetails ? {
+    ...dbDetails.zone_config,
+    ...tableDetails.zone_config
+  } : {};
+}
+
 const mapStateToProps = (
   state: AdminUIState,
   ownProps: RouteComponentProps,
-) => ({
-  tableInfo: selectTableInfo(state, ownProps),
-  grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
-  dbResponse:
-    databaseDetails(state)[
-      getMatchParamByName(ownProps.match, databaseNameAttr)
-    ] &&
-    databaseDetails(state)[
-      getMatchParamByName(ownProps.match, databaseNameAttr)
-    ].data,
-});
+) => {
+
+  return {
+    tableInfo: selectTableInfo(state, ownProps),
+    grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
+    zoneConfig: zoneConfig(state, ownProps),
+}};
 
 const mapDispatchToProps = {
   setSort: databaseTableGrantsSortSetting.set,
