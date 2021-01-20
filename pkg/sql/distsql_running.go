@@ -125,6 +125,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	vectorizeThresholdMet bool,
+	collectStats bool,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
@@ -141,6 +142,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		Version:           execinfra.Version,
 		EvalContext:       evalCtxProto,
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
+		CollectStats:      collectStats,
 	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
@@ -333,7 +335,9 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	}
 
-	ctx, flow, err := dsp.setupFlows(ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet)
+	ctx, flow, err := dsp.setupFlows(
+		ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet, planCtx.collectStats,
+	)
 	if err != nil {
 		recv.SetError(err)
 		return func() {}

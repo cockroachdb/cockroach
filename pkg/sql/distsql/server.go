@@ -306,7 +306,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Create the FlowCtx for the flow.
-	flowCtx := ds.NewFlowContext(ctx, req.Flow.FlowID, evalCtx, req.TraceKV, localState)
+	flowCtx := ds.NewFlowContext(ctx, req.Flow.FlowID, evalCtx, req.TraceKV, req.CollectStats, localState)
 
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
@@ -391,6 +391,7 @@ func (ds *ServerImpl) NewFlowContext(
 	id execinfrapb.FlowID,
 	evalCtx *tree.EvalContext,
 	traceKV bool,
+	collectStats bool,
 	localState LocalState,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
@@ -401,6 +402,7 @@ func (ds *ServerImpl) NewFlowContext(
 		EvalCtx:        evalCtx,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
+		CollectStats:   collectStats,
 		Local:          localState.IsLocal,
 	}
 
