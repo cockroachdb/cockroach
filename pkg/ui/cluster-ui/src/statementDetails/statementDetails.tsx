@@ -107,6 +107,8 @@ export type NodesSummary = {
 export interface StatementDetailsDispatchProps {
   refreshStatements: () => void;
   refreshStatementDiagnosticsRequests: () => void;
+  refreshNodes: () => void;
+  refreshNodesLiveness: () => void;
   createStatementDiagnosticsReport: (statementFingerprint: string) => void;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
@@ -284,11 +286,15 @@ export class StatementDetails extends React.Component<
   componentDidMount() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
+    this.props.refreshNodes();
+    this.props.refreshNodesLiveness();
   }
 
   componentDidUpdate() {
     this.props.refreshStatements();
     this.props.refreshStatementDiagnosticsRequests();
+    this.props.refreshNodes();
+    this.props.refreshNodesLiveness();
   }
 
   onTabChange = (tabId: string) => {
