@@ -23,6 +23,7 @@ package leaktest
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -99,7 +100,12 @@ func AfterTest(t testing.TB) func() {
 		// If there was a panic, "leaked" goroutines are expected.
 		if r := recover(); r != nil {
 			atomic.StoreUint32(&leakDetectorDisabled, 1)
-			t.Fatalf("panic: %+v", r)
+			// NB: we don't want to re-panic here, for the Go test
+			// harness will not recover that for us. Instead, it will
+			// stop running the tests, but we are deciding here to fail
+			// only that one test but keep going otherwise.
+			// We need to explicitly print the stack trace though.
+			t.Fatalf("%v\n%s", r, debug.Stack())
 			return
 		}
 
