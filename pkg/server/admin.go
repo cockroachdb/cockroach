@@ -595,6 +595,33 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
+	// Marshal SHOW ZONE CONFIGURATION result.
+	rows, cols, err = s.server.sqlServer.internalExecutor.QueryWithCols(
+		ctx, "admin-show-zone-config", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		fmt.Sprintf("SHOW ZONE CONFIGURATION FOR TABLE %s", escQualTable))
+	if s.isNotFoundError(err) {
+		return nil, status.Errorf(codes.NotFound, "%s", err)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	{
+		const rawConfigSqlColName = "raw_config_sql"
+		if len(rows) != 1 {
+			return nil, s.serverErrorf("show zone configuration not available.")
+		}
+
+		scanner := makeResultScanner(cols)
+		var configureZoneStmt string
+		if err := scanner.Scan(rows[0], rawConfigSqlColName, &configureZoneStmt); err != nil {
+			return nil, err
+		}
+
+		resp.ConfigureZoneStatement = configureZoneStmt
+	}
+
+
 	var tableID descpb.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{

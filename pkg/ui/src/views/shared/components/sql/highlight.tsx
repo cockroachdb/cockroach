@@ -18,6 +18,7 @@ const cx = classNames.bind(styles);
 
 export class Highlight extends React.Component<SqlBoxProps> {
   preNode: React.RefObject<HTMLPreElement> = React.createRef();
+  preNodeSecondary: React.RefObject<HTMLPreElement> = React.createRef();
 
   shouldComponentUpdate(newProps: SqlBoxProps) {
     return newProps.value !== this.props.value;
@@ -26,65 +27,34 @@ export class Highlight extends React.Component<SqlBoxProps> {
   componentDidMount() {
     hljs.configure({
       tabReplace: "  ",
+      languages: ["sql"],
     });
     hljs.highlightBlock(this.preNode.current);
+    if (this.preNodeSecondary.current) {
+      hljs.highlightBlock(this.preNodeSecondary.current);
+    }
   }
 
   componentDidUpdate() {
     hljs.highlightBlock(this.preNode.current);
+    if (this.preNodeSecondary.current) {
+      hljs.highlightBlock(this.preNodeSecondary.current);
+    }
   }
 
-  renderZone = () => {
-    const { zone } = this.props;
-    const zoneConfig = zone.zone_config;
-    return (
-      <span className={cx("sql-highlight", "hljs")}>
-        <span className="hljs-keyword">CONFIGURE ZONE USING</span>
-        <br />
-        <span className="hljs-label">range_min_bytes = </span>
-        <span className="hljs-built_in">{`${String(
-          zoneConfig.range_min_bytes,
-        )},`}</span>
-        <br />
-        <span className="hljs-label">range_max_bytes = </span>
-        <span className="hljs-built_in">{`${String(
-          zoneConfig.range_max_bytes,
-        )},`}</span>
-        <br />
-        {zoneConfig.gc?.ttl_seconds && (
-          <>
-            <span className="hljs-label">gc.ttlseconds = </span>
-            <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
-            <br />
-          </>
-        )}
-        <span className="hljs-label">num_replicas = </span>
-        <span className="hljs-built_in">{`${zoneConfig.num_replicas},`}</span>
-        <br />
-        <span className="hljs-label">constraints = ['</span>
-        <span className="hljs-built_in">{String(zoneConfig.constraints)}</span>
-        '],
-        <br />
-        <span className="hljs-label">lease_preferences = [['</span>
-        <span className="hljs-built_in">
-          {String(zoneConfig.lease_preferences)}
-        </span>
-        ']]
-      </span>
-    );
-  };
-
   render() {
-    const { value, zone } = this.props;
+    const { value, secondaryValue } = this.props;
     return (
       <>
         <span className={cx("sql-highlight")} ref={this.preNode}>
           {value}
         </span>
-        {zone && (
+        {secondaryValue && (
           <>
             <div className={cx("higlight-divider")} />
-            {this.renderZone()}
+            <span className={cx("sql-highlight")} ref={this.preNodeSecondary}>
+              {secondaryValue}
+            </span>
           </>
         )}
       </>

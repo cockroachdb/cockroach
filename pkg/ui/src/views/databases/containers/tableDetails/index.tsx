@@ -30,7 +30,6 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
-import { databaseDetails } from "../databaseSummary";
 import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import SqlBox from "src/views/shared/components/sql/box";
@@ -61,7 +60,6 @@ interface TableMainActions {
   refreshTableStats: typeof refreshTableStats;
   refreshDatabaseDetails: typeof refreshDatabaseDetails;
   setSort: typeof databaseTableGrantsSortSetting.set;
-  dbResponse: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
 }
 
 /**
@@ -100,7 +98,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
   prevPage = () => this.props.history.goBack();
 
   render() {
-    const { tableInfo, grantsSortSetting, match, dbResponse } = this.props;
+    const { tableInfo, grantsSortSetting, match } = this.props;
     const database = getMatchParamByName(match, databaseNameAttr);
     const table = getMatchParamByName(match, tableNameAttr);
 
@@ -130,7 +128,7 @@ export class TableMain extends React.Component<TableMainProps, {}> {
                   <Col className="gutter-row" span={16}>
                     <SqlBox
                       value={tableInfo.createStatement || ""}
-                      zone={dbResponse}
+                      secondaryValue={tableInfo.configureZoneStatement || ""}
                     />
                   </Col>
                   <Col className="gutter-row" span={8}>
@@ -221,17 +219,12 @@ export function selectTableInfo(
 const mapStateToProps = (
   state: AdminUIState,
   ownProps: RouteComponentProps,
-) => ({
-  tableInfo: selectTableInfo(state, ownProps),
-  grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
-  dbResponse:
-    databaseDetails(state)[
-      getMatchParamByName(ownProps.match, databaseNameAttr)
-    ] &&
-    databaseDetails(state)[
-      getMatchParamByName(ownProps.match, databaseNameAttr)
-    ].data,
-});
+) => {
+  return {
+    tableInfo: selectTableInfo(state, ownProps),
+    grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
+  };
+};
 
 const mapDispatchToProps = {
   setSort: databaseTableGrantsSortSetting.set,
