@@ -1,0 +1,38 @@
+# This file contains telemetry tests for sql.schema.*_materialized_view.* counters.
+
+feature-allowlist
+sql.schema.create_materialized_view
+sql.schema.alter_materialized_view.owner_to
+sql.schema.alter_materialized_view.set_schema
+sql.schema.refresh_materialized_view
+sql.schema.drop_materialized_view
+----
+
+feature-usage
+CREATE MATERIALIZED VIEW mvx AS SELECT 1
+----
+sql.schema.create_materialized_view
+
+feature-usage
+REFRESH MATERIALIZED VIEW mvx
+----
+sql.schema.refresh_materialized_view
+
+feature-usage
+ALTER MATERIALIZED VIEW mvx OWNER TO root
+----
+sql.schema.alter_materialized_view.owner_to
+
+exec
+CREATE SCHEMA ss
+----
+
+feature-usage
+ALTER MATERIALIZED VIEW mvx SET SCHEMA ss
+----
+sql.schema.alter_materialized_view.set_schema
+
+feature-usage
+DROP MATERIALIZED VIEW ss.mvx
+----
+sql.schema.drop_materialized_view

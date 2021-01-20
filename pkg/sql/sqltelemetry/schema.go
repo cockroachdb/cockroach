@@ -142,3 +142,7 @@ var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.s
 // CreateUnloggedTableCounter is a counter that is incremented every time an unlogged
 // table is created.
 var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unlogged_table")
+
+// SchemaRefreshMaterializedView is to be incremented every time a materialized
+// view is refreshed.
+var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
