@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -91,6 +93,9 @@ func getRowKey(
 	index *descpb.IndexDescriptor,
 	values []tree.Datum,
 ) ([]byte, error) {
+	if len(index.ColumnIDs) < len(values) {
+		return nil, pgerror.Newf(pgcode.Syntax, "excessive number of values provided: expected %d, got %d", len(index.ColumnIDs), len(values))
+	}
 	colMap := make(map[descpb.ColumnID]int)
 	for i := range values {
 		colMap[index.ColumnIDs[i]] = i
