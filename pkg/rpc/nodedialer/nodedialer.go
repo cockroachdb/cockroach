@@ -239,6 +239,25 @@ func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *w
 	return (*wrappedBreaker)(value)
 }
 
+// Latency returns the exponentially weighted moving average latency to the
+// given node ID. Returns a latency of 0 with no error if we don't have enough
+// samples to compute a reliable average.
+func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
+	if n == nil || n.resolver == nil {
+		return 0, errors.New("no node dialer configured")
+	}
+	addr, err := n.resolver(nodeID)
+	if err != nil {
+		// Don't trip the breaker.
+		return 0, err
+	}
+	latency, ok := n.rpcContext.RemoteClocks.Latency(addr.String())
+	if !ok {
+		latency = 0
+	}
+	return latency, nil
+}
+
 type dialerAdapter Dialer
 
 func (da *dialerAdapter) Ready(nodeID roachpb.NodeID) bool {
