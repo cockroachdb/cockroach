@@ -2530,6 +2530,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 // races (primarily in asynchronous coalesced heartbeats).
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 59209, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
