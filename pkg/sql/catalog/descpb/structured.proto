@@ -1093,6 +1093,8 @@ message TableDescriptor {
     }
     message RegionalByRow {
       option (gogoproto.equal) = true;
+      // As is set if the table has a REGIONAL BY ROW AS ... set to a specific column.
+      optional string as = 1;
     }
     message Global {
       option (gogoproto.equal) = true;

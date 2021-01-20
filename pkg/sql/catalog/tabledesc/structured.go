@@ -1686,6 +1686,11 @@ func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree
 		}
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 		f.WriteString("REGIONAL BY ROW")
+		if v.RegionalByRow.As != nil {
+			f.WriteString(" AS ")
+			col := tree.Name(*v.RegionalByRow.As)
+			f.FormatNode(&col)
+		}
 	default:
 		return errors.Newf("unknown locality: %T", v)
 	}

@@ -22,8 +22,13 @@ CREATE TABLE regional_by_row_table (
 PARTITION BY LIST (pk) (PARTITION one VALUES IN ((1)))
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW AS is not yet supported
-CREATE TABLE regional_by_row_table_on_col (a int) LOCALITY REGIONAL BY ROW AS a
+statement error cannot specify crdb_region column in REGIONAL BY ROW table as the column is implicitly created by the system
+CREATE TABLE regional_by_row_table (
+  pk int,
+  a int,
+  crdb_region crdb_internal_region
+)
+LOCALITY REGIONAL BY ROW
 
 statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
 CREATE TABLE regional_by_row_table (
@@ -169,6 +174,91 @@ ca-central-1    7   8   9
 ca-central-1    10  11  12
 us-east-1       20  21  22
 ap-southeast-2  23  24  25
+
+statement error  cannot use column crdb_region_col which has type INT8 in REGIONAL BY ROW AS\nDETAIL:\s+REGIONAL BY ROW AS must reference a column of type crdb_internal_region.
+CREATE TABLE regional_by_row_table_as (
+  pk int PRIMARY KEY,
+  crdb_region_col int
+) LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+statement error column no_exist_col in REGIONAL BY ROW AS does not exist
+CREATE TABLE regional_by_row_table_as (
+  pk int PRIMARY KEY
+) LOCALITY REGIONAL BY ROW AS no_exist_col
+
+statement ok
+CREATE TABLE regional_by_row_table_as (
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col crdb_internal_region AS (
+    CASE
+      WHEN pk <= 10 THEN 'us-east-1'
+      ELSE 'ap-southeast-2'
+    END
+  ) STORED,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table_as]
+----
+CREATE TABLE public.regional_by_row_table_as (
+  pk INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  crdb_region_col public.crdb_internal_region NULL AS (CASE WHEN pk <= 10:::INT8 THEN 'us-east-1':::public.crdb_internal_region ELSE 'ap-southeast-2':::public.crdb_internal_region END) STORED,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX regional_by_row_table_as_a_idx (a ASC),
+  UNIQUE INDEX regional_by_row_table_as_b_key (b ASC),
+  FAMILY fam_0_pk_a_b_crdb_region_col (pk, a, b, crdb_region_col)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_a_idx CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 1}',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@regional_by_row_table_as_b_key CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 1}',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table_as@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 1}',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TI
+INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
+RETURNING crdb_region_col, pk
+----
+us-east-1       1
+us-east-1       10
+ap-southeast-2  20
 
 # Create some tables to validate that their zone configurations are adjusted appropriately.
 statement ok
