@@ -83,18 +83,18 @@ TABLE g
  ├── b int
  ├── geog geography
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
- ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ ├── geog_inverted_key geography not null [virtual-inverted]
+ ├── geog_inverted_key geography not null [virtual-inverted]
  ├── INDEX primary
  │    └── k int not null
  ├── INVERTED INDEX secondary
  │    ├── a int
- │    ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ │    ├── geog_inverted_key geography not null [virtual-inverted]
  │    └── k int not null
  ├── INVERTED INDEX secondary
  │    ├── a int
  │    ├── b int
- │    ├── geog_inverted_key geography not null [hidden] [virtual-inverted]
+ │    ├── geog_inverted_key geography not null [virtual-inverted]
  │    └── k int not null
  └── UNIQUE (k)
 

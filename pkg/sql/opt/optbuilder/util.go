@@ -119,7 +119,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(refScope.cols))
 		for i := range refScope.cols {
 			col := &refScope.cols[i]
-			if col.table == *src && !col.hidden {
+			if col.table == *src && col.visibility == cat.Visible {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name))
 			}
@@ -134,7 +134,7 @@ func (b *Builder) expandStar(
 		aliases = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
 			col := &inScope.cols[i]
-			if !col.hidden {
+			if col.visibility == cat.Visible {
 				exprs = append(exprs, col)
 				aliases = append(aliases, string(col.name))
 			}
@@ -248,7 +248,7 @@ func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColum
 	for i := range cols {
 		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
-			c.hidden = true
+			c.visibility = cat.Hidden
 		}
 	}
 }

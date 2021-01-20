@@ -232,11 +232,11 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 			continue
 		}
 		s.cols = append(s.cols, scopeColumn{
-			name:   tabCol.ColName(),
-			table:  *alias,
-			typ:    tabCol.DatumType(),
-			id:     tabMeta.MetaID.ColumnID(i),
-			hidden: tabCol.IsHidden(),
+			name:       tabCol.ColName(),
+			table:      *alias,
+			typ:        tabCol.DatumType(),
+			id:         tabMeta.MetaID.ColumnID(i),
+			visibility: tabCol.Visibility(),
 		})
 	}
 }
@@ -372,7 +372,7 @@ func (s *scope) makePresentation() physical.Presentation {
 	presentation := make(physical.Presentation, 0, len(s.cols))
 	for i := range s.cols {
 		col := &s.cols[i]
-		if !col.hidden {
+		if col.visibility == cat.Visible {
 			presentation = append(presentation, opt.AliasedColumn{
 				Alias: string(col.name),
 				ID:    col.id,
@@ -543,7 +543,7 @@ func (s *scope) hasSameColumns(other *scope) bool {
 func (s *scope) removeHiddenCols() {
 	n := 0
 	for i := range s.cols {
-		if s.cols[i].hidden {
+		if s.cols[i].visibility != cat.Visible {
 			s.extraCols = append(s.extraCols, s.cols[i])
 		} else {
 			if n != i {
@@ -726,23 +726,24 @@ func (s *scope) FindSourceProvidingColumn(
 			if col.name != colName {
 				continue
 			}
-
-			// If the matching column is a mutation column, then act as if it's not
-			// present so that matches in higher scopes can be found. However, if
-			// no match is found in higher scopes, report a backfill error rather
-			// than a "not found" error.
-			if col.mutation {
-				reportBackfillError = true
+			if col.visibility == cat.Invisible {
+				// Act as if this column is not present so that matches in higher scopes
+				// can be found. However, if no match is found in higher scopes and this
+				// is a mutation column, report a backfill error rather than a "not
+				// found" error.
+				if col.mutation {
+					reportBackfillError = true
+				}
 				continue
 			}
 
-			if col.table.ObjectName == "" && !col.hidden {
+			if col.table.ObjectName == "" && col.visibility == cat.Visible {
 				if candidateFromAnonSource != nil {
 					moreThanOneCandidateFromAnonSource = true
 					break
 				}
 				candidateFromAnonSource = col
-			} else if !col.hidden {
+			} else if col.visibility == cat.Visible {
 				if candidateWithPrefix != nil {
 					moreThanOneCandidateWithPrefix = true
 				}
@@ -1529,14 +1530,14 @@ func (s *scope) newAmbiguousColumnError(
 	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name == n && (allowHidden || !col.hidden) {
-			if col.table.ObjectName == "" && !col.hidden {
+		if col.name == n && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
+			if col.table.ObjectName == "" && col.visibility == cat.Visible {
 				if moreThanOneCandidateFromAnonSource {
 					// Only print first anonymous source, since other(s) are identical.
 					fmtCandidate(col.table)
 					break
 				}
-			} else if !col.hidden {
+			} else if col.visibility == cat.Visible {
 				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
 					fmtCandidate(col.table)
 				}
