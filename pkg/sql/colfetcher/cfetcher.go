@@ -613,6 +613,7 @@ func (rf *cFetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -645,6 +646,7 @@ func (rf *cFetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		nil, /* memMonitor */
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
