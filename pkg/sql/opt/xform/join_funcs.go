@@ -129,7 +129,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 //  1. The index has all the columns we need; this is the simple case, where we
 //     generate a LookupJoin expression in the current group:
 //
-//         Join                       LookupJoin(t@idx))
+//         Join                       LookupJoin(t@idx)
 //         /   \                           |
 //        /     \            ->            |
 //      Input  Scan(t)                   Input
