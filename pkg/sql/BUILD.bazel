@@ -119,6 +119,7 @@ go_library(
         "opt_catalog.go",
         "opt_exec_factory.go",
         "ordinality.go",
+        "partition.go",
         "partition_utils.go",
         "pg_catalog.go",
         "pg_extension.go",

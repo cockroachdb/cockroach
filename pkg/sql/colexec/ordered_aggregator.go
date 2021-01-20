@@ -93,6 +93,12 @@ type orderedAggregator struct {
 	// function operators write directly to this output batch.
 	scratch struct {
 		coldata.Batch
+		// tempBuffer is used when we need to shift the second part of the
+		// scratch batch into the beginning. This can occur when we aggregated
+		// more tuples than can fit into a single output batch, and we need some
+		// scratch space to copy the overflow tuples into before resetting the
+		// scratch.Batch.
+		tempBuffer coldata.Batch
 		// shouldResetInternalBatch keeps track of whether the scratch.Batch should
 		// be reset. It is false in cases where we have overflow results still to
 		// return and therefore do not want to modify the batch.
@@ -276,6 +282,14 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			} else {
 				a.scratch.Batch, _ = a.allocator.ResetMaybeReallocate(a.outputTypes, a.scratch.Batch, newMinCapacity)
 			}
+			// We will never copy more than coldata.BatchSize() into the
+			// temporary buffer, so a half of the scratch's capacity will always
+			// be sufficient.
+			tempBufferCapacity := newMinCapacity / 2
+			if tempBufferCapacity == 0 {
+				tempBufferCapacity = 1
+			}
+			a.scratch.tempBuffer, _ = a.allocator.ResetMaybeReallocate(a.outputTypes, a.scratch.tempBuffer, tempBufferCapacity)
 			for fnIdx, fn := range a.bucket.fns {
 				fn.SetOutput(a.scratch.ColVec(fnIdx))
 			}
@@ -312,42 +326,51 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				})
 				batchToReturn = a.unsafeBatch
 
-				// Copy the second part of the scratch batch into the first and
-				// we will resume from there on the next iteration.
+				// Copy the second part of the scratch batch into the temporary
+				// buffer first, reset the scratch batch, and copy over that
+				// second part into the beginning of the scratch batch.
+				//
+				// This two-step process is necessary because we cannot do
+				// resetting (needed to copy to the beginning) and copying (in
+				// order to move the data) on the same scratch batch since then
+				// the source and the destination would be the same, and
+				// resetting it would lead to the loss of data.
 				newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize()
-				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
+				a.scratch.tempBuffer.ResetInternalBatch()
+				a.allocator.PerformOperation(a.scratch.tempBuffer.ColVecs(), func() {
 					for i := 0; i < len(a.outputTypes); i++ {
-						vec := a.scratch.ColVec(i)
-						// Note that we're using Append here instead of Copy
-						// because we want the "truncation" behavior, i.e. we
-						// want to copy over the remaining tuples such the
-						// "lengths" of the vectors are equal to the number of
-						// copied elements.
-						vec.Append(
-							coldata.SliceArgs{
-								Src:         vec,
-								DestIdx:     0,
-								SrcStartIdx: coldata.BatchSize(),
-								SrcEndIdx:   a.scratch.resumeIdx,
+						a.scratch.tempBuffer.ColVec(i).Copy(
+							coldata.CopySliceArgs{
+								SliceArgs: coldata.SliceArgs{
+									Src:         a.scratch.ColVec(i),
+									SrcStartIdx: coldata.BatchSize(),
+									SrcEndIdx:   a.scratch.resumeIdx,
+								},
 							},
 						)
-						// Now we need to restore the length for the Vec.
-						vec.SetLength(a.scratch.Capacity())
-						a.bucket.fns[i].SetOutputIndex(newResumeIdx)
-						// There might have been some NULLs set in the part that
-						// we have just copied over, so we need to unset the
-						// NULLs.
-						a.scratch.ColVec(i).Nulls().UnsetNullsAfter(newResumeIdx)
+					}
+				})
+				a.scratch.ResetInternalBatch()
+				a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
+					for i := 0; i < len(a.outputTypes); i++ {
+						a.scratch.ColVec(i).Copy(
+							coldata.CopySliceArgs{
+								SliceArgs: coldata.SliceArgs{
+									Src:       a.scratch.tempBuffer.ColVec(i),
+									SrcEndIdx: newResumeIdx,
+								},
+							},
+						)
 					}
 				})
 				a.scratch.resumeIdx = newResumeIdx
 			} else {
 				a.scratch.SetLength(a.scratch.resumeIdx)
-				for _, fn := range a.bucket.fns {
-					fn.SetOutputIndex(0 /* idx */)
-				}
 				a.scratch.resumeIdx = 0
 				a.scratch.shouldResetInternalBatch = true
+			}
+			for _, fn := range a.bucket.fns {
+				fn.SetOutputIndex(a.scratch.resumeIdx)
 			}
 			a.state = stateAfterOutputting
 			stateAfterOutputting = orderedAggregatorUnknown

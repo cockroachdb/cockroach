@@ -18,7 +18,6 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -360,9 +359,9 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "source two", string(b1.Get(1)))
 		require.Equal(t, "source one", string(b1.Get(2)))
 
-		// Set the length to 1 and  follow it with testing a full overwrite of only
-		// one element.
-		b1.SetLength(1)
+		// Set the length to 1 and follow it with testing a full overwrite of
+		// only one element.
+		b1.offsets = b1.offsets[:2]
 		require.Equal(t, 1, b1.Len())
 		b1.CopySlice(b2, 0, 0, b2.Len())
 		require.Equal(t, 1, b1.Len())
@@ -433,56 +432,4 @@ func TestBytes(t *testing.T) {
 		other = b2.Window(0, 4)
 		other.AssertOffsetsAreNonDecreasing(4)
 	})
-}
-
-// TestAppendBytesWithLastNull makes sure that Append handles correctly the
-// case when the last element of Bytes vector is NULL.
-func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(types.Bytes, 4, StandardColumnFactory)
-	sel := []int{0, 2, 3}
-	src.Bytes().Set(0, []byte("zero"))
-	src.Nulls().SetNull(1)
-	src.Bytes().Set(2, []byte("two"))
-	src.Nulls().SetNull(3)
-	sliceArgs := SliceArgs{
-		Src:         src,
-		DestIdx:     0,
-		SrcStartIdx: 0,
-		SrcEndIdx:   len(sel),
-	}
-	dest := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
-	expected := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
-	for _, withSel := range []bool{false, true} {
-		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
-			expected.Nulls().UnsetNulls()
-			expected.Bytes().Reset()
-			if withSel {
-				sliceArgs.Sel = sel
-				for expIdx, srcIdx := range sel {
-					if src.Nulls().NullAt(srcIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(srcIdx))
-					}
-				}
-			} else {
-				sliceArgs.Sel = nil
-				for expIdx := 0; expIdx < 3; expIdx++ {
-					if src.Nulls().NullAt(expIdx) {
-						expected.Nulls().SetNull(expIdx)
-					} else {
-						expected.Bytes().Set(expIdx, src.Bytes().Get(expIdx))
-					}
-				}
-			}
-			expected.Bytes().UpdateOffsetsToBeNonDecreasing(3)
-			// require.Equal checks the "string-ified" versions of the vectors for
-			// equality. Bytes uses maxSetIndex to print out "truncated"
-			// representation, so we manually update it (Vec.Append will use
-			// AppendVal function that updates maxSetIndex itself).
-			expected.Bytes().maxSetIndex = 2
-			dest.Append(sliceArgs)
-			require.Equal(t, expected, dest)
-		})
-	}
 }
