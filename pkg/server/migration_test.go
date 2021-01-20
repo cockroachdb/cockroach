@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -201,7 +200,6 @@ func TestBumpClusterVersion(t *testing.T) {
 
 func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59180)
 
 	const numStores = 3
 	var storeSpecs []base.StoreSpec

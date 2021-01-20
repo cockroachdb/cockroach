@@ -60,10 +60,13 @@ type createViewNode struct {
 func (n *createViewNode) ReadingOwnWrites() {}
 
 func (n *createViewNode) startExec(params runParams) error {
+	tableType := tree.GetTableType(
+		false /* isSequence */, true /* isView */, n.materialized,
+	)
 	if n.replace {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("or_replace_view"))
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(fmt.Sprintf("or_replace_%s", tableType)))
 	} else {
-		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
+		telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter(tableType))
 	}
 
 	viewName := n.viewName.Object()
