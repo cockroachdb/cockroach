@@ -196,23 +196,43 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
 	}
 
+	acquisition := !status.Lease.OwnedBy(p.repl.store.StoreID())
+	extension := !transfer && !acquisition
+	_ = extension // not used, just documentation
+
+	if acquisition {
+		// If this is a non-cooperative lease change (i.e. an acquisition), it
+		// is up to us to ensure that Lease.Start is greater than the end time
+		// of the previous lease. This means that if status refers to an expired
+		// epoch lease, we must increment the liveness epoch of the previous
+		// leaseholder *using status.Liveness*, which we know to be expired *at
+		// status.Timestamp*, before we can propose this lease. If this
+		// increment fails, we cannot propose this new lease (see handling of
+		// ErrEpochAlreadyIncremented in requestLeaseAsync).
+		//
+		// Note that the request evaluation may decrease our proposed start time
+		// if it decides that it is safe to do so (for example, this happens
+		// when renewing an expiration-based lease), but it will never increase
+		// it (and a start timestamp that is too low is unsafe because it
+		// results in incorrect initialization of the timestamp cache on the new
+		// leaseholder). For expiration-based leases, we have a safeguard during
+		// evaluation - we simply check that the new lease starts after the old
+		// lease ends and throw an error if now. But for epoch-based leases, we
+		// don't have the benefit of such a safeguard during evaluation because
+		// the expiration is indirectly stored in the referenced liveness record
+		// and not in the lease itself. So for epoch-based leases, enforcing
+		// this safety condition is truly up to us.
+		if status.State != kvserverpb.LeaseState_EXPIRED {
+			log.Fatalf(ctx, "cannot acquire lease from another node before it has expired: %v", status)
+		}
+	}
+
 	// No request in progress. Let's propose a Lease command asynchronously.
 	llHandle := p.newHandle()
 	reqHeader := roachpb.RequestHeader{
 		Key: startKey,
 	}
 	reqLease := roachpb.Lease{
-		// It's up to us to ensure that Lease.Start is greater than the
-		// end time of the previous lease. This means that if status
-		// refers to an expired epoch lease, we must increment the epoch
-		// *at status.Timestamp* before we can propose this lease.
-		//
-		// Note that the server may decrease our proposed start time if it
-		// decides that it is safe to do so (for example, this happens
-		// when renewing an expiration-based lease), but it will never
-		// increase it (and a start timestamp that is too low is unsafe
-		// because it results in incorrect initialization of the timestamp
-		// cache on the new leaseholder).
 		Start:      status.Now,
 		Replica:    nextLeaseHolder,
 		ProposedTS: &status.Now,
@@ -500,63 +520,66 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 	return h
 }
 
-// leaseStatus returns lease status. If the lease is epoch-based,
-// the liveness field will be set to the liveness used to compute
-// its state, unless state == leaseError.
+// leaseStatus returns a lease status. The lease status is linked to the desire
+// to serve a request at a specific timestamp (which may be a future timestamp)
+// under the lease, as well as a notion of the current hlc time (now).
 //
-// - The lease is considered valid if the current timestamp (now) is
-//   covered by the supplied lease. This is determined differently
-//   depending on the lease properties. For expiration-based leases,
-//   now is covered if it's less than the expiration. For epoch-based
-//   "node liveness" leases, the lease epoch must match the owner node's
-//   liveness epoch -AND- now must be within the node's liveness
-//   expiration.
+// Explanation
 //
-// - To be valid, a lease which contains a valid ProposedTS must have
-//   a proposed timestamp greater than the minimum proposed timestamp
-//   (minProposedTS), which prevents a restarted process from serving
-//   commands, since the spanlatch manager has been wiped through the
-//   restart. The minProposedTS is also bumped during a cooperative
-//   lease transfer, so this also prevents a lease from being used
-//   again after a lease transfer has been initiated. If this condition
-//   is not met then the lease is considered to be proscribed.
+// A status of ERROR indicates a failure to determine the correct lease status,
+// and should not occur under normal operations. The caller's only recourse is
+// to give up or to retry.
 //
-// - Even if a lease is currently valid at the current time, it may be
-//   deemed unusable for a given request if the request's timestamp
-//   (reqTS) is not well contained within the lease's expiration.
-//   Certainly, the request timestamp must be less than the lease's
-//   expiration in order to operate under the lease. But additionally,
-//   the request's timestamp must be below the lease's stasis period,
-//   which is a window equal in duration to the maximum clock offset
-//   immediately before a lease expiration in which a lease cannot
-//   safely serve requests.
+// If the lease is expired according to the now timestamp (and, in the case of
+// epoch-based leases, the liveness epoch), a status of EXPIRED is returned.
+// Note that this ignores the timestamp of the request, which may well
+// technically be eligible to be served under the lease. The key feature of an
+// EXPIRED status is that it reflects that a new lease with a start timestamp
+// greater than or equal to now can be acquired non-cooperatively.
 //
-//   On the surface, it might seem like we could easily abandon the
-//   lease stasis concept in favor of consulting a request's uncertainty
-//   interval. We would then define a request's timestamp as the maximum
-//   of its read_timestamp and its max_timestamp, and simply check
-//   whether this timestamp falls below a lease's expiration. This could
-//   allow certain transactional requests to operate more closely to a
-//   lease's expiration. But not all requests that expect
-//   linearizability use an uncertainty interval (e.g. non-transactional
-//   requests), and so the lease stasis period serves as a kind of
-//   catch-all uncertainty interval for non-transactional and admin
-//   requests.
+// If the lease is not EXPIRED, the request timestamp is taken into account. The
+// expiration timestamp is adjusted for clock offset; if the request timestamp
+// falls into the so-called "stasis period" at the end of the lifetime of the
+// lease, or if the request timestamp is beyond the end of the lifetime of the
+// lease, the status is UNUSABLE. Callers typically want to react to an UNUSABLE
+// lease status by extending the lease, if they are in a position to do so.
 //
-//   Without that stasis period, the following linearizability violation
-//   could occur for two non-transactional requests operating on a single
-//   register durign a lease change:
+// For request timestamps falling before the lease's stasis period, the lease's
+// start timestamp is checked against the minProposedTimestamp. This timestamp
+// indicates the oldest timestamp that a lease can have as its start time and
+// still be used by the node. It is set both in cooperative lease transfers and
+// to prevent reuse of leases across node restarts (which would result in
+// latching violations). Leases with start times preceding this timestamp are
+// assigned a status of PROSCRIBED and can not be not be used. Instead, a new
+// lease should be acquired by callers.
 //
-//   * a range lease gets committed on the new lease holder (but not the old).
-//   * client proposes and commits a write on new lease holder (with a
-//     timestamp just greater than the expiration of the old lease).
-//   * client tries to read what it wrote, but hits a slow coordinator
-//     (which assigns a timestamp covered by the old lease).
-//   * the read is served by the old lease holder (which has not
-//     processed the change in lease holdership).
-//   * the client fails to read their own write.
+// Finally, for requests timestamps falling before the stasis period of a lease
+// that is not EXPIRED and also not PROSCRIBED, the status is VALID.
 //
-// - The lease is considered expired in all other cases.
+// Implementation Note
+//
+// On the surface, it might seem like we could easily abandon the lease stasis
+// concept in favor of consulting a request's uncertainty interval. We would
+// then define a request's timestamp as the maximum of its read_timestamp and
+// its max_timestamp, and simply check whether this timestamp falls below a
+// lease's expiration. This could allow certain transactional requests to
+// operate more closely to a lease's expiration. But not all requests that
+// expect linearizability use an uncertainty interval (e.g. non-transactional
+// requests), and so the lease stasis period serves as a kind of catch-all
+// uncertainty interval for non-transactional and admin requests.
+//
+// Without that stasis period, the following linearizability violation could
+// occur for two non-transactional requests operating on a single register
+// during a lease change:
+//
+// * a range lease gets committed on the new lease holder (but not the old).
+// * client proposes and commits a write on new lease holder (with a timestamp
+//   just greater than the expiration of the old lease).
+// * client tries to read what it wrote, but hits a slow coordinator (which
+//   assigns a timestamp covered by the old lease).
+// * the read is served by the old lease holder (which has not processed the
+//   change in lease holdership).
+// * the client fails to read their own write.
 //
 func (r *Replica) leaseStatus(
 	ctx context.Context,
@@ -565,7 +588,18 @@ func (r *Replica) leaseStatus(
 	minProposedTS hlc.ClockTimestamp,
 	reqTS hlc.Timestamp,
 ) kvserverpb.LeaseStatus {
-	status := kvserverpb.LeaseStatus{Now: now, Lease: lease}
+	status := kvserverpb.LeaseStatus{
+		Lease: lease,
+		// NOTE: it would not be correct to accept either only the request time
+		// or only the current time in this method, we need both. We need the
+		// request time to determine whether the current lease can serve a given
+		// request, even if that request has a timestamp in the future of
+		// present time. We need the current time to distinguish between an
+		// EXPIRED lease and an UNUSABLE lease. Only an EXPIRED lease can change
+		// hands through a lease acquisition.
+		Now:         now,
+		RequestTime: reqTS,
+	}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()

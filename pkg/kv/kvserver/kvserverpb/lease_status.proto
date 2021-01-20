@@ -21,18 +21,18 @@ import "gogoproto/gogo.proto";
 enum LeaseState {
   // ERROR indicates that the lease can't be used or acquired.
   ERROR = 0;
-  // VALID indicates that the lease is valid at the present time and can
-  // be used to serve a given request.
+  // VALID indicates that the lease is not expired at the current clock
+  // time and can be used to serve a given request.
   VALID = 1;
-  // UNUSABLE indicates that a lease has not expired at the present time
-  // (i.e. it is VALID), but cannot be used to serve a given request. A
-  // lease may be unusable for one of two reasons.
+  // UNUSABLE indicates that a lease has not expired at the current clock
+  // time, but cannot be used to serve a given request. A lease may be
+  // unusable for one of two reasons.
   //
   // First, if the request operates at a timestamp in the future, it is
   // possible for the request's timestamp to fall outside of the lease's
-  // validity window, even if the lease is valid at the present time. In
-  // such cases, the lease must be extended past the request's timestamp
-  // before the request can be served under the lease.
+  // validity window, even if the lease is not yet expired at the current
+  // clock time. In such cases, the lease must be extended past the
+  // request's timestamp before the request can be served under the lease.
   //
   // Second, even if the request does not operate at a timestamp in the
   // future and operates fully within the lease's validity window, it may
@@ -58,12 +58,13 @@ enum LeaseState {
   // (for epoch-based leases), each of which serve as forms of "lease
   // extension".
   UNUSABLE = 2;
-  // EXPIRED indicates that the lease is not valid at the present time and
-  // can't be used to serve a request. An expired lease may become VALID
-  // for the same leaseholder on RequestLease or Heartbeat, or it may be
-  // replaced by a new leaseholder with a RequestLease (for
-  // expiration-based leases) or IncrementEpoch+RequestLease (for
-  // epoch-based leases).
+  // EXPIRED indicates that the current clock time is past the lease's
+  // expiration time. An expired lease may become VALID for the same
+  // leaseholder on RequestLease or Heartbeat, or it may be replaced by a
+  // new leaseholder with a RequestLease (for expiration-based leases) or
+  // IncrementEpoch+RequestLease (for epoch-based leases).
+  //
+  // Only an EXPIRED lease may change hands non-cooperatively.
   EXPIRED = 3;
   // PROSCRIBED indicates that the lease's proposed timestamp is earlier
   // than allowed and can't be used to serve a request. This is used to
@@ -72,20 +73,22 @@ enum LeaseState {
   // them. This state also used during a lease transfer, to prevent the
   // outgoing leaseholder from serving any other requests under its old
   // lease. Note that the PROSCRIBED state is only visible to the
-  // leaseholder; other nodes will see this as a VALID lease.
+  // leaseholder; other nodes may see this as a VALID lease.
   PROSCRIBED = 4;
 }
 
-// LeaseStatus holds the lease state, the timestamp at which the state
-// is accurate, the lease, and optionally the liveness if the lease is
-// epoch-based.
+// LeaseStatus holds the lease state, the current clock time at which the
+// state is accurate, the request time at which the status is accurate, the
+// lease iself, and optionally the liveness if the lease is epoch-based.
 message LeaseStatus {
   // Lease which this status describes.
   roachpb.Lease lease = 1 [(gogoproto.nullable) = false];
-  // Timestamp that the lease was evaluated at.
+  // Clock timestamp that the lease was evaluated at.
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
-  // State of the lease at now.
+  // Timestamp for the request operating under the lease.
+  util.hlc.Timestamp request_time = 5 [(gogoproto.nullable) = false];
+  // State of the lease at now for a request at request_time.
   LeaseState state = 3;
   // Liveness if this is an epoch-based lease.
   kv.kvserver.liveness.livenesspb.Liveness liveness = 4 [(gogoproto.nullable) = false];
