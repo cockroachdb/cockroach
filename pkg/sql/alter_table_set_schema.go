@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -92,6 +93,7 @@ func (p *planner) AlterTableSetSchema(
 }
 
 func (n *alterTableSetSchemaNode) startExec(params runParams) error {
+	telemetry.Inc(n.n.TelemetryCounter())
 	ctx := params.ctx
 	p := params.p
 	tableDesc := n.tableDesc
