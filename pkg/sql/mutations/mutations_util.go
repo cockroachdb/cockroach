@@ -19,9 +19,9 @@ import (
 var maxBatchSize = defaultMaxBatchSize
 
 var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
-	10000, /* defaultValue */
-	1,     /* min */
-	10000, /* max */
+	1, /* defaultValue */
+	1, /* min */
+	1, /* max */
 ))
 
 // MaxBatchSize returns the max number of entries in the KV batch for a
