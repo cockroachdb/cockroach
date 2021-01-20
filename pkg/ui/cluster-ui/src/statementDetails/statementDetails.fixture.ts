@@ -159,6 +159,8 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   },
   refreshStatements: noop,
   refreshStatementDiagnosticsRequests: noop,
+  refreshNodes: noop,
+  refreshNodesLiveness: noop,
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   createStatementDiagnosticsReport: noop,

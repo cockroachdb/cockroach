@@ -1,8 +1,8 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
 
-const STATEMENT_DIAGNOSTICS_PATH = "_status/stmtdiagreports";
-const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "_status/stmtdiagreports";
+const STATEMENT_DIAGNOSTICS_PATH = "/_status/stmtdiagreports";
+const CREATE_STATEMENT_DIAGNOSTICS_REPORT_PATH = "/_status/stmtdiagreports";
 
 type CreateStatementDiagnosticsReportResponseMessage = cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
 
