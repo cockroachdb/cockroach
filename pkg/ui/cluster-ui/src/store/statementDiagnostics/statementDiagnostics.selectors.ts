@@ -36,3 +36,12 @@ export const selectDiagnosticsReportsPerStatement = createSelector(
       )
       .value(),
 );
+
+export const selectDiagnosticsReportsByStatementFingerprint = createSelector(
+  selectStatementDiagnosticsReports,
+  (_state: AppState, statementFingerprint: string) => statementFingerprint,
+  (requests, statementFingerprint) =>
+    (requests || []).filter(
+      request => request.statement_fingerprint === statementFingerprint,
+    ),
+);

@@ -28,6 +28,12 @@ export const actions = {
   pagination: createAction<PagePayload<number>>(`${PREFIX}/pagination`),
   sorting: createAction<PagePayload<SortingPayload>>(`${PREFIX}/sorting`),
   activateDiagnostics: createAction<PagePayload<string>>(
-    `${PREFIX}/activateDiagnostics`,
+    `${PREFIX}/activateStatementDiagnostics`,
+  ),
+  downloadStatementDiagnostics: createAction<PagePayload<string>>(
+    `${PREFIX}/downloadStatementDiagnostics`,
+  ),
+  subNavigationSelection: createAction<PagePayload<string>>(
+    `${PREFIX}/subNavigationSelection`,
   ),
 };
