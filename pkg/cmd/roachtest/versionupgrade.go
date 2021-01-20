@@ -219,7 +219,11 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 			u.conns = append(u.conns, u.c.Conn(ctx, i))
 		}
 	}
-	return u.conns[i-1]
+	db := u.conns[i-1]
+	// Run a trivial query to shake out errors that can occur when the server has
+	// restarted in the meantime.
+	_ = db.PingContext(ctx)
+	return db
 }
 
 func (u *versionUpgradeTest) uploadVersion(
