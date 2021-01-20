@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.server.diagnosticspb;
+package cockroach.server.diagnostics.diagnosticspb;
 option go_package = "diagnosticspb";
 
 import "build/info.proto";
@@ -30,6 +30,10 @@ message DiagnosticReport {
   SQLInstanceInfo sql = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQL"];
   Environment env = 11 [(gogoproto.nullable) = false];
 
+  // These fields are no longer used by CRDB, but are used by the Registration
+  // Service to parse reports from older versions of CRDB.
+  // These fields are now passed as part of the FeatureUsage field.
+
   map<string, int64> legacy_unimplemented_errors = 5;
   map<string, int64> legacy_error_counts = 7;
 }
@@ -45,15 +49,16 @@ message NodeInfo {
   // Uptime is the number of seconds since the CRDB node was started.
   int64 uptime = 9;
 
-  // The following fields are deprecated and will be removed. They are replaced
-  // by the separated DiagnosticsReport.Env field.
+  // These fields are no longer used by CRDB, but are used by the Registration
+  // Service to parse reports from older versions of CRDB.
+  // The following fields are replaced by the DiagnosticsReport.Env field.
 
-  roachpb.Locality locality = 5 [(gogoproto.nullable) = false];
-  HardwareInfo hardware = 6 [(gogoproto.nullable) = false];
-  OSInfo os = 7 [(gogoproto.nullable) = false];
-  build.Info build = 8 [(gogoproto.nullable) = false];
-  string license_type = 10;
-  TopologyInfo topology = 11 [(gogoproto.nullable) = false];
+  roachpb.Locality legacy_locality = 5 [(gogoproto.nullable) = false];
+  HardwareInfo legacy_hardware = 6 [(gogoproto.nullable) = false];
+  OSInfo legacy_os = 7 [(gogoproto.nullable) = false];
+  build.Info legacy_build = 8 [(gogoproto.nullable) = false];
+  string legacy_license_type = 10;
+  TopologyInfo legacy_topology = 11 [(gogoproto.nullable) = false];
 }
 
 message StoreInfo {
