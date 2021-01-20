@@ -328,7 +328,10 @@ func ShowCreatePartitioning(
 	indent int,
 	colOffset int,
 ) error {
-	if partDesc.NumColumns == 0 {
+	isPrimaryKeyOfPartitionAllByTable :=
+		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idxDesc.ID && colOffset == 0
+
+	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
 	}
 	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
@@ -353,7 +356,7 @@ func ShowCreatePartitioning(
 
 	indentStr := strings.Repeat("\t", indent)
 	buf.WriteString(` PARTITION `)
-	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idxDesc.ID {
+	if isPrimaryKeyOfPartitionAllByTable {
 		buf.WriteString(`ALL `)
 	}
 	buf.WriteString(`BY `)
@@ -361,6 +364,9 @@ func ShowCreatePartitioning(
 		buf.WriteString(`LIST`)
 	} else if len(partDesc.Range) > 0 {
 		buf.WriteString(`RANGE`)
+	} else if isPrimaryKeyOfPartitionAllByTable {
+		buf.WriteString(`NOTHING`)
+		return nil
 	} else {
 		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
 	}

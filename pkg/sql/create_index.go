@@ -430,7 +430,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 	indexDesc.Version = encodingVersion
 
-	var partitionByAll *tree.PartitionBy
+	var partitionAllBy *tree.PartitionBy
 	if n.tableDesc.IsPartitionAllBy() {
 		// Convert the PartitioningDescriptor back into tree.PartitionBy by
 		// re-parsing the SHOW CREATE partitioning statement.
@@ -454,41 +454,45 @@ func (n *createIndexNode) startExec(params runParams) error {
 		if err != nil {
 			return errors.Wrap(err, "error recreating PARTITION BY clause for PARTITION ALL BY affected index")
 		}
-		partitionByAll = stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTablePartitionByTable).PartitionByTable.PartitionBy
+		partitionAllBy = stmt.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTablePartitionByTable).PartitionByTable.PartitionBy
 	}
-	if n.n.PartitionByIndex.ContainsPartitions() || partitionByAll != nil {
-		partitionBy := partitionByAll
-		if partitionByAll == nil {
-			partitionBy = n.n.PartitionByIndex.PartitionBy
-		} else if n.n.PartitionByIndex.ContainsPartitions() {
+	if n.n.PartitionByIndex != nil || n.tableDesc.IsPartitionAllBy() {
+		partitionBy := partitionAllBy
+		if !n.tableDesc.IsPartitionAllBy() {
+			if n.n.PartitionByIndex.ContainsPartitions() {
+				partitionBy = n.n.PartitionByIndex.PartitionBy
+			}
+		} else if n.n.PartitionByIndex != nil {
 			return pgerror.New(
 				pgcode.FeatureNotSupported,
 				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 			)
 		}
-		newIndexDesc, numImplicitColumns, err := detectImplicitPartitionColumns(
-			params.p.EvalContext(),
-			n.tableDesc,
-			*indexDesc,
-			partitionBy,
-		)
-		if err != nil {
-			return err
+		if partitionBy != nil {
+			newIndexDesc, numImplicitColumns, err := detectImplicitPartitionColumns(
+				params.p.EvalContext(),
+				n.tableDesc,
+				*indexDesc,
+				partitionBy,
+			)
+			if err != nil {
+				return err
+			}
+			indexDesc = &newIndexDesc
+			partitioning, err := CreatePartitioning(
+				params.ctx,
+				params.p.ExecCfg().Settings,
+				params.EvalContext(),
+				n.tableDesc,
+				indexDesc,
+				numImplicitColumns,
+				partitionBy,
+			)
+			if err != nil {
+				return err
+			}
+			indexDesc.Partitioning = partitioning
 		}
-		indexDesc = &newIndexDesc
-		partitioning, err := CreatePartitioning(
-			params.ctx,
-			params.p.ExecCfg().Settings,
-			params.EvalContext(),
-			n.tableDesc,
-			indexDesc,
-			numImplicitColumns,
-			partitionBy,
-		)
-		if err != nil {
-			return err
-		}
-		indexDesc.Partitioning = partitioning
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
