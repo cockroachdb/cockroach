@@ -5052,12 +5052,12 @@ project
       ├── immutable
       ├── fd: ()-->(14), (1)-->(10)
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null n.boroname:14 "inverted_join_const_col_@14":20!null
+      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null n.boroname:14!null "inverted_join_const_col_@14":20!null
       │    ├── prefix key columns: [20] = [14]
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:16)
       │    ├── key: (1,13)
-      │    ├── fd: ()-->(20), (1)-->(10), (13)-->(14)
+      │    ├── fd: ()-->(14,20), (1)-->(10), (14)==(20), (20)==(14)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@14":20!null c.gid:1!null c.geom:10
       │    │    ├── key: (1)
@@ -5095,7 +5095,7 @@ project
       │    ├── prefix key columns: [18] = [6]
       │    ├── inverted-expr
       │    │    └── t1.a:9 @> t2.a:4
-      │    ├── fd: ()-->(18)
+      │    ├── fd: ()-->(6,18), (6)==(18), (18)==(6)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":18!null t2.a:4
       │    │    ├── fd: ()-->(18)
@@ -5130,7 +5130,7 @@ project
       │    ├── prefix key columns: [17] = [6]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: ()-->(17)
+      │    ├── fd: ()-->(6,17), (6)==(17), (17)==(6)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":17!null t2.j:3
       │    │    ├── fd: ()-->(17)
@@ -5165,7 +5165,7 @@ project
       │    ├── prefix key columns: [17] = [6]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: ()-->(17)
+      │    ├── fd: ()-->(6,17), (6)==(17), (17)==(6)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":17!null t2.j:3
       │    │    ├── fd: ()-->(17)
@@ -5200,6 +5200,7 @@ project
       │    ├── prefix key columns: [17] = [6]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
+      │    ├── fd: (6)==(17), (17)==(6)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:3 "inverted_join_const_col_@6":17!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5240,8 +5241,8 @@ project
       │    ├── prefix key columns: [1] = [6]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(3)
+      │    ├── key: (6)
+      │    ├── fd: (1)-->(3), (1)==(6), (6)==(1)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:1!null t2.j:3
       │    │    ├── key: (1)
@@ -5305,12 +5306,12 @@ project
       ├── immutable
       ├── fd: (6)-->(7,8)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null i:7 "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null
+      │    ├── columns: t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null
       │    ├── flags: force inverted join (into right side)
       │    ├── prefix key columns: [19 20] = [6 7]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (6)-->(7)
+      │    ├── fd: (6)-->(7), (6)==(19), (19)==(6), (7)==(20), (20)==(7)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:3 "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5355,12 +5356,12 @@ project
       ├── key: (6)
       ├── fd: (1)-->(3), (6)-->(7,8), (1)==(6), (6)==(1)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null t2.j:3 t1.k:6!null i:7 "inverted_join_const_col_@7":18!null
+      │    ├── columns: t2.k:1!null t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@7":18!null
       │    ├── flags: force inverted join (into right side)
       │    ├── prefix key columns: [1 18] = [6 7]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (1)-->(3), (6)-->(7)
+      │    ├── fd: (1)-->(3), (6)-->(7), (1)==(6), (6)==(1), (7)==(18), (18)==(7)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.k:1!null t2.j:3 "inverted_join_const_col_@7":18!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5404,8 +5405,8 @@ project
       │    ├── prefix key columns: [1 2] = [6 7]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2,3), (6)-->(7), (2)==(7), (7)==(2)
+      │    ├── key: (6)
+      │    ├── fd: (1)-->(2,3), (6)-->(7), (2)==(7), (7)==(2), (1)==(6), (6)==(1)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:1!null l:2 t2.j:3
       │    │    ├── key: (1)
@@ -5473,17 +5474,17 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── semi-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7
+      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7!null
       ├── key columns: [6] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(2-4)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7 "inverted_join_const_col_@7":19!null continuation:20
+      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7!null "inverted_join_const_col_@7":19!null continuation:20
       │    ├── prefix key columns: [19] = [7]
       │    ├── inverted-expr
       │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (1)-->(2-4), (6)-->(7,20)
+      │    ├── fd: (1)-->(2-4), (6)-->(7,20), (7)==(19), (19)==(7)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5515,43 +5516,26 @@ project
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── distinct-on
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      ├── grouping columns: t2.k:1!null
-      ├── internal-ordering: +(1|7)
+ └── semi-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
       ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-4)
-      ├── inner-join (lookup json_arr1 [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7!null t1.j:8
-      │    ├── key columns: [6] = [6]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
-      │    ├── ordering: +(1|7) [actual: +1]
-      │    ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7
-      │    │    ├── prefix key columns: [1] = [7]
-      │    │    ├── inverted-expr
-      │    │    │    └── t1.j:8 @> t2.j:3
-      │    │    ├── key: (1,6)
-      │    │    ├── fd: (1)-->(2-4), (6)-->(7)
-      │    │    ├── ordering: +1
-      │    │    ├── scan json_arr2 [as=t2]
-      │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-4)
-      │    │    │    └── ordering: +1
-      │    │    └── filters (true)
-      │    └── filters
-      │         └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
-      └── aggregations
-           ├── const-agg [as=l:2, outer=(2)]
-           │    └── l:2
-           ├── const-agg [as=t2.j:3, outer=(3)]
-           │    └── t2.j:3
-           └── const-agg [as=t2.a:4, outer=(4)]
-                └── t2.a:4
+      ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7!null continuation:19
+      │    ├── prefix key columns: [1] = [7]
+      │    ├── inverted-expr
+      │    │    └── t1.j:8 @> t2.j:3
+      │    ├── key: (6)
+      │    ├── fd: (1)-->(2-4), (6)-->(7,19), (1)==(7), (7)==(1)
+      │    ├── scan json_arr2 [as=t2]
+      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-4)
+      │    └── filters (true)
+      └── filters
+           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
 # Generate an inverted anti-join on a multi-column inverted index.
 opt expect=GenerateInvertedJoinsFromSelect
