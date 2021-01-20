@@ -12,6 +12,8 @@ package gcjob
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -142,6 +144,72 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 	return true
 }
 
+// runningStatusGC generates a RunningStatus string which always remains under
+// a certain size, given any progress struct.
+func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus {
+	tableIDs := make([]string, 0, len(progress.Tables))
+	indexIDs := make([]string, 0, len(progress.Indexes))
+	for _, table := range progress.Tables {
+		if table.Status == jobspb.SchemaChangeGCProgress_DELETING {
+			tableIDs = append(tableIDs, strconv.Itoa(int(table.ID)))
+		}
+	}
+	for _, index := range progress.Indexes {
+		if index.Status == jobspb.SchemaChangeGCProgress_DELETING {
+			indexIDs = append(indexIDs, strconv.Itoa(int(index.IndexID)))
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("performing garbage collection on")
+	var flag bool
+	if progress.Tenant != nil && progress.Tenant.Status == jobspb.SchemaChangeGCProgress_DELETING {
+		b.WriteString(" tenant")
+		flag = true
+	}
+
+	for _, s := range []struct {
+		ids      []string
+		singular string
+		plural   string
+	}{
+		{tableIDs, "table", "tables"},
+		{indexIDs, "index", "indexes"},
+	} {
+		if len(s.ids) == 0 {
+			continue
+		}
+		if flag {
+			b.WriteRune(';')
+		}
+		b.WriteRune(' ')
+		switch len(s.ids) {
+		case 1:
+			// one id, e.g. "table 123"
+			b.WriteString(s.singular)
+			b.WriteRune(' ')
+			b.WriteString(s.ids[0])
+		case 2, 3, 4, 5:
+			// a few ids, e.g. "tables 123, 456, 789"
+			b.WriteString(s.plural)
+			b.WriteRune(' ')
+			b.WriteString(strings.Join(s.ids, ", "))
+		default:
+			// too many ids to print, e.g. "25 tables"
+			b.WriteString(strconv.Itoa(len(s.ids)))
+			b.WriteRune(' ')
+			b.WriteString(s.plural)
+		}
+		flag = true
+	}
+
+	if !flag {
+		// `flag` not set implies we're not GCing anything.
+		return sql.RunningStatusWaitingGC
+	}
+	return jobs.RunningStatus(b.String())
+}
+
 // getAllTablesWaitingForGC returns a slice with all of the table IDs which have
 // note yet been been GC'd. This is used to determine which tables' statuses
 // need to be updated.
@@ -178,12 +246,14 @@ func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 	return nil
 }
 
-// persistProgress sets the current state of the progress back on the job.
+// persistProgress sets the current state of the progress and running status
+// back on the job.
 func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	jobID int64,
 	progress *jobspb.SchemaChangeGCProgress,
+	runningStatus jobs.RunningStatus,
 ) {
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
@@ -194,9 +264,16 @@ func persistProgress(
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
+		err = job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return runningStatus, nil
+		})
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "updated running status: %+v", runningStatus)
 		return nil
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload err: %+v", err)
+		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
 }
 
