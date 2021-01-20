@@ -8,7 +8,11 @@
 
 package streamclient
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+)
 
 // client is a mock stream client.
 type client struct{}
@@ -21,16 +25,16 @@ func NewStreamClient() Client {
 }
 
 // GetTopology implements the Client interface.
-func (m *client) GetTopology(address StreamAddress) (Topology, error) {
-	return Topology{
-		Partitions: []PartitionAddress{"some://address"},
+func (m *client) GetTopology(_ streamingccl.StreamAddress) (streamingccl.Topology, error) {
+	return streamingccl.Topology{
+		Partitions: []streamingccl.PartitionAddress{"some://address"},
 	}, nil
 }
 
 // ConsumePartition implements the Client interface.
 func (m *client) ConsumePartition(
-	address PartitionAddress, startTime time.Time,
-) (chan Event, error) {
-	eventCh := make(chan Event)
+	_ streamingccl.PartitionAddress, _ time.Time,
+) (chan streamingccl.Event, error) {
+	eventCh := make(chan streamingccl.Event)
 	return eventCh, nil
 }
