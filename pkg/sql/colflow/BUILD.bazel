@@ -60,7 +60,6 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descs",
