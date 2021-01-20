@@ -2315,7 +2315,7 @@ func addPGTypeRow(
 			typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 		}
 	default:
-		typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
+		typArray = tree.NewDOid(tree.DInt(types.CalcArrayOid(typ)))
 	}
 	if typ.Family() == types.EnumFamily {
 		builtinPrefix = "enum_"
