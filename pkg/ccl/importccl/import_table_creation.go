@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 const (
@@ -316,5 +318,17 @@ func (r fkResolver) LookupSchema(
 func (r fkResolver) LookupTableByID(
 	ctx context.Context, id descpb.ID,
 ) (*tabledesc.Immutable, error) {
+	return nil, errSchemaResolver
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	return nil, errSchemaResolver
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
 	return nil, errSchemaResolver
 }
