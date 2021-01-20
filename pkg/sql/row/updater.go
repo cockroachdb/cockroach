@@ -180,13 +180,10 @@ func MakeUpdater(
 
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
-		// When changing the primary key, we delete the old values and reinsert
-		// them, so request them all.
 		var err error
-		tableCols := tableDesc.DeletableColumns()
-		ru.rd = MakeDeleter(codec, tableDesc, tableCols)
+		ru.rd = MakeDeleter(codec, tableDesc, requestedCols)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, tableCols, alloc,
+			ctx, txn, codec, tableDesc, requestedCols, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
