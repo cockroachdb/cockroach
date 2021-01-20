@@ -134,41 +134,6 @@ func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }
 
-type resumingHTTPReader struct {
-	body      io.ReadCloser
-	canResume bool  // Can we resume if download aborts prematurely?
-	pos       int64 // How much data was received so far.
-	size      int64 // total file size
-	ctx       context.Context
-	url       string
-	client    *httpStorage
-}
-
-var _ io.ReadCloser = &resumingHTTPReader{}
-
-func newResumingHTTPReader(
-	ctx context.Context, client *httpStorage, url string, offset int64,
-) (*resumingHTTPReader, error) {
-	r := &resumingHTTPReader{
-		ctx:    ctx,
-		client: client,
-		url:    url,
-		pos:    offset,
-	}
-
-	if err := r.sendRequest(); err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
-func (r *resumingHTTPReader) Close() error {
-	if r.body != nil {
-		return r.body.Close()
-	}
-	return nil
-}
-
 // checkHTTPContentRangeHeader parses Content-Range header and ensures that
 // range start offset is the same as the expected 'pos'. It returns the total
 // size of the remote object as extracted from the header.
@@ -207,82 +172,73 @@ func checkHTTPContentRangeHeader(h string, pos int64) (int64, error) {
 	return size, nil
 }
 
-func (r *resumingHTTPReader) sendRequest() error {
-	var headers map[string]string
-	if r.pos > 0 {
-		headers = map[string]string{"Range": fmt.Sprintf("bytes=%d-", r.pos)}
-	}
-	if r.body != nil {
-		if err := r.body.Close(); err != nil {
-			return err
-		}
-		r.body = nil
-	}
-
-	for attempt, retries := 0, retry.StartWithCtx(r.ctx, HTTPRetryOptions); retries.Next(); attempt++ {
-		resp, err := r.client.req(r.ctx, "GET", r.url, nil, headers)
-		if err == nil {
-			if r.pos == 0 {
-				r.size = resp.ContentLength
-			} else {
-				r.size, err = checkHTTPContentRangeHeader(resp.Header.Get("Content-Range"), r.pos)
-				if err != nil {
-					return err
-				}
-			}
-			r.body = resp.Body
-			r.canResume = resp.Header.Get("Accept-Ranges") == "bytes"
-			return nil
-		}
-
-		log.Errorf(r.ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
-
-		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
-			return err
-		}
-	}
-	if r.ctx.Err() == nil {
-		return errors.New("too many retries; giving up")
-	}
-
-	return r.ctx.Err()
-}
-
-// Read implements io.Reader interface to read the data from the underlying
-// http stream, issuing additional requests in case download is interrupted.
-func (r *resumingHTTPReader) Read(p []byte) (n int, err error) {
-	for retries := 0; n == 0 && err == nil; retries++ {
-		n, err = r.body.Read(p)
-		r.pos += int64(n)
-
-		if err != nil && !errors.IsAny(err, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(r.ctx, "HTTP:Read err: %s", err)
-		}
-
-		// Resume download if the http server supports this.
-		if r.canResume && isResumableHTTPError(err) {
-			log.Errorf(r.ctx, "HTTP:Retry: error %s", err)
-			if retries >= maxNoProgressReads {
-				err = errors.Wrap(err, "multiple Read calls return no data")
-				return
-			}
-			err = r.sendRequest()
-		}
-	}
-
-	return
-}
-
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	return newResumingHTTPReader(ctx, h, basename, 0)
+	stream, _, err := h.ReadFileAt(ctx, basename, 0)
+	return stream, err
+}
+
+func (h *httpStorage) openStreamAt(
+	ctx context.Context, url string, pos int64,
+) (*http.Response, error) {
+	var headers map[string]string
+	if pos > 0 {
+		headers = map[string]string{"Range": fmt.Sprintf("bytes=%d-", pos)}
+	}
+
+	for attempt, retries := 0, retry.StartWithCtx(ctx, HTTPRetryOptions); retries.Next(); attempt++ {
+		resp, err := h.req(ctx, "GET", url, nil, headers)
+		if err == nil {
+			return resp, err
+		}
+
+		log.Errorf(ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
+
+		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
+			return nil, err
+		}
+	}
+	if ctx.Err() == nil {
+		return nil, errors.New("too many retries; giving up")
+	}
+
+	return nil, ctx.Err()
 }
 
 func (h *httpStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
-	r, err := newResumingHTTPReader(ctx, h, basename, offset)
-	return r, r.size, err
+	stream, err := h.openStreamAt(ctx, basename, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var size int64
+	if offset == 0 {
+		size = stream.ContentLength
+	} else {
+		size, err = checkHTTPContentRangeHeader(stream.Header.Get("Content-Range"), offset)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+
+	canResume := stream.Header.Get("Accept-Ranges") == "bytes"
+	if canResume {
+		return &resumingReader{
+			ctx: ctx,
+			opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+				s, err := h.openStreamAt(ctx, basename, pos)
+				if err != nil {
+					return nil, err
+				}
+				return s.Body, err
+			},
+			reader: stream.Body,
+			pos:    offset,
+		}, size, nil
+	}
+	return stream.Body, size, nil
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
