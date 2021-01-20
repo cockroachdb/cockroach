@@ -1,0 +1,490 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+CREATE DATABASE alter_locality_test primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
+
+statement ok
+CREATE TABLE no_table_locality (i int)
+
+statement error cannot alter a table's LOCALITY if its database is not multi-region enabled
+ALTER TABLE no_table_locality SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+ALTER TABLE IF EXISTS table_does_not_exist SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+use alter_locality_test
+
+# Turn on experimental flag to allow REGIONAL BY ROW table creation
+# TODO(#multiregion): remove this once flag is no longer needed for REGIONAL BY ROW tables
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement ok
+CREATE TABLE regional_by_row (i int) LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE regional_by_row
+----
+regional_by_row  CREATE TABLE public.regional_by_row (
+                 i INT8 NULL,
+                 crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                 FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 3}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 3}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 3}',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+CREATE TABLE regional_by_table_in_primary_region (i int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region             CREATE TABLE public.regional_by_table_in_primary_region (
+                                                i INT8 NULL,
+                                                FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+CREATE TABLE regional_by_table_no_region (i int) LOCALITY REGIONAL BY TABLE
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
+                                                i INT8 NULL,
+                                                FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+CREATE TABLE regional_by_table_in_us_east (i int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east                 CREATE TABLE public.regional_by_table_in_us_east (
+                                             i INT8 NULL,
+                                             FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CONFIGURE ZONE USING
+                                    range_min_bytes = 134217728,
+                                    range_max_bytes = 536870912,
+                                    gc.ttlseconds = 90000,
+                                    num_replicas = 3,
+                                    constraints = '{+region=us-east-1: 3}',
+                                    lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+CREATE TABLE global (i int) LOCALITY GLOBAL
+
+query TT
+SHOW CREATE TABLE global
+----
+global             CREATE TABLE public.global (
+                   i INT8 NULL,
+                   FAMILY "primary" (i, rowid)
+) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+TABLE global  ALTER TABLE global CONFIGURE ZONE USING
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 90000,
+              num_replicas = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE in "ap-southeast"
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE regional_by_row
+----
+regional_by_row  CREATE TABLE public.regional_by_row (
+                 i INT8 NULL,
+                 crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
+                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                 FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY ROW;
+ALTER PARTITION "ap-southeast-2" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 3}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 3}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX alter_locality_test.public.regional_by_row@primary CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 3}',
+  lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE global SET LOCALITY REGIONAL BY TABLE
+
+statement error unimplemented: implementation pending
+ALTER TABLE global SET LOCALITY REGIONAL BY TABLE in "ap-southeast"
+
+statement error unimplemented: implementation pending
+ALTER TABLE global SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+statement ok
+ALTER TABLE global SET LOCALITY GLOBAL
+
+query TT
+SHOW CREATE TABLE global
+----
+global             CREATE TABLE public.global (
+                   i INT8 NULL,
+                   FAMILY "primary" (i, rowid)
+) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+TABLE global  ALTER TABLE global CONFIGURE ZONE USING
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 90000,
+              num_replicas = 3,
+              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE global SET LOCALITY REGIONAL BY ROW
+
+statement error region "invalid-region" has not been added to database "alter_locality_test"
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in "invalid-region"
+
+statement ok
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region               CREATE TABLE public.regional_by_table_in_primary_region (
+                                                  i INT8 NULL,
+                                                  FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+TABLE regional_by_table_in_primary_region  ALTER TABLE regional_by_table_in_primary_region CONFIGURE ZONE USING
+                                           range_min_bytes = 134217728,
+                                           range_max_bytes = 536870912,
+                                           gc.ttlseconds = 90000,
+                                           num_replicas = 3,
+                                           constraints = '{+region=ap-southeast-2: 3}',
+                                           lease_preferences = '[[+region=ap-southeast-2]]'
+
+# Alter back to original state
+statement ok
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                     i INT8 NULL,
+                                     FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+# Alter to same state
+statement ok
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                     i INT8 NULL,
+                                     FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                     i INT8 NULL,
+                                     FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY GLOBAL
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region                     CREATE TABLE public.regional_by_table_no_region (
+                                                i INT8 NULL,
+                                                FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+# drop and recreate the table to get it back to the "no region" state
+statement ok
+DROP TABLE regional_by_table_no_region
+
+statement ok
+CREATE TABLE regional_by_table_no_region (i int)
+
+statement ok
+ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region                       CREATE TABLE public.regional_by_table_no_region (
+                                                  i INT8 NULL,
+                                                  FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFIGURE ZONE USING
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 90000,
+                                   num_replicas = 3,
+                                   constraints = '{+region=ap-southeast-2: 3}',
+                                   lease_preferences = '[[+region=ap-southeast-2]]'
+
+# drop and recreate the table to get it back to the "no region" state
+statement ok
+DROP TABLE regional_by_table_no_region
+
+statement ok
+CREATE TABLE regional_by_table_no_region (i int)
+
+statement ok
+ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                             i INT8 NULL,
+                             FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_no_region SET LOCALITY GLOBAL
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                              i INT8 NULL,
+                              FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in "us-east-1"
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east                      CREATE TABLE public.regional_by_table_in_us_east (
+                                                  i INT8 NULL,
+                                                  FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CONFIGURE ZONE USING
+                                    range_min_bytes = 134217728,
+                                    range_max_bytes = 536870912,
+                                    gc.ttlseconds = 90000,
+                                    num_replicas = 3,
+                                    constraints = '{+region=ap-southeast-2: 3}',
+                                    lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in "us-east-1"
+
+statement ok
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                              i INT8 NULL,
+                              FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY GLOBAL
+
+statement error unimplemented: implementation pending
+ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW
