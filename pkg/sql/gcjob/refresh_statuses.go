@@ -65,7 +65,7 @@ func refreshTables(
 	}
 
 	if expired || haveAnyMissing {
-		persistProgress(ctx, execCfg, jobID, progress)
+		persistProgress(ctx, execCfg, jobID, progress, sql.RunningStatusWaitingGC)
 	}
 
 	return expired, earliestDeadline
