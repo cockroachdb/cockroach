@@ -13,6 +13,7 @@ package row
 import (
 	"bytes"
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -48,10 +49,16 @@ type sendFunc func(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error)
 
+func (s sendFunc) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	return s(ctx, ba)
+}
+
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
-	sendFn sendFunc
+	sender sender
 	spans  roachpb.Spans
 	// If useBatchLimit is true, batches are limited to kvBatchSize. If
 	// firstBatchLimit is also set, the first batch is limited to that value.
@@ -73,12 +80,32 @@ type txnKVFetcher struct {
 	// so that the fetcher can keep track of which response was produced for each
 	// input span.
 	requestSpans roachpb.Spans
-	responses    []roachpb.ResponseUnion
+	// curRequestSpan is the current request span we are processing.
+	curRequestSpan int
+	responses      []roachpb.ResponseUnion
+
+	scratch struct {
+		// requests is a reused slice of RequestUnion to avoid re-allocating a new one
+		// on each request.
+		requests []roachpb.RequestUnion
+
+		scans    []scanAlloc
+		revScans []revScanAlloc
+	}
 
 	origSpan         roachpb.Span
 	remainingBatches [][]byte
-	mon              *mon.BytesMonitor
 	acc              mon.BoundAccount
+}
+
+type revScanAlloc struct {
+	req   roachpb.ReverseScanRequest
+	union roachpb.RequestUnion_ReverseScan
+}
+
+type scanAlloc struct {
+	req   roachpb.ScanRequest
+	union roachpb.RequestUnion_Scan
 }
 
 var _ kvBatchFetcher = &txnKVFetcher{}
@@ -192,23 +219,42 @@ func makeKVBatchFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
-) (txnKVFetcher, error) {
-	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
-		res, err := txn.Send(ctx, ba)
-		if err != nil {
-			return nil, err.GoError()
-		}
-		return res, nil
-	}
-	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+) (*txnKVFetcher, error) {
+	wrapper := sendingTxn{txn: txn}
+	return makeKVBatchFetcherWithSender(
+		wrapper, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
 	)
 }
 
-// makeKVBatchFetcherWithSendFunc is like makeKVBatchFetcher but uses a custom
-// send function.
-func makeKVBatchFetcherWithSendFunc(
-	sendFn sendFunc,
+type sendingTxn struct {
+	txn *kv.Txn
+}
+
+func (s sendingTxn) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	res, err := s.txn.Send(ctx, ba)
+	if err != nil {
+		return nil, err.GoError()
+	}
+	return res, nil
+}
+
+var txnKVFetcherPool = sync.Pool{
+	New: func() interface{} { return &txnKVFetcher{} },
+}
+
+var _ sender = sendingTxn{}
+
+// sender is like kv.Sender but it returns a Go error, not a roachpb Error.
+type sender interface {
+	Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+}
+
+// makeKVBatchFetcherWithSender is like makeKVBatchFetcher but uses a custom
+// sender.
+func makeKVBatchFetcherWithSender(
+	sender sender,
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
@@ -216,9 +262,9 @@ func makeKVBatchFetcherWithSendFunc(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
-) (txnKVFetcher, error) {
+) (*txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
-		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
+		return nil, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
 			firstBatchLimit, useBatchLimit)
 	}
 
@@ -226,7 +272,7 @@ func makeKVBatchFetcherWithSendFunc(
 		// Verify the spans are ordered if a batch limit is used.
 		for i := 1; i < len(spans); i++ {
 			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
-				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+				return nil, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
 		}
 	} else if util.RaceEnabled {
@@ -245,32 +291,42 @@ func makeKVBatchFetcherWithSendFunc(
 			// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
 			// risk of incorrect results, since the row fetcher can't distinguish
 			// between identical rows in two different batches.
-			return txnKVFetcher{}, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
+			return nil, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
 		}
 	}
 
+	ret := txnKVFetcherPool.Get().(*txnKVFetcher)
+
+	// Reuse the slice memory from the pooled object if possible.
+	if cap(ret.spans) < len(spans) {
+		ret.spans = make(roachpb.Spans, len(spans))
+	} else {
+		ret.spans = ret.spans[:len(spans)]
+	}
 	// Make a copy of the spans because we update them.
-	copySpans := make(roachpb.Spans, len(spans))
-	for i := range spans {
-		if reverse {
-			// Reverse scans receive the spans in decreasing order.
-			copySpans[len(spans)-i-1] = spans[i]
-		} else {
-			copySpans[i] = spans[i]
+	if !reverse {
+		copy(ret.spans, spans)
+	} else {
+		lastSpan := len(spans) - 1
+		for i := range spans {
+			ret.spans[lastSpan-i] = spans[i]
 		}
 	}
 
-	return txnKVFetcher{
-		sendFn:          sendFn,
-		spans:           copySpans,
+	*ret = txnKVFetcher{
+		sender: sender,
+		// Reuse the spans and scratch space from our pooled object.
+		spans:           ret.spans,
+		requestSpans:    ret.requestSpans,
+		scratch:         ret.scratch,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		lockStrength:    lockStrength,
 		lockWaitPolicy:  lockWaitPolicy,
-		mon:             mon,
 		acc:             mon.MakeBoundAccount(),
-	}, nil
+	}
+	return ret, nil
 }
 
 // maxScanResponseBytes is the maximum number of bytes a scan request can
@@ -279,7 +335,14 @@ const maxScanResponseBytes = 10 * (1 << 20)
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
-	var ba roachpb.BatchRequest
+	if cap(f.scratch.requests) < len(f.spans) {
+		f.scratch.requests = make([]roachpb.RequestUnion, len(f.spans))
+	} else {
+		f.scratch.requests = f.scratch.requests[:len(f.spans)]
+	}
+	ba := roachpb.BatchRequest{
+		Requests: f.scratch.requests,
+	}
 	ba.Header.WaitPolicy = f.getWaitPolicy()
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	if ba.Header.MaxSpanRequestKeys > 0 {
@@ -292,13 +355,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// TargetBytes would interfere with.
 		ba.Header.TargetBytes = maxScanResponseBytes
 	}
-	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
 	if f.reverse {
-		scans := make([]struct {
-			req   roachpb.ReverseScanRequest
-			union roachpb.RequestUnion_ReverseScan
-		}, len(f.spans))
+		if cap(f.scratch.revScans) < len(f.spans) {
+			f.scratch.revScans = make([]revScanAlloc, len(f.spans))
+		} else {
+			f.scratch.revScans = f.scratch.revScans[:len(f.spans)]
+		}
+		scans := f.scratch.revScans
 		for i := range f.spans {
 			scans[i].req.SetSpan(f.spans[i])
 			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
@@ -307,10 +371,12 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			ba.Requests[i].Value = &scans[i].union
 		}
 	} else {
-		scans := make([]struct {
-			req   roachpb.ScanRequest
-			union roachpb.RequestUnion_Scan
-		}, len(f.spans))
+		if cap(f.scratch.scans) < len(f.spans) {
+			f.scratch.scans = make([]scanAlloc, len(f.spans))
+		} else {
+			f.scratch.scans = f.scratch.scans[:len(f.spans)]
+		}
+		scans := f.scratch.scans
 		for i := range f.spans {
 			scans[i].req.SetSpan(f.spans[i])
 			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
@@ -325,6 +391,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		f.requestSpans = f.requestSpans[:len(f.spans)]
 	}
 	copy(f.requestSpans, f.spans)
+	f.curRequestSpan = 0
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		var buf bytes.Buffer
@@ -353,7 +420,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Reset spans in preparation for adding resume-spans below.
 	f.spans = f.spans[:0]
 
-	br, err := f.sendFn(ctx, ba)
+	br, err := f.sender.Send(ctx, ba)
 	if err != nil {
 		return err
 	}
@@ -433,8 +500,8 @@ func (f *txnKVFetcher) nextBatch(
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
-		origSpan := f.requestSpans[0]
-		f.requestSpans = f.requestSpans[1:]
+		origSpan := f.requestSpans[f.curRequestSpan]
+		f.curRequestSpan++
 		var batchResp []byte
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
@@ -463,4 +530,13 @@ func (f *txnKVFetcher) nextBatch(
 // close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) close(ctx context.Context) {
 	f.acc.Close(ctx)
+	f.scratch.scans = f.scratch.scans[:0]
+	f.scratch.revScans = f.scratch.revScans[:0]
+	f.scratch.requests = f.scratch.requests[:0]
+	*f = txnKVFetcher{
+		requestSpans: f.requestSpans[:0],
+		scratch:      f.scratch,
+		spans:        f.spans[:0],
+	}
+	txnKVFetcherPool.Put(f)
 }
