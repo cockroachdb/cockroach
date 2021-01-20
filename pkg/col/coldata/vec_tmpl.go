@@ -71,14 +71,6 @@ func (m *memColumn) Append(args SliceArgs) {
 				// We need to truncate toCol before appending to it, so in case of Bytes,
 				// we append an empty slice.
 				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
-				// We will be getting all values below to be appended, regardless of
-				// whether the value is NULL. It is possible that Bytes' invariant of
-				// non-decreasing offsets on the source is currently not maintained, so
-				// we explicitly enforce it.
-				//
-				// Note that here we rely on the fact that selection vectors are
-				// increasing sequences.
-				fromCol.UpdateOffsetsToBeNonDecreasing(sel[len(sel)-1] + 1)
 				// {{else}}
 				// {{/* Here WINDOW means slicing which allows us to use APPENDVAL below. */}}
 				toCol = execgen.WINDOW(toCol, 0, args.DestIdx)

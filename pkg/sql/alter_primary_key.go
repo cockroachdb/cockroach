@@ -219,6 +219,39 @@ func (p *planner) AlterPrimaryKey(
 		return err
 	}
 
+	// If we are using PARTITION ALL BY, copy the partitioning over when inheriting the new index.
+	if tableDesc.IsPartitionAllBy() {
+		partitionBy, err := partitionByFromTableDesc(p.ExecCfg().Codec, tableDesc)
+		if err != nil {
+			return err
+		}
+		if partitionBy != nil {
+			var numImplicitColumns int
+			*newPrimaryIndexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
+				p.EvalContext(),
+				tableDesc,
+				*newPrimaryIndexDesc,
+				partitionBy,
+			)
+			if err != nil {
+				return err
+			}
+			partitioning, err := CreatePartitioning(
+				ctx,
+				p.ExecCfg().Settings,
+				p.EvalContext(),
+				tableDesc,
+				newPrimaryIndexDesc,
+				numImplicitColumns,
+				partitionBy,
+			)
+			if err != nil {
+				return err
+			}
+			newPrimaryIndexDesc.Partitioning = partitioning
+		}
+	}
+
 	// Create a new index that indexes everything the old primary index
 	// does, but doesn't store anything.
 	if shouldCopyPrimaryKey(tableDesc, newPrimaryIndexDesc) {
