@@ -380,10 +380,6 @@ define InvertedJoinPrivate {
     # the cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
 
-    # InvertedCol is the inverted column in the index that is referenced by
-    # InvertedExpr.
-    InvertedCol ColumnID
-
     # IsFirstJoinInPairedJoiner is true if this is the first join of a
     # paired-joiner used for left joins.
     IsFirstJoinInPairedJoiner bool

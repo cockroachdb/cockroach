@@ -595,7 +595,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.Table = scanPrivate.Table
 		invertedJoin.Index = index.Ordinal()
 		invertedJoin.InvertedExpr = invertedExpr
-		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(index, 0)
 		invertedJoin.Cols = indexCols.Union(inputCols)
 		if continuationCol != 0 {
 			invertedJoin.Cols.Add(continuationCol)

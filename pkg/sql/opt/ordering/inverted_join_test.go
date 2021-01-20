@@ -134,7 +134,6 @@ func TestInvertedJoinProvided(t *testing.T) {
 					InvertedExpr: invertedExpr,
 					Table:        tab,
 					Index:        1,
-					InvertedCol:  opt.ColumnID(5),
 					Cols:         tc.outCols,
 				},
 			)
