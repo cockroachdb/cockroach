@@ -77,6 +77,17 @@ SELECT id FROM system.descriptor
 51
 52
 
+# Verify we can read ID on its own (see #58614).
+query I
+SELECT id FROM system.descriptor WHERE id=1
+----
+1
+
+query I
+SELECT id FROM (VALUES(1)) AS v(a) INNER LOOKUP JOIN system.descriptor on id=a
+----
+1
+
 # Verify we can read "protobuf" columns.
 query I
 SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1

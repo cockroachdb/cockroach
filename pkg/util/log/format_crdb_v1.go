@@ -27,7 +27,7 @@ import (
 
 // FormatLegacyEntry writes the legacy log entry to the specified writer.
 func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
-	buf := formatLogEntryInternal(e, true /*showCounter*/, nil)
+	buf := formatLogEntryInternal(e, false /* isHeader */, true /*showCounter*/, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
@@ -40,7 +40,7 @@ type formatCrdbV1 struct{}
 func (formatCrdbV1) formatterName() string { return "crdb-v1" }
 
 func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternal(entry.convertToLegacy(), false /*showCounter*/, nil)
+	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
 }
 
 func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
@@ -102,6 +102,18 @@ the following caveats apply:
   entries larger than 64KiB successfully. Generally, use of this internal
   log entry parser is discouraged.
 
+### Header lines
+
+At the beginning of each file, a header is printed using a similar format as
+regular log entries. This header reports when the file was created,
+which parameters were used to start the server, the server identifiers
+if known, and other metadata about the running process.
+
+This header appears to be logged at severity INFO (with an I prefix at the
+start of the line) even though it does not really have a severity. The
+header is printed unconditionally even when a filter is configured to
+omit entries at the INFO level.
+
 ### Common log entry prefix
 
 Each line of output starts with the following prefix:
@@ -156,7 +168,7 @@ type formatCrdbV1WithCounter struct{}
 func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
 func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternal(entry.convertToLegacy(), true /*showCounter*/, nil)
+	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
 }
 
 func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
@@ -173,7 +185,7 @@ func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry.convertToLegacy(), false /*showCounter*/, cp)
+	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
 }
 
 const ttyFormatDoc = `
@@ -198,7 +210,7 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry.convertToLegacy(), true /*showCounter*/, cp)
+	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
 }
 
 func (formatCrdbV1TTYWithCounter) doc() string {
@@ -212,7 +224,9 @@ const severityChar = "IWEF"
 // It uses a newly allocated *buffer. The caller is responsible
 // for calling putBuffer() afterwards.
 //
-func formatLogEntryInternal(entry logpb.Entry, showCounter bool, cp ttycolor.Profile) *buffer {
+func formatLogEntryInternal(
+	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile,
+) *buffer {
 	buf := getBuffer()
 	if entry.Line < 0 {
 		entry.Line = 0 // not a real line number, but acceptable to someDigits
@@ -267,7 +281,7 @@ func formatLogEntryInternal(entry logpb.Entry, showCounter bool, cp ttycolor.Pro
 		tmp[n] = ' '
 		n++
 	}
-	if entry.Channel != 0 {
+	if !isHeader && entry.Channel != 0 {
 		// Prefix the filename with the channel number.
 		n += buf.someDigits(n, int(entry.Channel))
 		tmp[n] = '@'
