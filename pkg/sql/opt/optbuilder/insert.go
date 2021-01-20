@@ -731,6 +731,23 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			memo.EmptyProjectionsExpr,
 			insertColSet,
 		)
+	}
+
+	// Loop over each UNIQUE index, potentially creating an upsert-distinct-on for
+	// each one. This must happen after all conflicting rows are removed with the
+	// left-joins + filters created above, to avoid removing valid rows (see
+	// #59125).
+	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
+		index := mb.tab.Index(idx)
+		if !index.IsUnique() {
+			continue
+		}
+
+		// If conflict columns were explicitly specified, then only check for a
+		// conflict on a single index. Otherwise, check on all indexes.
+		if conflictIndex != nil && conflictIndex != index {
+			continue
+		}
 
 		// Add an UpsertDistinctOn operator to ensure there are no duplicate input
 		// rows for this unique index. Duplicate rows can trigger conflict errors

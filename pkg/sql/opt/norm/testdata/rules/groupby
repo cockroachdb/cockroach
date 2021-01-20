@@ -1704,21 +1704,19 @@ insert a
  └── upsert-distinct-on
       ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
       ├── grouping columns: column3:8!null column9:9
-      ├── lax-key: (8,9)
+      ├── lax-key: (7,9)
       ├── fd: ()-->(9,10), (7,9)~~>(6,8), (8,9)~~>(6,7,10)
-      ├── select
-      │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
-      │    ├── lax-key: (7,9,22,23)
-      │    ├── fd: ()-->(9,10,22), (7,9)~~>(6,8)
-      │    ├── left-join (hash)
-      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 i:22 f:23
-      │    │    ├── lax-key: (7,9,22,23)
-      │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8)
-      │    │    ├── upsert-distinct-on
-      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
-      │    │    │    ├── grouping columns: column2:7!null column9:9
-      │    │    │    ├── lax-key: (7,9)
-      │    │    │    ├── fd: ()-->(9,10), (7,9)~~>(6,8,10)
+      ├── upsert-distinct-on
+      │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10
+      │    ├── grouping columns: column2:7!null column9:9
+      │    ├── lax-key: (7,9)
+      │    ├── fd: ()-->(9,10), (7,9)~~>(6,8,10)
+      │    ├── select
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19 i:22 f:23
+      │    │    ├── fd: ()-->(9-11,19,22)
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19 i:22 f:23
+      │    │    │    ├── fd: ()-->(9-11,19)
       │    │    │    ├── select
       │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9 column10:10 k:11 i:17 s:19
       │    │    │    │    ├── fd: ()-->(9-11,19)
@@ -1760,21 +1758,21 @@ insert a
       │    │    │    │    │         └── column9:9 = i:17 [outer=(9,17), constraints=(/9: (/NULL - ]; /17: (/NULL - ]), fd=(9)==(17), (17)==(9)]
       │    │    │    │    └── filters
       │    │    │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
-      │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=column1:6, outer=(6)]
-      │    │    │         │    └── column1:6
-      │    │    │         ├── first-agg [as=column3:8, outer=(8)]
-      │    │    │         │    └── column3:8
-      │    │    │         └── first-agg [as=column10:10, outer=(10)]
-      │    │    │              └── column10:10
-      │    │    ├── scan a
-      │    │    │    ├── columns: i:22!null f:23
-      │    │    │    └── lax-key: (22,23)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: i:22!null f:23
+      │    │    │    │    └── lax-key: (22,23)
+      │    │    │    └── filters
+      │    │    │         ├── column3:8 = f:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
+      │    │    │         └── column9:9 = i:22 [outer=(9,22), constraints=(/9: (/NULL - ]; /22: (/NULL - ]), fd=(9)==(22), (22)==(9)]
       │    │    └── filters
-      │    │         ├── column3:8 = f:23 [outer=(8,23), constraints=(/8: (/NULL - ]; /23: (/NULL - ]), fd=(8)==(23), (23)==(8)]
-      │    │         └── column9:9 = i:22 [outer=(9,22), constraints=(/9: (/NULL - ]; /22: (/NULL - ]), fd=(9)==(22), (22)==(9)]
-      │    └── filters
-      │         └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      │    │         └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      │    └── aggregations
+      │         ├── first-agg [as=column1:6, outer=(6)]
+      │         │    └── column1:6
+      │         ├── first-agg [as=column3:8, outer=(8)]
+      │         │    └── column3:8
+      │         └── first-agg [as=column10:10, outer=(10)]
+      │              └── column10:10
       └── aggregations
            ├── first-agg [as=column1:6, outer=(6)]
            │    └── column1:6
@@ -1800,90 +1798,82 @@ insert a
  │    └── column10:10 => j:5
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
- └── project
+ └── upsert-distinct-on
       ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
+      ├── grouping columns: column1:6
       ├── side-effects
-      ├── fd: ()-->(10), (6)~~>(7-9)
-      └── select
-           ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
-           ├── side-effects
-           ├── lax-key: (6,17,19,22,23)
-           ├── fd: ()-->(10,19,22), (6)~~>(7-9)
-           ├── left-join (hash)
-           │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19 i:22 f:23
-           │    ├── side-effects
-           │    ├── lax-key: (6,17,19,22,23)
-           │    ├── fd: ()-->(10,19), (6)~~>(7-9)
-           │    ├── select
-           │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
-           │    │    ├── side-effects
-           │    │    ├── lax-key: (6,17,19)
-           │    │    ├── fd: ()-->(10,19), (6)~~>(7-9)
-           │    │    ├── left-join (hash)
-           │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 i:17 s:19
-           │    │    │    ├── side-effects
-           │    │    │    ├── lax-key: (6,17,19)
-           │    │    │    ├── fd: ()-->(10), (6)~~>(7-9)
-           │    │    │    ├── upsert-distinct-on
-           │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10
-           │    │    │    │    ├── grouping columns: column1:6
-           │    │    │    │    ├── side-effects
-           │    │    │    │    ├── lax-key: (6)
-           │    │    │    │    ├── fd: ()-->(10), (6)~~>(7-10)
-           │    │    │    │    ├── select
-           │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
-           │    │    │    │    │    ├── side-effects
-           │    │    │    │    │    ├── fd: ()-->(10,11)
-           │    │    │    │    │    ├── left-join (hash)
-           │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
-           │    │    │    │    │    │    ├── cardinality: [2 - ]
-           │    │    │    │    │    │    ├── side-effects
-           │    │    │    │    │    │    ├── fd: ()-->(10)
-           │    │    │    │    │    │    ├── project
-           │    │    │    │    │    │    │    ├── columns: column10:10 column1:6 column2:7!null column3:8!null column4:9!null
-           │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
-           │    │    │    │    │    │    │    ├── side-effects
-           │    │    │    │    │    │    │    ├── fd: ()-->(10)
-           │    │    │    │    │    │    │    ├── values
-           │    │    │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null
-           │    │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
-           │    │    │    │    │    │    │    │    ├── side-effects
-           │    │    │    │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
-           │    │    │    │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
-           │    │    │    │    │    │    │    └── projections
-           │    │    │    │    │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
-           │    │    │    │    │    │    ├── scan a
-           │    │    │    │    │    │    │    ├── columns: k:11!null
-           │    │    │    │    │    │    │    └── key: (11)
-           │    │    │    │    │    │    └── filters
-           │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
-           │    │    │    │    │    └── filters
-           │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
-           │    │    │    │    └── aggregations
-           │    │    │    │         ├── first-agg [as=column2:7, outer=(7)]
-           │    │    │    │         │    └── column2:7
-           │    │    │    │         ├── first-agg [as=column3:8, outer=(8)]
-           │    │    │    │         │    └── column3:8
-           │    │    │    │         ├── first-agg [as=column4:9, outer=(9)]
-           │    │    │    │         │    └── column4:9
-           │    │    │    │         └── first-agg [as=column10:10, outer=(10)]
-           │    │    │    │              └── column10:10
-           │    │    │    ├── scan a
-           │    │    │    │    ├── columns: i:17!null s:19!null
-           │    │    │    │    └── key: (17,19)
-           │    │    │    └── filters
-           │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
-           │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
-           │    │    └── filters
-           │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
-           │    ├── scan a
-           │    │    ├── columns: i:22!null f:23
-           │    │    └── lax-key: (22,23)
-           │    └── filters
-           │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
-           │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
-           └── filters
-                └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      ├── lax-key: (6)
+      ├── fd: ()-->(10), (6)~~>(7-10)
+      ├── select
+      │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+      │    ├── side-effects
+      │    ├── fd: ()-->(10,11,19,22)
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19 i:22 f:23
+      │    │    ├── side-effects
+      │    │    ├── fd: ()-->(10,11,19)
+      │    │    ├── select
+      │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+      │    │    │    ├── side-effects
+      │    │    │    ├── fd: ()-->(10,11,19)
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11 i:17 s:19
+      │    │    │    │    ├── side-effects
+      │    │    │    │    ├── fd: ()-->(10,11)
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
+      │    │    │    │    │    ├── side-effects
+      │    │    │    │    │    ├── fd: ()-->(10,11)
+      │    │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null column10:10 k:11
+      │    │    │    │    │    │    ├── cardinality: [2 - ]
+      │    │    │    │    │    │    ├── side-effects
+      │    │    │    │    │    │    ├── fd: ()-->(10)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: column10:10 column1:6 column2:7!null column3:8!null column4:9!null
+      │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    │    │    │    ├── side-effects
+      │    │    │    │    │    │    │    ├── fd: ()-->(10)
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:6 column2:7!null column3:8!null column4:9!null
+      │    │    │    │    │    │    │    │    ├── cardinality: [2 - 2]
+      │    │    │    │    │    │    │    │    ├── side-effects
+      │    │    │    │    │    │    │    │    ├── (unique_rowid(), 'foo', 1, 1.0)
+      │    │    │    │    │    │    │    │    └── (unique_rowid(), 'bar', 2, 2.0)
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         └── CAST(NULL AS JSONB) [as=column10:10]
+      │    │    │    │    │    │    ├── scan a
+      │    │    │    │    │    │    │    ├── columns: k:11!null
+      │    │    │    │    │    │    │    └── key: (11)
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── column1:6 = k:11 [outer=(6,11), constraints=(/6: (/NULL - ]; /11: (/NULL - ]), fd=(6)==(11), (11)==(6)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── k:11 IS NULL [outer=(11), constraints=(/11: [/NULL - /NULL]; tight), fd=()-->(11)]
+      │    │    │    │    ├── scan a
+      │    │    │    │    │    ├── columns: i:17!null s:19!null
+      │    │    │    │    │    └── key: (17,19)
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:7 = s:19 [outer=(7,19), constraints=(/7: (/NULL - ]; /19: (/NULL - ]), fd=(7)==(19), (19)==(7)]
+      │    │    │    │         └── column3:8 = i:17 [outer=(8,17), constraints=(/8: (/NULL - ]; /17: (/NULL - ]), fd=(8)==(17), (17)==(8)]
+      │    │    │    └── filters
+      │    │    │         └── s:19 IS NULL [outer=(19), constraints=(/19: [/NULL - /NULL]; tight), fd=()-->(19)]
+      │    │    ├── scan a
+      │    │    │    ├── columns: i:22!null f:23
+      │    │    │    └── lax-key: (22,23)
+      │    │    └── filters
+      │    │         ├── column4:9 = f:23 [outer=(9,23), constraints=(/9: (/NULL - ]; /23: (/NULL - ]), fd=(9)==(23), (23)==(9)]
+      │    │         └── column3:8 = i:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
+      │    └── filters
+      │         └── i:22 IS NULL [outer=(22), constraints=(/22: [/NULL - /NULL]; tight), fd=()-->(22)]
+      └── aggregations
+           ├── first-agg [as=column2:7, outer=(7)]
+           │    └── column2:7
+           ├── first-agg [as=column3:8, outer=(8)]
+           │    └── column3:8
+           ├── first-agg [as=column4:9, outer=(9)]
+           │    └── column4:9
+           └── first-agg [as=column10:10, outer=(10)]
+                └── column10:10
 
 # DO NOTHING case with explicit conflict columns (only add upsert-distinct-on
 # for one index).
