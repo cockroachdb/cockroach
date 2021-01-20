@@ -1,0 +1,39 @@
+# This file contains telemetry tests for sql.schema.alter_*.set_schema counters.
+
+feature-allowlist
+sql.schema.alter_table.set_schema
+sql.schema.alter_sequence.set_schema
+sql.schema.alter_view.set_schema
+sql.schema.alter_materialized_view.set_schema
+----
+
+exec
+CREATE SCHEMA ss
+----
+
+exec
+CREATE TABLE t();
+CREATE SEQUENCE s;
+CREATE VIEW vx AS SELECT 1;
+CREATE MATERIALIZED VIEW mvx AS SELECT 1
+----
+
+feature-usage
+ALTER TABLE t SET SCHEMA ss
+----
+sql.schema.alter_table.set_schema
+
+feature-usage
+ALTER SEQUENCE s SET SCHEMA ss
+----
+sql.schema.alter_sequence.set_schema
+
+feature-usage
+ALTER VIEW vx SET SCHEMA ss
+----
+sql.schema.alter_view.set_schema
+
+feature-usage
+ALTER MATERIALIZED VIEW mvx SET SCHEMA ss
+----
+sql.schema.alter_materialized_view.set_schema

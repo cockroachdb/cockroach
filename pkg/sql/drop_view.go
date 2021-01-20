@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -91,7 +90,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 func (n *dropViewNode) ReadingOwnWrites() {}
 
 func (n *dropViewNode) startExec(params runParams) error {
-	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("view"))
+	telemetry.Inc(n.n.TelemetryCounter())
 
 	ctx := params.ctx
 	for _, toDel := range n.td {
