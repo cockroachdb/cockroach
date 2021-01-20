@@ -32,7 +32,8 @@ import (
 // collector wrapper can be plugged in.
 type rowFetcher interface {
 	StartScan(
-		_ context.Context, _ *kv.Txn, _ roachpb.Spans, limitBatches bool, limitHint int64, traceKV bool,
+		_ context.Context, _ *kv.Txn, _ roachpb.Spans, limitBatches bool,
+		limitHint int64, traceKV bool, forceProductionKVBatchSize bool,
 	) error
 	StartInconsistentScan(
 		_ context.Context,
@@ -43,6 +44,7 @@ type rowFetcher interface {
 		limitBatches bool,
 		limitHint int64,
 		traceKV bool,
+		forceProductionKVBatchSize bool,
 	) error
 
 	NextRow(ctx context.Context) (

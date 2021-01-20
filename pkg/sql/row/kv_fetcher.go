@@ -54,9 +54,11 @@ func NewKVFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
+	forceProductionKVBatchSize bool,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
+		lockWaitPolicy, mon, forceProductionKVBatchSize,
 	)
 	return newKVFetcher(&kvBatchFetcher), err
 }
