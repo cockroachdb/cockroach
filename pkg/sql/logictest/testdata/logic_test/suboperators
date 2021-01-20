@@ -169,7 +169,7 @@ SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[2, NULL]))
 NULL
 
 query T
-SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[NULL, NULL]))
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[NULL, NULL]::int[]))
 ----
 NULL
 
@@ -218,7 +218,7 @@ SELECT * FROM abc WHERE a = ANY(SELECT * FROM unnest(ARRAY[4, NULL]))
 ----
 
 query III
-SELECT * FROM abc WHERE a = ANY(SELECT * FROM unnest(ARRAY[NULL, NULL]))
+SELECT * FROM abc WHERE a = ANY(SELECT * FROM unnest(ARRAY[NULL, NULL]::int[]))
 ----
 
 query error unsupported comparison operator: <int> = ANY <tuple\{string\}>
@@ -333,7 +333,7 @@ SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[1, NULL]))
 NULL
 
 query T
-SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
+SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]::int[]))
 ----
 NULL
 
@@ -358,7 +358,7 @@ SELECT * FROM abc WHERE a > ALL(SELECT * FROM unnest(ARRAY[1, NULL]))
 ----
 
 query III
-SELECT * FROM abc WHERE a > ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
+SELECT * FROM abc WHERE a > ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]::int[]))
 ----
 
 query error unsupported comparison operator: <int> = ALL <tuple\{string\}>

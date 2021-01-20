@@ -447,6 +447,10 @@ func arrayOf(
 	// If the reference is a statically known type, then return an array type,
 	// rather than an array type reference.
 	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
+		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
+		if typ.Family() == types.UnknownFamily {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
+		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err
 		}

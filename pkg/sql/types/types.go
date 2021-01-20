@@ -1056,9 +1056,14 @@ func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
+	// Do not make an array of type unknown[]. Follow Postgres' behavior and
+	// convert this to type string[].
+	if typ.Family() == UnknownFamily {
+		typ = String
+	}
 	arr := &T{InternalType: InternalType{
 		Family:        ArrayFamily,
-		Oid:           calcArrayOid(typ),
+		Oid:           CalcArrayOid(typ),
 		ArrayContents: typ,
 		Locale:        &emptyLocale,
 	}}
@@ -2108,7 +2113,7 @@ func (t *T) upgradeType() error {
 				return err
 			}
 			t.InternalType.ArrayContents = &arrayContents
-			t.InternalType.Oid = calcArrayOid(t.ArrayContents())
+			t.InternalType.Oid = CalcArrayOid(t.ArrayContents())
 		}
 
 		// Marshaling/unmarshaling nested arrays is not yet supported.
