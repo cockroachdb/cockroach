@@ -232,6 +232,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			return nil, errors.Wrap(err, "instantiating clock source")
 		}
 		clock = hlc.NewClock(clockSrc.UnixNano, time.Duration(cfg.MaxOffset))
+	} else if cfg.TestingKnobs.Server != nil &&
+		cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource != nil {
+		clock = hlc.NewClock(cfg.TestingKnobs.Server.(*TestingKnobs).ClockSource,
+			time.Duration(cfg.MaxOffset))
 	} else {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}

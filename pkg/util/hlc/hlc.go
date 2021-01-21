@@ -124,6 +124,31 @@ func (m *ManualClock) Set(nanos int64) {
 	atomic.StoreInt64(&m.nanos, nanos)
 }
 
+// HybridManualClock is a convenience type to facilitate
+// creating a hybrid logical clock whose physical clock
+// ticks with the wall clock, but that can be moved arbitrarily
+// into the future. HybridManualClock is thread safe.
+type HybridManualClock struct {
+	nanos         int64
+	physicalClock func() int64
+}
+
+// NewHybridManualClock returns a new instance, initialized with
+// specified timestamp.
+func NewHybridManualClock() *HybridManualClock {
+	return &HybridManualClock{nanos: 0, physicalClock: UnixNano}
+}
+
+// UnixNano returns the underlying hybrid manual clock's timestamp.
+func (m *HybridManualClock) UnixNano() int64 {
+	return atomic.LoadInt64(&m.nanos) + m.physicalClock()
+}
+
+// Increment atomically increments the hybrid manual clock's timestamp.
+func (m *HybridManualClock) Increment(incr int64) {
+	atomic.AddInt64(&m.nanos, incr)
+}
+
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
 // c := hlc.NewClock(hlc.UnixNano, ...).
