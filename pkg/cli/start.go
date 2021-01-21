@@ -500,14 +500,7 @@ If problems persist, please see %s.`
 		}
 	}
 
-	// Set up the Geospatial library.
-	// We need to make sure this happens before any queries involving geospatial data is executed.
-	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
-	if err != nil {
-		log.Ops.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
-	} else {
-		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
-	}
+	initGEOS(ctx)
 
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
@@ -1100,4 +1093,15 @@ func getClientGRPCConn(
 		stopper.Stop(ctx)
 	}
 	return conn, clock, closer, nil
+}
+
+// initGEOS sets up the Geospatial library.
+// We need to make sure this happens before any queries involving geospatial data is executed.
+func initGEOS(ctx context.Context) {
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
+	if err != nil {
+		log.Ops.Warningf(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
+	} else {
+		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
+	}
 }
