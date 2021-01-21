@@ -1658,7 +1658,7 @@ func mvccPutInternal(
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
-				// TODO(nvanbenschoten): can this call return a
+				// TODO(nvanbenschoten): this call can return a
 				// ReadWithinUncertaintyInterval error? It shouldn't. Once we
 				// support local uncertainty limits, maybe we pass a limit of 0?
 				if value, err = maybeGetValue(
