@@ -721,13 +721,17 @@ func (jb *JoinOrderBuilder) addToGroup(
 		jb.f.Memo().AddSelectToGroup(selectExpr, grp)
 		return
 	}
+
+	// Set SkipReorderJoins to true in order to avoid duplicate reordering on this
+	// join.
+	newJoinPrivate := memo.JoinPrivate{SkipReorderJoins: true}
 	switch op {
 	case opt.InnerJoinOp:
 		newJoin := &memo.InnerJoinExpr{
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddInnerJoinToGroup(newJoin, grp)
 
@@ -736,7 +740,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddSemiJoinToGroup(newJoin, grp)
 
@@ -745,7 +749,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddAntiJoinToGroup(newJoin, grp)
 
@@ -754,7 +758,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddLeftJoinToGroup(newJoin, grp)
 
@@ -763,7 +767,7 @@ func (jb *JoinOrderBuilder) addToGroup(
 			Left:        left,
 			Right:       right,
 			On:          on,
-			JoinPrivate: memo.JoinPrivate{},
+			JoinPrivate: newJoinPrivate,
 		}
 		jb.f.Memo().AddFullJoinToGroup(newJoin, grp)
 
@@ -779,21 +783,25 @@ func (jb *JoinOrderBuilder) memoize(
 	op opt.Operator, left, right memo.RelExpr, on, selectFilters memo.FiltersExpr,
 ) memo.RelExpr {
 	var join memo.RelExpr
+
+	// Set SkipReorderJoins to true in order to avoid duplicate reordering on this
+	// join.
+	newJoinPrivate := &memo.JoinPrivate{SkipReorderJoins: true}
 	switch op {
 	case opt.InnerJoinOp:
-		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeInnerJoin(left, right, on, newJoinPrivate)
 
 	case opt.SemiJoinOp:
-		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeSemiJoin(left, right, on, newJoinPrivate)
 
 	case opt.AntiJoinOp:
-		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeAntiJoin(left, right, on, newJoinPrivate)
 
 	case opt.LeftJoinOp:
-		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeLeftJoin(left, right, on, newJoinPrivate)
 
 	case opt.FullJoinOp:
-		join = jb.f.Memo().MemoizeFullJoin(left, right, on, &memo.JoinPrivate{WasReordered: true})
+		join = jb.f.Memo().MemoizeFullJoin(left, right, on, newJoinPrivate)
 
 	default:
 		panic(errors.AssertionFailedf("invalid operator: %v", op))

@@ -150,7 +150,21 @@ Source expression:
              └── filters
                   └── grandchild.pid = parent.pid
 
-New expression 1 of 1:
+New expression 1 of 2:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (hash)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters
+             │         ├── grandchild.pid = child.pid
+             │         └── grandchild.cid = child.cid
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+New expression 2 of 2:
   sort
    └── project
         └── inner-join (hash)
@@ -179,7 +193,7 @@ Source expression:
              └── filters
                   └── grandchild.pid = parent.pid
 
-New expression 1 of 5:
+New expression 1 of 6:
   sort
    └── project
         └── inner-join (hash)
@@ -193,7 +207,7 @@ New expression 1 of 5:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-New expression 2 of 5:
+New expression 2 of 6:
   sort
    └── project
         └── inner-join (hash)
@@ -207,7 +221,7 @@ New expression 2 of 5:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-New expression 3 of 5:
+New expression 3 of 6:
   sort
    └── project
         └── inner-join (hash)
@@ -221,7 +235,7 @@ New expression 3 of 5:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-New expression 4 of 5:
+New expression 4 of 6:
   sort
    └── project
         └── inner-join (hash)
@@ -235,7 +249,19 @@ New expression 4 of 5:
                   ├── grandchild.pid = child.pid
                   └── grandchild.cid = child.cid
 
-New expression 5 of 5:
+New expression 5 of 6:
+  sort
+   └── project
+        └── inner-join (hash)
+             ├── inner-join (merge)
+             │    ├── scan grandchild
+             │    ├── scan child
+             │    └── filters (true)
+             ├── scan parent
+             └── filters
+                  └── grandchild.pid = parent.pid
+
+New expression 6 of 6:
   sort
    └── project
         └── inner-join (hash)
