@@ -245,8 +245,23 @@ func (m *MemBatch) SetSelection(b bool) {
 func (m *MemBatch) SetLength(length int) {
 	m.length = length
 	if length > 0 {
+		// In order to maintain the invariant of Bytes vectors we need to update
+		// offsets up to the element with the largest index that can be accessed
+		// by the batch.
+		maxIdx := length - 1
+		if m.useSel && m.sel[length-1] > maxIdx {
+			// Note that here we rely on the fact that selection vectors are
+			// increasing sequences.
+			//
+			// This assumption is only enforced by the invariantsChecker
+			// starting from 21.1 branches, so we have a "safe" conditional to
+			// not have a correctness regression, yet we deliberately do not
+			// want to iterate over the selection vector to find the largest
+			// index since that could be a performance regression.
+			maxIdx = m.sel[length-1]
+		}
 		for _, bytesVecIdx := range m.bytesVecIdxs {
-			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(length)
+			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(maxIdx + 1)
 		}
 	}
 }
