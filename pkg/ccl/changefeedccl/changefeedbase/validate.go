@@ -49,9 +49,6 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	if tableDesc.GetState() == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
 	}
-	if tableDesc.GetName() != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
-	}
 
 	return nil
 }

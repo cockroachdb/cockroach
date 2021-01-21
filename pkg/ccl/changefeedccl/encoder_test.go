@@ -388,6 +388,63 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestTableNameCollision(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE DATABASE printr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE printr.drivers (id INT PRIMARY KEY, version INT)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice'), (2, NULL)`,
+		)
+		sqlDB.Exec(t,
+			`INSERT INTO printr.drivers VALUES (1, 100), (2, NULL)`,
+		)
+
+		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, movrFeed)
+
+		printrFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, printrFeed)
+
+		comboFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers, movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved, full_table_name`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, comboFeed)
+
+		assertPayloadsAvro(t, reg, movrFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
+			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
+		})
+
+		assertPayloadsAvro(t, reg, printrFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
+			`drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"version":null}},"before":null}`,
+		})
+
+		assertPayloadsAvro(t, reg, comboFeed, []string{
+			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}},"before":null}`,
+			`movr.public.drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"name":null}},"before":null}`,
+			`printr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"version":{"long":100}}},"before":null}`,
+			`printr.public.drivers: {"id":{"long":2}}->{"after":{"drivers":{"id":{"long":2},"version":null}},"before":null}`,
+		})
+	}
+
+	//t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

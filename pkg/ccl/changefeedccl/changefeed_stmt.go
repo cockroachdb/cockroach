@@ -34,8 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -86,7 +88,6 @@ func changefeedPlanHook(
 	); err != nil {
 		return nil, nil, nil, false, err
 	}
-
 	var sinkURIFn func() (string, error)
 	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
@@ -198,8 +199,13 @@ func changefeedPlanHook(
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
+				_, qualified := opts[changefeedbase.OptFullTableName]
+				name, err := getMaybeQualifiedTableName(ctx, table, *p.ExecCfg(), p.Txn(), qualified)
+				if err != nil {
+					return err
+				}
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
-					StatementTimeName: table.GetName(),
+					StatementTimeName: name,
 				}
 				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
@@ -674,4 +680,45 @@ func (b *changefeedResumer) OnPauseRequest(
 	pts := execCfg.ProtectedTimestampProvider
 	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, *b.job.ID(),
 		details.Targets, *resolved, cp)
+}
+
+// getQualifiedTableName returns the database-qualified name of the table
+// or view represented by the provided descriptor. It is a sort of
+// reverse of the Resolve() functions.
+func getQualifiedTableName(
+	ctx context.Context, execCfg sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
+) (*tree.TableName, error) {
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, desc.GetParentID())
+	if err != nil {
+		return nil, err
+	}
+	schemaID := desc.GetParentSchemaID()
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
+	if err != nil {
+		return nil, err
+	}
+	tbName := tree.MakeTableNameWithSchema(
+		tree.Name(dbDesc.GetName()),
+		tree.Name(schemaName),
+		tree.Name(desc.GetName()),
+	)
+	return &tbName, nil
+}
+
+// getMaybeQualifiedTableName gets a table name with or without the dots
+func getMaybeQualifiedTableName(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	execCfg sql.ExecutorConfig,
+	txn *kv.Txn,
+	qualified bool,
+) (string, error) {
+	if qualified {
+		tbl, err := getQualifiedTableName(ctx, execCfg, txn, desc)
+		if err != nil {
+			return "", err
+		}
+		return tbl.String(), err
+	}
+	return desc.GetName(), nil
 }

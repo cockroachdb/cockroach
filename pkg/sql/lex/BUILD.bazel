@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "encode.go",
         "experimental_keywords.go",
+        "reserved_keywords.go",
         ":gen-keywords",  # keep
         ":gen-tokens",  # keep
     ],

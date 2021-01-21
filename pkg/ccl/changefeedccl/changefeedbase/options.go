@@ -30,6 +30,7 @@ const (
 	OptCursor                   = `cursor`
 	OptEnvelope                 = `envelope`
 	OptFormat                   = `format`
+	OptFullTableName            = `full_table_name`
 	OptKeyInValue               = `key_in_value`
 	OptResolvedTimestamps       = `resolved`
 	OptUpdatedTimestamps        = `updated`
@@ -100,6 +101,7 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptCursor:                   sql.KVStringOptRequireValue,
 	OptEnvelope:                 sql.KVStringOptRequireValue,
 	OptFormat:                   sql.KVStringOptRequireValue,
+	OptFullTableName:            sql.KVStringOptRequireNoValue,
 	OptKeyInValue:               sql.KVStringOptRequireNoValue,
 	OptResolvedTimestamps:       sql.KVStringOptAny,
 	OptUpdatedTimestamps:        sql.KVStringOptRequireNoValue,
