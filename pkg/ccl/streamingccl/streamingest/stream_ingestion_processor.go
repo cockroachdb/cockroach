@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -66,14 +67,7 @@ type streamIngestionProcessor struct {
 	ingestionErr error
 
 	// eventCh is the merged event channel of all of the partition event streams.
-	eventCh chan partitionEvent
-}
-
-// partitionEvent augments a normal event with the partition it came from.
-type partitionEvent struct {
-	streamingccl.Event
-
-	partition streamingccl.PartitionAddress
+	eventCh chan streamingccl.Event
 }
 
 var _ execinfra.Processor = &streamIngestionProcessor{}
@@ -91,6 +85,20 @@ func newStreamIngestionDataProcessor(
 	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
 	if err != nil {
 		return nil, err
+	}
+
+	// Check if there are any interceptor methods that need to be registered with
+	// the stream client.
+	// These methods are invoked on every emitted Event.
+	if knobs, ok := flowCtx.Cfg.TestingKnobs.StreamIngestionTestingKnobs.(*sql.
+		StreamIngestionTestingKnobs); ok {
+		if knobs.Interceptors != nil {
+			if interceptable, ok := streamClient.(streamclient.InterceptableStreamClient); ok {
+				for _, interceptor := range knobs.Interceptors {
+					interceptable.RegisterInterception(interceptor)
+				}
+			}
+		}
 	}
 
 	sip := &streamIngestionProcessor{
@@ -211,8 +219,8 @@ func (sip *streamIngestionProcessor) flush() error {
 // channel.
 func merge(
 	ctx context.Context, partitionStreams map[streamingccl.PartitionAddress]chan streamingccl.Event,
-) chan partitionEvent {
-	merged := make(chan partitionEvent)
+) chan streamingccl.Event {
+	merged := make(chan streamingccl.Event)
 
 	var wg sync.WaitGroup
 	wg.Add(len(partitionStreams))
@@ -221,13 +229,8 @@ func merge(
 		go func(partition streamingccl.PartitionAddress, eventCh <-chan streamingccl.Event) {
 			defer wg.Done()
 			for event := range eventCh {
-				pe := partitionEvent{
-					Event:     event,
-					partition: partition,
-				}
-
 				select {
-				case merged <- pe:
+				case merged <- event:
 				case <-ctx.Done():
 					// TODO: Add ctx.Err() to an error channel once ConsumePartition
 					// supports an error ch.
@@ -283,7 +286,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpan, erro
 
 			// Each partition is represented by a span defined by the
 			// partition address.
-			spanStartKey := roachpb.Key(event.partition)
+			spanStartKey := roachpb.Key(*event.GetPartitionAddress())
 			return &jobspb.ResolvedSpan{
 				Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
 				Timestamp: resolvedTime,

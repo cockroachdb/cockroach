@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -32,14 +33,82 @@ type Validator interface {
 	Failures() []string
 }
 
+// StreamClientValidatorWrapper wraps a Validator and exposes additional methods
+// used by stream ingestion to check for correctness.
+type StreamClientValidatorWrapper interface {
+	GetValuesForKeyBelowTimestamp(key string, timestamp hlc.Timestamp) ([]roachpb.KeyValue, error)
+	GetValidator() Validator
+}
+
+type streamValidator struct {
+	Validator
+}
+
+var _ StreamClientValidatorWrapper = &streamValidator{}
+
+// NewStreamClientValidatorWrapper returns a wrapped Validator, that can be used
+// to validate the events emitted by the cluster to cluster streaming client.
+// The wrapper currently only "wraps" an orderValidator, but can be built out
+// to utilize other Validator's.
+// The wrapper also allows querying the orderValidator to retrieve streamed
+// events from an in-memory store.
+func NewStreamClientValidatorWrapper() StreamClientValidatorWrapper {
+	ov := NewOrderValidator("unusedC2C")
+	return &streamValidator{
+		ov,
+	}
+}
+
+// GetValidator implements the StreamClientValidatorWrapper interface.
+func (sv *streamValidator) GetValidator() Validator {
+	return sv.Validator
+}
+
+// GetValuesForKeyBelowTimestamp implements the StreamClientValidatorWrapper
+// interface.
+// It returns the streamed KV updates for `key` with a ts less than equal to
+// `timestamp`.
+func (sv *streamValidator) GetValuesForKeyBelowTimestamp(
+	key string, timestamp hlc.Timestamp,
+) ([]roachpb.KeyValue, error) {
+	orderValidator, ok := sv.GetValidator().(*orderValidator)
+	if !ok {
+		return nil, errors.Newf("unknown validator %T: ", sv.GetValidator())
+	}
+	timestampValueTuples := orderValidator.keyTimestampAndValues[key]
+	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
+		return timestamp.Less(timestampValueTuples[i].ts)
+	})
+	var kv []roachpb.KeyValue
+	for _, tsValue := range timestampValueTuples[:timestampsIdx] {
+		byteRep := []byte(key)
+		kv = append(kv, roachpb.KeyValue{
+			Key: byteRep,
+			Value: roachpb.Value{
+				RawBytes:  []byte(tsValue.value),
+				Timestamp: tsValue.ts,
+			},
+		})
+	}
+
+	return kv, nil
+}
+
+type timestampValue struct {
+	ts    hlc.Timestamp
+	value string
+}
+
 type orderValidator struct {
-	topic           string
-	partitionForKey map[string]string
-	keyTimestamps   map[string][]hlc.Timestamp
-	resolved        map[string]hlc.Timestamp
+	topic                 string
+	partitionForKey       map[string]string
+	keyTimestampAndValues map[string][]timestampValue
+	resolved              map[string]hlc.Timestamp
 
 	failures []string
 }
+
+var _ Validator = &orderValidator{}
 
 // NewOrderValidator returns a Validator that checks the row and resolved
 // timestamp ordering guarantees. It also asserts that keys have an affinity to
@@ -52,17 +121,15 @@ type orderValidator struct {
 // lower update timestamp will be emitted on that partition.
 func NewOrderValidator(topic string) Validator {
 	return &orderValidator{
-		topic:           topic,
-		partitionForKey: make(map[string]string),
-		keyTimestamps:   make(map[string][]hlc.Timestamp),
-		resolved:        make(map[string]hlc.Timestamp),
+		topic:                 topic,
+		partitionForKey:       make(map[string]string),
+		keyTimestampAndValues: make(map[string][]timestampValue),
+		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
 
 // NoteRow implements the Validator interface.
-func (v *orderValidator) NoteRow(
-	partition string, key, ignoredValue string, updated hlc.Timestamp,
-) error {
+func (v *orderValidator) NoteRow(partition string, key, value string, updated hlc.Timestamp) error {
 	if prev, ok := v.partitionForKey[key]; ok && prev != partition {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`key [%s] received on two partitions: %s and %s`, key, prev, partition,
@@ -71,17 +138,20 @@ func (v *orderValidator) NoteRow(
 	}
 	v.partitionForKey[key] = partition
 
-	timestamps := v.keyTimestamps[key]
-	timestampsIdx := sort.Search(len(timestamps), func(i int) bool {
-		return updated.LessEq(timestamps[i])
+	timestampValueTuples := v.keyTimestampAndValues[key]
+	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
+		return updated.LessEq(timestampValueTuples[i].ts)
 	})
-	seen := timestampsIdx < len(timestamps) && timestamps[timestampsIdx] == updated
+	seen := timestampsIdx < len(timestampValueTuples) &&
+		timestampValueTuples[timestampsIdx].ts == updated
 
-	if !seen && len(timestamps) > 0 && updated.Less(timestamps[len(timestamps)-1]) {
+	if !seen && len(timestampValueTuples) > 0 &&
+		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
 			v.topic, partition,
-			updated.AsOfSystemTime(), timestamps[len(timestamps)-1].AsOfSystemTime(),
+			updated.AsOfSystemTime(),
+			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
 		))
 	}
 	if !seen && updated.Less(v.resolved[partition]) {
@@ -92,8 +162,12 @@ func (v *orderValidator) NoteRow(
 	}
 
 	if !seen {
-		v.keyTimestamps[key] = append(
-			append(timestamps[:timestampsIdx], updated), timestamps[timestampsIdx:]...)
+		v.keyTimestampAndValues[key] = append(
+			append(timestampValueTuples[:timestampsIdx], timestampValue{
+				ts:    updated,
+				value: value,
+			}),
+			timestampValueTuples[timestampsIdx:]...)
 	}
 	return nil
 }

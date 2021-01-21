@@ -63,8 +63,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	pa1 := streamingccl.PartitionAddress("s3://my_streams/stream/partition1")
-	pa2 := streamingccl.PartitionAddress("s3://my_streams/stream/partition2")
+	pa1 := streamingccl.PartitionAddress("partition1")
+	pa2 := streamingccl.PartitionAddress("partition2")
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
@@ -79,11 +79,11 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		{
 			name: "same-resolved-ts-across-partitions",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, pa1),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, pa2),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, pa2),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
@@ -92,9 +92,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// emitted a resolved ts.
 			name: "no-checkpoints",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV),
+				streamingccl.MakeKVEvent(sampleKV, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV),
+				streamingccl.MakeKVEvent(sampleKV, pa2),
 			}},
 		},
 		{
@@ -102,39 +102,39 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// emitted a resolved ts.
 			name: "no-checkpoint-from-one-partition",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, pa1),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, pa1),
 			}, pa2: []streamingccl.Event{}},
 		},
 		{
 			name: "one-partition-ahead-of-the-other",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, pa1),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1}, pa2),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1},
 		},
 		{
 			name: "some-interleaved-timestamps",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}, pa1),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 4}, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 3}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 5}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 3}, pa2),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 5}, pa2),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 4},
 		},
 		{
 			name: "some-interleaved-logical-timestamps",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}, pa1),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 1}),
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 1}, pa2),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 2}, pa2),
 			}},
 			expectedFrontierTimestamp: hlc.Timestamp{WallTime: 1, Logical: 4},
 		},
@@ -143,9 +143,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			// lower than its start time.
 			name: "checkpoint-lower-than-start-ts",
 			events: partitionToEvent{pa1: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 4}, pa1),
 			}, pa2: []streamingccl.Event{
-				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}),
+				streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 1, Logical: 2}, pa2),
 			}},
 			frontierStartTime: hlc.Timestamp{WallTime: 1, Logical: 3},
 		},
