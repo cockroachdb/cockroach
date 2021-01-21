@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -307,6 +308,7 @@ type kafkaSinkConfig struct {
 	saslHandshake    bool
 	saslUser         string
 	saslPassword     string
+	targetNames      map[descpb.ID]string
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -420,6 +422,13 @@ func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
 		config = defaultSaramaConfig
 	}
 	return
+func (s *kafkaSink) setTargets(targets jobspb.ChangefeedTargets) {
+	s.topics = make(map[string]struct{})
+	s.cfg.targetNames = make(map[descpb.ID]string)
+	for id, t := range targets {
+		s.cfg.targetNames[id] = t.StatementTimeName
+		s.topics[s.cfg.kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
+	}
 }
 
 func makeKafkaSink(
@@ -430,15 +439,14 @@ func makeKafkaSink(
 	opts map[string]string,
 	acc mon.BoundAccount,
 ) (Sink, error) {
+
 	sink := &kafkaSink{
 		ctx: ctx,
 		cfg: cfg,
 	}
-	sink.topics = make(map[string]struct{})
-	for _, t := range targets {
-		sink.topics[cfg.kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
-	}
+
 	sink.mu.mem = acc
+	sink.setTargets(targets)
 
 	config := sarama.NewConfig()
 	config.ClientID = `CockroachDB`
@@ -542,7 +550,7 @@ func (s *kafkaSink) Close() error {
 func (s *kafkaSink) EmitRow(
 	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.GetName())
+	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(s.cfg.targetNames[table.GetID()])
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
@@ -769,6 +777,8 @@ type sqlSink struct {
 
 	rowBuf  []interface{}
 	scratch bufalloc.ByteAllocator
+
+	targetNames map[descpb.ID]string
 }
 
 func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlSink, error) {
@@ -787,13 +797,15 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 	}
 
 	s := &sqlSink{
-		db:        db,
-		tableName: tableName,
-		topics:    make(map[string]struct{}),
-		hasher:    fnv.New32a(),
+		db:          db,
+		tableName:   tableName,
+		topics:      make(map[string]struct{}),
+		hasher:      fnv.New32a(),
+		targetNames: make(map[descpb.ID]string),
 	}
-	for _, t := range targets {
+	for id, t := range targets {
 		s.topics[t.StatementTimeName] = struct{}{}
+		s.targetNames[id] = t.StatementTimeName
 	}
 	return s, nil
 }
@@ -802,7 +814,7 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 func (s *sqlSink) EmitRow(
 	ctx context.Context, table catalog.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	topic := table.GetName()
+	topic := s.targetNames[table.GetID()]
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
