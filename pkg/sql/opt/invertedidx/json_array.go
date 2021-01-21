@@ -57,14 +57,15 @@ func (j *jsonOrArrayJoinPlanner) extractInvertedJoinConditionFromLeaf(
 func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 	left, right opt.ScalarExpr,
 ) bool {
-	// The first argument should be a variable corresponding to the index
-	// column.
-	variable, ok := indexColumnVariable(j.tabID, j.index, left)
-	if !ok {
-		// The column does not match the index column.
+	// The first argument should be a variable or expression corresponding to
+	// the index column.
+	// TODO(mgartner): The first argument could be an expression that matches a
+	// computed column expression if the computed column is indexed. Pass
+	// computedColumns to enable this.
+	if !isIndexColumn(j.tabID, j.index, left, nil /* computedColumns */) {
 		return false
 	}
-	if variable.Typ.Family() == types.ArrayFamily &&
+	if left.DataType().Family() == types.ArrayFamily &&
 		j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
 		// We cannot plan inverted joins on array indexes that do not include
 		// keys for empty arrays.
@@ -255,8 +256,9 @@ func (g *jsonOrArrayDatumsToInvertedExpr) PreFilter(
 }
 
 type jsonOrArrayFilterPlanner struct {
-	tabID opt.TableID
-	index cat.Index
+	tabID           opt.TableID
+	index           cat.Index
+	computedColumns map[opt.ColumnID]opt.ScalarExpr
 }
 
 var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
@@ -302,10 +304,9 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
 ) invertedexpr.InvertedExpression {
-	// The first argument should be a variable corresponding to the index
-	// column.
-	variable, ok := indexColumnVariable(j.tabID, j.index, left)
-	if !ok {
+	// The first argument should be a variable or expression corresponding to
+	// the index column.
+	if !isIndexColumn(j.tabID, j.index, left, j.computedColumns) {
 		return invertedexpr.NonInvertedColExpression{}
 	}
 
@@ -314,7 +315,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 		return invertedexpr.NonInvertedColExpression{}
 	}
 	d := memo.ExtractConstDatum(right)
-	if variable.Typ.Family() == types.ArrayFamily &&
+	if left.DataType().Family() == types.ArrayFamily &&
 		j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
 		if arr, ok := d.(*tree.DArray); ok && arr.Len() == 0 {
 			// We cannot constrain array indexes that do not include
@@ -343,8 +344,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 ) invertedexpr.InvertedExpression {
 	// The left side of the fetch val expression, the Json field, should be a
 	// variable corresponding to the index column.
-	variable, ok := indexColumnVariable(j.tabID, j.index, fetch.Json)
-	if !ok {
+	if !isIndexColumn(j.tabID, j.index, fetch.Json, j.computedColumns) {
 		return invertedexpr.NonInvertedColExpression{}
 	}
 
