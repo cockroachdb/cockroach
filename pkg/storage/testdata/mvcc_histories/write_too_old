@@ -25,3 +25,30 @@ meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,
 data: "a"/44.000000000,1 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
+
+run ok
+resolve_intent t=A k=a status=ABORTED
+----
+>> at end:
+data: "a"/44.000000000,0 -> /BYTES/abc
+
+## A more complex txn writing at an older timestamp but with an uncertainty
+## interval that extends past the value.
+## This is expected to fail with a "write too old" error and NOT a "read within
+## uncertainty interval" error.
+
+run error
+with t=B
+  txn_begin  ts=33 maxTs=55
+  cput   k=a v=def
+----
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false max=55.000000000,0
+data: "a"/44.000000000,0 -> /BYTES/abc
+error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 33.000000000,0 encountered previous write with future timestamp 44.000000000,0 within uncertainty interval `t <= (local=0,0, global=55.000000000,0)`; observed timestamps: []
+
+run ok
+resolve_intent t=B k=a status=ABORTED
+----
+>> at end:
+data: "a"/44.000000000,0 -> /BYTES/abc
