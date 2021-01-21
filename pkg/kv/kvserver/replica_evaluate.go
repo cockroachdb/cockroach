@@ -150,6 +150,7 @@ func evaluateBatch(
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	readOnly bool,
 ) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
 
@@ -268,7 +269,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply)
+			ctx, idKey, index, readWriter, rec, ms, baHeader, args, reply, lul)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -487,16 +488,18 @@ func evaluateCommand(
 	h roachpb.Header,
 	args roachpb.Request,
 	reply roachpb.Response,
+	lul hlc.Timestamp,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
 
 	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
 		cArgs := batcheval.CommandArgs{
-			EvalCtx: rec,
-			Header:  h,
-			Args:    args,
-			Stats:   ms,
+			EvalCtx:               rec,
+			Header:                h,
+			Args:                  args,
+			Stats:                 ms,
+			LocalUncertaintyLimit: lul,
 		}
 
 		if cmd.EvalRW != nil {
