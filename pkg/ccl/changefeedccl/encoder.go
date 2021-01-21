@@ -271,8 +271,8 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	registryURL                        string
-	updatedField, beforeField, keyOnly bool
+	registryURL                                       string
+	updatedField, beforeField, keyOnly, fullTableName bool
 
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -324,12 +324,12 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
+	_, e.fullTableName = opts[changefeedbase.OptFullTableName]
 
 	if len(e.registryURL) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
 			changefeedbase.OptConfluentSchemaRegistry, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-
 	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
 	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
@@ -339,10 +339,12 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
 	cacheKey := makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
+
 	registered, ok := e.keyCache[cacheKey]
 	if !ok {
 		var err error
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex())
+
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), row.tableDesc.GetName())
 		if err != nil {
 			return nil, err
 		}
