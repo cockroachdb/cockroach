@@ -30,11 +30,26 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
+statement error REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported
+CREATE TABLE regional_by_row_table (
+  pk int
+)
+PARTITION BY NOTHING
+LOCALITY REGIONAL BY ROW
+
 statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
   INDEX (a) PARTITION BY LIST (a) (PARTITION one VALUES IN ((1)))
+)
+LOCALITY REGIONAL BY ROW
+
+statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
+CREATE TABLE regional_by_row_table (
+  pk int,
+  a int,
+  INDEX (a) PARTITION BY NOTHING
 )
 LOCALITY REGIONAL BY ROW
 
@@ -45,6 +60,15 @@ CREATE TABLE regional_by_row_table (
   UNIQUE (a) PARTITION BY LIST (a) (PARTITION one VALUES IN ((1)))
 )
 LOCALITY REGIONAL BY ROW
+
+statement error REGIONAL BY ROW on a table with an UNIQUE constraint containing PARTITION BY is not supported
+CREATE TABLE regional_by_row_table (
+  pk int,
+  a int,
+  UNIQUE (a) PARTITION BY NOTHING
+)
+LOCALITY REGIONAL BY ROW
+
 
 statement ok
 CREATE TABLE regional_by_row_table (
