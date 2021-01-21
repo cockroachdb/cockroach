@@ -64,7 +64,7 @@ func TestAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if mutations.MaxBatchSize() == 1 {
+	if mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) == 1 {
 		// This test relies on the fact that the mutation batch consisting of a
 		// single row also contains an EndTxn which is the case only when the
 		// max batch size is at least 2, so we'll skip it.

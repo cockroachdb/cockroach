@@ -71,8 +71,8 @@ func (s *ColBatchScan) Init() {
 	s.init = true
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
-		s.ctx, s.flowCtx.Txn, s.spans,
-		limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.ctx, s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)
 	}

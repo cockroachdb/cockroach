@@ -764,6 +764,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context, txn *kv.Txn) (rowenc.EncDatu
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			return nil, err
@@ -908,6 +909,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
 			z.FlowCtx.TraceKV,
+			z.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 		if err != nil {
 			log.Errorf(z.Ctx, "scan error: %s", err)
