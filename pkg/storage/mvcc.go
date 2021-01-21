@@ -769,6 +769,26 @@ type MVCCGetOptions struct {
 	Tombstones       bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
+	// by any observed timestamp that the transaction has acquired from the node
+	// that holds the lease for the range that the transaction is evaluating on.
+	//
+	// The local uncertainty limit can reduce the uncertainty interval applied
+	// to most values on a range. This can lead to values that would otherwise
+	// be considered uncertain by the original global uncertainty limit to be
+	// considered "certainly concurrent", and thus not causally related, with
+	// the transaction due to observed timestamps.
+	//
+	// However, the local uncertainty limit does not apply to all values on a
+	// range. Specifically, values with "synthetic timestamps" must use the
+	// transaction's original global uncertainty limit for the purposes of
+	// uncertainty, because observed timestamps do not apply to values with
+	// synthetic timestamps.
+	//
+	// See pkg/kv/kvserver/observedts for more details.
+	//
+	// The field is only set if Txn is also set.
+	LocalUncertaintyLimit hlc.Timestamp
 }
 
 func (opts *MVCCGetOptions) validate() error {
@@ -1638,6 +1658,9 @@ func mvccPutInternal(
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
 			if txn != nil {
+				// TODO(nvanbenschoten): can this call return a
+				// ReadWithinUncertaintyInterval error? It shouldn't. Once we
+				// support local uncertainty limits, maybe we pass a limit of 0?
 				if value, err = maybeGetValue(
 					ctx, iter, key, value, ok, readTimestamp, txn, valueFn); err != nil {
 					return err
@@ -2407,6 +2430,26 @@ type MVCCScanOptions struct {
 	Reverse          bool
 	FailOnMoreRecent bool
 	Txn              *roachpb.Transaction
+	// LocalUncertaintyLimit is the transaction's GlobalUncertaintyLimit, reduce
+	// by any observed timestamp that the transaction has acquired from the node
+	// that holds the lease for the range that the transaction is evaluating on.
+	//
+	// The local uncertainty limit can reduce the uncertainty interval applied
+	// to most values on a range. This can lead to values that would otherwise
+	// be considered uncertain by the original global uncertainty limit to be
+	// considered "certainly concurrent", and thus not causally related, with
+	// the transaction due to observed timestamps.
+	//
+	// However, the local uncertainty limit does not apply to all values on a
+	// range. Specifically, values with "synthetic timestamps" must use the
+	// transaction's original global uncertainty limit for the purposes of
+	// uncertainty, because observed timestamps do not apply to values with
+	// synthetic timestamps.
+	//
+	// See pkg/kv/kvserver/observedts for more details.
+	//
+	// The field is only set if Txn is also set.
+	LocalUncertaintyLimit hlc.Timestamp
 	// MaxKeys is the maximum number of kv pairs returned from this operation.
 	// The zero value represents an unbounded scan. If the limit stops the scan,
 	// a corresponding ResumeSpan is returned. As a special case, the value -1
@@ -2463,7 +2506,9 @@ type MVCCScanResult struct {
 // Only keys that with a timestamp less than or equal to the supplied timestamp
 // will be included in the scan results. If a transaction is provided and the
 // scan encounters a value with a timestamp between the supplied timestamp and
-// the transaction's max timestamp, an uncertainty error will be returned.
+// the transaction's global uncertainty limit, an uncertainty error will be
+// returned. This window of uncertainty is reduced down to the local uncertainty
+// limit, if one is provided.
 //
 // In tombstones mode, if the most recent value for a key is a deletion
 // tombstone, the scan result will contain a roachpb.KeyValue for that key whose
