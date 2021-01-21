@@ -876,7 +876,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn)
+	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 	mvccScanner.get()
 
 	if mvccScanner.err != nil {
@@ -2338,7 +2338,7 @@ func mvccScanToBytes(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn)
+	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 
 	var res MVCCScanResult
 	var err error
