@@ -720,6 +720,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 ) {
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
@@ -740,7 +741,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
 		spanExpr, constraint, remainingFilters, pfState, filterOk := invertedidx.TryFilterInvertedIndex(
-			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index,
+			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
 		)
 		if filterOk {
 			spansToRead = spanExpr.SpansToRead

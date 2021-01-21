@@ -72,6 +72,7 @@ func TryFilterInvertedIndex(
 	optionalFilters memo.FiltersExpr,
 	tabID opt.TableID,
 	index cat.Index,
+	computedColumns map[opt.ColumnID]opt.ScalarExpr,
 ) (
 	spanExpr *invertedexpr.SpanExpression,
 	constraint *constraint.Constraint,
@@ -81,6 +82,8 @@ func TryFilterInvertedIndex(
 ) {
 	// Attempt to constrain the prefix columns, if there are any. If they cannot
 	// be constrained to single values, the index cannot be used.
+	// TODO(mgartner): Use computedColumns to attempt to constrain prefix
+	// columns.
 	constraint, filters, ok = constrainPrefixColumns(
 		evalCtx, factory, filters, optionalFilters, tabID, index,
 	)
@@ -109,8 +112,9 @@ func TryFilterInvertedIndex(
 		typ = types.Geometry
 	} else {
 		filterPlanner = &jsonOrArrayFilterPlanner{
-			tabID: tabID,
-			index: index,
+			tabID:           tabID,
+			index:           index,
+			computedColumns: computedColumns,
 		}
 		col := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
 		typ = factory.Metadata().Table(tabID).Column(col).DatumType()
@@ -498,20 +502,21 @@ func extractInvertedFilterCondition(
 	}
 }
 
-// indexColumnVariable returns a variable expression (a type-asserted form of e)
-// and ok=true if e is a variable expression that corresponds to the inverted
-// index column.
-func indexColumnVariable(
-	tabID opt.TableID, index cat.Index, e opt.Expr,
-) (_ *memo.VariableExpr, ok bool) {
-	variable, ok := e.(*memo.VariableExpr)
-	if !ok {
-		return nil, false
-	}
+// isIndexColumn returns true if e is an expression that corresponds to an
+// inverted index column. The expression can be either:
+//  - a variable on the index column, or
+//  - an expression that matches the computed column expression (if the index
+//    column is computed).
+//
+func isIndexColumn(
+	tabID opt.TableID, index cat.Index, e opt.Expr, computedColumns map[opt.ColumnID]opt.ScalarExpr,
+) bool {
 	invertedIndexCol := tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal())
-	if variable.Col != invertedIndexCol {
-		// The column does not match the index column.
-		return nil, false
+	if v, ok := e.(*memo.VariableExpr); ok && v.Col == invertedIndexCol {
+		return true
 	}
-	return variable, true
+	if computedColumns != nil && e == computedColumns[invertedIndexCol] {
+		return true
+	}
+	return false
 }

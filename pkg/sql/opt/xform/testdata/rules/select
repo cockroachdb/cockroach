@@ -3389,7 +3389,8 @@ project
  ├── key: (1)
  └── scan computed@field_inv_idx
       ├── columns: k:1!null
-      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /8/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
 # Tests for multi-column inverted indexes.
