@@ -3337,7 +3337,21 @@ project
  ├── key: (1)
  └── scan computed@field_inv_idx
       ├── columns: k:1!null
-      ├── constraint: /5/1: [/'{"a": "b"}' - /'{"a": "b"}']
+      ├── inverted constraint: /8/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      └── key: (1)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM computed WHERE (j->'foo')->'a' = '1'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan computed@field_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /8/1
+      │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
       └── key: (1)
 
 # Tests for multi-column inverted indexes.
@@ -3841,6 +3855,44 @@ select
  │              └── fd: (1)-->(9)
  └── filters
       ├── a:2 = 'foo' [outer=(2), constraints=(/2: [/'foo' - /'foo']; tight), fd=()-->(2)]
+      └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
+
+# Constrain a prefix computed column when the computed expression matches a
+# filter expression.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM mc WHERE upper(a) = 'FOO' AND ST_CoveredBy('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom)
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null c:4 geom:5!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── index-join mc
+ │    ├── columns: k:1!null a:2!null b:3!null c:4 geom:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /9
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │         ├── pre-filterer expression
+ │         │    └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5)
+ │         ├── key: (1)
+ │         └── scan mc@mc_idx
+ │              ├── columns: k:1!null geom_inverted_key:9!null
+ │              ├── constraint: /4: [/'FOO' - /'FOO']
+ │              ├── inverted constraint: /9/1
+ │              │    └── spans
+ │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         ├── ["B\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+ │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(9)
+ └── filters
       └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:5) [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 exec-ddl

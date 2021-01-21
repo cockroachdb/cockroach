@@ -469,7 +469,13 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 		// the index when we expect to and we have the correct values for tight,
 		// unique, and remainingFilters.
 		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
-			evalCtx, &f, filters, nil /* optionalFilters */, tab, md.Table(tab).Index(tc.indexOrd),
+			evalCtx,
+			&f,
+			filters,
+			nil, /* optionalFilters */
+			tab,
+			md.Table(tab).Index(tc.indexOrd),
+			nil, /* computedColumns */
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
