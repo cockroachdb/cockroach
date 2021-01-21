@@ -170,6 +170,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",

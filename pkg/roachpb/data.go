@@ -1480,7 +1480,8 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	// timestamp from the node.
 	//
 	// TODO(nvanbenschoten): how is this supposed to work for follower reads?
-	// This is tracked in #57685.
+	// This is tracked in #57685. We can now use the LocalUncertaintyLimit in
+	// place of clockTS, which handles follower reads correctly.
 	clockTS, ok := txn.GetObservedTimestamp(origin)
 	if !ok {
 		log.Fatalf(ctx,
