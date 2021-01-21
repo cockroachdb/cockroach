@@ -173,6 +173,7 @@ func TestNextRowSingle(t *testing.T) {
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -293,6 +294,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -403,6 +405,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 		false, /*limitBatches*/
 		0,     /*limitHint*/
 		false, /*traceKV*/
+		false, /*forceProductionKVBatchSize*/
 	)
 	assert.Error(t, err)
 	assert.Equal(t, pgerror.GetPGCode(err), pgcode.OutOfMemory)
@@ -490,6 +493,7 @@ INDEX(c)
 		// batch that ends between rows.
 		1,     /*limitHint*/
 		false, /*traceKV*/
+		false, /*forceProductionKVBatchSize*/
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -650,6 +654,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -1007,6 +1012,7 @@ func TestNextRowInterleaved(t *testing.T) {
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
+				false, /*forceProductionKVBatchSize*/
 			); err != nil {
 				t.Fatal(err)
 			}

@@ -3223,6 +3223,9 @@ type EvalContextTestingKnobs struct {
 	// cost of each expression in the query tree for the purpose of creating
 	// alternate query plans in the optimizer.
 	OptimizerCostPerturbation float64
+	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
+	// to use the non-test value.
+	ForceProductionBatchSizes bool
 
 	CallbackGenerators map[string]*CallbackValueGenerator
 }

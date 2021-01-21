@@ -569,6 +569,7 @@ func (rf *Fetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -584,6 +585,7 @@ func (rf *Fetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
@@ -609,6 +611,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	forceProductionKVBatchSize bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -665,6 +668,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err

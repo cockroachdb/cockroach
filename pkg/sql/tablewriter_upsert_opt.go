@@ -99,7 +99,7 @@ var _ tableWriter = &optTableUpserter{}
 func (tu *optTableUpserter) init(
 	ctx context.Context, txn *kv.Txn, evalCtx *tree.EvalContext,
 ) error {
-	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc)
+	tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx)
 
 	// rowsNeeded, set upon initialization, indicates whether or not we want
 	// rows returned from the operation.

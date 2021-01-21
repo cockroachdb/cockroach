@@ -188,15 +188,16 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(
-			ctx, tr.FlowCtx.Txn, tr.spans,
-			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			ctx, tr.FlowCtx.Txn, tr.spans, limitBatches, tr.limitHint,
+			tr.FlowCtx.TraceKV,
+			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	} else {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
-			ctx, tr.FlowCtx.Cfg.DB, initialTS,
-			tr.maxTimestampAge, tr.spans,
+			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.spans,
 			limitBatches, tr.limitHint, tr.FlowCtx.TraceKV,
+			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
 

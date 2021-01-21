@@ -16,19 +16,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+const productionMaxBatchSize = 10000
+
 var maxBatchSize = defaultMaxBatchSize
 
 var defaultMaxBatchSize = int64(util.ConstantWithMetamorphicTestRange(
-	10000, /* defaultValue */
-	1,     /* min */
-	10000, /* max */
+	productionMaxBatchSize, /* defaultValue */
+	1,                      /* min */
+	productionMaxBatchSize, /* max */
 ))
 
 // MaxBatchSize returns the max number of entries in the KV batch for a
 // mutation operation (delete, insert, update, upsert) - including secondary
 // index updates, FK cascading updates, etc - before the current KV batch is
 // executed and a new batch is started.
-func MaxBatchSize() int {
+//
+// If forceProductionMaxBatchSize is true, then the "production" value will be
+// returned regardless of whether the build is metamorphic or not. This should
+// only be used by tests the output of which differs if maxBatchSize is
+// randomized.
+func MaxBatchSize(forceProductionMaxBatchSize bool) int {
+	if forceProductionMaxBatchSize {
+		return productionMaxBatchSize
+	}
 	return int(atomic.LoadInt64(&maxBatchSize))
 }
 
