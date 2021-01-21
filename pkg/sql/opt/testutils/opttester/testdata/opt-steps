@@ -473,6 +473,127 @@ GenerateLookupJoins (higher cost)
   -           └── variable: customers.id:5 [type=int]
   + └── filters (true)
 --------------------------------------------------------------------------------
+CommuteLeftJoin (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (lookup customers)
+  +right-join (hash)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+  - ├── key columns: [2] = [5]
+  - ├── lookup columns are key
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+  + ├── scan customers
+  + │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  + │    ├── key: (5)
+  + │    └── fd: (5)-->(6,7)
+    ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+    │    ├── check constraint expressions
+    │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+    │    │         ├── variable: status:3 [type=string]
+    │    │         └── tuple [type=tuple{string, string, string}]
+    │    │              ├── const: 'cancelled' [type=string]
+    │    │              ├── const: 'complete' [type=string]
+    │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+    │    └── fd: (1)-->(2,3)
+  - └── filters (true)
+  + └── filters
+  +      └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+  +           ├── variable: customer_id:2 [type=int]
+  +           └── variable: customers.id:5 [type=int]
+--------------------------------------------------------------------------------
+GenerateMergeJoins (higher cost)
+--------------------------------------------------------------------------------
+  -right-join (hash)
+  +left-join (merge)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+  + ├── left ordering: +2
+  + ├── right ordering: +5
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+  + ├── sort
+  + │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │    ├── key: (1)
+  + │    ├── fd: (1)-->(2,3)
+  + │    ├── ordering: +2
+  + │    └── scan orders
+  + │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │         ├── check constraint expressions
+  + │         │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  + │         │         ├── variable: status:3 [type=string]
+  + │         │         └── tuple [type=tuple{string, string, string}]
+  + │         │              ├── const: 'cancelled' [type=string]
+  + │         │              ├── const: 'complete' [type=string]
+  + │         │              └── const: 'open' [type=string]
+  + │         ├── key: (1)
+  + │         └── fd: (1)-->(2,3)
+    ├── scan customers
+    │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+    │    ├── key: (5)
+  - │    └── fd: (5)-->(6,7)
+  - ├── scan orders
+  - │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │    ├── check constraint expressions
+  - │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  - │    │         ├── variable: status:3 [type=string]
+  - │    │         └── tuple [type=tuple{string, string, string}]
+  - │    │              ├── const: 'cancelled' [type=string]
+  - │    │              ├── const: 'complete' [type=string]
+  - │    │              └── const: 'open' [type=string]
+  - │    ├── key: (1)
+  - │    └── fd: (1)-->(2,3)
+  - └── filters
+  -      └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+  -           ├── variable: customer_id:2 [type=int]
+  -           └── variable: customers.id:5 [type=int]
+  + │    ├── fd: (5)-->(6,7)
+  + │    └── ordering: +5
+  + └── filters (true)
+--------------------------------------------------------------------------------
+GenerateLookupJoins (higher cost)
+--------------------------------------------------------------------------------
+  -left-join (merge)
+  +left-join (lookup customers)
+    ├── columns: id:1(int!null) customer_id:2(int) status:3(string!null) id:5(int) name:6(string) address:7(string)
+  - ├── left ordering: +2
+  - ├── right ordering: +5
+  + ├── key columns: [2] = [5]
+  + ├── lookup columns are key
+    ├── key: (1)
+    ├── fd: (1)-->(2,3,5-7), (5)-->(6,7)
+  - ├── sort
+  + ├── scan orders
+    │    ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  + │    ├── check constraint expressions
+  + │    │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  + │    │         ├── variable: status:3 [type=string]
+  + │    │         └── tuple [type=tuple{string, string, string}]
+  + │    │              ├── const: 'cancelled' [type=string]
+  + │    │              ├── const: 'complete' [type=string]
+  + │    │              └── const: 'open' [type=string]
+    │    ├── key: (1)
+  - │    ├── fd: (1)-->(2,3)
+  - │    ├── ordering: +2
+  - │    └── scan orders
+  - │         ├── columns: orders.id:1(int!null) customer_id:2(int) status:3(string!null)
+  - │         ├── check constraint expressions
+  - │         │    └── in [type=bool, outer=(3), constraints=(/3: [/'cancelled' - /'cancelled'] [/'complete' - /'complete'] [/'open' - /'open']; tight)]
+  - │         │         ├── variable: status:3 [type=string]
+  - │         │         └── tuple [type=tuple{string, string, string}]
+  - │         │              ├── const: 'cancelled' [type=string]
+  - │         │              ├── const: 'complete' [type=string]
+  - │         │              └── const: 'open' [type=string]
+  - │         ├── key: (1)
+  - │         └── fd: (1)-->(2,3)
+  - ├── scan customers
+  - │    ├── columns: customers.id:5(int!null) name:6(string!null) address:7(string)
+  - │    ├── key: (5)
+  - │    ├── fd: (5)-->(6,7)
+  - │    └── ordering: +5
+  + │    └── fd: (1)-->(2,3)
+    └── filters (true)
+--------------------------------------------------------------------------------
 GenerateMergeJoins (higher cost)
 --------------------------------------------------------------------------------
   -left-join (lookup customers)
@@ -515,6 +636,9 @@ GenerateMergeJoins (higher cost)
   + │         ├── key: (1)
   + │         └── fd: (1)-->(2,3)
     └── filters (true)
+--------------------------------------------------------------------------------
+GenerateMergeJoins (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 Final best expression
   Cost: 2168.06
