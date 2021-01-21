@@ -230,6 +230,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/streamingccl",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
