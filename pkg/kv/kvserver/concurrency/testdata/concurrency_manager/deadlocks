@@ -161,8 +161,10 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [4] sequence req1r: detected pusher aborted
+[4] sequence req1r: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
 [6] sequence req3r: resolving intent "a" for txn 00000001 with ABORTED status
+[6] sequence req3r: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [6] sequence req3r: acquiring latches
 [6] sequence req3r: scanning lock table for conflicting locks
 [6] sequence req3r: sequencing complete, returned guard
@@ -176,6 +178,7 @@ on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [5] sequence req2r: resolving intent "c" for txn 00000003 with COMMITTED status
+[5] sequence req2r: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 1.23s
 [5] sequence req2r: acquiring latches
 [5] sequence req2r: scanning lock table for conflicting locks
 [5] sequence req2r: sequencing complete, returned guard
@@ -376,12 +379,15 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [4] sequence req4w: resolving intent "a" for txn 00000001 with ABORTED status
+[4] sequence req4w: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [4] sequence req4w: acquiring latches
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: sequencing complete, returned guard
 [5] sequence req1w2: detected pusher aborted
+[5] sequence req1w2: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
+[7] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [7] sequence req3w2: pushing txn 00000004 to detect request deadlock
 [7] sequence req3w2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -389,6 +395,7 @@ on-txn-updated txn=txn1 status=aborted
 finish req=req4w
 ----
 [-] finish req4w: finishing request
+[7] sequence req3w2: conflicted with 00000004-0000-0000-0000-000000000000 on "a" for 1.23s
 [7] sequence req3w2: acquiring latches
 [7] sequence req3w2: scanning lock table for conflicting locks
 [7] sequence req3w2: sequencing complete, returned guard
@@ -402,6 +409,7 @@ on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [6] sequence req2w2: resolving intent "c" for txn 00000003 with COMMITTED status
+[6] sequence req2w2: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 1.23s
 [6] sequence req2w2: acquiring latches
 [6] sequence req2w2: scanning lock table for conflicting locks
 [6] sequence req2w2: sequencing complete, returned guard
@@ -537,6 +545,7 @@ on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
 [4] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
+[4] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [4] sequence req4w: pushing txn 00000003 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -612,7 +621,9 @@ on-txn-updated txn=txn4 status=aborted
 ----
 [-] update txn: aborting txn4
 [4] sequence req4w: detected pusher aborted
+[4] sequence req4w: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 1.23s
 [4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: conflicted with 00000004-0000-0000-0000-000000000000 on "b" for 1.23s
 [5] sequence req1w2: acquiring latches
 [5] sequence req1w2: scanning lock table for conflicting locks
 [5] sequence req1w2: sequencing complete, returned guard
@@ -626,6 +637,7 @@ on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
 [6] sequence req3w2: resolving intent "a" for txn 00000001 with COMMITTED status
+[6] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
@@ -761,6 +773,7 @@ on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
 [4] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
+[4] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [4] sequence req4w: pushing txn 00000003 to abort
 [4] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -836,8 +849,10 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [5] sequence req1w2: detected pusher aborted
+[5] sequence req1w2: conflicted with 00000004-0000-0000-0000-000000000000 on "b" for 1.23s
 [5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
 [6] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
+[6] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
@@ -851,6 +866,7 @@ on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [4] sequence req4w: resolving intent "c" for txn 00000003 with COMMITTED status
+[4] sequence req4w: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 1.23s
 [4] sequence req4w: acquiring latches
 [4] sequence req4w: scanning lock table for conflicting locks
 [4] sequence req4w: sequencing complete, returned guard
@@ -1006,6 +1022,7 @@ on-txn-updated txn=txn1 status=committed
 ----
 [-] update txn: committing txn1
 [5] sequence req4w: resolving intent "a" for txn 00000001 with COMMITTED status
+[5] sequence req4w: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 1.23s
 [5] sequence req4w: pushing txn 00000002 to abort
 [5] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1013,9 +1030,11 @@ on-txn-updated txn=txn2 status=committed
 ----
 [-] update txn: committing txn2
 [4] sequence req5w: resolving intent "b" for txn 00000002 with COMMITTED status
+[4] sequence req5w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [4] sequence req5w: pushing txn 00000003 to abort
 [4] sequence req5w: blocked on select in concurrency_test.(*cluster).PushTransaction
 [5] sequence req4w: resolving intent "b" for txn 00000002 with COMMITTED status
+[5] sequence req4w: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 1.23s
 [5] sequence req4w: pushing txn 00000005 to detect request deadlock
 [5] sequence req4w: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -1081,7 +1100,9 @@ on-txn-updated txn=txn4 status=aborted
 ----
 [-] update txn: aborting txn4
 [5] sequence req4w: detected pusher aborted
+[5] sequence req4w: conflicted with 00000005-0000-0000-0000-000000000000 on "b" for 1.23s
 [5] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[6] sequence req3w2: conflicted with 00000004-0000-0000-0000-000000000000 on "a" for 1.23s
 [6] sequence req3w2: acquiring latches
 [6] sequence req3w2: scanning lock table for conflicting locks
 [6] sequence req3w2: sequencing complete, returned guard
@@ -1095,6 +1116,7 @@ on-txn-updated txn=txn3 status=committed
 ----
 [-] update txn: committing txn3
 [4] sequence req5w: resolving intent "c" for txn 00000003 with COMMITTED status
+[4] sequence req5w: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 1.23s
 [4] sequence req5w: acquiring latches
 [4] sequence req5w: scanning lock table for conflicting locks
 [4] sequence req5w: sequencing complete, returned guard

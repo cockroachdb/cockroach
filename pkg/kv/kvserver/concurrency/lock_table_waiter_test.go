@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -343,7 +344,11 @@ func testWaitNoopUntilDone(t *testing.T, k waitKind, makeReq func() Request) {
 	w, _, g := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)
 
-	g.state = waitingState{kind: k}
+	txn := makeTxnProto("noop-wait-txn")
+	g.state = waitingState{
+		kind: k,
+		txn:  &txn.TxnMeta,
+	}
 	g.notify()
 	defer notifyUntilDone(t, g)()
 
@@ -644,4 +649,50 @@ func BenchmarkTxnCache(b *testing.B) {
 			_, _ = c.get(txnOp.ID)
 		}
 	}
+}
+
+func TestContentionEventHelper(t *testing.T) {
+	// This is mostly a regression test that ensures that we don't
+	// accidentally update tBegin when continuing to handle the same event.
+	// General coverage of the helper results from TestConcurrencyManagerBasic.
+
+	tr := tracing.NewTracer()
+	sp := tr.StartSpan("foo", tracing.WithForceRealSpan())
+
+	var sl []*roachpb.ContentionEvent
+	h := contentionEventHelper{
+		sp: sp,
+		onEvent: func(ev *roachpb.ContentionEvent) {
+			sl = append(sl, ev)
+		},
+	}
+	txn := makeTxnProto("foo")
+	h.emitAndInit(waitingState{
+		kind: waitForDistinguished,
+		key:  roachpb.Key("a"),
+		txn:  &txn.TxnMeta,
+	})
+	require.Empty(t, sl)
+	require.NotZero(t, h.tBegin)
+	tBegin := h.tBegin
+
+	// Another event for the same txn/key should not mutate tBegin
+	// or emit an event.
+	h.emitAndInit(waitingState{
+		kind: waitFor,
+		key:  roachpb.Key("a"),
+		txn:  &txn.TxnMeta,
+	})
+	require.Empty(t, sl)
+	require.Equal(t, tBegin, h.tBegin)
+
+	h.emitAndInit(waitingState{
+		kind: waitForDistinguished,
+		key:  roachpb.Key("b"),
+		txn:  &txn.TxnMeta,
+	})
+	require.Len(t, sl, 1)
+	require.Equal(t, txn.TxnMeta, sl[0].TxnMeta)
+	require.Equal(t, roachpb.Key("a"), sl[0].Key)
+	require.NotZero(t, sl[0].Duration)
 }
