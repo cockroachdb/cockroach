@@ -295,6 +295,11 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 }
 
 func makeMetrics(internal bool) Metrics {
+	// fullTableIndexScan is only instantiated for non-internal queries
+	var fullTableIndexScan *metric.Counter
+	if internal == false {
+		fullTableIndexScan = metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal))
+	}
 	return Metrics{
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
@@ -316,6 +321,7 @@ func makeMetrics(internal bool) Metrics {
 
 			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+			FullTableOrIndexScanCount: fullTableIndexScan,
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),

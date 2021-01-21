@@ -918,13 +918,15 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	// - plan contains a full table or full index scan.
 	// - the session setting disallows full table/index scans.
 	// - the query is not an internal query.
-	if (flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)) &&
-		planner.EvalContext().SessionData.DisallowFullTableScans && ex.executorType == executorTypeExec {
-		return errors.WithHint(
-			pgerror.Newf(pgcode.TooManyRows,
-				"query `%s` contains a full table/index scan which is explicitly disallowed",
-				planner.stmt.SQL),
-			"try overriding the `disallow_full_table_scans` cluster/session setting")
+	if (flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)) && ex.executorType == executorTypeExec {
+		if planner.EvalContext().SessionData.DisallowFullTableScans {
+			return errors.WithHint(
+				pgerror.Newf(pgcode.TooManyRows,
+					"query `%s` contains a full table/index scan which is explicitly disallowed",
+					planner.stmt.SQL),
+				"try overriding the `disallow_full_table_scans` cluster/session setting")
+		}
+		ex.metrics.EngineMetrics.FullTableOrIndexScanCount.Inc(1)
 	}
 
 	// TODO(knz): Remove this accounting if/when savepoint rollbacks

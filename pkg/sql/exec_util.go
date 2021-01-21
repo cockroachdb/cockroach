@@ -474,6 +474,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaFullTableOrIndexScan = metric.Metadata{
+		Name:        "sql.full.table.index.scan.count",
+		Help:        "Number of full table or index scans",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Below are the metadata for the statement started counters.
 
