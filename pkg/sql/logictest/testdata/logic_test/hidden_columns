@@ -48,13 +48,3 @@ query II
 SELECT 42, x FROM t
 ----
 42  123
-
-# Check that ALTER can make hidden columns visible.
-
-statement ok
-ALTER TABLE kv ALTER v SET VISIBLE
-
-query I
-SELECT * FROM kv
-----
-456

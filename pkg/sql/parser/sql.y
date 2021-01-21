@@ -1343,7 +1343,6 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
-//   ALTER TABLE ... ALTER [COLUMN] <colname> SET [NOT] VISIBLE
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... ALTER PRIMARY KEY USING INDEX <name>
 //   ALTER TABLE ... RENAME TO <newname>
@@ -1362,7 +1361,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... SET LOCALITY [REGIONAL BY [TABLE IN <region> | ROW] | GLOBAL]
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | [NOT] VISIBLE | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
@@ -1896,16 +1895,6 @@ alter_table_cmd:
 | ALTER opt_column column_name SET NOT NULL
   {
     $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
-  }
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT VISIBLE
-| ALTER opt_column column_name SET NOT VISIBLE
-  {
-    $$.val = &tree.AlterTableSetHidden{Column: tree.Name($3), Hidden: true}
-  }
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET VISIBLE
-| ALTER opt_column column_name SET VISIBLE
-  {
-    $$.val = &tree.AlterTableSetHidden{Column: tree.Name($3), Hidden: false}
   }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS column_name opt_drop_behavior

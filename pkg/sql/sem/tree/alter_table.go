@@ -73,7 +73,6 @@ func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
-func (*AlterTableSetHidden) alterTableCmd()          {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionBy) alterTableCmd()        {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
@@ -91,7 +90,6 @@ var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
-var _ AlterTableCmd = &AlterTableSetHidden{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionBy{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
@@ -409,37 +407,6 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 		ctx.WriteString(" SET DEFAULT ")
 		ctx.FormatNode(node.Default)
 	}
-}
-
-// AlterTableSetHidden represents an ALTER COLUMN SET NOT VISIBLE
-// command.
-type AlterTableSetHidden struct {
-	Column Name
-	Hidden bool
-}
-
-// Format implements the NodeFormatter interface.
-func (node *AlterTableSetHidden) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ALTER COLUMN ")
-	ctx.FormatNode(&node.Column)
-	ctx.WriteString(" SET ")
-	if node.Hidden {
-		ctx.WriteString("NOT ")
-	}
-	ctx.WriteString("VISIBLE")
-}
-
-// GetColumn implements the ColumnMutationCmd interface.
-func (node *AlterTableSetHidden) GetColumn() Name {
-	return node.Column
-}
-
-// TelemetryCounter implements the AlterTableCmd interface.
-func (node *AlterTableSetHidden) TelemetryCounter() telemetry.Counter {
-	if node.Hidden {
-		return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_not_visible")
-	}
-	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_visible")
 }
 
 // AlterTableSetNotNull represents an ALTER COLUMN SET NOT NULL

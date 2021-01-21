@@ -1077,8 +1077,6 @@ func applyColumnMutation(
 				"column %q is not a computed column", col.Name)
 		}
 		col.ComputeExpr = nil
-	case *tree.AlterTableSetHidden:
-		col.Hidden = t.Hidden
 	}
 	return nil
 }
