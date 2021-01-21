@@ -250,6 +250,14 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	false,
 )
 
+// InterleavedTablesEnabled is the setting that controls whether it's possible
+// to create interleaved indexes or tables.
+var InterleavedTablesEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.interleaved_tables.enabled",
+	"allows creation of interleaved tables or indexes",
+	false,
+)
+
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the
