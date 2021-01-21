@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -88,6 +89,8 @@ func (p *planner) UnsafeUpsertDescriptor(
 	// Validate that existing is sane and store its hex serialization into
 	// existingStr to be written to the event log.
 	var existingStr string
+	var previousOwner string
+	var previousUserPrivileges []descpb.UserPrivileges
 	if existing != nil {
 		if existing.IsUncommittedVersion() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -103,27 +106,38 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", existing, err)
 		}
 		existingStr = hex.EncodeToString(marshaled)
+		previousOwner = existing.GetPrivileges().Owner().Normalized()
+		previousUserPrivileges = existing.GetPrivileges().Users
 	}
 
+	var objectType privilege.ObjectType
 	switch md := existing.(type) {
 	case *tabledesc.Mutable:
 		md.TableDescriptor = *desc.GetTable() // nolint:descriptormarshal
+		objectType = privilege.Table
 	case *schemadesc.Mutable:
 		md.SchemaDescriptor = *desc.GetSchema()
+		objectType = privilege.Schema
 	case *dbdesc.Mutable:
 		md.DatabaseDescriptor = *desc.GetDatabase()
+		objectType = privilege.Database
 	case *typedesc.Mutable:
 		md.TypeDescriptor = *desc.GetType()
+		objectType = privilege.Type
 	case nil:
 		// nolint:descriptormarshal
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			existing = tabledesc.NewCreatedMutable(*tableDesc)
+			objectType = privilege.Table
 		} else if schemaDesc := desc.GetSchema(); schemaDesc != nil {
 			existing = schemadesc.NewCreatedMutable(*schemaDesc)
+			objectType = privilege.Schema
 		} else if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			existing = dbdesc.NewCreatedMutable(*dbDesc)
+			objectType = privilege.Database
 		} else if typeDesc := desc.GetType(); typeDesc != nil {
 			existing = typedesc.NewCreatedMutable(*typeDesc)
+			objectType = privilege.Type
 		} else {
 			return pgerror.New(pgcode.InvalidTableDefinition, "invalid ")
 		}
@@ -141,13 +155,176 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return err
 		}
 	}
-	return p.logEvent(ctx, id,
-		&eventpb.UnsafeUpsertDescriptor{
-			PreviousDescriptor: existingStr,
-			NewDescriptor:      hex.EncodeToString(encodedDesc),
-			Force:              force,
-			ForceNotice:        forceNoticeString,
+
+	// Log any ownership changes.
+	newOwner := existing.GetPrivileges().Owner().Normalized()
+	if previousOwner != newOwner {
+		if err := logOwnerEvents(ctx, p, newOwner, existing); err != nil {
+			return err
+		}
+	}
+
+	// Log any privilege changes.
+	if err := comparePrivileges(
+		ctx, p, existing, previousUserPrivileges, objectType,
+	); err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx, id, &eventpb.UnsafeUpsertDescriptor{
+		PreviousDescriptor: existingStr,
+		NewDescriptor:      hex.EncodeToString(encodedDesc),
+		Force:              force,
+		ForceNotice:        forceNoticeString,
+	})
+}
+
+// comparePrivileges iterates through all users and for each user, compares
+// their old privileges to their new privileges.
+// It then logs the granted and/or revoked privileges for that user.
+func comparePrivileges(
+	ctx context.Context,
+	p *planner,
+	existing catalog.MutableDescriptor,
+	previousUserPrivileges []descpb.UserPrivileges,
+	objectType privilege.ObjectType,
+) error {
+	newUserPrivileges := existing.GetPrivileges().Users
+
+	newUserPrivilegesMap := make(map[string]uint32) // Maps each username to bitfield of privileges.
+	for _, newUser := range newUserPrivileges {
+		newUserPrivilegesMap[newUser.User().Normalized()] = newUser.Privileges
+	}
+
+	for _, oldUser := range previousUserPrivileges {
+		var grantedPrivileges []string
+		var revokedPrivileges []string
+		username := oldUser.User().Normalized()
+
+		// User still in the UserPrivileges list after upsert, figure out which privileges have changed.
+		if newPrivileges, ok := newUserPrivilegesMap[username]; ok {
+			if oldUser.Privileges != newPrivileges { // User has different privileges
+
+				// Construct a set of this user's old privileges (before upsert).
+				oldPrivSet := make(map[string]struct{})
+				for _, priv := range privilege.ListFromBitField(oldUser.Privileges, objectType).SortedNames() {
+					oldPrivSet[priv] = struct{}{}
+				}
+
+				// Compare with this user's new privileges.
+				for _, priv := range privilege.ListFromBitField(newPrivileges, objectType).SortedNames() {
+					if _, ok := oldPrivSet[priv]; !ok {
+						// New privileges that do not exist in the old privileges set imply that they have been granted.
+						grantedPrivileges = append(grantedPrivileges, priv)
+					} else {
+						// Old privilege still exists, remove it from set.
+						delete(oldPrivSet, priv)
+					}
+				}
+
+				// Any remaining old privileges imply they do not exist in
+				// the new privilege set, so they have been revoked.
+				for priv := range oldPrivSet {
+					revokedPrivileges = append(revokedPrivileges, priv)
+				}
+			}
+
+			// Finished with this user, remove from the map.
+			delete(newUserPrivilegesMap, username)
+		} else {
+			// User no longer in the UserPrivileges list, all privileges revoked.
+			revokedPrivileges = privilege.ListFromBitField(oldUser.Privileges, objectType).SortedNames()
+		}
+
+		// Log the events for this user's privilege changes.
+		if err := logPrivilegeEvents(
+			ctx, p, existing, grantedPrivileges, revokedPrivileges, username,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Any leftovers in the new users map indicate privileges for a new user.
+	for username, privileges := range newUserPrivilegesMap {
+		grantedPrivileges := privilege.ListFromBitField(privileges, objectType).SortedNames()
+		// Log the events for this user's privilege changes.
+		if err := logPrivilegeEvents(
+			ctx, p, existing, grantedPrivileges, nil, username,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// logPrivilegeEvents logs the privilege event for each user.
+func logPrivilegeEvents(
+	ctx context.Context,
+	p *planner,
+	existing catalog.MutableDescriptor,
+	grantedPrivileges []string,
+	revokedPrivileges []string,
+	grantee string,
+) error {
+
+	eventDetails := eventpb.CommonSQLPrivilegeEventDetails{
+		Grantee:           grantee,
+		GrantedPrivileges: grantedPrivileges,
+		RevokedPrivileges: revokedPrivileges,
+	}
+
+	switch md := existing.(type) {
+	case *tabledesc.Mutable:
+		return p.logEvent(ctx, existing.GetID(), &eventpb.ChangeTablePrivilege{
+			CommonSQLPrivilegeEventDetails: eventDetails,
+			TableName:                      md.GetName(),
 		})
+	case *schemadesc.Mutable:
+		return p.logEvent(ctx, existing.GetID(), &eventpb.ChangeSchemaPrivilege{
+			CommonSQLPrivilegeEventDetails: eventDetails,
+			SchemaName:                     md.GetName(),
+		})
+	case *dbdesc.Mutable:
+		return p.logEvent(ctx, existing.GetID(), &eventpb.ChangeDatabasePrivilege{
+			CommonSQLPrivilegeEventDetails: eventDetails,
+			DatabaseName:                   md.GetName(),
+		})
+	case *typedesc.Mutable:
+		return p.logEvent(ctx, existing.GetID(), &eventpb.ChangeTypePrivilege{
+			CommonSQLPrivilegeEventDetails: eventDetails,
+			TypeName:                       md.GetName(),
+		})
+	}
+	return nil
+}
+
+// logPrivilegeEvents logs the owner event for a descriptor.
+func logOwnerEvents(
+	ctx context.Context, p *planner, newOwner string, existing catalog.MutableDescriptor,
+) error {
+	switch md := existing.(type) {
+	case *tabledesc.Mutable:
+		return p.logEvent(ctx, md.GetID(), &eventpb.AlterTableOwner{
+			TableName: md.GetName(),
+			Owner:     newOwner,
+		})
+	case *schemadesc.Mutable:
+		return p.logEvent(ctx, md.GetID(), &eventpb.AlterSchemaOwner{
+			SchemaName: md.GetName(),
+			Owner:      newOwner,
+		})
+	case *dbdesc.Mutable:
+		return p.logEvent(ctx, md.GetID(), &eventpb.AlterDatabaseOwner{
+			DatabaseName: md.GetName(),
+			Owner:        newOwner,
+		})
+	case *typedesc.Mutable:
+		return p.logEvent(ctx, md.GetID(), &eventpb.AlterTypeOwner{
+			TypeName: md.GetName(),
+			Owner:    newOwner,
+		})
+	}
+	return nil
 }
 
 // UnsafeUpsertNamespaceEntry powers the repair builtin of the same name. The
