@@ -1,4 +1,4 @@
-# LogicTest: !metamorphic
+# LogicTest: !metamorphic, !3node-tenant
 
 # Disable automatic stats
 statement ok
