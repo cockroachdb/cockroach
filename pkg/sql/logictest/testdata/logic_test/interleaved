@@ -450,14 +450,26 @@ subtest interleaved_deprecation_notice
 statement ok
 CREATE TABLE interleave_parent (x INT PRIMARY KEY);
 
-statement notice NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
+statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE TABLE interleave_create_notice (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
 
-statement notice NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
+statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE INDEX interleave_index ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
 
 statement ok
 CREATE TABLE interleave_pk_notice (x INT NOT NULL, y INT);
 
-statement notice NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
+statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
+ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = false
+
+statement error interleaved tables and interleaved indexes are disabled
+CREATE TABLE willfail (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement error interleaved tables and interleaved indexes are disabled
+CREATE INDEX willfail ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement error interleaved tables and interleaved indexes are disabled
 ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
