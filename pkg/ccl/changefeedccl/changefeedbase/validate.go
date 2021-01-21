@@ -49,9 +49,6 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *tabledesc.Immuta
 	if tableDesc.State == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
-	if tableDesc.Name != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
-	}
 
 	// TODO(mrtracy): re-enable this when allow-backfill option is added.
 	// if tableDesc.HasColumnBackfillMutation() {

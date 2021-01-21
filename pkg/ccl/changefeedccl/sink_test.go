@@ -66,8 +66,10 @@ func TestKafkaSink(t *testing.T) {
 	}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   map[string]struct{}{`t`: {}},
 	}
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
+	sink.setTargets(targets)
 	sink.start()
 	defer func() {
 		if err := sink.Close(); err != nil {
@@ -156,8 +158,10 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   map[string]struct{}{SQLNameToKafkaName(`☃`): {}},
 	}
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
+	sink.setTargets(targets)
 	sink.start()
 	defer func() { require.NoError(t, sink.Close()) }()
 	if err := sink.EmitRow(ctx, table(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
@@ -184,7 +188,8 @@ func TestSQLSink(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	table := func(name string) *tabledesc.Immutable {
-		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
+		id, _ := strconv.ParseUint(name, 36, 64)
+		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name, ID: descpb.ID(id)})
 	}
 
 	ctx := context.Background()
@@ -198,8 +203,8 @@ func TestSQLSink(t *testing.T) {
 	sinkURL.Path = `d`
 
 	targets := jobspb.ChangefeedTargets{
-		0: jobspb.ChangefeedTarget{StatementTimeName: `foo`},
-		1: jobspb.ChangefeedTarget{StatementTimeName: `bar`},
+		table(`foo`).GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
+		table(`bar`).GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
 	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
 	require.NoError(t, err)
@@ -210,7 +215,7 @@ func TestSQLSink(t *testing.T) {
 
 	// Undeclared topic
 	require.EqualError(t,
-		sink.EmitRow(ctx, table(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: nope`)
+		sink.EmitRow(ctx, table(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
 	require.NoError(t, sink.EmitRow(ctx, table(`foo`), []byte(`k1`), []byte(`v0`), zeroTS))
