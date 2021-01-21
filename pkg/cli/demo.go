@@ -18,11 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -274,12 +272,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	}
 	defer c.cleanup(ctx)
 
-	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
-	if err != nil {
-		log.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
-	} else {
-		log.Infof(ctx, "GEOS loaded from directory %s", loc)
-	}
+	initGEOS(ctx)
 
 	if err := c.start(ctx, cmd, gen); err != nil {
 		return checkAndMaybeShout(err)
