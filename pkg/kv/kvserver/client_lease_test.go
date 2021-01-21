@@ -216,7 +216,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	// liveness are not triggering gossiping.
 	for _, s := range tc.Servers {
 		pErr := s.Stores().VisitStores(func(store *kvserver.Store) error {
-			store.NodeLiveness().PauseHeartbeatLoopForTest()
+			store.GetStoreConfig().NodeLiveness.PauseHeartbeatLoopForTest()
 			return nil
 		})
 		if pErr != nil {
