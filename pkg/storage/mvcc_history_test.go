@@ -52,10 +52,10 @@ import (
 // cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent]
+// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]]
 // increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent]
+// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -673,6 +673,9 @@ func cmdGet(e *evalCtx) error {
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
 	}
+	if e.hasArg("localUncertaintyLimit") {
+		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
+	}
 	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
 	// NB: the error is returned below. This ensures the test can
 	// ascertain no result is populated in the intent when an error
@@ -768,6 +771,9 @@ func cmdScan(e *evalCtx) error {
 	}
 	if e.hasArg("failOnMoreRecent") {
 		opts.FailOnMoreRecent = true
+	}
+	if e.hasArg("localUncertaintyLimit") {
+		opts.LocalUncertaintyLimit = e.getTsWithName(nil, "localUncertaintyLimit")
 	}
 	if e.hasArg("max") {
 		var n int

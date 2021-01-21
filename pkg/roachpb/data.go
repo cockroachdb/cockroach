@@ -1478,6 +1478,9 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	// If the reader encountered a newer write within the uncertainty
 	// interval, we advance the txn's timestamp just past the last observed
 	// timestamp from the node.
+	//
+	// TODO(nvanbenschoten): how is this supposed to work for follower reads?
+	// This is tracked in #57685.
 	clockTS, ok := txn.GetObservedTimestamp(origin)
 	if !ok {
 		log.Fatalf(ctx,
