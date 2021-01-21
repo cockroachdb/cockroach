@@ -58,13 +58,8 @@ func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 ) bool {
 	// The first argument should be a variable corresponding to the index
 	// column.
-	variable, ok := left.(*memo.VariableExpr)
+	variable, ok := indexColumnVariable(j.tabID, j.index, left)
 	if !ok {
-		return false
-	}
-	if variable.Col != j.tabID.ColumnID(
-		j.index.VirtualInvertedColumn().InvertedSourceColumnOrdinal(),
-	) {
 		// The column does not match the index column.
 		return false
 	}
@@ -300,14 +295,8 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 ) invertedexpr.InvertedExpression {
 	// The first argument should be a variable corresponding to the index
 	// column.
-	variable, ok := left.(*memo.VariableExpr)
+	variable, ok := indexColumnVariable(j.tabID, j.index, left)
 	if !ok {
-		return invertedexpr.NonInvertedColExpression{}
-	}
-	if variable.Col != j.tabID.ColumnID(
-		j.index.VirtualInvertedColumn().InvertedSourceColumnOrdinal(),
-	) {
-		// The column does not match the index column.
 		return invertedexpr.NonInvertedColExpression{}
 	}
 

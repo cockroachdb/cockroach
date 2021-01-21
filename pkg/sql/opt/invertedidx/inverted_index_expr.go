@@ -497,3 +497,21 @@ func extractInvertedFilterCondition(
 		return filterPlanner.extractInvertedFilterConditionFromLeaf(evalCtx, filterCond)
 	}
 }
+
+// indexColumnVariable returns a variable expression (a type-asserted form of e)
+// and ok=true if e is a variable expression that corresponds to the inverted
+// index column.
+func indexColumnVariable(
+	tabID opt.TableID, index cat.Index, e opt.Expr,
+) (_ *memo.VariableExpr, ok bool) {
+	variable, ok := e.(*memo.VariableExpr)
+	if !ok {
+		return nil, false
+	}
+	invertedIndexCol := tabID.ColumnID(index.VirtualInvertedColumn().InvertedSourceColumnOrdinal())
+	if variable.Col != invertedIndexCol {
+		// The column does not match the index column.
+		return nil, false
+	}
+	return variable, true
+}
