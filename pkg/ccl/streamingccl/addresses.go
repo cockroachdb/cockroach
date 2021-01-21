@@ -25,6 +25,11 @@ func (sa StreamAddress) URL() (*url.URL, error) {
 // Each partition will emit events for a fixed span of keys.
 type PartitionAddress string
 
+// URL parses the partition address as a URL.
+func (pa PartitionAddress) URL() (*url.URL, error) {
+	return url.Parse(string(pa))
+}
+
 // Topology is a configuration of stream partitions. These are particular to a
 // stream. It specifies the number and addresses of partitions of the stream.
 //

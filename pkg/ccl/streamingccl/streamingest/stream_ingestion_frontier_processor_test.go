@@ -63,8 +63,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	pa1 := streamingccl.PartitionAddress("s3://my_streams/stream/partition1")
-	pa2 := streamingccl.PartitionAddress("s3://my_streams/stream/partition2")
+	pa1 := streamingccl.PartitionAddress("partition1")
+	pa2 := streamingccl.PartitionAddress("partition2")
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}
