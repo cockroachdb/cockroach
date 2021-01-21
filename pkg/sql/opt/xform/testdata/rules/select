@@ -1937,6 +1937,162 @@ index-join b
       │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
       └── key: (1)
 
+# Query using the fetch val and equality operators.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      └── key: (1)
+
+# Do not generate an inverted scan when the index of the fetch val operator is
+# not a string.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->0) = '"b"' [outer=(4), immutable]
+
+# Do not generate an inverted scan when right side of the equality is an array.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '["b"]'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->'a') = '["b"]' [outer=(4), immutable]
+
+# Do not generate an inverted scan when right side of the equality is an object.
+opt expect-not=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '{"b": "c"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── (j:4->'a') = '{"b": "c"}' [outer=(4), immutable]
+
+# Query using the fetch val and equality operators in a conjunction.
+opt expect=GenerateInvertedIndexScans disable=GenerateInvertedIndexZigzagJoins
+SELECT k FROM b WHERE j->'a' = '"b"' AND j->'c' = '"d"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: true
+      │         │    └── union spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── span expression
+      │              ├── tight: true, unique: true
+      │              └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+# Query using the fetch val and equality operators in a disjunction.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"' OR j->'c' = '"d"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
+# Query using the fetch val and equality operators in a disjunction with a
+# contains operator.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a' = '"b"' OR j @> '{"c": "d"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans
+           │         ├── ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+           │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
 # GenerateInvertedIndexScans propagates row-level locking information.
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j @> '{"a": "b"}' FOR UPDATE
@@ -4783,7 +4939,8 @@ SELECT k FROM inv_zz_partial WHERE j->'a' = '1' AND j->'b' = '2'
 ----
 project
  └── scan inv_zz_partial@zz_idx,partial
-      └── constraint: /2/1: [/'{"b": 2}' - /'{"b": 2}']
+      └── inverted constraint: /7/1
+           └── spans: ["7b\x00\x01*\x04\x00", "7b\x00\x01*\x04\x00"]
 
 # --------------------------------------------------
 # SplitDisjunction

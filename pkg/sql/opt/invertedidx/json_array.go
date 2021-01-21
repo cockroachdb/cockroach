@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -270,24 +271,32 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
 	switch t := expr.(type) {
-	// TODO(rytaft): Support JSON fetch val operator (->).
 	case *memo.ContainsExpr:
-		invertedExpr := j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right)
-		if !invertedExpr.IsTight() {
-			remainingFilters = expr
+		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right)
+	case *memo.EqExpr:
+		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
+			invertedExpr = j.extractJSONFetchValEqCondition(evalCtx, fetch, t.Right)
 		}
+	}
 
-		// We do not currently support pre-filtering for JSON and Array indexes, so
-		// the returned pre-filter state is nil.
-		return invertedExpr, remainingFilters, nil
-
-	default:
+	if invertedExpr == nil {
+		// An inverted expression could not be extracted.
 		return invertedexpr.NonInvertedColExpression{}, expr, nil
 	}
+
+	// If the extracted inverted expression is not tight then remaining filters
+	// must be applied after the inverted index scan.
+	if !invertedExpr.IsTight() {
+		remainingFilters = expr
+	}
+
+	// We do not currently support pre-filtering for JSON and Array indexes, so
+	// the returned pre-filter state is nil.
+	return invertedExpr, remainingFilters, nil
 }
 
 // extractJSONOrArrayContainsCondition extracts an InvertedExpression
-// representing an inverted filter over the given inverted index, based
+// representing an inverted filter over the planner's inverted index, based
 // on the given left and right expression arguments. Returns an empty
 // InvertedExpression if no inverted filter could be extracted.
 func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
@@ -315,4 +324,58 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 	}
 
 	return getSpanExprForJSONOrArrayIndex(evalCtx, d)
+}
+
+// extractJSONFetchValEqCondition extracts an InvertedExpression representing an
+// inverted filter over the planner's inverted index, based on equality between
+// a fetch val expression and a right scalar expression. If the following criteria
+// are not met, an empty InvertedExpression is returned.
+//
+//   1. The fetch value operator's left expression must be a variable
+//      referencing the inverted column in the index.
+//   2. The fetch value operator's right expression must be a constant string.
+//   3. The right expression in the equality expression must be a constant JSON
+//      value that is not an object or an array.
+//
+// TODO(mgartner): Support chained fetch val operators, e.g., j->'a'->'b' = '1'.
+func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
+	evalCtx *tree.EvalContext, fetch *memo.FetchValExpr, right opt.ScalarExpr,
+) invertedexpr.InvertedExpression {
+	// The left side of the fetch val expression, the Json field, should be a
+	// variable corresponding to the index column.
+	variable, ok := indexColumnVariable(j.tabID, j.index, fetch.Json)
+	if !ok {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// The right side of the fetch val expression, the Index field, should be a
+	// constant string.
+	if !memo.CanExtractConstDatum(fetch.Index) {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
+	if !ok {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// The right side of the equals expression should be a constant JSON value
+	// that is not an object or array.
+	if !memo.CanExtractConstDatum(right) {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	val, ok := memo.ExtractConstDatum(right).(*tree.DJSON)
+	if !ok {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+	typ := val.JSON.Type()
+	if typ == json.ObjectJSONType || typ == json.ArrayJSONType {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// Build a new JSON object of the form: {<key>: <right>}.
+	b := json.NewObjectBuilder(1)
+	b.Add(string(*key), val.JSON)
+	obj := tree.NewDJSON(b.Build())
+
+	return getSpanExprForJSONOrArrayIndex(evalCtx, obj)
 }
