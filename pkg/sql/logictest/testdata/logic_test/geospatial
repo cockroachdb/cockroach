@@ -5726,3 +5726,33 @@ LINESTRING (57.73791181125825 33.624956576975762, 10 125.599999999999994, 13.606
 LINESTRING (64 21.5, 22 102)
 POINT (22 102)
 POINT (0 0)
+
+query T
+SELECT ST_AsEWKT(ST_ShiftLongitude(geom)) FROM ( VALUES
+  ('POINT(0 0)'::geometry),
+  ('POINT(-1 90)'::geometry),
+  ('POINT(181 -23)'::geometry),
+  ('LINESTRING(2 2, 5 -60, 200 0)'::geometry),
+  ('POLYGON((-6 -10, 6 -10, 0 20, -6 -10), (3 2, -1 -1, 1 -5, 3 2))'::geometry)
+) t(geom);
+----
+POINT (0 0)
+POINT (359 90)
+POINT (-179 -23)
+LINESTRING (2 2, 5 -60, -160 0)
+POLYGON ((354 -10, 6 -10, 0 20, 354 -10), (3 2, 359 -1, 1 -5, 3 2))
+
+query T
+SELECT ST_AsEWKT(ST_ShiftLongitude(geom)) FROM ( VALUES
+  ('SRID=4326;POINT(0 0)'::geometry),
+  ('SRID=4326;POINT(-1 90)'::geometry),
+  ('SRID=4326;POINT(181 -23)'::geometry),
+  ('SRID=4326;LINESTRING(2 2, 5 -60, 200 0)'::geometry),
+  ('SRID=4326;POLYGON((-6 -10, 6 -10, 0 20, -6 -10), (3 2, -1 -1, 1 -5, 3 2))'::geometry)
+) t(geom);
+----
+SRID=4326;POINT (0 0)
+SRID=4326;POINT (359 90)
+SRID=4326;POINT (-179 -23)
+SRID=4326;LINESTRING (2 2, 5 -60, -160 0)
+SRID=4326;POLYGON ((354 -10, 6 -10, 0 20, 354 -10), (3 2, 359 -1, 1 -5, 3 2))
