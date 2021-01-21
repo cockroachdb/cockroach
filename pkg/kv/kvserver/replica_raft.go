@@ -68,10 +68,14 @@ func makeIDKey() kvserverbase.CmdIDKey {
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
-	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, lease *roachpb.Lease,
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	g *concurrency.Guard,
+	lease *roachpb.Lease,
+	lul hlc.Timestamp,
 ) (chan proposalResult, func(), int64, *roachpb.Error) {
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g.LatchSpans())
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, lul, g.LatchSpans())
 	log.Event(proposal.ctx, "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately
