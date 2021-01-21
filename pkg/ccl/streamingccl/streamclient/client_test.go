@@ -38,7 +38,7 @@ func (sc testStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (sc testStreamClient) ConsumePartition(
-	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, pa streamingccl.PartitionAddress, _ time.Time,
 ) (chan streamingccl.Event, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -49,8 +49,8 @@ func (sc testStreamClient) ConsumePartition(
 	}
 
 	events := make(chan streamingccl.Event, 2)
-	events <- streamingccl.MakeKVEvent(sampleKV)
-	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 100})
+	events <- streamingccl.MakeKVEvent(sampleKV, pa)
+	events <- streamingccl.MakeCheckpointEvent(hlc.Timestamp{WallTime: 100}, pa)
 	close(events)
 
 	return events, nil

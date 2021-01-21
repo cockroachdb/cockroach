@@ -37,11 +37,15 @@ type Event interface {
 	// CheckpointEvent. The resolved timestamp indicates that all KV events until
 	// this time have been emitted.
 	GetResolved() *hlc.Timestamp
+	// GetPartitionAddress returns the PartitionAddress of the partition from which the
+	// event was emitted from.
+	GetPartitionAddress() *PartitionAddress
 }
 
 // kvEvent is a key value pair that needs to be ingested.
 type kvEvent struct {
-	kv roachpb.KeyValue
+	kv               roachpb.KeyValue
+	partitionAddress PartitionAddress
 }
 
 var _ Event = kvEvent{}
@@ -61,10 +65,16 @@ func (kve kvEvent) GetResolved() *hlc.Timestamp {
 	return nil
 }
 
+// GetPartitionAddress implements the Event interface.
+func (kve kvEvent) GetPartitionAddress() *PartitionAddress {
+	return &kve.partitionAddress
+}
+
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
 type checkpointEvent struct {
 	resolvedTimestamp hlc.Timestamp
+	partitionAddress  PartitionAddress
 }
 
 var _ Event = checkpointEvent{}
@@ -84,12 +94,17 @@ func (ce checkpointEvent) GetResolved() *hlc.Timestamp {
 	return &ce.resolvedTimestamp
 }
 
+// GetPartitionAddress implements the Event interface.
+func (ce checkpointEvent) GetPartitionAddress() *PartitionAddress {
+	return &ce.partitionAddress
+}
+
 // MakeKVEvent creates an Event from a KV.
-func MakeKVEvent(kv roachpb.KeyValue) Event {
-	return kvEvent{kv: kv}
+func MakeKVEvent(kv roachpb.KeyValue, address PartitionAddress) Event {
+	return kvEvent{kv: kv, partitionAddress: address}
 }
 
 // MakeCheckpointEvent creates an Event from a resolved timestamp.
-func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp) Event {
-	return checkpointEvent{resolvedTimestamp: resolvedTimestamp}
+func MakeCheckpointEvent(resolvedTimestamp hlc.Timestamp, address PartitionAddress) Event {
+	return checkpointEvent{resolvedTimestamp: resolvedTimestamp, partitionAddress: address}
 }
