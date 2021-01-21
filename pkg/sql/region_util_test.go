@@ -388,7 +388,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 		desc         string
 		region       descpb.DatabaseDescriptor_RegionConfig_Region
 		regionConfig descpb.DatabaseDescriptor_RegionConfig
-		expected     *zonepb.ZoneConfig
+		expected     zonepb.ZoneConfig
 	}{
 		{
 			desc: "4-region table with zone survivability",
@@ -405,7 +405,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				Constraints: []zonepb.ConstraintsConjunction{
 					{
@@ -434,7 +434,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 			},
 		},
 		{
-			desc: "4-region global table with region survivaability",
+			desc: "4-region global table with region survivability",
 			region: descpb.DatabaseDescriptor_RegionConfig_Region{
 				Name: "region_a",
 			},
@@ -448,7 +448,7 @@ func TestZoneConfigFromRegionConfigForPartition(t *testing.T) {
 				PrimaryRegion: "region_b",
 				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				Constraints: []zonepb.ConstraintsConjunction{
 					{

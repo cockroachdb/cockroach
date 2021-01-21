@@ -427,48 +427,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 	indexDesc.Version = encodingVersion
 
-	if n.n.PartitionByIndex.ContainsPartitioningClause() || n.tableDesc.IsPartitionAllBy() {
-		var partitionBy *tree.PartitionBy
-		if !n.tableDesc.IsPartitionAllBy() {
-			if n.n.PartitionByIndex.ContainsPartitions() {
-				partitionBy = n.n.PartitionByIndex.PartitionBy
-			}
-		} else if n.n.PartitionByIndex.ContainsPartitioningClause() {
-			return pgerror.New(
-				pgcode.FeatureNotSupported,
-				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
-			)
-		} else {
-			partitionBy, err = partitionByFromTableDesc(params.p.ExecCfg().Codec, n.tableDesc)
-			if err != nil {
-				return err
-			}
-		}
-		if partitionBy != nil {
-			newIndexDesc, numImplicitColumns, err := detectImplicitPartitionColumns(
-				params.p.EvalContext(),
-				n.tableDesc,
-				*indexDesc,
-				partitionBy,
-			)
-			if err != nil {
-				return err
-			}
-			indexDesc = &newIndexDesc
-			partitioning, err := CreatePartitioning(
-				params.ctx,
-				params.p.ExecCfg().Settings,
-				params.EvalContext(),
-				n.tableDesc,
-				indexDesc,
-				numImplicitColumns,
-				partitionBy,
-			)
-			if err != nil {
-				return err
-			}
-			indexDesc.Partitioning = partitioning
-		}
+	*indexDesc, err = params.p.configureIndexDescForNewIndexPartitioning(
+		params.ctx,
+		n.tableDesc,
+		*indexDesc,
+		n.n.PartitionByIndex,
+	)
+	if err != nil {
+		return err
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
@@ -478,6 +444,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
 		return err
 	}
+	if err := params.p.configureZoneConfigForNewIndexPartitioning(
+		params.ctx,
+		n.tableDesc,
+		*indexDesc,
+	); err != nil {
+		return err
+	}
+
 	// The index name may have changed as a result of
 	// AllocateIDs(). Retrieve it for the event log below.
 	index := n.tableDesc.Mutations[mutationIdx].GetIndex()
@@ -519,3 +493,86 @@ func (n *createIndexNode) startExec(params runParams) error {
 func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*createIndexNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createIndexNode) Close(context.Context)        {}
+
+// configureIndexDescForNewIndexPartitioning returns a new copy of an index descriptor
+// containing modifications needed if partitioning is configured.
+func (p *planner) configureIndexDescForNewIndexPartitioning(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	partitionByIndex *tree.PartitionByIndex,
+) (descpb.IndexDescriptor, error) {
+	var err error
+	if partitionByIndex.ContainsPartitioningClause() || tableDesc.IsPartitionAllBy() {
+		var partitionBy *tree.PartitionBy
+		if !tableDesc.IsPartitionAllBy() {
+			if partitionByIndex.ContainsPartitions() {
+				partitionBy = partitionByIndex.PartitionBy
+			}
+		} else if partitionByIndex.ContainsPartitioningClause() {
+			return indexDesc, pgerror.New(
+				pgcode.FeatureNotSupported,
+				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
+			)
+		} else {
+			partitionBy, err = partitionByFromTableDesc(p.ExecCfg().Codec, tableDesc)
+			if err != nil {
+				return indexDesc, err
+			}
+		}
+
+		if partitionBy != nil {
+			var numImplicitColumns int
+			indexDesc, numImplicitColumns, err = detectImplicitPartitionColumns(
+				p.EvalContext(),
+				tableDesc,
+				indexDesc,
+				partitionBy,
+			)
+			if err != nil {
+				return indexDesc, err
+			}
+			if indexDesc.Partitioning, err = CreatePartitioning(
+				ctx,
+				p.ExecCfg().Settings,
+				p.EvalContext(),
+				tableDesc,
+				&indexDesc,
+				numImplicitColumns,
+				partitionBy,
+			); err != nil {
+				return indexDesc, err
+			}
+		}
+	}
+	return indexDesc, nil
+}
+
+// configureZoneConfigForNewIndexPartitioning configures the zone config for any new index
+// in a REGIONAL BY ROW table.
+// This *must* be done after the index ID has been allocated.
+func (p *planner) configureZoneConfigForNewIndexPartitioning(
+	ctx context.Context, tableDesc *tabledesc.Mutable, indexDesc descpb.IndexDescriptor,
+) error {
+	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+	if tableDesc.LocalityConfig != nil && tableDesc.LocalityConfig.GetRegionalByRow() != nil {
+		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+			ctx,
+			p.txn,
+			tableDesc.ParentID,
+			tree.DatabaseLookupFlags{},
+		)
+		if err != nil {
+			return err
+		}
+		if err := p.addNewZoneConfigSubzonesForIndex(
+			ctx,
+			tableDesc,
+			indexDesc.ID,
+			*dbDesc.RegionConfig,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
