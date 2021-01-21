@@ -326,4 +326,4 @@ RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/au
 
 COPY entrypoint.sh /usr/local/bin
 
-ENTRYPOINT ["autouseradd", "--user", "roach", "--no-create-home", "--", "entrypoint.sh"]
+ENTRYPOINT ["autouseradd", "--user", "roach", "--", "entrypoint.sh"]
