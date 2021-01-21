@@ -34,7 +34,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newEngine(t)
+	cleanup, eng := newOnDiskEngine(t)
 	defer cleanup()
 	defer eng.Close()
 
@@ -117,7 +117,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
 	testLimiter := rate.NewLimiter(rate.Inf, 0)
 
-	cleanup, eng := newEngine(t)
+	cleanup, eng := newOnDiskEngine(t)
 	defer cleanup()
 	defer eng.Close()
 
