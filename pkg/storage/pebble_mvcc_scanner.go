@@ -295,7 +295,7 @@ func (p *pebbleMVCCScanner) isUncertainValue(ts hlc.Timestamp) bool {
 
 // Returns an uncertainty error with the specified timestamp and p.txn.
 func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
-	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.txn)
+	p.err = roachpb.NewReadWithinUncertaintyIntervalError(p.ts, ts, p.localUncertaintyLimit, p.txn)
 	p.results.clear()
 	p.intents.Reset()
 	return false
