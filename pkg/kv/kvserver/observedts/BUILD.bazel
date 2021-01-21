@@ -13,7 +13,6 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
-        "//pkg/util/log",
     ],
 )
 

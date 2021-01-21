@@ -172,7 +172,7 @@ var D5 = roachpb.Transaction{}.ObservedTimestamps
 
 // D6 ————————————————————————————————————————————————
 //
-// LimitTxnMaxTimestamp
+// ComputeLocalUncertaintyLimit
 //
 // Observed timestamps allow transactions to avoid uncertainty related restarts
 // because they allow transactions to bound their "effective max timestamp" when
@@ -183,8 +183,10 @@ var D5 = roachpb.Transaction{}.ObservedTimestamps
 //
 // TODO(nvanbenschoten): update this documentation to discuss the local
 // uncertainty limit in place of the "effective max timestamp" once we start
-// returning this value instead of updating the max timestamp field.
-var D6 = LimitTxnMaxTimestamp
+// returning this value instead of updating the max timestamp field. Also,
+// update the documentation to reflect to rename from "max timestamp" to
+// "global uncertainty limit".
+var D6 = ComputeLocalUncertaintyLimit
 
 // Ignore unused warnings.
 var _, _, _, _, _, _ = D1, D2, D3, D4, D5, D6

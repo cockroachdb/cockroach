@@ -1124,16 +1124,16 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 	})
 }
 
-// TestRangeLimitTxnMaxTimestamp verifies that on lease transfer, the
-// normal limiting of a txn's max timestamp to the first observed
-// timestamp on a node is extended to include the lease start
-// timestamp. This disallows the possibility that a write to another
-// replica of the range (on node n1) happened at a later timestamp
-// than the originally observed timestamp for the node which now owns
-// the lease (n2). This can happen if the replication of the write
-// doesn't make it from n1 to n2 before the transaction observes n2's
-// clock time.
-func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
+// TestRangeLocalUncertaintyLimitAfterNewLease verifies that on lease
+// transfer, the normal limiting of a request's local uncertainty limit
+// to the first observed timestamp on a node is extended to include the
+// lease start timestamp. This disallows the possibility that a write to
+// another replica of the range (on node n1) happened at a later
+// timestamp than the originally observed timestamp for the node which
+// now owns the lease (n2). This can happen if the replication of the
+// write doesn't make it from n1 to n2 before the transaction observes
+// n2's clock time.
+func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1177,7 +1177,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 
 	// Do a write on node1 to establish a key with its timestamp at now.
 	if _, pErr := kv.SendWrapped(
-		context.Background(), tc.Servers[0].DistSender(), putArgs(keyA, []byte("value")),
+		ctx, tc.Servers[0].DistSender(), putArgs(keyA, []byte("value")),
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1194,7 +1194,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := replica1.AdminTransferLease(context.Background(), replica2Desc.StoreID); err != nil {
+		if err := replica1.AdminTransferLease(ctx, replica2Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 		lease, _ := replica2.GetLease()
@@ -1214,7 +1214,7 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	// expect to see an uncertainty interval error.
 	h := roachpb.Header{Txn: &txn}
 	if _, pErr := kv.SendWrappedWith(
-		context.Background(), tc.Servers[0].DistSender(), h, getArgs(keyA),
+		ctx, tc.Servers[0].DistSender(), h, getArgs(keyA),
 	); !testutils.IsPError(pErr, "uncertainty") {
 		t.Fatalf("expected an uncertainty interval error; got %v", pErr)
 	}

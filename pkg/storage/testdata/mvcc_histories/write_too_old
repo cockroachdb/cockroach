@@ -44,8 +44,10 @@ with t=B
 ----
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false max=55.000000000,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,1 min=0,0 seq=0} ts=44.000000000,1 del=false klen=12 vlen=8
+data: "a"/44.000000000,1 -> /BYTES/def
 data: "a"/44.000000000,0 -> /BYTES/abc
-error: (*roachpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 33.000000000,0 encountered previous write with future timestamp 44.000000000,0 within uncertainty interval `t <= (local=0,0, global=55.000000000,0)`; observed timestamps: []
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write at timestamp 33.000000000,0 too old; wrote at 44.000000000,1
 
 run ok
 resolve_intent t=B k=a status=ABORTED
