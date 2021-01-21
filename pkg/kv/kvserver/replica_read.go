@@ -43,11 +43,9 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, g, roachpb.NewError(err)
 	}
 
-	// Limit the transaction's maximum timestamp using observed timestamps.
-	// TODO(nvanbenschoten): now that we've pushed this down here, consider
-	// keeping the "local max timestamp" on the stack and never modifying the
-	// batch.
-	ba.Txn = observedts.LimitTxnMaxTimestamp(ctx, ba.Txn, st)
+	// Compute the transaction's local uncertainty limit using observed
+	// timestamps, which can help avoid uncertainty restarts.
+	localUncertaintyLimit := observedts.ComputeLocalUncertaintyLimit(ba.Txn, st)
 
 	// Evaluate read-only batch command.
 	spans := g.LatchSpans()
@@ -76,7 +74,9 @@ func (r *Replica) executeReadOnlyBatch(
 	// as we're performing a non-locking read.
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, spans)
+	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(
+		ctx, rw, rec, ba, localUncertaintyLimit, spans,
+	)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// proagate the error. Don't assume ownership of the concurrency guard.
@@ -132,6 +132,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ba *roachpb.BatchRequest,
+	lul hlc.Timestamp,
 	latchSpans *spanset.SpanSet,
 ) (br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
 	log.Event(ctx, "executing read-only batch")
@@ -140,7 +141,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		if retries > 0 {
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
-		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, lul, true /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
