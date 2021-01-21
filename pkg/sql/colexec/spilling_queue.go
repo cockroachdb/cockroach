@@ -109,19 +109,15 @@ func newSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
 	// writes/reads.
 	memoryLimit := args.MemoryLimit
 	memoryLimit -= int64(args.DiskQueueCfg.BufferSizeBytes)
-	initialItemsLen := spillingQueueInitialItemsLen
-	if memoryLimit < 0 {
-		memoryLimit = 0
-		// Make items at least of length 1. Even though batches will spill to
-		// disk directly, it's nice to have at least one item in order to be
-		// able to deserialize from disk into this slice.
-		initialItemsLen = 1
+	var items []coldata.Batch
+	if memoryLimit > 0 {
+		items = make([]coldata.Batch, spillingQueueInitialItemsLen)
 	}
 	return &spillingQueue{
 		unlimitedAllocator: args.UnlimitedAllocator,
 		maxMemoryLimit:     memoryLimit,
 		typs:               args.Types,
-		items:              make([]coldata.Batch, initialItemsLen),
+		items:              items,
 		diskQueueCfg:       args.DiskQueueCfg,
 		fdSemaphore:        args.FDSemaphore,
 		diskAcc:            args.DiskAcc,
@@ -158,7 +154,7 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 	q.testingKnobs.numEnqueues++
 
 	alreadySpilled := q.numOnDiskItems > 0
-	memoryLimitReached := q.unlimitedAllocator.Used() > q.maxMemoryLimit
+	memoryLimitReached := q.unlimitedAllocator.Used() > q.maxMemoryLimit || q.maxMemoryLimit <= 0
 	maxInMemEnqueuesExceeded := q.testingKnobs.maxNumBatchesEnqueuedInMemory != 0 && q.testingKnobs.numEnqueues > q.testingKnobs.maxNumBatchesEnqueuedInMemory
 	if alreadySpilled || memoryLimitReached || maxInMemEnqueuesExceeded {
 		// In this case, one of the following conditions is true:
@@ -343,15 +339,10 @@ func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {
 		q.unlimitedAllocator.RetainBatch(q.dequeueScratch)
 		if q.rewindable {
 			q.rewindableState.numItemsDequeued++
-			return q.dequeueScratch, nil
+		} else {
+			q.numOnDiskItems--
 		}
-		q.numOnDiskItems--
-		q.numInMemoryItems++
-		q.items[q.curTailIdx] = q.dequeueScratch
-		q.curTailIdx++
-		if q.curTailIdx == len(q.items) {
-			q.curTailIdx = 0
-		}
+		return q.dequeueScratch, nil
 	}
 
 	res := q.items[q.curHeadIdx]
