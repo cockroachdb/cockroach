@@ -340,12 +340,27 @@ message Transaction {
   // successful refresh or, if the refresh is unsuccessful, after a transaction
   // restart.
   util.hlc.Timestamp read_timestamp = 15 [(gogoproto.nullable) = false];
-  // Initial Timestamp + clock skew. Reads which encounter values with
-  // timestamps between timestamp and max_timestamp trigger a txn
-  // retry error, unless the node being read is listed in observed_timestamps
-  // (in which case no more read uncertainty can occur).
+  // The transaction's max timestamp is its initial timestamp + maximum
+  // cluster-wide clock skew. This value defines the upper bound of the
+  // transaction's uncertainty interval.
+  //
+  // Reads which encounter values with timestamps between read_timestamp and
+  // max_timestamp ("within the uncertainty interval") trigger a retry error
+  // (ReadWithinUncertaintyIntervalError). This forces the transaction to
+  // increase its read timestamp, either through a refresh or a retry, in order
+  // to ensure that the transaction observes the "uncertain" value.
+  //
+  // However, the effective max timestamp applied to values can be reduced when
+  // evaluating a request on a node from which the transaction has acquired an
+  // observed timestamp. This reduced max timestamp is reflected in the
+  // local_uncertainty_limit variable at the time of request evaluation.
+  //
+  // See pkg/kv/kvserver/observedts for more details.
+  //
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
+  //
+  // TODO(nvanbenschoten): rename this field to global_uncertainty_limit.
   util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
