@@ -1109,6 +1109,12 @@ func (node *PartitionByIndex) ContainsPartitions() bool {
 	return node != nil && node.PartitionBy != nil
 }
 
+// ContainsPartitioningClause determines if the partition by table contains
+// a partitioning clause, including PARTITION BY NOTHING.
+func (node *PartitionByIndex) ContainsPartitioningClause() bool {
+	return node != nil
+}
+
 // PartitionByTable represents a PARTITION [ALL] BY definition within
 // a CREATE/ALTER TABLE statement.
 type PartitionByTable struct {
@@ -1136,6 +1142,12 @@ func (node *PartitionByTable) Format(ctx *FmtCtx) {
 // a partition clause which is not PARTITION BY NOTHING.
 func (node *PartitionByTable) ContainsPartitions() bool {
 	return node != nil && node.PartitionBy != nil
+}
+
+// ContainsPartitioningClause determines if the partition by table contains
+// a partitioning clause, including PARTITION BY NOTHING.
+func (node *PartitionByTable) ContainsPartitioningClause() bool {
+	return node != nil
 }
 
 // PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
