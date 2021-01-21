@@ -1,0 +1,63 @@
+# Verify that ContentionEvents are emitted. This is mostly a sanity check - look
+# for the datadriven tests in `pkg/kv/kvserver/concurrency` for the actual events
+# that do get emitted in various contention scenarios.
+
+statement ok
+GRANT ADMIN TO testuser
+
+statement ok
+CREATE TABLE kv (k VARCHAR PRIMARY KEY, v VARCHAR)
+
+
+query TT
+SELECT * FROM kv
+----
+
+user testuser
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO kv VALUES('k', 'v')
+
+user root
+
+statement ok
+SET tracing=on
+
+statement ok
+SET TRACING=on;
+BEGIN;
+SET TRANSACTION PRIORITY HIGH;
+INSERT INTO kv VALUES('k', 'my v');
+COMMIT;
+SET TRACING=off;
+
+# Check for the message emitted by (roachpb.ContentionEvent).String() as proof that a ContentionEvent
+# payload was added to the trace.
+#
+# NB: if the matcher here ever gets updated, make sure to update throughout this file.
+query I
+SELECT count(message) FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
+----
+1
+
+# Clean up.
+user testuser
+
+statement ok
+ROLLBACK
+
+# Do a straightforward non-conflicting insert; we want to check that there's *no* ContentionEvent
+# emitted for those. There's no reason to believe it would be - this is a pure sanity check.
+
+statement ok
+SET TRACING=on;
+INSERT INTO kv VALUES ('l', 'lll');
+SET TRACING=off;
+
+query I
+SELECT count(message) FROM [ SHOW TRACE FOR SESSION ] WHERE message LIKE '%conflicted with % on % for %'
+----
+0

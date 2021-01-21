@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // UserPriority is a custom type for transaction's user priority.
@@ -1518,4 +1519,14 @@ func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
 		StoreID:   storeID,
 	}
 	return sIdent, nil
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("conflicted with %s on %s for %.2fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())
+}
+
+// String implements fmt.Stringer.
+func (c *ContentionEvent) String() string {
+	return redact.StringWithoutMarkers(c)
 }
