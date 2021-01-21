@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,6 +98,13 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		"", // parentDir
 		tempStorageMaxSizeBytes,
 	)
+
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
+	if err != nil {
+		log.Infof(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
+	} else {
+		log.Infof(ctx, "GEOS loaded from directory %s", loc)
+	}
 
 	sqlServer, addr, httpAddr, err := server.StartTenant(
 		ctx,
