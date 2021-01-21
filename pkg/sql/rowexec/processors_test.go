@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -501,6 +502,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 										roachpb.NewReadWithinUncertaintyIntervalError(
 											ba.Timestamp,           /* readTs */
 											ba.Timestamp.Add(1, 0), /* existingTs */
+											hlc.Timestamp{},        /* localUncertaintyLimit */
 											ba.Txn))
 								}
 								return nil
@@ -684,6 +686,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 								roachpb.NewReadWithinUncertaintyIntervalError(
 									ba.Timestamp,
 									ba.Timestamp.Add(1, 0),
+									hlc.Timestamp{},
 									ba.Txn,
 								),
 							)
