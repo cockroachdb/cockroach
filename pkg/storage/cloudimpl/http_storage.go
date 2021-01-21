@@ -20,7 +20,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -350,7 +350,7 @@ func (h *httpStorage) req(
 		}
 		dest.Host = h.hosts[int(hash.Sum32())%hosts]
 	}
-	dest.Path = filepath.Join(dest.Path, file)
+	dest.Path = path.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 
