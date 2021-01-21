@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -88,6 +90,8 @@ func (p *planner) UnsafeUpsertDescriptor(
 	// Validate that existing is sane and store its hex serialization into
 	// existingStr to be written to the event log.
 	var existingStr string
+	var previousOwner string
+	var previousPrivileges []descpb.UserPrivileges
 	if existing != nil {
 		if existing.IsUncommittedVersion() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -103,6 +107,8 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return errors.AssertionFailedf("failed to marshal existing descriptor %v: %v", existing, err)
 		}
 		existingStr = hex.EncodeToString(marshaled)
+		previousOwner = existing.GetPrivileges().Owner().Normalized()
+		previousPrivileges = existing.GetPrivileges().Users
 	}
 
 	switch md := existing.(type) {
@@ -141,13 +147,48 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return err
 		}
 	}
-	return p.logEvent(ctx, id,
-		&eventpb.UnsafeUpsertDescriptor{
-			PreviousDescriptor: existingStr,
-			NewDescriptor:      hex.EncodeToString(encodedDesc),
-			Force:              force,
-			ForceNotice:        forceNoticeString,
-		})
+
+	var newOwner string
+	if previousOwner != existing.GetPrivileges().Owner().Normalized() {
+		newOwner = existing.GetPrivileges().Owner().Normalized()
+	}
+
+	newPrivileges := existing.GetPrivileges().Users
+	m := make(map[string]uint32)
+	for _, newUser := range newPrivileges {
+		m[newUser.User().Normalized()] = newUser.Privileges
+	}
+
+	var changedPrivileges []string
+	for _, oldUser := range previousPrivileges {
+		username := oldUser.User().Normalized()
+		if newPrivileges, ok := m[username]; ok {
+			if oldUser.Privileges != newPrivileges {
+				changedPrivileges = append(changedPrivileges, fmt.Sprintf(
+					"%s: %v to %v", username, oldUser.Privileges, newPrivileges))
+			}
+			delete(m, username)
+		} else {
+			changedPrivileges = append(changedPrivileges, fmt.Sprintf(
+				"%s: %v to %v", username, oldUser.Privileges, "None"))
+		}
+	}
+
+	// Any leftovers in map indicate privileges for new users.
+	for username, privileges := range m {
+		changedPrivileges = append(changedPrivileges, fmt.Sprintf(
+			"%s: %v to %v", username, "None", privileges))
+	}
+
+	return p.logEvent(ctx, id, &eventpb.UnsafeUpsertDescriptor{
+		PreviousDescriptor: existingStr,
+		NewDescriptor:      hex.EncodeToString(encodedDesc),
+		Force:              force,
+		ForceNotice:        forceNoticeString,
+		PreviousOwner:      previousOwner,
+		NewOwner:           newOwner,
+		ChangedPrivileges:  fmt.Sprintf(strings.Join(changedPrivileges, ", ")),
+	})
 }
 
 // UnsafeUpsertNamespaceEntry powers the repair builtin of the same name. The

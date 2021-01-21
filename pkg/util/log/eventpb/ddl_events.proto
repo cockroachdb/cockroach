@@ -425,6 +425,9 @@ message UnsafeUpsertDescriptor {
   string new_descriptor = 4 [(gogoproto.jsontag) = ",omitempty"];
   bool force = 5 [(gogoproto.jsontag) = ",omitempty"];
   string force_notice = 6 [(gogoproto.jsontag) = ",omitempty"];
+  string previous_owner = 7 [(gogoproto.jsontag) = ",omitempty"];
+  string new_owner = 8 [(gogoproto.jsontag) = ",omitempty"];
+  string changed_privileges = 9 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 

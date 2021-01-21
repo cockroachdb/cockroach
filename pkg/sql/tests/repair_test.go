@@ -258,54 +258,23 @@ func TestDescriptorRepair(t *testing.T) {
 		after              []string
 	}{
 		{
-			op: `
-SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
-'{
-  "table": {
-    "columns": [ { "id": 1, "name": "i" } ],
-    "families": [
-      {
-        "columnIds": [ 1 ],
-        "columnNames": [ "i" ],
-        "defaultColumnId": 0,
-        "id": 0,
-        "name": "primary"
-      }
-    ],
-    "formatVersion": 3,
-    "id": 59,
-    "name": "foo",
-    "nextColumnId": 2,
-    "nextFamilyId": 1,
-    "nextIndexId": 2,
-    "nextMutationId": 1,
-    "parentId": 52,
-    "primaryIndex": {
-      "columnDirections": [ "ASC" ],
-      "columnIds": [ 1 ],
-      "columnNames": [ "i" ],
-      "id": 1,
-      "name": "primary",
-      "type": "FORWARD",
-      "unique": true,
-      "version": 1
-    },
-    "privileges": {
-      "owner_proto": "root",
-      "users": [ { "privileges": 2, "user_proto": "admin" }, { "privileges": 2, "user_proto": "root" } ],
-      "version": 1
-    },
-    "state": "PUBLIC",
-    "unexposedParentSchemaId": 29,
-    "version": 1
-  }
-}
-'))
-`,
+			op: upsertRepair,
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "unsafe_upsert_descriptor",
 					info: `"DescriptorID":59`,
+				},
+			},
+		},
+		{
+			before: []string{
+				upsertRepair,
+			},
+			op: upsertUpdatePrivileges,
+			expEventLogEntries: []eventLogPattern{
+				{
+					typ:  "unsafe_upsert_descriptor",
+					info: `"PreviousOwner":"root","NewOwner":"admin","ChangedPrivileges":"admin: 2 to 5, root: 2 to 3"}`,
 				},
 			},
 		},
@@ -585,5 +554,99 @@ SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor)
 		updateInvalidateDuplicateColumnDescriptorCTEs + `
 SELECT crdb_internal.unsafe_upsert_descriptor(52, descriptor, true)
   FROM updated;
+`
+
+	// This is a statement to repair an invalid descriptor using
+  // crdb_internal.unsafe_upsert_descriptor.
+	upsertRepair = `
+SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
+'{
+  "table": {
+    "columns": [ { "id": 1, "name": "i" } ],
+    "families": [
+      {
+        "columnIds": [ 1 ],
+        "columnNames": [ "i" ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 59,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 1,
+    "parentId": 52,
+    "primaryIndex": {
+      "columnDirections": [ "ASC" ],
+      "columnIds": [ 1 ],
+      "columnNames": [ "i" ],
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 1
+    },
+    "privileges": {
+      "owner_proto": "root",
+      "users": [ { "privileges": 2, "user_proto": "admin" }, { "privileges": 2, "user_proto": "root" } ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}
+'))
+`
+
+	// This is a statement to update the above descriptor's privileges
+	// (owner, permissions, etc.).
+	upsertUpdatePrivileges = `
+SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', 
+'{
+  "table": {
+    "columns": [ { "id": 1, "name": "i" } ],
+    "families": [
+      {
+        "columnIds": [ 1 ],
+        "columnNames": [ "i" ],
+        "defaultColumnId": 0,
+        "id": 0,
+        "name": "primary"
+      }
+    ],
+    "formatVersion": 3,
+    "id": 59,
+    "name": "foo",
+    "nextColumnId": 2,
+    "nextFamilyId": 1,
+    "nextIndexId": 2,
+    "nextMutationId": 1,
+    "parentId": 52,
+    "primaryIndex": {
+      "columnDirections": [ "ASC" ],
+      "columnIds": [ 1 ],
+      "columnNames": [ "i" ],
+      "id": 1,
+      "name": "primary",
+      "type": "FORWARD",
+      "unique": true,
+      "version": 1
+    },
+    "privileges": {
+      "owner_proto": "admin",
+      "users": [ { "privileges": 5, "user_proto": "admin" }, { "privileges": 3, "user_proto": "root" } ],
+      "version": 1
+    },
+    "state": "PUBLIC",
+    "unexposedParentSchemaId": 29,
+    "version": 1
+  }
+}
+'))
 `
 )

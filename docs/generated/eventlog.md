@@ -1004,6 +1004,9 @@ using crdb_internal.unsafe_upsert_descriptor().
 | `NewDescriptor` |  | yes |
 | `Force` |  | no |
 | `ForceNotice` |  | yes |
+| `PreviousOwner` |  | yes |
+| `NewOwner` |  | yes |
+| `ChangedPrivileges` |  | yes |
 
 
 #### Common fields
