@@ -836,18 +836,18 @@ project
  │    │         │    ├── fd: ()-->(8), (1)-->(2-6), (2,4,5)~~>(1,3,6), (9)-->(10-16), (16)-->(9-15), (1)==(9), (9)==(1), (9,20-22)-->(18,19)
  │    │         │    ├── left-join (lookup transactiondetails@detailscardidindex)
  │    │         │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null transactiondetails.dealerid:18 isbuy:19 transactiondate:20 transactiondetails.cardid:21 quantity:22
- │    │         │    │    ├── key columns: [39 40 1] = [18 19 21]
+ │    │         │    │    ├── key columns: [43 44 1] = [18 19 21]
  │    │         │    │    ├── immutable
  │    │         │    │    ├── stats: [rows=3543333.33, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(21)=19000, null(21)=0]
  │    │         │    │    ├── key: (1,20-22)
  │    │         │    │    ├── fd: (1)-->(2-6), (2,4,5)~~>(1,3,6), (1,20-22)-->(18,19)
  │    │         │    │    ├── ordering: +1
  │    │         │    │    ├── project
- │    │         │    │    │    ├── columns: "lookup_join_const_col_@19":40!null "lookup_join_const_col_@18":39!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
+ │    │         │    │    │    ├── columns: "lookup_join_const_col_@19":44!null "lookup_join_const_col_@18":43!null id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
  │    │         │    │    │    ├── immutable
- │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(39)=1, null(39)=0, distinct(40)=1, null(40)=0]
+ │    │         │    │    │    ├── stats: [rows=19000, distinct(1)=19000, null(1)=0, distinct(2)=13000, null(2)=0, distinct(5)=829, null(5)=0, distinct(6)=5601.15328, null(6)=0, distinct(43)=1, null(43)=0, distinct(44)=1, null(44)=0]
  │    │         │    │    │    ├── key: (1)
- │    │         │    │    │    ├── fd: ()-->(39,40), (1)-->(2-6), (2,4,5)~~>(1,3,6)
+ │    │         │    │    │    ├── fd: ()-->(43,44), (1)-->(2-6), (2,4,5)~~>(1,3,6)
  │    │         │    │    │    ├── ordering: +1
  │    │         │    │    │    ├── select
  │    │         │    │    │    │    ├── columns: id:1!null name:2!null rarity:3 setname:4 number:5!null isfoil:6!null
@@ -865,8 +865,8 @@ project
  │    │         │    │    │    │    └── filters
  │    │         │    │    │    │         └── (name:2, setname:4, number:5) > ('Shock', '7E', 248) [outer=(2,4,5), immutable, constraints=(/2/4/5: [/'Shock'/'7E'/249 - ]; tight)]
  │    │         │    │    │    └── projections
- │    │         │    │    │         ├── false [as="lookup_join_const_col_@19":40]
- │    │         │    │    │         └── 1 [as="lookup_join_const_col_@18":39]
+ │    │         │    │    │         ├── false [as="lookup_join_const_col_@19":44]
+ │    │         │    │    │         └── 1 [as="lookup_join_const_col_@18":43]
  │    │         │    │    └── filters
  │    │         │    │         └── (transactiondate:20 >= '2020-02-28 00:00:00+00:00') AND (transactiondate:20 <= '2020-03-01 00:00:00+00:00') [outer=(20), constraints=(/20: [/'2020-02-28 00:00:00+00:00' - /'2020-03-01 00:00:00+00:00']; tight)]
  │    │         │    ├── scan cardsinfo
