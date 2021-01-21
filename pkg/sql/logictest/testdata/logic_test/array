@@ -1544,6 +1544,9 @@ SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 2  {NULL,NULL,NULL}  NULL
 2  {4,5}             7
 
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
 # Test that interleaving an array index doesn't lead to problems.
 # Add parent PRIMARY KEY (x, y DESC) once #50659 is fixed.
 # Add child PRIMARY KEY (x, y DESC, z) once #50659 is fixed.

@@ -177,6 +177,8 @@ NULL           /1             {1}       1
 /10            /11            {1}       1
 /11            NULL           {1}       1
 
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
 
 statement ok
 CREATE TABLE t1 (k INT PRIMARY KEY, v1 INT, v2 INT, v3 INT)

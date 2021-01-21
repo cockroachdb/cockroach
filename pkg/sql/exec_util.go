@@ -250,6 +250,12 @@ var preferLookupJoinsForFKs = settings.RegisterBoolSetting(
 	false,
 )
 
+var interleavedTablesEnabled = settings.RegisterBoolSetting(
+	"sql.defaults.interleaved_tables.enabled",
+	"allows creation of interleaved tables",
+	false,
+)
+
 // optUseHistogramsClusterMode controls the cluster default for whether
 // histograms are used by the optimizer for cardinality estimation.
 // Note that it does not control histogram collection; regardless of the

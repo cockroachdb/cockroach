@@ -744,6 +744,9 @@ txn
 statement ok
 ROLLBACK
 
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
 # Ensure that index drops that can't use range deletions succeed.
 statement ok
 CREATE TABLE enum_parent (x greeting PRIMARY KEY);

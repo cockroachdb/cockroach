@@ -15,6 +15,9 @@ statement ok
 INSERT INTO p VALUES ('b' COLLATE en_u_ks_level1)
 
 statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
+statement ok
 CREATE TABLE c1 (
   a STRING COLLATE en_u_ks_level1 PRIMARY KEY,
   b STRING COLLATE en_u_ks_level1

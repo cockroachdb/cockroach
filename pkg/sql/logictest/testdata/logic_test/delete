@@ -343,6 +343,9 @@ SELECT * FROM a AS OF SYSTEM TIME $ts
 4
 5
 
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
 # Similar test with interleaved tables.
 statement ok
 INSERT INTO a SELECT generate_series(1,3)

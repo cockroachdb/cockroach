@@ -1,6 +1,9 @@
 # Test querying deeply interleaved tables.
 
 statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
+statement ok
 CREATE TABLE level1 (
   k1 INT,
   PRIMARY KEY (k1)

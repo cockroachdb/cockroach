@@ -635,6 +635,9 @@ statement ok
 INSERT INTO customers (k) VALUES ('b')
 
 statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
+statement ok
 CREATE TABLE orders (k CHAR PRIMARY KEY, v CHAR) INTERLEAVE IN PARENT customers (k)
 
 statement ok

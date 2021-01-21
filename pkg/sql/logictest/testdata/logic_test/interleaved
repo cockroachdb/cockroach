@@ -1,4 +1,8 @@
 # LogicTest: !3node-tenant(49854)
+
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
 # Grandparent table
 statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
@@ -460,4 +464,16 @@ statement ok
 CREATE TABLE interleave_pk_notice (x INT NOT NULL, y INT);
 
 statement notice NOTICE: interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
+ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = false
+
+statement error interleaved tables and indexes are disabled, and will be removed in 21.2.
+CREATE TABLE willfail (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement error interleaved tables and indexes are disabled, and will be removed in 21.2.
+CREATE INDEX willfail ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement error interleaved tables and indexes are disabled, and will be removed in 21.2.
 ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);

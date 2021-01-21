@@ -24,6 +24,9 @@
 #   - additional ancestor above (child2 - grandchild2)
 #   - no interleaved relationship (parent1 - parent2, parent2 - child1)
 
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
 #################
 # Create tables #
 #################
