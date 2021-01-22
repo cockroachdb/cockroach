@@ -133,6 +133,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	// Execution stats collected using a sampling approach.
 	s.BytesSentOverNetwork.Add(other.BytesSentOverNetwork, s.StatCollectionCount, other.StatCollectionCount)
 	s.MaxMemUsage.Add(other.MaxMemUsage, s.StatCollectionCount, other.StatCollectionCount)
+	s.ContentionTime.Add(other.ContentionTime, s.StatCollectionCount, other.StatCollectionCount)
 
 	if other.SensitiveInfo.LastErr != "" {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
@@ -161,5 +162,6 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
 		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
 		s.BytesSentOverNetwork.AlmostEqual(other.BytesSentOverNetwork, eps) &&
-		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps)
+		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps) &&
+		s.ContentionTime.AlmostEqual(other.ContentionTime, eps)
 }

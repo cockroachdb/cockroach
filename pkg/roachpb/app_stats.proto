@@ -98,6 +98,9 @@ message StatementStatistics {
   // the mean of some NumericStat values.
   optional int64 stat_collection_count = 19 [(gogoproto.nullable) = false];
 
+  // ContentionTime collects the time this statement spent contending.
+  optional NumericStat contention_time = 20 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 

@@ -236,6 +236,9 @@ func (ih *instrumentationHelper) Finish(
 			stmtStats.mu.data.MaxMemUsage.Record(
 				stmtStats.mu.data.StatCollectionCount, float64(queryLevelStats.MaxMemUsage),
 			)
+			stmtStats.mu.data.ContentionTime.Record(
+				stmtStats.mu.data.StatCollectionCount, queryLevelStats.ContentionTime.Seconds(),
+			)
 			stmtStats.mu.Unlock()
 		}
 	}

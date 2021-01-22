@@ -83,7 +83,10 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 	return a
 }
 
-// NodeLevelStats returns all the flow level stats that correspond to the given traces and flow metadata.
+// NodeLevelStats returns all the flow level stats that correspond to the given
+// traces and flow metadata.
+// TODO(asubiotto): Flatten this struct, we're currently allocating a map per
+//  stat.
 type NodeLevelStats struct {
 	NetworkBytesSentGroupedByNode map[roachpb.NodeID]int64
 	MaxMemoryUsageGroupedByNode   map[roachpb.NodeID]int64
@@ -91,9 +94,11 @@ type NodeLevelStats struct {
 	KVRowsReadGroupedByNode       map[roachpb.NodeID]int64
 	KVTimeGroupedByNode           map[roachpb.NodeID]time.Duration
 	NetworkMessagesGroupedByNode  map[roachpb.NodeID]int64
+	ContentionTimeGroupedByNode   map[roachpb.NodeID]time.Duration
 }
 
-// QueryLevelStats returns all the query level stats that correspond to the given traces and flow metadata.
+// QueryLevelStats returns all the query level stats that correspond to the
+// given traces and flow metadata.
 type QueryLevelStats struct {
 	NetworkBytesSent int64
 	MaxMemUsage      int64
@@ -101,6 +106,7 @@ type QueryLevelStats struct {
 	KVRowsRead       int64
 	KVTime           time.Duration
 	NetworkMessages  int64
+	ContentionTime   time.Duration
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -176,6 +182,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVRowsReadGroupedByNode:       make(map[roachpb.NodeID]int64),
 		KVTimeGroupedByNode:           make(map[roachpb.NodeID]time.Duration),
 		NetworkMessagesGroupedByNode:  make(map[roachpb.NodeID]int64),
+		ContentionTimeGroupedByNode:   make(map[roachpb.NodeID]time.Duration),
 	}
 	var errs error
 
@@ -187,6 +194,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.KVBytesReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.BytesRead.Value())
 		a.nodeLevelStats.KVRowsReadGroupedByNode[stats.nodeID] += int64(stats.stats.KV.TuplesRead.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[stats.nodeID] += stats.stats.KV.KVTime.Value()
+		a.nodeLevelStats.ContentionTimeGroupedByNode[stats.nodeID] += stats.stats.KV.ContentionTime.Value()
 	}
 
 	// Process streamStats.
@@ -276,6 +284,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {
 		a.queryLevelStats.NetworkMessages += networkMessages
+	}
+
+	for _, contentionTime := range a.nodeLevelStats.KVTimeGroupedByNode {
+		a.queryLevelStats.ContentionTime += contentionTime
 	}
 	return errs
 }
