@@ -1629,7 +1629,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 	// attempt 2: writing the third chunk returns a permanent failure
 	// purge the schema change.
 	expectedAttempts := 3
-	blockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -1637,8 +1636,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 			// failure happens after a checkpoint has been written.
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				attempts++
@@ -1663,6 +1660,14 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1695,17 +1700,15 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("err = %s", err)
 	}
 
-	// No garbage left behind.
-	if err := checkTableKeyCount(context.Background(), kvDB, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	// No garbage left behind, after the rollback has been GC'ed.
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(context.Background(), kvDB, 1, maxValue)
+	})
 
 	// Check that constraints are cleaned up.
-	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
-	close(blockGC)
 }
 
 // TestSchemaChangeReverseMutations tests that schema changes get reversed
