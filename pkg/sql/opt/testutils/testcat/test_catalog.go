@@ -12,7 +12,6 @@ package testcat
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -399,13 +398,14 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 		tc.SetZoneConfig(stmt)
 		return "", nil
 
-	case *tree.ShowCreate:
-		tn := stmt.Name.ToTableName()
-		ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, &tn)
-		if err != nil {
-			return "", err
-		}
-		return ds.(fmt.Stringer).String(), nil
+	case *tree.ShowCreateTable:
+		//tn := stmt.Name.ToTableName()
+		//ds, _, err := tc.ResolveDataSource(context.Background(), cat.Flags{}, &tn)
+		//if err != nil {
+		//	return "", err
+		//}
+		//return ds.(fmt.Stringer).String(), nil
+		return "", nil
 
 	default:
 		return "", errors.AssertionFailedf("unsupported statement: %v", stmt)

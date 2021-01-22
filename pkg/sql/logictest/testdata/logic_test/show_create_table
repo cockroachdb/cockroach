@@ -1,0 +1,59 @@
+statement ok
+CREATE TABLE t(x INT)
+
+statement ok
+CREATE TABLE t2(x INT PRIMARY KEY, y INT, FAMILY f1 (x, y))
+
+statement ok
+CREATE TABLE t3(x INT, y INT, INDEX idx (x, y), FAMILY f1 (x, y))
+
+query TT colnames
+SHOW CREATE TABLE t
+----
+schema_name  table_name
+public       t
+
+query TT
+SHOW CREATE TABLE t, t2, t3
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    FAMILY f1 (x, y)
+);
+CREATE TABLE public.t3 (
+    x INT8 NULL,
+    y INT8 NULL,
+    INDEX idx (x ASC, y ASC),
+    FAMILY f1 (x, y, rowid)
+);
+
+query TT
+SHOW CREATE TABLE t, t2
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    FAMILY f1 (x, y)
+);
+
+SHOW CREATE TABLE should only show tables in the
+# current database (test).
+
+statement ok
+CREATE DATABASE not_test;
+CREATE TABLE not_test.should_not_appear()
+
+query TT
+SELECT schema_name, table_name FROM [SHOW CREATE TABLE not_test.should_not_appear]
+----

@@ -473,15 +473,23 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowCreate represents a SHOW CREATE statement.
-type ShowCreate struct {
-	Name *UnresolvedObjectName
+// ShowCreateAllTables represents a SHOW CREATE ALL TABLES statement.
+type ShowCreateAllTables struct{}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ALL TABLES")
+}
+
+// ShowCreateTable represents a SHOW CREATE TABLE statement.
+type ShowCreateTable struct {
+	Names TableNames
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowCreate) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE ")
-	ctx.FormatNode(node.Name)
+func (node *ShowCreateTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE TABLE ")
+	ctx.FormatNode(&node.Names)
 }
 
 // ShowSyntax represents a SHOW SYNTAX statement.

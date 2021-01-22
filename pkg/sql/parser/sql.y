@@ -5076,23 +5076,44 @@ show_transaction_stmt:
 
 // %Help: SHOW CREATE - display the CREATE statement for a table, sequence or view
 // %Category: DDL
-// %Text: SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// %Text:
+// SHOW CREATE [ TABLE | SEQUENCE | VIEW ] <tablename>
+// SHOW CREATE ALL TABLES
+// SHOW CREATE TABLE <tablenames>
 // %SeeAlso: WEBDOCS/show-create-table.html
 show_create_stmt:
+  // We can only accept one table when doing SHOW CREATE since
+  // table's can be named "view" or "sequence" causing ambiguous grammar
+  // when allowing multiple table names.
   SHOW CREATE table_name
   {
-    $$.val = &tree.ShowCreate{Name: $3.unresolvedObjectName()}
+    name := $3.unresolvedObjectName().ToTableName()
+    names := tree.TableNames{name}
+    $$.val = &tree.ShowCreateTable{
+      Names: names,
+    }
   }
-| SHOW CREATE create_kw table_name
+| SHOW CREATE view_or_sequence table_name_list
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
+    $$.val = &tree.ShowCreateTable{
+      Names: $4.tableNames(),
+    }
+  }
+| SHOW CREATE TABLE table_name_list
+  {
+    $$.val = &tree.ShowCreateTable{
+      Names: $4.tableNames(),
+    }
+  }
+| SHOW CREATE ALL TABLES
+  {
+    $$.val = &tree.ShowCreateAllTables{}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
-create_kw:
-  TABLE
-| VIEW
+view_or_sequence:
+  VIEW
 | SEQUENCE
 
 // %Help: SHOW USERS - list defined users

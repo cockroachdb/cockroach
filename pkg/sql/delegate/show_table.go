@@ -11,45 +11,17 @@
 package delegate
 
 import (
+	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
-
-func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
-	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
-
-	const showCreateQuery = `
-WITH zone_configs AS (
-    SELECT string_agg(raw_config_sql, e';\n' ORDER BY partition_name, index_name) FROM crdb_internal.zones
-    WHERE database_name = %[1]s
-    AND table_name = %[2]s
-    AND raw_config_yaml IS NOT NULL
-    AND raw_config_sql IS NOT NULL
-)
-SELECT
-    %[3]s AS table_name,
-    concat(create_statement,
-        CASE
-        WHEN NOT has_partitions
-            THEN NULL
-        WHEN (SELECT * FROM zone_configs) IS NULL
-            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
-        ELSE concat(e';\n', (SELECT * FROM zone_configs))
-        END
-    ) AS create_statement
-FROM
-    %[4]s.crdb_internal.create_statements
-WHERE
-    descriptor_id = %[6]d
-ORDER BY
-    1, 2;`
-
-	return d.showTableDetails(n.Name, showCreateQuery)
-}
 
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
@@ -88,7 +60,7 @@ WHERE
 ORDER BY
     1, 2, 3, 4, 5, 6, 7, 8;`
 
-	return d.showTableDetails(n.Table, getIndexesQuery)
+	return d.populateShowCreateObjectQueryDetails(n.Table, getIndexesQuery)
 }
 
 func (d *delegator) delegateShowColumns(n *tree.ShowColumns) (tree.Statement, error) {
@@ -141,7 +113,7 @@ FROM
 ORDER BY
     ordinal_position, 1, 2, 3, 4, 5, 6, 7;`
 
-	return d.showTableDetails(n.Table, getColumnsQuery)
+	return d.populateShowCreateObjectQueryDetails(n.Table, getColumnsQuery)
 }
 
 func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
@@ -168,30 +140,73 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
       AND t.oid = c.conrelid
     ORDER BY 1, 2, 3, 4, 5`
 
-	return d.showTableDetails(n.Table, getConstraintsQuery)
+	return d.populateShowCreateObjectQueryDetails(n.Table, getConstraintsQuery)
 }
 
-// showTableDetails returns the AST of a query which extracts information about
-// the given table using the given query patterns in SQL. The query pattern must
-// accept the following formatting parameters:
+func (d *delegator) delegateShowCreateTables(n *tree.ShowCreateTable) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateQuery = `
+WITH zone_configs AS (
+    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+    WHERE database_name = %[1]s
+    AND table_name IN (%[2]s)
+    AND raw_config_yaml IS NOT NULL
+    AND raw_config_sql IS NOT NULL
+)
+SELECT
+    descriptor_name AS table_name,
+    concat(concat(create_statement, ';'),
+        CASE
+        WHEN NOT has_partitions
+            THEN NULL
+        WHEN (SELECT * FROM zone_configs) IS NULL
+            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e'\n', (SELECT * FROM zone_configs))
+        END
+    ) AS create_statement
+FROM
+    %[3]s.crdb_internal.create_statements
+WHERE
+    descriptor_id IN (%[4]s)
+ORDER BY
+    1, 2;`
+
+	return d.populateShowCreateTableQueryDetails(n.Names, showCreateQuery)
+}
+
+func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateAllTablesQuery = `
+	SELECT crdb_internal.show_create_all_tables(%[1]s);
+`
+	databaseLiteral := d.evalCtx.SessionData.Database
+
+	query := fmt.Sprintf(showCreateAllTablesQuery,
+		lex.EscapeSQLString(databaseLiteral),
+	)
+
+	return parse(query)
+}
+
+// populateShowCreateObjectQueryDetails returns the AST of a query which extracts
+// information about the given table using the given query patterns in SQL.
+// populateShowCreateObjectQueryDetails is used for SHOW CREATE INDEX / COLUMNS/
+// CONSTRAINTS.
+// The query pattern must accept the following formatting parameters:
 //   %[1]s the database name as SQL string literal.
 //   %[2]s the unqualified table name as SQL string literal.
 //   %[3]s the given table name as SQL string literal.
 //   %[4]s the database name as SQL identifier.
 //   %[5]s the schema name as SQL string literal.
-//   %[6]s the table ID.
-func (d *delegator) showTableDetails(
+//   %[6]d the table ID.
+func (d *delegator) populateShowCreateObjectQueryDetails(
 	name *tree.UnresolvedObjectName, query string,
 ) (tree.Statement, error) {
-	// We avoid the cache so that we can observe the details without
-	// taking a lease, like other SHOW commands.
-	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
-	tn := name.ToTableName()
-	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
+
+	resName, id, err := d.getNameAndID(name)
 	if err != nil {
-		return nil, err
-	}
-	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
 		return nil, err
 	}
 
@@ -201,8 +216,73 @@ func (d *delegator) showTableDetails(
 		lex.EscapeSQLString(resName.String()),
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 		lex.EscapeSQLString(resName.Schema()),
-		dataSource.PostgresDescriptorID(),
+		id,
 	)
 
 	return parse(fullQuery)
+}
+
+// populateShowCreateTableQueryDetails returns the AST of a query which
+// extracts information about the given table using the given query patterns
+// in SQL.
+// populateShowCreateTableQueryDetails is used for SHOW CREATE TABLE.
+// The query pattern must accept the following formatting parameters:
+//   %[1]s the database name as SQL string literal.
+//   %[2]s the unqualified table name(s) as SQL string literal.
+//   %[3]s the database name as SQL identifier.
+//   %[4]s the table ID(s)
+func (d *delegator) populateShowCreateTableQueryDetails(
+	names tree.TableNames, query string,
+) (tree.Statement, error) {
+	var tableNameLiterals []string
+	var descriptorIDLiterals []string
+	for _, name := range names {
+		resName, id, err := d.getNameAndID(name.ToUnresolvedObjectName())
+		if err != nil {
+			return nil, err
+		}
+
+		tableNameLiterals = append(tableNameLiterals, resName.String())
+		descriptorIDLiterals = append(descriptorIDLiterals, strconv.Itoa(int(id)))
+	}
+
+	tableNames := strings.Join(tableNameLiterals, ",")
+	descriptorIDs := strings.Join(descriptorIDLiterals, ",")
+
+	databaseLiteral := d.evalCtx.SessionData.Database
+
+	var buf bytes.Buffer
+	lexbase.EncodeEscapedSQLIdent(&buf, databaseLiteral)
+	// databaseIdentifier is used in the query, double quote are needed
+	// in the case where the database name includes spaces.
+	databaseIdentifier := buf.String()
+
+	fullQuery := fmt.Sprintf(query,
+		lex.EscapeSQLString(databaseLiteral),
+		lex.EscapeSQLString(tableNames),
+		databaseIdentifier,
+		descriptorIDs,
+	)
+
+	return parse(fullQuery)
+}
+
+// getNameAndID takes a table name in the form of a tree.UnresolvedObjectName
+// performs a lookup for the table and returns the resolved name and id of the
+// the table.
+func (d *delegator) getNameAndID(
+	name *tree.UnresolvedObjectName,
+) (cat.DataSourceName, cat.StableID, error) {
+	// We avoid the cache so that we can observe the details without
+	// taking a lease, like other SHOW commands.
+	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
+	tn := name.ToTableName()
+	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
+	if err != nil {
+		return cat.DataSourceName{}, 0, err
+	}
+	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+		return cat.DataSourceName{}, 0, err
+	}
+	return resName, dataSource.PostgresDescriptorID(), nil
 }
