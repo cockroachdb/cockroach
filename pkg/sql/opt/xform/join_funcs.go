@@ -374,11 +374,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		if pkCols == nil {
-			pkIndex := md.Table(scanPrivate.Table).Index(cat.PrimaryIndex)
-			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
-			for i := range pkCols {
-				pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
-			}
+			pkCols = c.getPkCols(scanPrivate.Table)
 		}
 
 		// The lower LookupJoin must return all PK columns (they are needed as key
@@ -469,6 +465,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 	inputCols := input.Relational().OutputCols
 	var pkCols opt.ColList
+	var newScanPrivate *memo.ScanPrivate
 
 	eqColsAndOptionalFiltersCalculated := false
 	var leftEqCols opt.ColList
@@ -579,12 +576,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		}
 
 		if pkCols == nil {
-			tab := c.e.mem.Metadata().Table(scanPrivate.Table)
-			pkIndex := tab.Index(cat.PrimaryIndex)
-			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
-			for i := range pkCols {
-				pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
-			}
+			pkCols = c.getPkCols(scanPrivate.Table)
 		}
 
 		// Though the index is marked as containing the column being indexed, it
@@ -594,6 +586,13 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
 			indexCols.Add(prefixCol)
+		}
+
+		// Create a new ScanPrivate, which will be used below for the inverted join.
+		// Note: this must happen before the continuation column is created to ensure
+		// that the continuation column will have the highest column ID.
+		if newScanPrivate == nil {
+			newScanPrivate = c.DuplicateScanPrivate(scanPrivate)
 		}
 
 		continuationCol := opt.ColumnID(0)
@@ -629,6 +628,12 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.On = c.ExtractBoundConditions(onFilters, invertedJoin.Cols)
 		indexJoin.On = c.ExtractUnboundConditions(onFilters, invertedJoin.Cols)
 
+		// Map the inverted join to use the new table and column IDs from the
+		// newScanPrivate created above. We want to make sure that the column IDs
+		// returned by the inverted join are different from the IDs that will be
+		// returned by the top level index join.
+		c.mapInvertedJoin(&invertedJoin, indexCols, newScanPrivate)
+
 		indexJoin.Input = c.e.f.ConstructInvertedJoin(
 			invertedJoin.Input,
 			invertedJoin.On,
@@ -637,44 +642,72 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		indexJoin.JoinType = joinType
 		indexJoin.Table = scanPrivate.Table
 		indexJoin.Index = cat.PrimaryIndex
-		indexJoin.KeyCols = pkCols
+		indexJoin.KeyCols = c.getPkCols(invertedJoin.Table)
 		indexJoin.Cols = scanPrivate.Cols.Union(inputCols)
 		indexJoin.LookupColsAreTableKey = true
 		if continuationCol != 0 {
 			indexJoin.IsSecondJoinInPairedJoiner = true
 		}
 
-		// If this is not a semi- or anti-join, create the LookupJoin for the index
-		// join in the same group.
-		if joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp {
-			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
-			return
+		// If this is a semi- or anti-join, ensure the columns do not include any
+		// unneeded right-side columns.
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+			indexJoin.Cols = inputCols.Union(indexJoin.On.OuterCols())
 		}
 
-		// Some semi and anti joins require a project on top (see below). Avoid
-		// adding that projection if it will be a no-op (i.e., we already have
-		// the correct output columns from the lookup join).
-		outputCols := indexJoin.Cols.Intersection(indexJoin.Input.Relational().OutputCols)
-		if outputCols.SubsetOf(inputCols) {
-			c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
-			return
-		}
-
-		// For some semi and anti joins, we need to add a project on top to ensure
-		// that only the original left-side columns are output. Normally, the
-		// LookupJoin would be able to perform the necessary projection for semi
-		// and anti joins by intersecting Cols with the OutputCols of its input,
-		// but that doesn't work for paired joins since the input to the second
-		// join may include more columns than the original input.
-		var project memo.ProjectExpr
-		project.Input = c.e.f.ConstructLookupJoin(
-			indexJoin.Input,
-			indexJoin.On,
-			&indexJoin.LookupJoinPrivate,
-		)
-		project.Passthrough = grp.Relational().OutputCols
-		c.e.mem.AddProjectToGroup(&project, grp)
+		// Create the LookupJoin for the index join in the same group.
+		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	})
+}
+
+// getPkCols gets the primary key columns for the given table as a ColList.
+func (c *CustomFuncs) getPkCols(tabID opt.TableID) opt.ColList {
+	tab := c.e.mem.Metadata().Table(tabID)
+	pkIndex := tab.Index(cat.PrimaryIndex)
+	pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
+	for i := range pkCols {
+		pkCols[i] = tabID.IndexColumnID(pkIndex, i)
+	}
+	return pkCols
+}
+
+// mapInvertedJoin maps the given inverted join to use the table and columns
+// provided in newScanPrivate. The inverted join is modified in place. indexCols
+// contains the pre-calculated index columns used by the given invertedJoin.
+func (c *CustomFuncs) mapInvertedJoin(
+	invertedJoin *memo.InvertedJoinExpr, indexCols opt.ColSet, newScanPrivate *memo.ScanPrivate,
+) {
+	tabID := invertedJoin.Table
+	newTabID := newScanPrivate.Table
+
+	// Get the catalog index (same for both new and old tables).
+	index := c.e.mem.Metadata().TableMeta(tabID).Table.Index(invertedJoin.Index)
+
+	// Though the index is marked as containing the column being indexed, it
+	// doesn't actually, and it is only valid to extract the primary key
+	// columns and non-inverted prefix columns from it.
+	newPkCols := c.getPkCols(newTabID)
+	newIndexCols := newPkCols.ToSet()
+	for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+		prefixCol := newTabID.IndexColumnID(index, i)
+		newIndexCols.Add(prefixCol)
+	}
+
+	// Get the source and destination ColSets, including the inverted source
+	// columns, which will be used in the invertedExpr.
+	srcCols := indexCols.Copy()
+	dstCols := newIndexCols.Copy()
+	ord := index.VirtualInvertedColumn().InvertedSourceColumnOrdinal()
+	invertedSourceCol := tabID.ColumnID(ord)
+	newInvertedSourceCol := newTabID.ColumnID(ord)
+	srcCols.Add(invertedSourceCol)
+	dstCols.Add(newInvertedSourceCol)
+
+	invertedJoin.Table = newTabID
+	invertedJoin.InvertedExpr = c.mapScalarExprCols(invertedJoin.InvertedExpr, srcCols, dstCols)
+	invertedJoin.Cols = invertedJoin.Cols.Difference(indexCols).Union(newIndexCols)
+	invertedJoin.ConstFilters = c.MapFilterCols(invertedJoin.ConstFilters, srcCols, dstCols)
+	invertedJoin.On = c.MapFilterCols(invertedJoin.On, srcCols, dstCols)
 }
 
 // findJoinFilterConstants tries to find a filter that is exactly equivalent to

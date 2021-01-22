@@ -1684,6 +1684,11 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 func (c *CustomFuncs) MapFilterCols(
 	filters memo.FiltersExpr, src, dst opt.ColSet,
 ) memo.FiltersExpr {
+	newFilters := c.mapScalarExprCols(&filters, src, dst).(*memo.FiltersExpr)
+	return *newFilters
+}
+
+func (c *CustomFuncs) mapScalarExprCols(scalar opt.ScalarExpr, src, dst opt.ColSet) opt.ScalarExpr {
 	if src.Len() != dst.Len() {
 		panic(errors.AssertionFailedf(
 			"src and dst must have the same number of columns, src: %v, dst: %v",
@@ -1701,8 +1706,7 @@ func (c *CustomFuncs) MapFilterCols(
 		dstCol, _ = dst.Next(dstCol + 1)
 	}
 
-	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
-	return *newFilters
+	return c.RemapCols(scalar, colMap)
 }
 
 // MakeSetPrivate constructs a new SetPrivate with given left, right, and out

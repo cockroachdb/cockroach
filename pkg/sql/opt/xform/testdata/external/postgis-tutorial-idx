@@ -261,14 +261,14 @@ sort
       ├── fd: ()-->(10)
       └── inner-join (lookup nyc_neighborhoods [as=neighborhoods])
            ├── columns: boroname:2 neighborhoods.name:3 neighborhoods.geom:4!null subways.name:10!null subways.geom:22!null
-           ├── key columns: [1] = [1]
+           ├── key columns: [61] = [1]
            ├── lookup columns are key
            ├── immutable
            ├── fd: ()-->(10)
            ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geom_idx [as=neighborhoods])
-           │    ├── columns: neighborhoods.gid:1!null subways.name:10!null subways.geom:22
+           │    ├── columns: subways.name:10!null subways.geom:22 neighborhoods.gid:61!null
            │    ├── inverted-expr
-           │    │    └── st_coveredby(subways.geom:22, neighborhoods.geom:4)
+           │    │    └── st_coveredby(subways.geom:22, neighborhoods.geom:64)
            │    ├── fd: ()-->(10)
            │    ├── select
            │    │    ├── columns: subways.name:10!null subways.geom:22
@@ -320,14 +320,14 @@ sort
       │    ├── fd: (3)-->(19-21)
       │    ├── inner-join (lookup nyc_census_blocks [as=census])
       │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4!null popn_total:9 popn_white:10 popn_black:11 census.geom:16!null
-      │    │    ├── key columns: [7] = [7]
+      │    │    ├── key columns: [24] = [7]
       │    │    ├── lookup columns are key
       │    │    ├── immutable
       │    │    ├── fd: ()-->(2)
       │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=census])
-      │    │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4 census.gid:7!null
+      │    │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4 census.gid:24!null
       │    │    │    ├── inverted-expr
-      │    │    │    │    └── st_intersects(neighborhoods.geom:4, census.geom:16)
+      │    │    │    │    └── st_intersects(neighborhoods.geom:4, census.geom:33)
       │    │    │    ├── fd: ()-->(2)
       │    │    │    ├── select
       │    │    │    │    ├── columns: neighborhoods.boroname:2!null name:3 neighborhoods.geom:4
@@ -377,13 +377,13 @@ project
  │    ├── fd: ()-->(31-33)
  │    ├── inner-join (lookup nyc_census_blocks [as=census])
  │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:23 subways.geom:28!null
- │    │    ├── key columns: [1] = [1]
+ │    │    ├── key columns: [72] = [1]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
  │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=census])
- │    │    │    ├── columns: census.gid:1!null routes:23 subways.geom:28
+ │    │    │    ├── columns: routes:23 subways.geom:28 census.gid:72!null
  │    │    │    ├── inverted-expr
- │    │    │    │    └── st_dwithin(subways.geom:28, census.geom:10, 200.0)
+ │    │    │    │    └── st_dwithin(subways.geom:28, census.geom:81, 200.0)
  │    │    │    ├── immutable
  │    │    │    ├── select
  │    │    │    │    ├── columns: routes:23 subways.geom:28
@@ -448,13 +448,13 @@ sort
       │    │    ├── immutable
       │    │    ├── inner-join (lookup nyc_census_blocks [as=census])
       │    │    │    ├── columns: popn_total:3 popn_white:4 popn_black:5 census.geom:10!null routes:23 subways.geom:28!null
-      │    │    │    ├── key columns: [1] = [1]
+      │    │    │    ├── key columns: [75] = [1]
       │    │    │    ├── lookup columns are key
       │    │    │    ├── immutable
       │    │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=census])
-      │    │    │    │    ├── columns: census.gid:1!null routes:23 subways.geom:28
+      │    │    │    │    ├── columns: routes:23 subways.geom:28 census.gid:75!null
       │    │    │    │    ├── inverted-expr
-      │    │    │    │    │    └── st_dwithin(subways.geom:28, census.geom:10, 200.0)
+      │    │    │    │    │    └── st_dwithin(subways.geom:28, census.geom:84, 200.0)
       │    │    │    │    ├── scan nyc_subway_stations [as=subways]
       │    │    │    │    │    └── columns: routes:23 subways.geom:28
       │    │    │    │    └── filters (true)
@@ -491,14 +491,14 @@ project
  ├── immutable
  └── inner-join (lookup nyc_subway_stations [as=s])
       ├── columns: s.name:4 routes:11 s.geom:16!null n.name:21!null n.geom:22!null
-      ├── key columns: [1] = [1]
+      ├── key columns: [37] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(21)
       ├── inner-join (inverted nyc_subway_stations@nyc_subway_stations_geom_idx [as=s])
-      │    ├── columns: s.gid:1!null n.name:21!null n.geom:22
+      │    ├── columns: n.name:21!null n.geom:22 s.gid:37!null
       │    ├── inverted-expr
-      │    │    └── st_contains(n.geom:22, s.geom:16)
+      │    │    └── st_contains(n.geom:22, s.geom:52)
       │    ├── fd: ()-->(21)
       │    ├── select
       │    │    ├── columns: n.name:21!null n.geom:22
@@ -536,13 +536,13 @@ sort
       ├── key: (20,21)
       └── inner-join (lookup nyc_neighborhoods [as=n])
            ├── columns: routes:11 s.geom:16!null boroname:20 n.name:21 n.geom:22!null
-           ├── key columns: [19] = [19]
+           ├── key columns: [25] = [19]
            ├── lookup columns are key
            ├── immutable
            ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geom_idx [as=n])
-           │    ├── columns: routes:11 s.geom:16 n.gid:19!null
+           │    ├── columns: routes:11 s.geom:16 n.gid:25!null
            │    ├── inverted-expr
-           │    │    └── st_coveredby(s.geom:16, n.geom:22)
+           │    │    └── st_coveredby(s.geom:16, n.geom:28)
            │    ├── immutable
            │    ├── select
            │    │    ├── columns: routes:11 s.geom:16
@@ -574,14 +574,14 @@ scalar-group-by
  ├── fd: ()-->(19)
  ├── inner-join (lookup nyc_census_blocks [as=c])
  │    ├── columns: name:3!null n.geom:4!null popn_total:9 c.geom:16!null
- │    ├── key columns: [7] = [7]
+ │    ├── key columns: [20] = [7]
  │    ├── lookup columns are key
  │    ├── immutable
  │    ├── fd: ()-->(3)
  │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=c])
- │    │    ├── columns: name:3!null n.geom:4 c.gid:7!null
+ │    │    ├── columns: name:3!null n.geom:4 c.gid:20!null
  │    │    ├── inverted-expr
- │    │    │    └── st_intersects(n.geom:4, c.geom:16)
+ │    │    │    └── st_intersects(n.geom:4, c.geom:29)
  │    │    ├── fd: ()-->(3)
  │    │    ├── select
  │    │    │    ├── columns: name:3!null n.geom:4
@@ -627,14 +627,14 @@ project
  │    ├── ordering: +15
  │    ├── inner-join (lookup nyc_census_blocks [as=c])
  │    │    ├── columns: popn_total:3 c.geom:10!null name:15!null n.geom:16!null
- │    │    ├── key columns: [1] = [1]
+ │    │    ├── key columns: [33] = [1]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
  │    │    ├── ordering: +15
  │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=c])
- │    │    │    ├── columns: c.gid:1!null name:15!null n.geom:16
+ │    │    │    ├── columns: name:15!null n.geom:16 c.gid:33!null
  │    │    │    ├── inverted-expr
- │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
+ │    │    │    │    └── st_intersects(n.geom:16, c.geom:42)
  │    │    │    ├── ordering: +15
  │    │    │    ├── sort
  │    │    │    │    ├── columns: name:15!null n.geom:16
@@ -670,14 +670,14 @@ project
  ├── immutable
  └── inner-join (lookup nyc_census_blocks [as=blocks])
       ├── columns: blkid:2 blocks.geom:10!null name:16!null subways.geom:28!null
-      ├── key columns: [1] = [1]
+      ├── key columns: [67] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(16)
       ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geom_idx [as=blocks])
-      │    ├── columns: blocks.gid:1!null name:16!null subways.geom:28
+      │    ├── columns: name:16!null subways.geom:28 blocks.gid:67!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(subways.geom:28, blocks.geom:10)
+      │    │    └── st_coveredby(subways.geom:28, blocks.geom:76)
       │    ├── fd: ()-->(16)
       │    ├── select
       │    │    ├── columns: name:16!null subways.geom:28

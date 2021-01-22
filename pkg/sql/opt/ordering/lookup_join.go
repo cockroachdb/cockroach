@@ -20,16 +20,22 @@ import (
 func lookupOrIndexJoinCanProvideOrdering(
 	expr memo.RelExpr, required *physical.OrderingChoice,
 ) bool {
-	if lookupJoin, ok := expr.(*memo.LookupJoinExpr); ok && lookupJoin.IsSecondJoinInPairedJoiner {
-		// Can only pass through ordering if the ordering can be provided by the
-		// child, since we don't want a sort to be interposed between the child
-		// and this join.
-		return CanProvide(expr.Child(0).(memo.RelExpr), required)
-	}
 	// LookupJoin and IndexJoin can pass through their ordering if the ordering
 	// depends only on columns present in the input.
 	inputCols := expr.Child(0).(memo.RelExpr).Relational().OutputCols
-	return required.CanProjectCols(inputCols)
+	canProjectCols := required.CanProjectCols(inputCols)
+
+	if lookupJoin, ok := expr.(*memo.LookupJoinExpr); ok &&
+		canProjectCols && lookupJoin.IsSecondJoinInPairedJoiner {
+		// Can only pass through ordering if the ordering can be provided by the
+		// child, since we don't want a sort to be interposed between the child
+		// and this join.
+		child := expr.Child(0).(memo.RelExpr)
+		res := projectOrderingToInput(child, required)
+		res = trimColumnGroups(&res, &child.Relational().FuncDeps)
+		return CanProvide(child, &res)
+	}
+	return canProjectCols
 }
 
 func lookupOrIndexJoinBuildChildReqOrdering(

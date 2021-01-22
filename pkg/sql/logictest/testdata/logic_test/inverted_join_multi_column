@@ -158,15 +158,14 @@ ORDER BY j1.k, j2.i, j2.s, j2.j::STRING
 
 # This query performs a left inverted join on ij_idx with no matching rows on
 # the right.
-# TODO(mgartner): This test is broken, see #58892.
-# query ITITT
-# SELECT j1.*, j2.*
-# FROM j1 LEFT INVERTED JOIN j2@ij_idx
-#   ON i = 10 AND j2.j @> j1.j AND j2.j = '"foo"'
-# WHERE k = 1
-# ORDER BY j1.k, j2.i
-# ----
-# 1  {"a": "b"}  NULL  NULL  NULL
+query ITITT
+SELECT j1.*, j2.*
+FROM j1 LEFT INVERTED JOIN j2@ij_idx
+  ON i = 10 AND j2.j @> j1.j AND j2.j = '"foo"'
+WHERE k = 1
+ORDER BY j1.k, j2.i
+----
+1  {"a": "b"}  NULL  NULL  NULL
 
 # This query performs a semi inverted join on ij_idx.
 query IT
@@ -312,21 +311,20 @@ ORDER BY a1.a, a2.a
 
 # This query performs a left inverted join on ij_idx with no matching rows on
 # the right.
-# TODO(mgartner): This test is broken, see #58892.
-# query ITIT
-# SELECT a1.*, a2.* FROM a1@primary
-# LEFT INVERTED JOIN a2@ia_idx
-# ON a2.a @> a1.a AND a2.a = '{100}' AND a2.i = 10
-# ORDER BY a1.a, a2.a
-# ----
-# 8  NULL       NULL  NULL
-# 1  {}         NULL  NULL
-# 7  {NULL}     NULL  NULL
-# 2  {1}        NULL  NULL
-# 4  {1,2}      NULL  NULL
-# 6  {1,2,3,4}  NULL  NULL
-# 5  {1,3}      NULL  NULL
-# 3  {2}        NULL  NULL
+query ITIT
+SELECT a1.*, a2.* FROM a1@primary
+LEFT INVERTED JOIN a2@ia_idx
+ON a2.a @> a1.a AND a2.a = '{100}' AND a2.i = 10
+ORDER BY a1.a, a2.a
+----
+8  NULL       NULL  NULL
+1  {}         NULL  NULL
+7  {NULL}     NULL  NULL
+2  {1}        NULL  NULL
+4  {1,2}      NULL  NULL
+6  {1,2,3,4}  NULL  NULL
+5  {1,3}      NULL  NULL
+3  {2}        NULL  NULL
 
 # This query performs a semi inverted join.
 query IT
