@@ -25,7 +25,7 @@ import "sql/catalog/descpb/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
-import "sql/opt/invertedexpr/span_expression.proto";
+import "sql/inverted/span_expression.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
@@ -695,7 +695,7 @@ message InvertedFiltererSpec {
 
   // The expression to evaluate. The SpansToRead are ignored since they
   // have already been used to setup the input.
-  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
+  optional inverted.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
 
   // Optional pre-filtering expression.
   message PreFiltererSpec {

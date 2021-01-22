@@ -552,7 +552,7 @@ func checkSupportForInvertedFilterNode(n *invertedFilterNode) (distRecommendatio
 	// arbitrary order, and de-duplicate the PKs at the next stage.
 	// The expression is a union of inverted spans iff all the spans have been
 	// promoted to FactoredUnionSpans, in which case the Left and Right
-	// InvertedExpressions are nil.
+	// inverted.Expressions are nil.
 	//
 	// TODO(sumeer): Even if the filtering cannot be distributed, the
 	// placement of the inverted filter could be optimized. Specifically, when

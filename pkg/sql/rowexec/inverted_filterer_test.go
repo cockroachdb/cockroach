@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -29,8 +29,8 @@ func intToEncodedInvertedVal(v int64) []byte {
 	return encoding.EncodeVarintAscending(nil, v)
 }
 
-func intSpanToEncodedSpan(start, end int64) invertedexpr.SpanExpressionProto_Span {
-	return invertedexpr.SpanExpressionProto_Span{
+func intSpanToEncodedSpan(start, end int64) inverted.SpanExpressionProto_Span {
+	return inverted.SpanExpressionProto_Span{
 		Start: intToEncodedInvertedVal(start),
 		End:   intToEncodedInvertedVal(end),
 	}
@@ -104,16 +104,16 @@ func TestInvertedFilterer(t *testing.T) {
 	}
 	for i := range testCases {
 		// Add the intersection InvertedExpr.
-		testCases[i].ProcessorCore.InvertedFilterer.InvertedExpr = invertedexpr.SpanExpressionProto{
-			Node: invertedexpr.SpanExpressionProto_Node{
-				Operator: invertedexpr.SetIntersection,
-				Left: &invertedexpr.SpanExpressionProto_Node{
-					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+		testCases[i].ProcessorCore.InvertedFilterer.InvertedExpr = inverted.SpanExpressionProto{
+			Node: inverted.SpanExpressionProto_Node{
+				Operator: inverted.SetIntersection,
+				Left: &inverted.SpanExpressionProto_Node{
+					FactoredUnionSpans: []inverted.SpanExpressionProto_Span{
 						intSpanToEncodedSpan(1, 2),
 					},
 				},
-				Right: &invertedexpr.SpanExpressionProto_Node{
-					FactoredUnionSpans: []invertedexpr.SpanExpressionProto_Span{
+				Right: &inverted.SpanExpressionProto_Node{
+					FactoredUnionSpans: []inverted.SpanExpressionProto_Span{
 						intSpanToEncodedSpan(3, 4),
 					},
 				},
