@@ -626,3 +626,42 @@ SELECT EXISTS(
        );
 `, tableName.String(), columnName)
 }
+
+func columnNotNullConstraintInMutation(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+  WITH descriptors AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'cockroach.sql.sqlbase.Descriptor',
+                            descriptor
+                           )->'table' AS d
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                   ),
+       constraint_mutations AS (
+                                SELECT mut
+                                  FROM (
+                                        SELECT json_array_elements(
+                                                d->'mutations'
+                                               ) AS mut
+                                          FROM descriptors
+                                       )
+                                 WHERE (mut->'constraint') IS NOT NULL
+                            ),
+       col AS (
+            SELECT (c->>'id')::INT8 AS id
+              FROM (
+                    SELECT json_array_elements(d->'columns') AS c
+                      FROM descriptors
+                   )
+             WHERE c->>'name' = $2
+           )
+SELECT EXISTS(
+        SELECT *
+          FROM constraint_mutations
+          JOIN col ON mut->'constraint'->>'constraintType' = 'NOT_NULL'
+                  AND (mut->'constraint'->>'notNullColumn')::INT8 = id
+       );
+`, tableName.String(), columnName)
+}
