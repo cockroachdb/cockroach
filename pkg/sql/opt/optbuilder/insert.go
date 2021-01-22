@@ -531,7 +531,7 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		// Skip mutation, hidden or system columns.
 		col := mb.tab.Column(i)
-		if col.Kind() != cat.Ordinary || col.IsHidden() {
+		if col.Kind() != cat.Ordinary || col.Visibility() != cat.Visible {
 			continue
 		}
 
@@ -578,7 +578,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if tabCol := mb.tab.Column(i); !tabCol.IsHidden() && tabCol.Kind() == cat.Ordinary {
+			if tabCol := mb.tab.Column(i); tabCol.Visibility() == cat.Visible && tabCol.Kind() == cat.Ordinary {
 				desiredTypes = append(desiredTypes, tabCol.DatumType())
 			}
 		}

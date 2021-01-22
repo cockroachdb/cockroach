@@ -1475,9 +1475,9 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 			cat.Ordinary,
 			colMeta.Type,
 			!relProps.NotNullCols.Contains(col),
-			false, /* hidden */
-			nil,   /* defaultExpr */
-			nil,   /* computedExpr */
+			cat.Visible,
+			nil, /* defaultExpr */
+			nil, /* computedExpr */
 		)
 
 		// Make sure we have estimated stats for this column.
