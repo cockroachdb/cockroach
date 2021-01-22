@@ -2,15 +2,16 @@ import React from "react";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 import { noop } from "lodash";
+import { Anchor } from "src/anchor";
 import {
-  Anchor,
   ActivateDiagnosticsModalRef,
-  getHighlightedText,
   DiagnosticStatusBadge,
-  AggregateStatistics,
-  Dropdown,
-  Button,
-} from "src/index";
+} from "src/statementsDiagnostics";
+import { getHighlightedText } from "src/highlightedText";
+import { AggregateStatistics } from "src/statementsTable";
+import { Dropdown } from "src/dropdown";
+import { Button } from "src/button";
+
 import { Tooltip2 as Tooltip } from "src/tooltip2";
 import {
   statementDiagnostics,

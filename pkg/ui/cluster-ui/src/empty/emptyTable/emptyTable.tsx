@@ -2,7 +2,7 @@ import React from "react";
 import classNames from "classnames/bind";
 import { isString } from "lodash";
 import styles from "./emptyTable.module.scss";
-import { Text, TextTypes } from "src";
+import { Text, TextTypes } from "src/text";
 
 export interface EmptyTableProps {
   icon?: string | React.ReactNode;

@@ -1,7 +1,9 @@
 import React from "react";
 import classNames from "classnames/bind";
 
-import { Badge, Anchor, Tooltip2 as Tooltip } from "src/index";
+import { Badge } from "src/badge";
+import { Anchor } from "src/anchor";
+import { Tooltip2 as Tooltip } from "src/tooltip2";
 import { statementDiagnostics } from "src/util";
 import { DiagnosticStatuses } from "./diagnosticStatuses";
 import styles from "./diagnosticStatusBadge.module.scss";

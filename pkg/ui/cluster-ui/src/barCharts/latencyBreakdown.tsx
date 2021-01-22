@@ -4,7 +4,7 @@ import { stdDevLong } from "src/util/appStats";
 import { NumericStatLegend } from "./numericStatLegend";
 import { scaleLinear } from "d3-scale";
 import { Duration } from "src/util/format";
-import { Tooltip } from "src/index";
+import { Tooltip } from "src/tooltip";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { clamp, normalizeClosedDomain } from "./utils";
