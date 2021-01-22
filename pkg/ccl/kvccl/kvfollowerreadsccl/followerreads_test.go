@@ -125,12 +125,12 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 	roOldWithNewMax := roachpb.BatchRequest{Header: roachpb.Header{
 		Txn: &roachpb.Transaction{
-			MaxTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			GlobalUncertaintyLimit: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 		},
 	}}
 	roOldWithNewMax.Add(&roachpb.GetRequest{})
 	if canSendToFollower(uuid.MakeV4(), st, roNew) {
-		t.Fatalf("should not be able to send a ro batch with new MaxTimestamp to a follower")
+		t.Fatalf("should not be able to send a ro batch with new GlobalUncertaintyLimit to a follower")
 	}
 	disableEnterprise()
 	if canSendToFollower(uuid.MakeV4(), st, roOld) {

@@ -44,7 +44,7 @@ func ComputeLocalUncertaintyLimit(
 		return hlc.Timestamp{}
 	}
 
-	localUncertaintyLimit := txn.MaxTimestamp
+	localUncertaintyLimit := txn.GlobalUncertaintyLimit
 	if status.State != kvserverpb.LeaseState_VALID {
 		return localUncertaintyLimit
 	}

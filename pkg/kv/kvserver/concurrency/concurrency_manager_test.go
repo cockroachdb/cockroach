@@ -52,7 +52,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [maxts=<int>[,<int>]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [uncertainty-limit=<int>[,<int>]]
 // new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name>
@@ -97,9 +97,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var epoch int
 				d.ScanArgs(t, "epoch", &epoch)
 
-				maxTS := ts
-				if d.HasArg("maxts") {
-					maxTS = scanTimestampWithName(t, d, "maxts")
+				uncertaintyLimit := ts
+				if d.HasArg("uncertainty-limit") {
+					uncertaintyLimit = scanTimestampWithName(t, d, "uncertainty-limit")
 				}
 
 				txn, ok := c.txnsByName[txnName]
@@ -117,8 +117,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						MinTimestamp:   ts,
 						Priority:       1, // not min or max
 					},
-					ReadTimestamp: ts,
-					MaxTimestamp:  maxTS,
+					ReadTimestamp:          ts,
+					GlobalUncertaintyLimit: uncertaintyLimit,
 				}
 				c.registerTxn(txnName, txn)
 				return ""
