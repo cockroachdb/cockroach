@@ -23,6 +23,7 @@ go_proto_library(
     proto = ":diagnosticspb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",  # keep
         "//pkg/build",
         "//pkg/config/zonepb",
         "//pkg/roachpb",
