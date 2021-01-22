@@ -617,7 +617,9 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 					Name:          tree.SeqOptOwnedBy,
 					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: "IrrelevantColumnName"}},
 			)
-			og.expectedExecErrors.add(pgcode.UndefinedTable)
+			if !(sequenceExists && ifNotExists) { // IF NOT EXISTS prevents the error
+				og.expectedExecErrors.add(pgcode.UndefinedTable)
+			}
 		} else {
 			column, err := og.randColumn(tx, *table, og.pctExisting(true))
 			if err != nil {
