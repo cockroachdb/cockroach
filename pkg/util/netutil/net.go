@@ -42,16 +42,21 @@ func ListenAndServeGRPC(
 
 	ctx := context.TODO()
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	stopper.AddCloser(stop.CloserFn(server.Stop))
+	waitQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		FatalIfUnexpected(ln.Close())
-		<-stopper.ShouldStop()
-		server.Stop()
-	})
+	}
+	if err := stopper.RunAsyncTask(ctx, "listen-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(ctx)
+		return nil, err
+	}
 
-	stopper.RunWorker(ctx, func(context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		FatalIfUnexpected(server.Serve(ln))
-	})
+	}); err != nil {
+		return nil, err
+	}
 	return ln, nil
 }
 
@@ -104,15 +109,18 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 		log.Fatalf(ctx, "%v", err)
 	}
 
-	stopper.RunWorker(ctx, func(context.Context) {
-		<-stopper.ShouldStop()
+	waitQuiesce := func(context.Context) {
+		<-stopper.ShouldQuiesce()
 
 		mu.Lock()
 		for conn := range activeConns {
 			conn.Close()
 		}
 		mu.Unlock()
-	})
+	}
+	if err := stopper.RunAsyncTask(ctx, "http2-wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(ctx)
+	}
 
 	return server
 }

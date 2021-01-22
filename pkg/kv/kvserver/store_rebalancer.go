@@ -177,7 +177,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "store-rebalancer", func(ctx context.Context) {
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 		timer.Reset(jitteredInterval(storeRebalancerTimerDuration))

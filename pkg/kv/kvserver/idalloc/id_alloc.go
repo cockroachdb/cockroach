@@ -99,7 +99,7 @@ func (ia *Allocator) Allocate(ctx context.Context) (int64, error) {
 
 func (ia *Allocator) start() {
 	ctx := ia.AnnotateCtx(context.Background())
-	ia.opts.Stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := ia.opts.Stopper.RunAsyncTask(ctx, "id-alloc", func(ctx context.Context) {
 		defer close(ia.ids)
 
 		var prevValue int64 // for assertions
@@ -150,10 +150,12 @@ func (ia *Allocator) start() {
 			for i := start; i < end; i++ {
 				select {
 				case ia.ids <- i:
-				case <-ia.opts.Stopper.ShouldStop():
+				case <-ia.opts.Stopper.ShouldQuiesce():
 					return
 				}
 			}
 		}
-	})
+	}); err != nil {
+		close(ia.ids)
+	}
 }

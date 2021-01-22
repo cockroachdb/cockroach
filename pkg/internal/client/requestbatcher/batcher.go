@@ -267,7 +267,7 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
-	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
 		defer b.sendDone(ba)
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {
@@ -340,7 +340,9 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 			ba.reqs, prevResps = nextReqs, nextPrevResps
 		}
-	})
+	}); err != nil {
+		b.sendDone(ba)
+	}
 }
 
 func (b *RequestBatcher) sendResponse(req *request, resp Response) {

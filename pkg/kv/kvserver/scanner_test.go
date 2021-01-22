@@ -120,7 +120,13 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.Background(), func(context.Context) {
+	done := func() {
+		tq.Lock()
+		tq.done = true
+		tq.Unlock()
+	}
+
+	if err := stopper.RunAsyncTask(context.Background(), "testqueue", func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -130,14 +136,14 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 					tq.processed++
 				}
 				tq.Unlock()
-			case <-stopper.ShouldStop():
-				tq.Lock()
-				tq.done = true
-				tq.Unlock()
+			case <-stopper.ShouldQuiesce():
+				done()
 				return
 			}
 		}
-	})
+	}); err != nil {
+		done()
+	}
 }
 
 // NB: MaybeAddAsync on a testQueue is actually synchronous.

@@ -796,12 +796,13 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 // stopper signals exit.
 func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.Background())
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		defer func() {
-			bq.mu.Lock()
-			bq.mu.stopped = true
-			bq.mu.Unlock()
-		}()
+	stop := func() {
+		bq.mu.Lock()
+		bq.mu.stopped = true
+		bq.mu.Unlock()
+	}
+	if err := stopper.RunAsyncTask(ctx, "queue-loop", func(ctx context.Context) {
+		defer stop()
 
 		// nextTime is initially nil; we don't start any timers until the queue
 		// becomes non-empty.
@@ -813,7 +814,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 		for {
 			select {
 			// Exit on stopper.
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 
 			// Incoming signal sets the next time to process if there were previously
@@ -872,7 +873,9 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 				}
 			}
 		}
-	})
+	}); err != nil {
+		stop()
+	}
 }
 
 // lastProcessDuration returns the duration of the last processing attempt.
@@ -1140,7 +1143,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	}
 
 	workerCtx := bq.AnnotateCtx(context.Background())
-	stopper.RunWorker(workerCtx, func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(workerCtx, "purgatory", func(ctx context.Context) {
 		ticker := time.NewTicker(purgatoryReportInterval)
 		for {
 			select {
@@ -1201,7 +1204,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 				for errStr, count := range errMap {
 					log.Errorf(ctx, "%d replicas failing with %q", count, errStr)
 				}
-			case <-stopper.ShouldStop():
+			case <-stopper.ShouldQuiesce():
 				return
 			}
 		}

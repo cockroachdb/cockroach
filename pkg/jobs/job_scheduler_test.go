@@ -303,7 +303,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 		// Notify main thread and return some small delay for daemon to sleep.
 		select {
 		case getWaitPeriodCalled <- struct{}{}:
-		case <-stopper.ShouldStop():
+		case <-stopper.ShouldQuiesce():
 		}
 
 		return 10 * time.Millisecond

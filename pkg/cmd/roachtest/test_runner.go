@@ -269,7 +269,7 @@ func (r *testRunner) Run(
 	for i := 0; i < parallelism; i++ {
 		i := i // Copy for closure.
 		wg.Add(1)
-		stopper.RunWorker(ctx, func(ctx context.Context) {
+		if err := stopper.RunAsyncTask(ctx, "worker", func(ctx context.Context) {
 			defer wg.Done()
 
 			if err := r.runWorker(
@@ -284,15 +284,22 @@ func (r *testRunner) Run(
 				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
 				errs.AddErr(err)
-				// Quiesce the stopper. This will cause all workers to not pick up more
-				// tests after finishing the currently running one.
-				stopper.Quiesce(ctx)
+				// Stop the stopper. This will cause all workers to not pick up more
+				// tests after finishing the currently running one. We add one to the
+				// WaitGroup so that wg.Wait() will also wait for the stopper.
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					stopper.Stop(ctx)
+				}()
 				// Interrupt everybody waiting for resources.
 				if qp != nil {
 					qp.Close(msg)
 				}
 			}
-		})
+		}); err != nil {
+			wg.Done()
+		}
 	}
 
 	// Wait for all the workers to finish.

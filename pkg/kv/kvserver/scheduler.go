@@ -189,19 +189,22 @@ func newRaftScheduler(
 }
 
 func (s *raftScheduler) Start(ctx context.Context, stopper *stop.Stopper) {
-	stopper.RunWorker(ctx, func(ctx context.Context) {
-		<-stopper.ShouldStop()
+	waitQuiesce := func(context.Context) {
+		<-stopper.ShouldQuiesce()
 		s.mu.Lock()
 		s.mu.stopped = true
 		s.mu.Unlock()
 		s.mu.cond.Broadcast()
-	})
+	}
+	if err := stopper.RunAsyncTask(ctx, "raftsched-wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(ctx)
+	}
 
 	s.done.Add(s.numWorkers)
 	for i := 0; i < s.numWorkers; i++ {
-		stopper.RunWorker(ctx, func(ctx context.Context) {
-			s.worker(ctx)
-		})
+		if err := stopper.RunAsyncTask(ctx, "raft-worker", s.worker); err != nil {
+			s.done.Done()
+		}
 	}
 }
 

@@ -118,12 +118,14 @@ func (connectorFactory) NewConnector(
 // cluster's ID and set Connector.rpcContext.ClusterID.
 func (c *Connector) Start(ctx context.Context) error {
 	startupC := c.startupC
-	c.rpcContext.Stopper.RunWorker(context.Background(), func(ctx context.Context) {
+	if err := c.rpcContext.Stopper.RunAsyncTask(context.Background(), "connector", func(ctx context.Context) {
 		ctx = c.AnnotateCtx(ctx)
 		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 		c.runGossipSubscription(ctx)
-	})
+	}); err != nil {
+		return err
+	}
 	// Synchronously block until the first GossipSubscription event.
 	select {
 	case <-startupC:
