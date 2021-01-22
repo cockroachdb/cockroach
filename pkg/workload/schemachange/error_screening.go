@@ -606,3 +606,23 @@ func violatesFkConstraintsHelper(
 	)
 	`, parentTableSchema, parentTableName, parentColumn, childValue))
 }
+
+func columnIsInDroppingIndex(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+SELECT EXISTS(
+        SELECT index_id
+          FROM (
+                SELECT DISTINCT index_id
+                  FROM crdb_internal.index_columns
+                 WHERE descriptor_id = $1::REGCLASS AND column_name = $2
+               ) AS indexes
+          JOIN crdb_internal.schema_changes AS sc ON sc.target_id
+                                                     = indexes.index_id
+                                                 AND table_id = $1::REGCLASS
+                                                 AND type = 'INDEX'
+                                                 AND direction = 'DROP'
+       );
+`, tableName.String(), columnName)
+}
