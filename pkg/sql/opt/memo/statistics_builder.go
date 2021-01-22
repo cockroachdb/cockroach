@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -657,7 +656,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// selectivity, the inverted constraint selectivity, and the partial index
 	// predicate (if they exist) to the underlying table stats.
 	if scan.Constraint == nil || scan.Constraint.Spans.Count() < 2 {
-		sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
+		sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -681,17 +680,17 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	// Get the stats for each span and union them together.
 	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
-	sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStatsUnion)
+	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
 	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
 		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
-		sb.constrainScan(scan, &c, scan.InvertedConstraint, pred, relProps, &spanStats)
+		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
 	// partial index predicate (if it exists) to get the correct column stats.
-	sb.constrainScan(scan, scan.Constraint, scan.InvertedConstraint, pred, relProps, s)
+	sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
 
 	// Copy in the row count and selectivity that were calculated above, if
 	// less than the values calculated from the combined spans.
@@ -720,7 +719,6 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 func (sb *statisticsBuilder) constrainScan(
 	scan *ScanExpr,
 	constraint *constraint.Constraint,
-	invertedConstraint invertedexpr.InvertedSpans,
 	pred FiltersExpr,
 	relProps *props.Relational,
 	s *props.Statistics,
@@ -731,7 +729,7 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Calculate distinct counts and histograms for inverted constrained columns
 	// -------------------------------------------------------------------------
-	if invertedConstraint != nil {
+	if scan.InvertedConstraint != nil {
 		// The constrained column is the virtual inverted column in the inverted
 		// index. Using scan.Cols here would also include the PK, which we don't
 		// want.
@@ -783,7 +781,7 @@ func (sb *statisticsBuilder) constrainScan(
 		// TODO(mgartner): Remove this special case for JSON and ARRAY inverted
 		// indexes that are constrained by scan.Constraint once they are instead
 		// constrained by scan.InvertedConstraint.
-		if idx.IsInverted() && invertedConstraint == nil {
+		if idx.IsInverted() && scan.InvertedConstraint == nil {
 			for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
 				numUnappliedConjuncts += sb.numConjunctsInConstraint(constraint, i)
 			}
