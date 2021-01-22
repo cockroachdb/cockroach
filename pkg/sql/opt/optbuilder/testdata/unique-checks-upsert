@@ -518,19 +518,182 @@ upsert uniq
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
 build
 INSERT INTO uniq VALUES (100, 10, 1), (200, 20, 2) ON CONFLICT (w) DO UPDATE SET w = 10
 ----
-error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+upsert uniq
+ ├── columns: <none>
+ ├── arbiter constraints: unique_w
+ ├── canary column: k:12
+ ├── fetch columns: k:12 v:13 w:14 x:15 y:16
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => v:2
+ │    ├── column3:9 => w:3
+ │    ├── column10:10 => x:4
+ │    └── column11:11 => y:5
+ ├── update-mapping:
+ │    └── upsert_w:21 => w:3
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_k:19 upsert_v:20 upsert_w:21!null upsert_x:22 upsert_y:23 column1:7!null column2:8!null column3:9!null column10:10 column11:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17 w_new:18!null
+ │    ├── project
+ │    │    ├── columns: w_new:18!null column1:7!null column2:8!null column3:9!null column10:10 column11:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null
+ │    │    │    │    ├── grouping columns: column3:9!null
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: column10:10 column11:11!null column1:7!null column2:8!null column3:9!null
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+ │    │    │    │    │    │    ├── (100, 10, 1)
+ │    │    │    │    │    │    └── (200, 20, 2)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         ├── NULL::INT8 [as=column10:10]
+ │    │    │    │    │         └── 5 [as=column11:11]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column1:7]
+ │    │    │    │         │    └── column1:7
+ │    │    │    │         ├── first-agg [as=column2:8]
+ │    │    │    │         │    └── column2:8
+ │    │    │    │         ├── first-agg [as=column10:10]
+ │    │    │    │         │    └── column10:10
+ │    │    │    │         └── first-agg [as=column11:11]
+ │    │    │    │              └── column11:11
+ │    │    │    ├── scan uniq
+ │    │    │    │    └── columns: k:12!null v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    └── filters
+ │    │    │         └── column3:9 = w:14
+ │    │    └── projections
+ │    │         └── 10 [as=w_new:18]
+ │    └── projections
+ │         ├── CASE WHEN k:12 IS NULL THEN column1:7 ELSE k:12 END [as=upsert_k:19]
+ │         ├── CASE WHEN k:12 IS NULL THEN column2:8 ELSE v:13 END [as=upsert_v:20]
+ │         ├── CASE WHEN k:12 IS NULL THEN column3:9 ELSE w_new:18 END [as=upsert_w:21]
+ │         ├── CASE WHEN k:12 IS NULL THEN column10:10 ELSE x:15 END [as=upsert_x:22]
+ │         └── CASE WHEN k:12 IS NULL THEN column11:11 ELSE y:16 END [as=upsert_y:23]
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_w:24!null upsert_k:25
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_w:24!null upsert_k:25
+      │         │    └── mapping:
+      │         │         ├──  upsert_w:21 => upsert_w:24
+      │         │         └──  upsert_k:19 => upsert_k:25
+      │         ├── scan uniq
+      │         │    └── columns: k:26!null w:28
+      │         └── filters
+      │              ├── upsert_w:24 = w:28
+      │              └── upsert_k:25 != k:26
+      └── unique-checks-item: uniq(x,y)
+           └── semi-join (hash)
+                ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                ├── with-scan &1
+                │    ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                │    └── mapping:
+                │         ├──  upsert_x:22 => upsert_x:32
+                │         ├──  upsert_y:23 => upsert_y:33
+                │         └──  upsert_k:19 => upsert_k:34
+                ├── scan uniq
+                │    └── columns: k:35!null x:38 y:39
+                └── filters
+                     ├── upsert_x:32 = x:38
+                     ├── upsert_y:33 = y:39
+                     └── upsert_k:34 != k:35
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
 build
 INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (x, y) DO UPDATE SET v = 10
+----
+upsert uniq
+ ├── columns: <none>
+ ├── arbiter constraints: unique_x_y
+ ├── canary column: k:12
+ ├── fetch columns: k:12 v:13 w:14 x:15 y:16
+ ├── insert-mapping:
+ │    ├── column1:7 => k:1
+ │    ├── column2:8 => v:2
+ │    ├── column3:9 => w:3
+ │    ├── column4:10 => x:4
+ │    └── column5:11 => y:5
+ ├── update-mapping:
+ │    └── upsert_v:20 => v:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_k:19 upsert_v:20!null upsert_w:21 upsert_x:22 upsert_y:23 column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17 v_new:18!null
+ │    ├── project
+ │    │    ├── columns: v_new:18!null column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null k:12 v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    ├── grouping columns: column4:10!null column5:11!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
+ │    │    │    │    │    └── (1, 2, 3, 4, 5)
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column1:7]
+ │    │    │    │         │    └── column1:7
+ │    │    │    │         ├── first-agg [as=column2:8]
+ │    │    │    │         │    └── column2:8
+ │    │    │    │         └── first-agg [as=column3:9]
+ │    │    │    │              └── column3:9
+ │    │    │    ├── scan uniq
+ │    │    │    │    └── columns: k:12!null v:13 w:14 x:15 y:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    └── filters
+ │    │    │         ├── column4:10 = x:15
+ │    │    │         └── column5:11 = y:16
+ │    │    └── projections
+ │    │         └── 10 [as=v_new:18]
+ │    └── projections
+ │         ├── CASE WHEN k:12 IS NULL THEN column1:7 ELSE k:12 END [as=upsert_k:19]
+ │         ├── CASE WHEN k:12 IS NULL THEN column2:8 ELSE v_new:18 END [as=upsert_v:20]
+ │         ├── CASE WHEN k:12 IS NULL THEN column3:9 ELSE w:14 END [as=upsert_w:21]
+ │         ├── CASE WHEN k:12 IS NULL THEN column4:10 ELSE x:15 END [as=upsert_x:22]
+ │         └── CASE WHEN k:12 IS NULL THEN column5:11 ELSE y:16 END [as=upsert_y:23]
+ └── unique-checks
+      ├── unique-checks-item: uniq(w)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_w:24 upsert_k:25
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_w:24 upsert_k:25
+      │         │    └── mapping:
+      │         │         ├──  upsert_w:21 => upsert_w:24
+      │         │         └──  upsert_k:19 => upsert_k:25
+      │         ├── scan uniq
+      │         │    └── columns: k:26!null w:28
+      │         └── filters
+      │              ├── upsert_w:24 = w:28
+      │              └── upsert_k:25 != k:26
+      └── unique-checks-item: uniq(x,y)
+           └── semi-join (hash)
+                ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                ├── with-scan &1
+                │    ├── columns: upsert_x:32 upsert_y:33 upsert_k:34
+                │    └── mapping:
+                │         ├──  upsert_x:22 => upsert_x:32
+                │         ├──  upsert_y:23 => upsert_y:33
+                │         └──  upsert_k:19 => upsert_k:34
+                ├── scan uniq
+                │    └── columns: k:35!null x:38 y:39
+                └── filters
+                     ├── upsert_x:32 = x:38
+                     ├── upsert_y:33 = y:39
+                     └── upsert_k:34 != k:35
+
+# Cannot conflict on a subset of columns in a unique constraint.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (x) DO UPDATE SET v = 10
+----
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+
+# Cannot conflict on a superset of columns in a unique constraint.
+build
+INSERT INTO uniq VALUES (1, 2, 3, 4, 5) ON CONFLICT (w, x, y) DO UPDATE SET v = 10
 ----
 error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
@@ -667,21 +830,191 @@ upsert uniq_overlaps_pk
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # column.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
 build
 INSERT INTO uniq_overlaps_pk VALUES (100, 10, 1, 1), (200, 20, 2, 2) ON CONFLICT (a) DO UPDATE SET a = 10
 ----
-error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+upsert uniq_overlaps_pk
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column4:9 => d:4
+ ├── update-mapping:
+ │    └── upsert_a:16 => a:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_a:16!null upsert_b:17 upsert_c:18 upsert_d:19 column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 a_new:15!null
+ │    ├── project
+ │    │    ├── columns: a_new:15!null column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+ │    │    │    │    ├── grouping columns: column1:6!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+ │    │    │    │    │    ├── (100, 10, 1, 1)
+ │    │    │    │    │    └── (200, 20, 2, 2)
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column2:7]
+ │    │    │    │         │    └── column2:7
+ │    │    │    │         ├── first-agg [as=column3:8]
+ │    │    │    │         │    └── column3:8
+ │    │    │    │         └── first-agg [as=column4:9]
+ │    │    │    │              └── column4:9
+ │    │    │    ├── scan uniq_overlaps_pk
+ │    │    │    │    └── columns: a:10!null b:11!null c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    │    └── filters
+ │    │    │         └── column1:6 = a:10
+ │    │    └── projections
+ │    │         └── 10 [as=a_new:15]
+ │    └── projections
+ │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:16]
+ │         ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b:11 END [as=upsert_b:17]
+ │         ├── CASE WHEN a:10 IS NULL THEN column3:8 ELSE c:12 END [as=upsert_c:18]
+ │         └── CASE WHEN a:10 IS NULL THEN column4:9 ELSE d:13 END [as=upsert_d:19]
+ └── unique-checks
+      ├── unique-checks-item: uniq_overlaps_pk(b,c)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_b:20 upsert_c:21 upsert_a:22!null
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_b:20 upsert_c:21 upsert_a:22!null
+      │         │    └── mapping:
+      │         │         ├──  upsert_b:17 => upsert_b:20
+      │         │         ├──  upsert_c:18 => upsert_c:21
+      │         │         └──  upsert_a:16 => upsert_a:22
+      │         ├── scan uniq_overlaps_pk
+      │         │    └── columns: a:23!null b:24!null c:25
+      │         └── filters
+      │              ├── upsert_b:20 = b:24
+      │              ├── upsert_c:21 = c:25
+      │              └── upsert_a:22 != a:23
+      ├── unique-checks-item: uniq_overlaps_pk(a)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_a:28!null upsert_b:29
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_a:28!null upsert_b:29
+      │         │    └── mapping:
+      │         │         ├──  upsert_a:16 => upsert_a:28
+      │         │         └──  upsert_b:17 => upsert_b:29
+      │         ├── scan uniq_overlaps_pk
+      │         │    └── columns: a:30!null b:31!null
+      │         └── filters
+      │              ├── upsert_a:28 = a:30
+      │              └── upsert_b:29 != b:31
+      └── unique-checks-item: uniq_overlaps_pk(c,d)
+           └── semi-join (hash)
+                ├── columns: upsert_c:35 upsert_d:36 upsert_a:37!null upsert_b:38
+                ├── with-scan &1
+                │    ├── columns: upsert_c:35 upsert_d:36 upsert_a:37!null upsert_b:38
+                │    └── mapping:
+                │         ├──  upsert_c:18 => upsert_c:35
+                │         ├──  upsert_d:19 => upsert_d:36
+                │         ├──  upsert_a:16 => upsert_a:37
+                │         └──  upsert_b:17 => upsert_b:38
+                ├── scan uniq_overlaps_pk
+                │    └── columns: a:39!null b:40!null c:41 d:42
+                └── filters
+                     ├── upsert_c:35 = c:41
+                     ├── upsert_d:36 = d:42
+                     └── (upsert_a:37 != a:39) OR (upsert_b:38 != b:40)
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
 build
 INSERT INTO uniq_overlaps_pk VALUES (1, 2, 3, 4) ON CONFLICT (c, d) DO UPDATE SET b = 10
 ----
-error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+upsert uniq_overlaps_pk
+ ├── columns: <none>
+ ├── arbiter constraints: unique_c_d
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:6 => a:1
+ │    ├── column2:7 => b:2
+ │    ├── column3:8 => c:3
+ │    └── column4:9 => d:4
+ ├── update-mapping:
+ │    └── upsert_b:17 => b:2
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19 column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null
+ │    ├── project
+ │    │    ├── columns: b_new:15!null column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+ │    │    │    │    ├── grouping columns: column3:8!null column4:9!null
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null
+ │    │    │    │    │    └── (1, 2, 3, 4)
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column1:6]
+ │    │    │    │         │    └── column1:6
+ │    │    │    │         └── first-agg [as=column2:7]
+ │    │    │    │              └── column2:7
+ │    │    │    ├── scan uniq_overlaps_pk
+ │    │    │    │    └── columns: a:10!null b:11!null c:12 d:13 crdb_internal_mvcc_timestamp:14
+ │    │    │    └── filters
+ │    │    │         ├── column3:8 = c:12
+ │    │    │         └── column4:9 = d:13
+ │    │    └── projections
+ │    │         └── 10 [as=b_new:15]
+ │    └── projections
+ │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:16]
+ │         ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:17]
+ │         ├── CASE WHEN a:10 IS NULL THEN column3:8 ELSE c:12 END [as=upsert_c:18]
+ │         └── CASE WHEN a:10 IS NULL THEN column4:9 ELSE d:13 END [as=upsert_d:19]
+ └── unique-checks
+      ├── unique-checks-item: uniq_overlaps_pk(b,c)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_b:20!null upsert_c:21 upsert_a:22
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_b:20!null upsert_c:21 upsert_a:22
+      │         │    └── mapping:
+      │         │         ├──  upsert_b:17 => upsert_b:20
+      │         │         ├──  upsert_c:18 => upsert_c:21
+      │         │         └──  upsert_a:16 => upsert_a:22
+      │         ├── scan uniq_overlaps_pk
+      │         │    └── columns: a:23!null b:24!null c:25
+      │         └── filters
+      │              ├── upsert_b:20 = b:24
+      │              ├── upsert_c:21 = c:25
+      │              └── upsert_a:22 != a:23
+      ├── unique-checks-item: uniq_overlaps_pk(a)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_a:28 upsert_b:29!null
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_a:28 upsert_b:29!null
+      │         │    └── mapping:
+      │         │         ├──  upsert_a:16 => upsert_a:28
+      │         │         └──  upsert_b:17 => upsert_b:29
+      │         ├── scan uniq_overlaps_pk
+      │         │    └── columns: a:30!null b:31!null
+      │         └── filters
+      │              ├── upsert_a:28 = a:30
+      │              └── upsert_b:29 != b:31
+      └── unique-checks-item: uniq_overlaps_pk(c,d)
+           └── semi-join (hash)
+                ├── columns: upsert_c:35 upsert_d:36 upsert_a:37 upsert_b:38!null
+                ├── with-scan &1
+                │    ├── columns: upsert_c:35 upsert_d:36 upsert_a:37 upsert_b:38!null
+                │    └── mapping:
+                │         ├──  upsert_c:18 => upsert_c:35
+                │         ├──  upsert_d:19 => upsert_d:36
+                │         ├──  upsert_a:16 => upsert_a:37
+                │         └──  upsert_b:17 => upsert_b:38
+                ├── scan uniq_overlaps_pk
+                │    └── columns: a:39!null b:40!null c:41 d:42
+                └── filters
+                     ├── upsert_c:35 = c:41
+                     ├── upsert_d:36 = d:42
+                     └── (upsert_a:37 != a:39) OR (upsert_b:38 != b:40)
 
 exec-ddl
 CREATE TABLE uniq_hidden_pk (
@@ -866,12 +1199,104 @@ upsert uniq_hidden_pk
 
 # On conflict do update with constant input, conflict on UNIQUE WITHOUT INDEX
 # columns.
-# TODO(rytaft): Allow ON CONFLICT to reference UNIQUE WITHOUT INDEX columns
-# (see #58246).
 build
 INSERT INTO uniq_hidden_pk VALUES (1, 2, 3, 4) ON CONFLICT (a, b, d) DO UPDATE SET a = 10
 ----
-error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
+upsert uniq_hidden_pk
+ ├── columns: <none>
+ ├── arbiter constraints: unique_a_b_d
+ ├── canary column: rowid:16
+ ├── fetch columns: a:12 b:13 c:14 d:15 rowid:16
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    ├── column4:10 => d:4
+ │    └── column11:11 => rowid:5
+ ├── update-mapping:
+ │    └── upsert_a:19 => a:1
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: upsert_a:19!null upsert_b:20 upsert_c:21 upsert_d:22 upsert_rowid:23 column1:7!null column2:8!null column3:9!null column4:10!null column11:11 a:12 b:13 c:14 d:15 rowid:16 crdb_internal_mvcc_timestamp:17 a_new:18!null
+ │    ├── project
+ │    │    ├── columns: a_new:18!null column1:7!null column2:8!null column3:9!null column4:10!null column11:11 a:12 b:13 c:14 d:15 rowid:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column11:11 a:12 b:13 c:14 d:15 rowid:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column11:11
+ │    │    │    │    ├── grouping columns: column1:7!null column2:8!null column4:10!null
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: column11:11 column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    │    │    │    │    └── (1, 2, 3, 4)
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── unique_rowid() [as=column11:11]
+ │    │    │    │    └── aggregations
+ │    │    │    │         ├── first-agg [as=column3:9]
+ │    │    │    │         │    └── column3:9
+ │    │    │    │         └── first-agg [as=column11:11]
+ │    │    │    │              └── column11:11
+ │    │    │    ├── scan uniq_hidden_pk
+ │    │    │    │    └── columns: a:12 b:13 c:14 d:15 rowid:16!null crdb_internal_mvcc_timestamp:17
+ │    │    │    └── filters
+ │    │    │         ├── column1:7 = a:12
+ │    │    │         ├── column2:8 = b:13
+ │    │    │         └── column4:10 = d:15
+ │    │    └── projections
+ │    │         └── 10 [as=a_new:18]
+ │    └── projections
+ │         ├── CASE WHEN rowid:16 IS NULL THEN column1:7 ELSE a_new:18 END [as=upsert_a:19]
+ │         ├── CASE WHEN rowid:16 IS NULL THEN column2:8 ELSE b:13 END [as=upsert_b:20]
+ │         ├── CASE WHEN rowid:16 IS NULL THEN column3:9 ELSE c:14 END [as=upsert_c:21]
+ │         ├── CASE WHEN rowid:16 IS NULL THEN column4:10 ELSE d:15 END [as=upsert_d:22]
+ │         └── CASE WHEN rowid:16 IS NULL THEN column11:11 ELSE rowid:16 END [as=upsert_rowid:23]
+ └── unique-checks
+      ├── unique-checks-item: uniq_hidden_pk(b,c)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_b:24 upsert_c:25 upsert_rowid:26
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_b:24 upsert_c:25 upsert_rowid:26
+      │         │    └── mapping:
+      │         │         ├──  upsert_b:20 => upsert_b:24
+      │         │         ├──  upsert_c:21 => upsert_c:25
+      │         │         └──  upsert_rowid:23 => upsert_rowid:26
+      │         ├── scan uniq_hidden_pk
+      │         │    └── columns: b:28 c:29 rowid:31!null
+      │         └── filters
+      │              ├── upsert_b:24 = b:28
+      │              ├── upsert_c:25 = c:29
+      │              └── upsert_rowid:26 != rowid:31
+      ├── unique-checks-item: uniq_hidden_pk(a,b,d)
+      │    └── semi-join (hash)
+      │         ├── columns: upsert_a:33!null upsert_b:34 upsert_d:35 upsert_rowid:36
+      │         ├── with-scan &1
+      │         │    ├── columns: upsert_a:33!null upsert_b:34 upsert_d:35 upsert_rowid:36
+      │         │    └── mapping:
+      │         │         ├──  upsert_a:19 => upsert_a:33
+      │         │         ├──  upsert_b:20 => upsert_b:34
+      │         │         ├──  upsert_d:22 => upsert_d:35
+      │         │         └──  upsert_rowid:23 => upsert_rowid:36
+      │         ├── scan uniq_hidden_pk
+      │         │    └── columns: a:37 b:38 d:40 rowid:41!null
+      │         └── filters
+      │              ├── upsert_a:33 = a:37
+      │              ├── upsert_b:34 = b:38
+      │              ├── upsert_d:35 = d:40
+      │              └── upsert_rowid:36 != rowid:41
+      └── unique-checks-item: uniq_hidden_pk(a)
+           └── semi-join (hash)
+                ├── columns: upsert_a:43!null upsert_rowid:44
+                ├── with-scan &1
+                │    ├── columns: upsert_a:43!null upsert_rowid:44
+                │    └── mapping:
+                │         ├──  upsert_a:19 => upsert_a:43
+                │         └──  upsert_rowid:23 => upsert_rowid:44
+                ├── scan uniq_hidden_pk
+                │    └── columns: a:45 rowid:49!null
+                └── filters
+                     ├── upsert_a:43 = a:45
+                     └── upsert_rowid:44 != rowid:49
 
 exec-ddl
 CREATE TABLE uniq_fk_parent (
@@ -991,3 +1416,82 @@ upsert uniq_fk_child
                 │    └── columns: uniq_fk_parent.a:7
                 └── filters
                      └── column2:6 = uniq_fk_parent.a:7
+
+# Check that we choose the unique without index constraint as the arbiter.
+exec-ddl
+CREATE TABLE t (
+  i INT,
+  CONSTRAINT i1 UNIQUE (i) WHERE i > 0,
+  CONSTRAINT i2 UNIQUE WITHOUT INDEX(i)
+)
+----
+
+build
+INSERT INTO t VALUES (1) ON CONFLICT (i) WHERE i > 0 DO UPDATE SET i = 2
+----
+upsert t
+ ├── columns: <none>
+ ├── arbiter constraints: i2
+ ├── canary column: rowid:7
+ ├── fetch columns: i:6 rowid:7
+ ├── insert-mapping:
+ │    ├── column1:4 => i:1
+ │    └── column5:5 => rowid:2
+ ├── update-mapping:
+ │    └── upsert_i:10 => i:1
+ ├── partial index put columns: partial_index_put1:12
+ ├── partial index del columns: partial_index_del1:13
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: partial_index_put1:12!null partial_index_del1:13 column1:4!null column5:5 i:6 rowid:7 crdb_internal_mvcc_timestamp:8 i_new:9!null upsert_i:10!null upsert_rowid:11
+ │    ├── project
+ │    │    ├── columns: upsert_i:10!null upsert_rowid:11 column1:4!null column5:5 i:6 rowid:7 crdb_internal_mvcc_timestamp:8 i_new:9!null
+ │    │    ├── project
+ │    │    │    ├── columns: i_new:9!null column1:4!null column5:5 i:6 rowid:7 crdb_internal_mvcc_timestamp:8
+ │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── columns: column1:4!null column5:5 i:6 rowid:7 crdb_internal_mvcc_timestamp:8
+ │    │    │    │    ├── ensure-upsert-distinct-on
+ │    │    │    │    │    ├── columns: column1:4!null column5:5
+ │    │    │    │    │    ├── grouping columns: column1:4!null
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: column5:5 column1:4!null
+ │    │    │    │    │    │    ├── values
+ │    │    │    │    │    │    │    ├── columns: column1:4!null
+ │    │    │    │    │    │    │    └── (1,)
+ │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │         └── unique_rowid() [as=column5:5]
+ │    │    │    │    │    └── aggregations
+ │    │    │    │    │         └── first-agg [as=column5:5]
+ │    │    │    │    │              └── column5:5
+ │    │    │    │    ├── scan t
+ │    │    │    │    │    ├── columns: i:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+ │    │    │    │    │    └── partial index predicates
+ │    │    │    │    │         └── i1: filters
+ │    │    │    │    │              └── i:6 > 0
+ │    │    │    │    └── filters
+ │    │    │    │         └── column1:4 = i:6
+ │    │    │    └── projections
+ │    │    │         └── 2 [as=i_new:9]
+ │    │    └── projections
+ │    │         ├── CASE WHEN rowid:7 IS NULL THEN column1:4 ELSE i_new:9 END [as=upsert_i:10]
+ │    │         └── CASE WHEN rowid:7 IS NULL THEN column5:5 ELSE rowid:7 END [as=upsert_rowid:11]
+ │    └── projections
+ │         ├── upsert_i:10 > 0 [as=partial_index_put1:12]
+ │         └── i:6 > 0 [as=partial_index_del1:13]
+ └── unique-checks
+      └── unique-checks-item: t(i)
+           └── semi-join (hash)
+                ├── columns: upsert_i:14!null upsert_rowid:15
+                ├── with-scan &1
+                │    ├── columns: upsert_i:14!null upsert_rowid:15
+                │    └── mapping:
+                │         ├──  upsert_i:10 => upsert_i:14
+                │         └──  upsert_rowid:11 => upsert_rowid:15
+                ├── scan t
+                │    ├── columns: i:16 rowid:17!null
+                │    └── partial index predicates
+                │         └── i1: filters
+                │              └── i:16 > 0
+                └── filters
+                     ├── upsert_i:14 = i:16
+                     └── upsert_rowid:15 != rowid:17

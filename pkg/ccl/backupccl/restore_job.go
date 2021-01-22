@@ -691,8 +691,9 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings *cluster.Settings
-	execCfg  *sql.ExecutorConfig
+	settings     *cluster.Settings
+	execCfg      *sql.ExecutorConfig
+	restoreStats RowCount
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -1135,9 +1136,7 @@ func createImportingDescriptors(
 }
 
 // Resume is part of the jobs.Resumer interface.
-func (r *restoreResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	p := execCtx.(sql.JobExecContext)
 
@@ -1202,7 +1201,7 @@ func (r *restoreResumer) Resume(
 		}
 		// Start the schema change jobs we created.
 		for _, newJob := range newDescriptorChangeJobs {
-			if _, err := newJob.Start(ctx); err != nil {
+			if err := newJob.Start(ctx); err != nil {
 				return err
 			}
 		}
@@ -1264,7 +1263,7 @@ func (r *restoreResumer) Resume(
 
 	// Start the schema change jobs we created.
 	for _, newJob := range newDescriptorChangeJobs {
-		if _, err := newJob.Start(ctx); err != nil {
+		if err := newJob.Start(ctx); err != nil {
 			return err
 		}
 	}
@@ -1285,14 +1284,7 @@ func (r *restoreResumer) Resume(
 		}
 	}
 
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*r.job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
+	r.restoreStats = res
 
 	// Collect telemetry.
 	{
@@ -1315,6 +1307,23 @@ func (r *restoreResumer) Resume(
 		}
 	}
 	return nil
+}
+
+// ReportResults implements JobResultsReporter interface.
+func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*r.job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
+		tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
+		tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
+	}:
+		return nil
+	}
 }
 
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of

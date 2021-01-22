@@ -99,7 +99,8 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
-		ins.Arbiters,
+		ins.ArbiterIndexes,
+		ins.ArbiterConstraints,
 		insertOrds,
 		returnOrds,
 		checkOrds,
@@ -417,7 +418,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	node, err := b.factory.ConstructUpsert(
 		input.root,
 		tab,
-		ups.Arbiters,
+		ups.ArbiterIndexes,
+		ups.ArbiterConstraints,
 		canaryCol,
 		insertColOrds,
 		fetchColOrds,

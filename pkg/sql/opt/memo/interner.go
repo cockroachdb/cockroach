@@ -553,6 +553,15 @@ func (h *hasher) HashIndexOrdinals(val cat.IndexOrdinals) {
 	h.hash = hash
 }
 
+func (h *hasher) HashUniqueOrdinals(val cat.UniqueOrdinals) {
+	hash := h.hash
+	for _, ord := range val {
+		hash ^= internHash(ord)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	// Hash the length and address of the first element.
 	h.HashInt(len(val))
@@ -933,6 +942,18 @@ func (h *hasher) IsIndexOrdinalEqual(l, r cat.IndexOrdinal) bool {
 }
 
 func (h *hasher) IsIndexOrdinalsEqual(l, r cat.IndexOrdinals) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsUniqueOrdinalsEqual(l, r cat.UniqueOrdinals) bool {
 	if len(l) != len(r) {
 		return false
 	}
