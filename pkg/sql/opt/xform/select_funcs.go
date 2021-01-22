@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -731,9 +732,9 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
-		var spanExpr *invertedexpr.SpanExpression
+		var spanExpr *inverted.SpanExpression
 		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
-		var spansToRead invertedexpr.InvertedSpans
+		var spansToRead inverted.Spans
 		var constraint *constraint.Constraint
 		var filterOk, constraintOk bool
 
@@ -787,7 +788,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
 		needInvertedFilter := spanExpr != nil &&
-			(!spanExpr.Unique || spanExpr.Operator != invertedexpr.None)
+			(!spanExpr.Unique || spanExpr.Operator != inverted.None)
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 )
 
 // JSONOrArrayToContainingSpanExpr converts a JSON or Array datum to a
@@ -23,7 +24,7 @@ import (
 // returns nil. If the provided datum is not a JSON or Array, returns an error.
 func JSONOrArrayToContainingSpanExpr(
 	evalCtx *tree.EvalContext, d tree.Datum,
-) (*SpanExpression, error) {
+) (*inverted.SpanExpression, error) {
 	var b []byte
 	spansSlice, tight, unique, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
@@ -33,33 +34,33 @@ func JSONOrArrayToContainingSpanExpr(
 	}
 	if len(spansSlice) == 0 {
 		// This can happen if the input is ARRAY[NULL].
-		return &SpanExpression{}, nil
+		return &inverted.SpanExpression{}, nil
 	}
 
 	// The spans returned by EncodeContainingInvertedIndexSpans represent the
 	// intersection of unions. So the below logic is performing a union on the
 	// inner loop and an intersection on the outer loop. See the comment
 	// above EncodeContainingInvertedIndexSpans for details.
-	var invExpr InvertedExpression
+	var invExpr inverted.Expression
 	for _, spans := range spansSlice {
-		var invExprLocal InvertedExpression
+		var invExprLocal inverted.Expression
 		for _, span := range spans {
-			invSpan := InvertedSpan{Start: EncInvertedVal(span.Key), End: EncInvertedVal(span.EndKey)}
-			spanExpr := ExprForInvertedSpan(invSpan, tight)
+			invSpan := inverted.Span{Start: inverted.EncVal(span.Key), End: inverted.EncVal(span.EndKey)}
+			spanExpr := inverted.ExprForSpan(invSpan, tight)
 			if invExprLocal == nil {
 				invExprLocal = spanExpr
 			} else {
-				invExprLocal = Or(invExprLocal, spanExpr)
+				invExprLocal = inverted.Or(invExprLocal, spanExpr)
 			}
 		}
 		if invExpr == nil {
 			invExpr = invExprLocal
 		} else {
-			invExpr = And(invExpr, invExprLocal)
+			invExpr = inverted.And(invExpr, invExprLocal)
 		}
 	}
 
-	if spanExpr, ok := invExpr.(*SpanExpression); ok {
+	if spanExpr, ok := invExpr.(*inverted.SpanExpression); ok {
 		spanExpr.Unique = unique
 		return spanExpr, nil
 	}

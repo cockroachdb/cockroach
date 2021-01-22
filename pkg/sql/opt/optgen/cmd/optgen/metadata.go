@@ -239,8 +239,8 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ViewDeps":          {fullName: "opt.ViewDeps", passByVal: true},
 		"LockingItem":       {fullName: "tree.LockingItem", isPointer: true},
 		"MaterializeClause": {fullName: "tree.MaterializeClause", passByVal: true},
-		"SpanExpression":    {fullName: "invertedexpr.SpanExpression", isPointer: true, usePointerIntern: true},
-		"InvertedSpans":     {fullName: "invertedexpr.InvertedSpans", passByVal: true},
+		"SpanExpression":    {fullName: "inverted.SpanExpression", isPointer: true, usePointerIntern: true},
+		"InvertedSpans":     {fullName: "inverted.Spans", passByVal: true},
 		"Persistence":       {fullName: "tree.Persistence", passByVal: true},
 		"PreFiltererState":  {fullName: "invertedexpr.PreFiltererStateForInvertedFilterer", isPointer: true, usePointerIntern: true},
 	}

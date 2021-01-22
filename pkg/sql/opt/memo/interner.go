@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -602,7 +602,7 @@ func (h *hasher) HashLockingItem(val *tree.LockingItem) {
 	}
 }
 
-func (h *hasher) HashInvertedSpans(val invertedexpr.InvertedSpans) {
+func (h *hasher) HashInvertedSpans(val inverted.Spans) {
 	for i := range val {
 		span := &val[i]
 		h.HashBytes(span.Start)
@@ -994,7 +994,7 @@ func (h *hasher) IsLockingItemEqual(l, r *tree.LockingItem) bool {
 	return l.Strength == r.Strength && l.WaitPolicy == r.WaitPolicy
 }
 
-func (h *hasher) IsInvertedSpansEqual(l, r invertedexpr.InvertedSpans) bool {
+func (h *hasher) IsInvertedSpansEqual(l, r inverted.Spans) bool {
 	return l.Equals(r)
 }
 

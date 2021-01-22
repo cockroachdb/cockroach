@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/stretchr/testify/require"
 )
 
@@ -658,7 +658,7 @@ func TestPreFilterer(t *testing.T) {
 			},
 		},
 	}
-	encodeInv := func(bbox geopb.BoundingBox) invertedexpr.EncInvertedVal {
+	encodeInv := func(bbox geopb.BoundingBox) inverted.EncVal {
 		var b []byte
 		b = encoding.EncodeGeoInvertedAscending(b)
 		// Arbitrary cellid
@@ -670,7 +670,7 @@ func TestPreFilterer(t *testing.T) {
 		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
 			filterer := invertedidx.NewPreFilterer(tc.typ, tc.relationship, tc.relationshipParams)
 			var toBind []tree.Datum
-			var toPreFilter []invertedexpr.EncInvertedVal
+			var toPreFilter []inverted.EncVal
 			includeBind := func(index int) bool {
 				for _, exclude := range tc.excludeFromPreFilters {
 					if exclude == index {
