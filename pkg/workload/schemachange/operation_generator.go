@@ -1563,6 +1563,13 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	constraintBeingAdded, err := columnNotNullConstraintInMutation(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	if constraintBeingAdded {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	}
 
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
