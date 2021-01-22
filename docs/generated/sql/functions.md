@@ -2151,6 +2151,8 @@ SELECT ST_S2Covering(geometry, ‘s2_max_level=15,s2_level_mod=3’).</p>
 those going in the opposite direction are in the second element.
 The paths themselves are given in the direction of the first geometry.</p>
 </span></td></tr>
+<tr><td><a name="st_shiftlongitude"></a><code>st_shiftlongitude(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified version of a geometry in which the longitude (X coordinate) of each point is incremented by 360 if it is &lt;0 and decremented by 360 if it is &gt;180. The result is only meaningful if the coordinates are in longitude/latitude.</p>
+</span></td></tr>
 <tr><td><a name="st_shortestline"></a><code>st_shortestline(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the LineString corresponds to the minimum distance across every pair of points comprising the given geometries.</p>
 <p>Note if geometries are the same, it will return the LineString with the minimum distance between the geometry’s vertexes. The function will return the shortest line that was discovered first when comparing minimum distances if more than one is found.</p>
 </span></td></tr>
