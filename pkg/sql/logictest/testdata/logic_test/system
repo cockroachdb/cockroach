@@ -577,6 +577,7 @@ ORDER BY name
 cluster.secret
 diagnostics.reporting.enabled
 kv.range_merge.queue_enabled
+sql.defaults.interleaved_tables.enabled
 sql.stats.automatic_collection.min_stale_rows
 version
 
@@ -595,6 +596,7 @@ ORDER BY name
 diagnostics.reporting.enabled                  true
 kv.range_merge.queue_enabled                   false
 somesetting                                    somevalue
+sql.defaults.interleaved_tables.enabled        true
 sql.stats.automatic_collection.min_stale_rows  5
 
 user testuser

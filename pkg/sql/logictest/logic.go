@@ -1546,6 +1546,10 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				t.Fatal(err)
 			}
 		}
+
+		if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if cfg.overrideDistSQLMode != "" {
