@@ -394,6 +394,7 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
+		GlobalReads: proto.Bool(true),
 		NumReplicas: proto.Int32(1),
 	}
 
@@ -407,6 +408,7 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: []
 lease_preferences: []
@@ -428,6 +430,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: [+duck=foo]
 lease_preferences: []
@@ -458,6 +461,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: [foo, +duck=foo, -duck=foo]
 lease_preferences: []
@@ -480,6 +484,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: {+duck=foo: 3}
 lease_preferences: []
@@ -511,6 +516,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: {'foo,+duck=foo,-duck=foo': 3}
 lease_preferences: []
@@ -548,6 +554,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 lease_preferences: []
@@ -559,6 +566,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: []
 lease_preferences: []
@@ -580,6 +588,7 @@ lease_preferences: []
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: []
 lease_preferences: [[+duck=foo]]
@@ -626,6 +635,7 @@ lease_preferences: [[+duck=foo]]
 range_max_bytes: 1
 gc:
   ttlseconds: 1
+global_reads: true
 num_replicas: 1
 constraints: [+duck=foo]
 lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
