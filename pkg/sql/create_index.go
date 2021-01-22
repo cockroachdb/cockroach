@@ -580,7 +580,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
 	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
-	if tableDesc.LocalityConfig != nil && tableDesc.LocalityConfig.GetRegionalByRow() != nil {
+	if tableDesc.IsLocalityRegionalByRow() {
 		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
 			ctx,
 			p.txn,
