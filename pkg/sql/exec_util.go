@@ -1552,6 +1552,7 @@ func (st *SessionTracing) StartTracing(
 		if sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
+		sp.ResetRecording()
 		sp.SetVerbose(true)
 		st.firstTxnSpan = sp
 	}

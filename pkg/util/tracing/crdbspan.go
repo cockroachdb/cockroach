@@ -111,12 +111,6 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if recType == RecordingVerbose {
 		s.setBaggageItemLocked(verboseTracingBaggageKey, "1")
 	}
-	// Clear any previously recorded info. This is needed by SQL SessionTracing,
-	// who likes to start and stop recording repeatedly on the same Span, and
-	// collect the (separate) recordings every time.
-	s.mu.recording.recordedLogs = nil
-	s.mu.recording.children = nil
-	s.mu.recording.remoteSpans = nil
 }
 
 func (s *crdbSpan) disableRecording() {
@@ -205,7 +199,7 @@ func (s *crdbSpan) record(msg string) {
 	}
 }
 
-func (s *crdbSpan) logStructured(item Structured) {
+func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.structured = append(s.mu.structured, item)
