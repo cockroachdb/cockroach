@@ -55,7 +55,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf, syncResults, finished, stopper, err := startConnExecutor(ctx)
+	buf, syncResults, finished, stopper, _, err := startConnExecutor(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,9 +240,13 @@ func mustParseOne(s string) parser.Statement {
 // gets the error from closing down the executor once the StmtBuf is closed, a
 // stopper that must be stopped when the test completes (this does not stop the
 // executor but stops other background work).
+//
+// It also returns a channel that AddRow might block on which can buffer up to
+// 16 items (including column types when applicable), so the caller might need
+// to receive from it occasionally.
 func startConnExecutor(
 	ctx context.Context,
-) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, error) {
+) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, <-chan ieIteratorResult, error) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
@@ -258,7 +262,7 @@ func startConnExecutor(
 	gw := gossip.MakeOptionalGossip(nil)
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
 	cfg := &ExecutorConfig{
@@ -305,16 +309,18 @@ func startConnExecutor(
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
+	iteratorCh := make(chan ieIteratorResult, 16)
 	var cc ClientComm = &internalClientComm{
 		sync: func(res []resWithPos) {
 			syncResults <- res
 		},
+		ch: iteratorCh,
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
 	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	finished := make(chan error)
 
@@ -324,7 +330,7 @@ func startConnExecutor(
 	go func() {
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
-	return buf, syncResults, finished, stopper, nil
+	return buf, syncResults, finished, stopper, iteratorCh, nil
 }
 
 // Test that a client session can close without deadlocking when the closing

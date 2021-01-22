@@ -711,6 +711,23 @@ func (ie *wrappedInternalExecutor) QueryRow(
 	panic("not implemented")
 }
 
+func (ie *wrappedInternalExecutor) QueryIterator(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryIteratorEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (sqlutil.InternalRows, error) {
+	panic("not implemented")
+}
+
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
 	ie.mu.RLock()
 	defer ie.mu.RUnlock()
