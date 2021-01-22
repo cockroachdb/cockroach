@@ -93,9 +93,20 @@
 // [5]: `ForkCtxSpan`. "forking" a Span is the same as creating a new one
 //      with a "follows from" relation.
 // [6]: `crdbSpan`
-// [7]: `Span.SetVerbose`. To understand the specifics of what exactly is
-//      captured in Span recording, when Spans have children that may be either
-//      local or remote, look towards `WithParentAnd{Auto,Manual}Collection`
+// [7]: `Span.SetVerbose`. To understand the specifics of what's captured in
+//      Span recordings, when Spans have children that may be either local or
+//      remote, look towards `WithParentAnd{Auto,Manual}Collection`.
+//      The complexity here stems from how we expect parentSpan.GetRecording()
+//      to behave. If all child spans are created using the AutoCollection
+//      option, grabbing the parent span's recording automatically captures all
+//      child span recordings. This is easy to implement, and doesn't have to
+//      leak outside the tracing package.
+//      For operations that tread RPC boundaries however, we cannot simply
+//      retrieve remote child recordings ourselves. To that end we provide
+//      the ManualCollection option, where the caller is responsible for
+//      capturing the remote child span's recording (`span.GetRecording`),
+//      transferring it over the wire, and importing it into the parent span
+//      (`ImportRemoteSpans`).
 // [8]: `Tracer.{Inject,Extract}`
 // [9]: `SpanMeta`
 // [10]: `{Client,Server}Interceptor`
