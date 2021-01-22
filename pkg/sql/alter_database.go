@@ -358,6 +358,32 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	return nil
 }
 
+// addDefaultLocalityConfigToAllTables adds a locality config representing
+// regional by table table's with affinity to the primary region to all table's
+// inside the supplied database.
+func addDefaultLocalityConfigToAllTables(
+	ctx context.Context, p *planner, desc *dbdesc.Immutable,
+) error {
+	b := p.Txn().NewBatch()
+	if err := forEachTableDesc(ctx, p, desc, hideVirtual,
+		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
+			mutDesc, err := p.Descriptors().GetMutableTableByID(
+				ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{},
+			)
+			if err != nil {
+				return err
+			}
+			mutDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+		return err
+	}
+	return p.Txn().Run(ctx, b)
+}
+
 // setInitialPrimaryRegion sets the primary region in cases where the database is already
 // a multi-region database.
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
@@ -369,6 +395,10 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		[]tree.Name{n.n.PrimaryRegion},
 	)
 	if err != nil {
+		return err
+	}
+
+	if err := addDefaultLocalityConfigToAllTables(params.ctx, params.p, &n.desc.Immutable); err != nil {
 		return err
 	}
 
@@ -475,7 +505,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 	// If we're changing to survive a region failure, validate that we have enough regions
 	// in the database.
 	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
-		regions, err := n.desc.Regions()
+		regions, err := n.desc.RegionNames()
 		if err != nil {
 			return err
 		}
