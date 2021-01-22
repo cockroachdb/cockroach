@@ -213,46 +213,28 @@ var opWeights = []int{
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, err error) {
-	savepointCount := 0
+func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, err error) {
+
 	for {
 		op := opType(og.params.ops.Int())
 		og.resetOpState()
+		stmt, err = opFuncs[op](og, tx)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
 
-		// Savepoints are used to prevent an infinite loop from occurring as a result of the transaction
-		// becoming aborted by an op function. If a transaction becomes aborted, no op function will be able
-		// to complete without error because all op functions rely on the passed transaction to introspect the database.
-		// With sufficient verbosity, any failed op functions will be logged as NOOPs below for debugging purposes.
-		//
-		// For example, functions such as getTableColumns() can abort the transaction if called with
-		// a non existing table. getTableColumns() is used by op functions such as createIndex().
-		// Op functions normally ensure that a table exists by checking system tables before passing the
-		// table to getTableColumns(). However, due to bugs such as #57494, system tables
-		// may be inaccurate and can cause getTableColumns() to be called with a non-existing table. This
-		// will result in an aborted transaction. Wrapping calls to op functions with savepoints will protect
-		// the transaction from being aborted by spurious errors such as in the above example.
-		savepointCount++
-		if _, err := tx.Exec(fmt.Sprintf(`SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", noops, err
+			return "", err
 		}
+		// Screen for schema change after write in the same transaction.
+		og.checkIfOpViolatesDDLAfterWrite(op)
 
-		stmt, err := opFuncs[op](og, tx)
-
-		if err == nil {
-			// Screen for schema change after write in the same transaction.
-			og.checkIfOpViolatesDDLAfterWrite(op)
-
-			// Add candidateExpectedCommitErrors to expectedCommitErrors
-			og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
-
-			return stmt, noops, err
-		}
-		if _, err := tx.Exec(fmt.Sprintf(`ROLLBACK TO SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", noops, err
-		}
-
-		noops = append(noops, fmt.Sprintf("NOOP: %s -> %v", op, err))
+		// Add candidateExpectedCommitErrors to expectedCommitErrors
+		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
+		break
 	}
+
+	return stmt, err
 }
 
 func (og *operationGenerator) checkIfOpViolatesDDLAfterWrite(ot opType) {
