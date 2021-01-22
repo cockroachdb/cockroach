@@ -18,8 +18,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -150,15 +150,15 @@ func TestInterner(t *testing.T) {
 		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
 
-	invSpan1 := invertedexpr.MakeSingleInvertedValSpan([]byte("abc"))
-	invSpan2 := invertedexpr.MakeSingleInvertedValSpan([]byte("abc"))
-	invSpan3 := invertedexpr.InvertedSpan{Start: []byte("abc"), End: []byte("def")}
-	invSpans1 := invertedexpr.InvertedSpans{invSpan1}
-	invSpans2 := invertedexpr.InvertedSpans{invSpan2}
-	invSpans3 := invertedexpr.InvertedSpans{invSpan3}
-	invSpans4 := invertedexpr.InvertedSpans{invSpan1, invSpan2}
-	invSpans5 := invertedexpr.InvertedSpans{invSpan2, invSpan1}
-	invSpans6 := invertedexpr.InvertedSpans{invSpan1, invSpan3}
+	invSpan1 := inverted.MakeSingleValSpan([]byte("abc"))
+	invSpan2 := inverted.MakeSingleValSpan([]byte("abc"))
+	invSpan3 := inverted.Span{Start: []byte("abc"), End: []byte("def")}
+	invSpans1 := inverted.Spans{invSpan1}
+	invSpans2 := inverted.Spans{invSpan2}
+	invSpans3 := inverted.Spans{invSpan3}
+	invSpans4 := inverted.Spans{invSpan1, invSpan2}
+	invSpans5 := inverted.Spans{invSpan2, invSpan1}
+	invSpans6 := inverted.Spans{invSpan1, invSpan3}
 
 	type testVariation struct {
 		val1  interface{}

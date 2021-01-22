@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -82,7 +82,7 @@ func newInvertedFilterer(
 		input:          input,
 		invertedColIdx: spec.InvertedColIdx,
 		invertedEval: batchedInvertedExprEvaluator{
-			exprs: []*invertedexpr.SpanExpressionProto{&spec.InvertedExpr},
+			exprs: []*inverted.SpanExpressionProto{&spec.InvertedExpr},
 		},
 	}
 

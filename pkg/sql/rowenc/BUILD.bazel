@@ -76,6 +76,7 @@ go_test(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/inverted",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/testutils",
