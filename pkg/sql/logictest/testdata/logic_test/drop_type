@@ -353,3 +353,24 @@ subtest regression_58461
 statement ok
 CREATE TYPE pet AS ENUM('cat');
 DROP TYPE IF EXISTS pet, alien;
+
+# Test that dropping a schema which contains a type which refers to things
+# outside of that schema works.
+
+subtest drop_schema_cascade
+
+statement ok
+CREATE SCHEMA schema_to_drop;
+CREATE TYPE schema_to_drop.typ AS ENUM ('a');
+CREATE TABLE t (k schema_to_drop.typ PRIMARY KEY);
+CREATE TABLE schema_to_drop.t (k schema_to_drop.typ PRIMARY KEY);
+
+statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop._typ" because other objects \(\[test\.public\.t\]\) still depend on it
+DROP SCHEMA schema_to_drop CASCADE;
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP SCHEMA schema_to_drop CASCADE;
+
