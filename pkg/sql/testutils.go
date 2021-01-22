@@ -48,7 +48,10 @@ func CreateTestTableDescriptor(
 			nil, /* vs */
 			st,
 			n,
-			parentID, keys.PublicSchemaID, id,
+			parentID,
+			keys.PublicSchemaID,
+			id,
+			descpb.InvalidID,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			nil, /* affected */
