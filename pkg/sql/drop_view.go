@@ -196,7 +196,7 @@ func (p *planner) dropViewImpl(
 		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
 		if err != nil {
 			return cascadeDroppedViews,
-				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
+				errors.Wrapf(err, "error resolving dependency relation ID %d", depID)
 		}
 		// The dependency is also being deleted, so we don't have to remove the
 		// references.
