@@ -148,6 +148,10 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 			return nil
 		}
 
+		if !b.disallowShadowing {
+			return nil
+		}
+
 		err := &kvserverbase.DuplicateKeyError{}
 		err.Key = append(err.Key, key.Key...)
 		err.Value = append(err.Value, value...)
