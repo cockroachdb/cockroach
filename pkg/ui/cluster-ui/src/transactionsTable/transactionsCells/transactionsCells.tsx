@@ -1,5 +1,6 @@
 import React from "react";
-import { getHighlightedText, Anchor } from "src/index";
+import { getHighlightedText } from "src/highlightedText";
+import { Anchor } from "src/anchor";
 import { Tooltip2 as Tooltip } from "src/tooltip2";
 import { summarize } from "src/util/sql/summarize";
 import { shortStatement } from "src/statementsTable/statementsTable";

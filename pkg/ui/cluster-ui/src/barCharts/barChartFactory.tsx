@@ -2,7 +2,7 @@ import { scaleLinear } from "d3-scale";
 import { extent as d3Extent } from "d3-array";
 import _ from "lodash";
 import React from "react";
-import { Tooltip } from "src/index";
+import { Tooltip } from "src/tooltip";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { NumericStatLegend } from "./numericStatLegend";
