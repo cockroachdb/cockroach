@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package invertedexpr
+package inverted
 
 import (
 	"fmt"
@@ -60,17 +60,17 @@ to-proto name=<name>
   Converts the SpanExpression to SpanExpressionProto
 */
 
-func getSpan(t *testing.T, d *datadriven.TestData) InvertedSpan {
+func getSpan(t *testing.T, d *datadriven.TestData) Span {
 	var str string
 	d.ScanArgs(t, "span", &str)
 	parts := strings.Split(str, ",")
 	if len(parts) > 2 {
 		d.Fatalf(t, "incorrect span format: %s", str)
-		return InvertedSpan{}
+		return Span{}
 	} else if len(parts) == 2 {
-		return InvertedSpan{Start: []byte(parts[0]), End: []byte(parts[1])}
+		return Span{Start: []byte(parts[0]), End: []byte(parts[1])}
 	} else {
-		return MakeSingleInvertedValSpan([]byte(parts[0]))
+		return MakeSingleValSpan([]byte(parts[0]))
 	}
 }
 
@@ -83,7 +83,7 @@ func (u UnknownExpression) SetNotTight()  { u.tight = false }
 func (u UnknownExpression) String() string {
 	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
 }
-func (u UnknownExpression) Copy() InvertedExpression {
+func (u UnknownExpression) Copy() Expression {
 	return UnknownExpression{tight: u.tight}
 }
 
@@ -91,8 +91,8 @@ func (u UnknownExpression) Copy() InvertedExpression {
 // by name, since calls to And() and Or() can modify that root node, and
 // the test wants to preserve the unmodified expression for later use.
 func getExprCopy(
-	t *testing.T, d *datadriven.TestData, name string, exprsByName map[string]InvertedExpression,
-) InvertedExpression {
+	t *testing.T, d *datadriven.TestData, name string, exprsByName map[string]Expression,
+) Expression {
 	expr := exprsByName[name]
 	if expr == nil {
 		d.Fatalf(t, "unknown expr: %s", name)
@@ -102,8 +102,8 @@ func getExprCopy(
 		return &SpanExpression{
 			Tight:              e.Tight,
 			Unique:             e.Unique,
-			SpansToRead:        append([]InvertedSpan(nil), e.SpansToRead...),
-			FactoredUnionSpans: append([]InvertedSpan(nil), e.FactoredUnionSpans...),
+			SpansToRead:        append([]Span(nil), e.SpansToRead...),
+			FactoredUnionSpans: append([]Span(nil), e.FactoredUnionSpans...),
 			Operator:           e.Operator,
 			Left:               e.Left,
 			Right:              e.Right,
@@ -118,15 +118,15 @@ func getExprCopy(
 	}
 }
 
-func toString(expr InvertedExpression) string {
+func toString(expr Expression) string {
 	tp := treeprinter.New()
 	formatExpression(tp, expr, true /* includeSpansToRead */)
 	return tp.String()
 }
 
 func getLeftAndRightExpr(
-	t *testing.T, d *datadriven.TestData, exprsByName map[string]InvertedExpression,
-) (InvertedExpression, InvertedExpression) {
+	t *testing.T, d *datadriven.TestData, exprsByName map[string]Expression,
+) (Expression, Expression) {
 	var leftName, rightName string
 	d.ScanArgs(t, "left", &leftName)
 	d.ScanArgs(t, "right", &rightName)
@@ -135,7 +135,7 @@ func getLeftAndRightExpr(
 
 func TestExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	exprsByName := make(map[string]InvertedExpression)
+	exprsByName := make(map[string]Expression)
 
 	datadriven.RunTest(t, "testdata/expression", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -146,7 +146,7 @@ func TestExpression(t *testing.T) {
 			d.ScanArgs(t, "tight", &tight)
 			d.ScanArgs(t, "unique", &unique)
 			span := getSpan(t, d)
-			expr := ExprForInvertedSpan(span, tight)
+			expr := ExprForSpan(span, tight)
 			expr.Unique = unique
 			exprsByName[name] = expr
 			return expr.String()
@@ -191,15 +191,15 @@ func TestExpression(t *testing.T) {
 	})
 }
 
-func span(start, end string) InvertedSpan {
-	return InvertedSpan{Start: []byte(start), End: []byte(end)}
+func span(start, end string) Span {
+	return Span{Start: []byte(start), End: []byte(end)}
 }
 
-func single(start string) InvertedSpan {
-	return MakeSingleInvertedValSpan([]byte(start))
+func single(start string) Span {
+	return MakeSingleValSpan([]byte(start))
 }
 
-func checkEqual(t *testing.T, expected, actual []InvertedSpan) {
+func checkEqual(t *testing.T, expected, actual []Span) {
 	require.Equal(t, len(expected), len(actual))
 	for i := range expected {
 		require.Equal(t, expected[i].Start, actual[i].Start)
@@ -209,83 +209,83 @@ func checkEqual(t *testing.T, expected, actual []InvertedSpan) {
 
 func TestSetUnion(t *testing.T) {
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c")},
+		[]Span{span("b", "c")},
 		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "c")},
+			[]Span{single("b")},
+			[]Span{span("b", "c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "d")},
+		[]Span{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{single("c")},
+			[]Span{single("b")},
+			[]Span{single("c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "d")},
+		[]Span{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("c", "d")},
+			[]Span{single("b")},
+			[]Span{span("c", "d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "d")},
+		[]Span{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c")},
-			[]InvertedSpan{span("c", "d")},
+			[]Span{span("b", "c")},
+			[]Span{span("c", "d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d")},
+		[]Span{span("b", "c"), single("d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c")},
-			[]InvertedSpan{single("d")},
+			[]Span{span("b", "c")},
+			[]Span{single("d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d"), single("f")},
+		[]Span{span("b", "c"), single("d"), single("f")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c"), single("f")},
-			[]InvertedSpan{single("d")},
+			[]Span{span("b", "c"), single("f")},
+			[]Span{single("d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "d"), single("e")},
+		[]Span{span("b", "d"), single("e")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c"), single("e")},
-			[]InvertedSpan{span("c", "d")},
+			[]Span{span("b", "c"), single("e")},
+			[]Span{span("c", "d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "f")},
+		[]Span{span("b", "f")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c"), single("e")},
-			[]InvertedSpan{span("c", "f")},
+			[]Span{span("b", "c"), single("e")},
+			[]Span{span("c", "f")},
 		),
 	)
 }
 
 func TestSetIntersection(t *testing.T) {
 	checkEqual(t,
-		[]InvertedSpan{single("b")},
+		[]Span{single("b")},
 		intersectSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "c")},
+			[]Span{single("b")},
+			[]Span{span("b", "c")},
 		),
 	)
 	checkEqual(t,
 		nil,
 		intersectSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("c", "d")},
+			[]Span{single("b")},
+			[]Span{span("c", "d")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{single("b"), span("d", "d\x00"), span("dd", "e"), span("f", "ff")},
+		[]Span{single("b"), span("d", "d\x00"), span("dd", "e"), span("f", "ff")},
 		intersectSpans(
-			[]InvertedSpan{single("b"), span("d", "e"), span("f", "g")},
-			[]InvertedSpan{span("b", "d\x00"), span("dd", "ff")},
+			[]Span{single("b"), span("d", "e"), span("f", "g")},
+			[]Span{span("b", "d\x00"), span("dd", "ff")},
 		),
 	)
 }
@@ -294,30 +294,30 @@ func TestSetSubtraction(t *testing.T) {
 	checkEqual(t,
 		nil,
 		subtractSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "c")},
+			[]Span{single("b")},
+			[]Span{span("b", "c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b\x00", "d")},
+		[]Span{span("b\x00", "d")},
 		subtractSpans(
-			[]InvertedSpan{span("b", "d")},
-			[]InvertedSpan{span("b", "b\x00")},
+			[]Span{span("b", "d")},
+			[]Span{span("b", "b\x00")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "d"), span("e", "ea")},
+		[]Span{span("b", "d"), span("e", "ea")},
 		subtractSpans(
-			[]InvertedSpan{span("b", "d"), span("e", "f")},
-			[]InvertedSpan{span("ea", "f")},
+			[]Span{span("b", "d"), span("e", "f")},
+			[]Span{span("ea", "f")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("d", "da"), span("db", "dc"),
+		[]Span{span("d", "da"), span("db", "dc"),
 			span("dd", "df"), span("fa", "g")},
 		subtractSpans(
-			[]InvertedSpan{single("b"), span("d", "e"), span("f", "g")},
-			[]InvertedSpan{span("b", "c"), span("da", "db"),
+			[]Span{single("b"), span("d", "e"), span("f", "g")},
+			[]Span{span("b", "c"), span("da", "db"),
 				span("dc", "dd"), span("df", "e"), span("f", "fa")},
 		),
 	)

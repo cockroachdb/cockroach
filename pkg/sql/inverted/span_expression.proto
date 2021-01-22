@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.sql.opt.invertedexpr;
-option go_package = "invertedexpr";
+package cockroach.util.inverted;
+option go_package = "inverted";
 
 import "gogoproto/gogo.proto";
 
@@ -28,7 +28,7 @@ enum SetOperator {
   SetIntersection = 2;
 }
 
-// SpanExpressionProto is a proto representation of an InvertedExpression
+// SpanExpressionProto is a proto representation of an inverted.Expression
 // tree consisting only of SpanExpressions. It is intended for use in
 // expression execution.
 message SpanExpressionProto {

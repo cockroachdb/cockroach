@@ -15,7 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -101,16 +101,16 @@ func intersectSetContainers(a, b setContainer) setContainer {
 
 // setExpression follows the structure of SpanExpression.
 type setExpression struct {
-	op invertedexpr.SetOperator
+	op inverted.SetOperator
 	// The index in invertedExprEvaluator.sets
 	unionSetIndex int
 	left          *setExpression
 	right         *setExpression
 }
 
-type invertedSpan = invertedexpr.SpanExpressionProto_Span
-type invertedSpans = invertedexpr.SpanExpressionProtoSpans
-type spanExpression = invertedexpr.SpanExpressionProto_Node
+type invertedSpan = inverted.SpanExpressionProto_Span
+type invertedSpans = inverted.SpanExpressionProtoSpans
+type spanExpression = inverted.SpanExpressionProto_Node
 
 // The spans in a SpanExpression.FactoredUnionSpans and the corresponding index
 // in invertedExprEvaluator.sets. Only populated when FactoredUnionsSpans is
@@ -205,9 +205,9 @@ func (ev *invertedExprEvaluator) evaluateSetExpr(sx *setExpression) setContainer
 	}
 	var childrenSet setContainer
 	switch sx.op {
-	case invertedexpr.SetUnion:
+	case inverted.SetUnion:
 		childrenSet = unionSetContainers(left, right)
-	case invertedexpr.SetIntersection:
+	case inverted.SetIntersection:
 		childrenSet = intersectSetContainers(left, right)
 	}
 	return unionSetContainers(ev.sets[sx.unionSetIndex], childrenSet)
@@ -259,7 +259,7 @@ func (s invertedSpanRoutingInfosByEndKey) Less(i, j int) bool {
 
 // preFilterer is the single method from DatumsToInvertedExpr that is relevant here.
 type preFilterer interface {
-	PreFilter(enc invertedexpr.EncInvertedVal, preFilters []interface{}, result []bool) (bool, error)
+	PreFilter(enc inverted.EncVal, preFilters []interface{}, result []bool) (bool, error)
 }
 
 // batchedInvertedExprEvaluator is for evaluating one or more expressions. The
@@ -270,7 +270,7 @@ type preFilterer interface {
 // fragmentedSpans used for routing the added rows.
 type batchedInvertedExprEvaluator struct {
 	filterer preFilterer
-	exprs    []*invertedexpr.SpanExpressionProto
+	exprs    []*inverted.SpanExpressionProto
 
 	// The pre-filtering state for each expression. When pre-filtering, this
 	// is the same length as exprs.
@@ -329,7 +329,7 @@ type batchedInvertedExprEvaluator struct {
 //    c-e-f            f-i
 //    c-e
 func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
-	pendingSpans []invertedSpanRoutingInfo, fragmentUntil invertedexpr.EncInvertedVal,
+	pendingSpans []invertedSpanRoutingInfo, fragmentUntil inverted.EncVal,
 ) []invertedSpanRoutingInfo {
 	// The start keys are the same, so this only sorts in increasing order of
 	// end keys. Assign slice to a field on the receiver before sorting to avoid
@@ -344,9 +344,9 @@ func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 		// the next fragment is constructed.
 		var removeSize int
 		// The end of the next fragment.
-		var end invertedexpr.EncInvertedVal
+		var end inverted.EncVal
 		// The start of the fragment after the next fragment.
-		var nextStart invertedexpr.EncInvertedVal
+		var nextStart inverted.EncVal
 		if fragmentUntil != nil && bytes.Compare(fragmentUntil, pendingSpans[0].span.End) < 0 {
 			// Can't completely remove any spans from pendingSpans, but a prefix
 			// of these spans will be removed
@@ -508,7 +508,7 @@ func (b *batchedInvertedExprEvaluator) init() (invertedSpans, error) {
 // TODO(sumeer): if this will be called in non-decreasing order of enc,
 // use that to optimize the binary search.
 func (b *batchedInvertedExprEvaluator) prepareAddIndexRow(
-	enc invertedexpr.EncInvertedVal, encFull invertedexpr.EncInvertedVal,
+	enc inverted.EncVal, encFull inverted.EncVal,
 ) (bool, error) {
 	routingEnc := enc
 	if encFull != nil {
@@ -525,7 +525,7 @@ func (b *batchedInvertedExprEvaluator) prepareAddIndexRow(
 // prefilter applies b.filterer, if it exists, returning true if addIndexRow
 // should be called for the row corresponding to the encoded value.
 // prepareAddIndexRow or prepareAddMultiColumnIndexRow must be called first.
-func (b *batchedInvertedExprEvaluator) prefilter(enc invertedexpr.EncInvertedVal) (bool, error) {
+func (b *batchedInvertedExprEvaluator) prefilter(enc inverted.EncVal) (bool, error) {
 	if b.filterer != nil {
 		exprIndexList := b.fragmentedSpans[b.routingIndex].exprIndexList
 		if len(exprIndexList) > cap(b.tempPreFilters) {
