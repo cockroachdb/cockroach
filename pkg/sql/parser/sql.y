@@ -5060,6 +5060,16 @@ show_create_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Name: $4.unresolvedObjectName()}
   }
+| SHOW CREATE TABLES table_name_list
+  {
+    $$.val = &tree.ShowCreateTables{
+      Names: $4.tableNames(),
+    }
+  }
+| SHOW CREATE ALL TABLES
+  {
+    $$.val = &tree.ShowCreateAllTables{}
+  }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
 create_kw:

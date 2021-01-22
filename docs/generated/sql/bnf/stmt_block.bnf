@@ -601,6 +601,8 @@ show_constraints_stmt ::=
 
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name
+	| 'SHOW' 'CREATE' 'TABLES' table_name_list
+	| 'SHOW' 'CREATE' 'ALL' 'TABLES'
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' var_name
@@ -1504,6 +1506,9 @@ with_comment ::=
 	'WITH' 'COMMENT'
 	| 
 
+table_name_list ::=
+	( table_name ) ( ( ',' table_name ) )*
+
 opt_on_targets_roles ::=
 	'ON' targets_roles
 	| 
@@ -1943,9 +1948,6 @@ target_elem ::=
 
 table_index_name_list ::=
 	( table_index_name ) ( ( ',' table_index_name ) )*
-
-table_name_list ::=
-	( table_name ) ( ( ',' table_name ) )*
 
 kv_option ::=
 	name '=' string_or_placeholder

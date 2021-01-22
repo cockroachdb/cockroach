@@ -12,6 +12,8 @@ package delegate
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -171,6 +173,67 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 	return d.showTableDetails(n.Table, getConstraintsQuery)
 }
 
+func (d *delegator) delegateShowCreateTables(n *tree.ShowCreateTables) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateQuery = `
+WITH zone_configs AS (
+    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+    WHERE table_name IN (%[1]s)
+    AND raw_config_yaml IS NOT NULL
+    AND raw_config_sql IS NOT NULL
+)
+SELECT
+		database_name,
+		schema_name,
+    descriptor_name AS table_name,
+    concat(create_statement,
+        CASE
+        WHEN NOT has_partitions
+            THEN NULL
+        WHEN (SELECT * FROM zone_configs) IS NULL
+            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e';\n', (SELECT * FROM zone_configs))
+        END
+    ) AS create_statement
+FROM
+    crdb_internal.create_statements
+WHERE
+    descriptor_id IN (%[2]s)
+ORDER BY
+    1, 2, 3;`
+
+	return d.showTablesDetails(n.Names, showCreateQuery)
+}
+
+func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateQuery = `
+WITH zone_configs AS (
+    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+)
+SELECT
+		database_name,
+		schema_name,
+    descriptor_name AS table_name,
+    concat(create_statement,
+        CASE
+        WHEN NOT has_partitions
+            THEN NULL
+        WHEN (SELECT * FROM zone_configs) IS NULL
+            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e';\n', (SELECT * FROM zone_configs))
+        END
+    ) AS create_statement
+FROM
+    crdb_internal.create_statements
+ORDER BY
+    1, 2, 3;`
+
+	return parse(showCreateQuery)
+}
+
 // showTableDetails returns the AST of a query which extracts information about
 // the given table using the given query patterns in SQL. The query pattern must
 // accept the following formatting parameters:
@@ -202,6 +265,49 @@ func (d *delegator) showTableDetails(
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 		lex.EscapeSQLString(resName.Schema()),
 		dataSource.PostgresDescriptorID(),
+	)
+
+	return parse(fullQuery)
+}
+
+// showTablesDetails returns the AST of a query which extracts information about
+// the given table using the given query patterns in SQL. The query pattern must
+// accept the following formatting parameters:
+//   %[1]s the given table names as SQL string literal.
+//   %[2]s the table IDs.
+func (d *delegator) showTablesDetails(names tree.TableNames, query string) (tree.Statement, error) {
+	// We avoid the cache so that we can observe the details without
+	// taking a lease, like other SHOW commands.
+	var ids []string
+	var resNames []string
+	for _, name := range names {
+		flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
+		tn := name
+		dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
+		if err != nil {
+			return nil, err
+		}
+		if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+			return nil, err
+		}
+
+		resNames = append(resNames, resName.String())
+		ids = append(ids, strconv.Itoa(int(dataSource.PostgresDescriptorID())))
+
+		if err != nil {
+			return nil, err
+		}
+		if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+			return nil, err
+		}
+	}
+
+	resNameLiterals := strings.Join(resNames, ",")
+	idLiterals := strings.Join(ids, ",")
+
+	fullQuery := fmt.Sprintf(query,
+		lex.EscapeSQLString(resNameLiterals),
+		idLiterals,
 	)
 
 	return parse(fullQuery)
