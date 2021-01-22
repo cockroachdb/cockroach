@@ -595,7 +595,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 		return err
 	}
 
-	var res bufferedCommandResult
+	var res streamingCommandResult
 	err := c.execInsertPlan(ctx, &c.p, &res)
 	if err != nil {
 		return err

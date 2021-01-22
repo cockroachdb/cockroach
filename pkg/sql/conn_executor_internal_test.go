@@ -55,7 +55,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf, syncResults, finished, stopper, err := startConnExecutor(ctx)
+	buf, syncResults, finished, stopper, _, err := startConnExecutor(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,11 +69,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// succeed and the 2nd one to fail (since the portal is destroyed after the
 	// Execute).
 	cmdPos := 0
-	stmt := mustParseOne("SELECT 1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps_nontxn", Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, PrepareStmt{Name: "ps_nontxn", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +117,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	if numResults != cmdPos+1 {
 		t.Fatalf("expected %d results, got: %d", cmdPos+1, len(results))
 	}
-	if err := results[successfulDescribePos].err; err != nil {
+	if err = results[successfulDescribePos].err; err != nil {
 		t.Fatalf("expected first Describe to succeed, got err: %s", err)
 	}
 	if !testutils.IsError(results[failedDescribePos].err, "unknown portal") {
@@ -134,20 +130,12 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	// after the COMMIT). The point of the SELECT is to show that the portal
 	// survives execution of a statement.
 	cmdPos++
-	stmt = mustParseOne("BEGIN")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("BEGIN")}); err != nil {
 		t.Fatal(err)
 	}
 
 	cmdPos++
-	stmt = mustParseOne("SELECT 1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = buf.Push(ctx, PrepareStmt{Name: "ps1", Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, PrepareStmt{Name: "ps1", Statement: mustParseOne("SELECT 1")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,11 +148,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	stmt = mustParseOne("SELECT 2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("SELECT 2")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,11 +162,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	cmdPos++
-	stmt = mustParseOne("COMMIT")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := buf.Push(ctx, ExecStmt{Statement: stmt}); err != nil {
+	if err = buf.Push(ctx, ExecStmt{Statement: mustParseOne("COMMIT")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,7 +187,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 		t.Fatalf("expected %d results, got: %d", exp, len(results))
 	}
 	succDescIdx := successfulDescribePos - numResults
-	if err := results[succDescIdx].err; err != nil {
+	if err = results[succDescIdx].err; err != nil {
 		t.Fatalf("expected first Describe to succeed, got err: %s", err)
 	}
 	failDescIdx := failedDescribePos - numResults
@@ -216,7 +196,7 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	}
 
 	buf.Close()
-	if err := <-finished; err != nil {
+	if err = <-finished; err != nil {
 		t.Fatal(err)
 	}
 }
@@ -240,9 +220,13 @@ func mustParseOne(s string) parser.Statement {
 // gets the error from closing down the executor once the StmtBuf is closed, a
 // stopper that must be stopped when the test completes (this does not stop the
 // executor but stops other background work).
+//
+// It also returns a channel that AddRow might block on which can buffer up to
+// 16 items (including column types when applicable), so the caller might need
+// to receive from it occasionally.
 func startConnExecutor(
 	ctx context.Context,
-) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, error) {
+) (*StmtBuf, <-chan []resWithPos, <-chan error, *stop.Stopper, <-chan ieIteratorResult, error) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
@@ -258,7 +242,7 @@ func startConnExecutor(
 	gw := gossip.MakeOptionalGossip(nil)
 	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	defer tempEngine.Close()
 	cfg := &ExecutorConfig{
@@ -305,16 +289,18 @@ func startConnExecutor(
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
+	iteratorCh := make(chan ieIteratorResult, 16)
 	var cc ClientComm = &internalClientComm{
 		sync: func(res []resWithPos) {
 			syncResults <- res
 		},
+		ch: iteratorCh,
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
 	conn, err := s.SetupConn(ctx, SessionArgs{}, buf, cc, sqlMetrics)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 	finished := make(chan error)
 
@@ -324,7 +310,7 @@ func startConnExecutor(
 	go func() {
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
-	return buf, syncResults, finished, stopper, nil
+	return buf, syncResults, finished, stopper, iteratorCh, nil
 }
 
 // Test that a client session can close without deadlocking when the closing
