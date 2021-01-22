@@ -67,6 +67,21 @@ func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
 	return size
 }
 
+// GetBatchMemSize returns the total memory footprint of the batch.
+func GetBatchMemSize(b coldata.Batch) int64 {
+	if b == nil || b == coldata.ZeroBatch {
+		return 0
+	}
+	// We need to get the capacity of the internal selection vector, even if b
+	// currently doesn't use it, so we set selection to true and will reset
+	// below.
+	usesSel := b.Selection() != nil
+	b.SetSelection(true)
+	memUsage := selVectorSize(cap(b.Selection())) + getVecsMemoryFootprint(b.ColVecs())
+	b.SetSelection(usesSel)
+	return memUsage
+}
+
 // GetProportionalBatchMemSize returns the memory size of the batch that is
 // proportional to given 'length'. This method returns the estimated memory
 // footprint *only* of the first 'length' tuples in 'b'.
@@ -153,7 +168,7 @@ func (a *Allocator) ResetMaybeReallocate(
 	if oldBatch == nil {
 		newBatch = a.NewMemBatchWithFixedCapacity(typs, minCapacity)
 	} else if oldBatch.Capacity() < coldata.BatchSize() {
-		a.ReleaseBatch(oldBatch)
+		a.ReleaseMemory(GetBatchMemSize(oldBatch))
 		newCapacity := oldBatch.Capacity() * 2
 		if newCapacity < minCapacity {
 			newCapacity = minCapacity
@@ -168,51 +183,6 @@ func (a *Allocator) ResetMaybeReallocate(
 		newBatch = oldBatch
 	}
 	return newBatch, reallocated
-}
-
-// RetainBatch adds the size of the batch to the memory account. This shouldn't
-// need to be used regularly, since most memory accounting necessary is done
-// through PerformOperation. Use this if you want to explicitly manage the
-// memory accounted for.
-// NOTE: when calculating memory footprint, this method looks at the capacities
-// of the vectors and does *not* pay attention to the length of the batch.
-func (a *Allocator) RetainBatch(b coldata.Batch) {
-	if b == coldata.ZeroBatch {
-		// coldata.ZeroBatch takes up no space but also doesn't support the change
-		// of the selection vector, so we need to handle it separately.
-		return
-	}
-	// We need to get the capacity of the internal selection vector, even if b
-	// currently doesn't use it, so we set selection to true and will reset
-	// below.
-	usesSel := b.Selection() != nil
-	b.SetSelection(true)
-	if err := a.acc.Grow(a.ctx, selVectorSize(cap(b.Selection()))+getVecsMemoryFootprint(b.ColVecs())); err != nil {
-		colexecerror.InternalError(err)
-	}
-	b.SetSelection(usesSel)
-}
-
-// ReleaseBatch releases the size of the batch from the memory account. This
-// shouldn't need to be used regularly, since all accounts are closed by
-// Flow.Cleanup. Use this if you want to explicitly manage the memory used. An
-// example of a use case is releasing a batch before writing it to disk.
-// NOTE: when calculating memory footprint, this method looks at the capacities
-// of the vectors and does *not* pay attention to the length of the batch.
-func (a *Allocator) ReleaseBatch(b coldata.Batch) {
-	if b == coldata.ZeroBatch {
-		// coldata.ZeroBatch takes up no space but also doesn't support the change
-		// of the selection vector, so we need to handle it separately.
-		return
-	}
-	// We need to get the capacity of the internal selection vector, even if b
-	// currently doesn't use it, so we set selection to true and will reset
-	// below.
-	usesSel := b.Selection() != nil
-	b.SetSelection(true)
-	batchMemSize := selVectorSize(cap(b.Selection())) + getVecsMemoryFootprint(b.ColVecs())
-	a.ReleaseMemory(batchMemSize)
-	b.SetSelection(usesSel)
 }
 
 // NewMemColumn returns a new coldata.Vec of the desired capacity.
