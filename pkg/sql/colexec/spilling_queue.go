@@ -106,21 +106,13 @@ type NewSpillingQueueArgs struct {
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
 func newSpillingQueue(args *NewSpillingQueueArgs) *spillingQueue {
-	// Reduce the memory limit by what the DiskQueue may need to buffer
-	// writes/reads.
-	// TODO(yuzefovich): the memory limit should only be reduced by the buffer
-	// size if/when the spilling to disk occurs. Until that point the spilling
-	// queue should be free to use the whole limit for the in-memory batch
-	// buffer.
-	memoryLimit := args.MemoryLimit
-	memoryLimit -= int64(args.DiskQueueCfg.BufferSizeBytes)
 	var items []coldata.Batch
-	if memoryLimit > 0 {
+	if args.MemoryLimit > 0 {
 		items = make([]coldata.Batch, spillingQueueInitialItemsLen)
 	}
 	return &spillingQueue{
 		unlimitedAllocator: args.UnlimitedAllocator,
-		maxMemoryLimit:     memoryLimit,
+		maxMemoryLimit:     args.MemoryLimit,
 		typs:               args.Types,
 		items:              items,
 		diskQueueCfg:       args.DiskQueueCfg,
@@ -444,6 +436,9 @@ func (q *spillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	// Only assign q.diskQueue if there was no error, otherwise the returned value
 	// may be non-nil but invalid.
 	q.diskQueue = diskQueue
+	// Reduce the memory limit by what the DiskQueue may need to buffer
+	// writes/reads.
+	q.maxMemoryLimit -= int64(q.diskQueueCfg.BufferSizeBytes)
 	return nil
 }
 
@@ -470,6 +465,7 @@ func (q *spillingQueue) close(ctx context.Context) error {
 		if q.fdSemaphore != nil {
 			q.fdSemaphore.Release(q.numFDsOpenAtAnyGivenTime())
 		}
+		q.maxMemoryLimit += int64(q.diskQueueCfg.BufferSizeBytes)
 		q.closed = true
 		return nil
 	}

@@ -257,9 +257,6 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeDefault
-	// We don't expect to spill to disk and we want to give the whole memory
-	// limit to the spilling queue's in-memory batch buffer.
-	queueCfg.BufferSizeBytes = 1
 
 	rng, _ := randutil.NewPseudoRand()
 	numBatches := int(spillingQueueInitialItemsLen)*(1+rng.Intn(4)) + rng.Intn(int(spillingQueueInitialItemsLen))
@@ -277,7 +274,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	// Choose a memory limit such that at most two batches can be kept in the
 	// in-memory buffer at a time (single batch is not enough because the queue
 	// delays the release of the memory by one batch).
-	memoryLimit := int64(2*colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()) + queueCfg.BufferSizeBytes)
+	memoryLimit := int64(2 * colmem.EstimateBatchSizeBytes(typs, coldata.BatchSize()))
 	if memoryLimit < mon.DefaultPoolAllocationSize {
 		memoryLimit = mon.DefaultPoolAllocationSize
 	}
