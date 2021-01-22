@@ -584,8 +584,8 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		//
 		// However, because we intend to read on the same node, we can limit
 		// this to a clock reading from the local clock, relying on the fact
-		// that an observed timestamp from this node will limit our local max
-		// timestamp when we return to read.
+		// that an observed timestamp from this node will limit our local
+		// uncertainty limit when we return to read.
 		//
 		// We intentionally do not use an observed timestamp directly to limit
 		// the push timestamp, because observed timestamps are not applicable in
@@ -600,9 +600,9 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		// need to push again, but expect to eventually succeed in reading,
 		// either after lease movement subsides or after the reader's read
 		// timestamp surpasses its max timestamp.
-		localMaxTS := req.Txn.MaxTimestamp
-		localMaxTS.Backward(w.clock.Now())
-		h.Timestamp.Forward(localMaxTS)
+		localUncertaintyLimit := req.Txn.GlobalUncertaintyLimit
+		localUncertaintyLimit.Backward(w.clock.Now())
+		h.Timestamp.Forward(localUncertaintyLimit)
 	}
 	return h
 }

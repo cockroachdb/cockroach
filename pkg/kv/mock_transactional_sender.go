@@ -116,7 +116,7 @@ func (m *MockTransactionalSender) CommitTimestampFixed() bool {
 func (m *MockTransactionalSender) SetFixedTimestamp(_ context.Context, ts hlc.Timestamp) {
 	m.txn.WriteTimestamp = ts
 	m.txn.ReadTimestamp = ts
-	m.txn.MaxTimestamp = ts
+	m.txn.GlobalUncertaintyLimit = ts
 	m.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed

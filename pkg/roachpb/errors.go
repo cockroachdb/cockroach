@@ -921,7 +921,7 @@ func NewReadWithinUncertaintyIntervalError(
 		LocalUncertaintyLimit: localUncertaintyLimit,
 	}
 	if txn != nil {
-		rwue.MaxTimestamp = txn.MaxTimestamp
+		rwue.GlobalUncertaintyLimit = txn.GlobalUncertaintyLimit
 		rwue.ObservedTimestamps = txn.ObservedTimestamps
 	}
 	return rwue
@@ -933,7 +933,7 @@ func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ 
 		"previous write with future timestamp %s within uncertainty interval `t <= "+
 		"(local=%v, global=%v)`; "+
 		"observed timestamps: ",
-		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.MaxTimestamp)
+		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
 	s.SafeRune('[')
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {

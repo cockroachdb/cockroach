@@ -927,10 +927,10 @@ func MVCCGetAsTxn(
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	return MVCCGet(ctx, reader, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			Status:        roachpb.PENDING,
-			ReadTimestamp: txnMeta.WriteTimestamp,
-			MaxTimestamp:  txnMeta.WriteTimestamp,
+			TxnMeta:                txnMeta,
+			Status:                 roachpb.PENDING,
+			ReadTimestamp:          txnMeta.WriteTimestamp,
+			GlobalUncertaintyLimit: txnMeta.WriteTimestamp,
 		}})
 }
 
@@ -2561,10 +2561,10 @@ func MVCCScanAsTxn(
 ) (MVCCScanResult, error) {
 	return MVCCScan(ctx, reader, key, endKey, timestamp, MVCCScanOptions{
 		Txn: &roachpb.Transaction{
-			TxnMeta:       txnMeta,
-			Status:        roachpb.PENDING,
-			ReadTimestamp: txnMeta.WriteTimestamp,
-			MaxTimestamp:  txnMeta.WriteTimestamp,
+			TxnMeta:                txnMeta,
+			Status:                 roachpb.PENDING,
+			ReadTimestamp:          txnMeta.WriteTimestamp,
+			GlobalUncertaintyLimit: txnMeta.WriteTimestamp,
 		}})
 }
 
