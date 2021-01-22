@@ -7,16 +7,13 @@ import classNames from "classnames/bind";
 
 import { Text } from "@cockroachlabs/ui-components";
 
-import {
-  Dropdown,
-  Loading,
-  PageConfig,
-  PageConfigItem,
-  SortSetting,
-  Search,
-  Pagination,
-  ResultsPerPageLabel,
-} from "src/index";
+import { Dropdown } from "src/dropdown";
+import { Loading } from "src/loading";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { SortSetting } from "src/sortedtable";
+import { Search } from "src/search";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
+
 import { DATE_FORMAT, appAttr, getMatchParamByName } from "src/util";
 import {
   AggregateStatistics,
