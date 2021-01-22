@@ -270,16 +270,11 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			return err
 		}
 		log.Infof(ctx, "job %d: resuming execution", *id)
-		errCh, err := r.deprecatedResume(resumeCtx, resumer, job, nil)
+		err = r.deprecatedResume(resumeCtx, resumer, job)
 		if err != nil {
 			r.unregister(*id)
 			return err
 		}
-		go func() {
-			// Wait for the job to finish. No need to print the error because if there
-			// was one it's been set in the job status already.
-			<-errCh
-		}()
 
 		adopted++
 	}
@@ -331,18 +326,9 @@ func (r *Registry) deprecatedCancelAll(ctx context.Context) {
 
 // deprecatedResume starts or resumes a job. If no error is returned then the
 // job was asynchronously executed. The job is executed with the ctx, so ctx
-// must only by canceled if the job should also be canceled. resultsCh is passed
-// to the resumable func and should be closed by the caller after errCh sends
-// a value. The onDone function is called when the async task completes or if
-// an error is returned.
-func (r *Registry) deprecatedResume(
-	ctx context.Context, resumer Resumer, job *Job, onDone func(),
-) (<-chan error, error) {
-	errCh := make(chan error, 1)
+// must only by canceled if the job should also be canceled.
+func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *Job) error {
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
-		if onDone != nil {
-			defer onDone()
-		}
 		// Bookkeeping.
 		payload := job.Payload()
 		execCtx, cleanup := r.execCtx("resume-"+job.taskName(), payload.UsernameProto.Decode())
@@ -371,14 +357,10 @@ func (r *Registry) deprecatedResume(
 			}
 		}
 		r.unregister(*job.ID())
-		errCh <- err
 	}); err != nil {
-		if onDone != nil {
-			onDone()
-		}
-		return nil, err
+		return err
 	}
-	return errCh, nil
+	return nil
 }
 
 func (j *Job) deprecatedInsert(
