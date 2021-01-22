@@ -98,6 +98,7 @@ func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
                             ns.oid = c.relnamespace
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
+           AND fd.descriptor_id != fd.dependedonby_id
        )
 	`, tableName.Object(), tableName.Schema())
 }
