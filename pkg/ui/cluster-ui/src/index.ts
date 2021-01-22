@@ -19,7 +19,6 @@ export * from "./statementsDiagnostics";
 export * from "./statementsPage";
 export * from "./statementDetails";
 export * from "./statementsTable";
-export * from "./statementDetails/statementDetails";
 export * from "./sql";
 export * from "./table";
 export * from "./store";
