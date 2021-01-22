@@ -1,0 +1,154 @@
+# All querys are separated into SELECT create_statement
+# and SELECT schema_name, table_name for formatting purposes.
+
+statement ok
+CREATE TABLE t(x INT)
+
+statement ok
+CREATE TABLE t2(x INT PRIMARY KEY, y INT, FAMILY f1 (x, y))
+
+statement ok
+CREATE TABLE t3(x INT, y INT, INDEX idx (x, y), FAMILY f1 (x, y))
+
+# Test SHOW CREATE ALL TABLES on a select few tables to avoid output from being
+# too long.
+query T
+SELECT create_statement FROM [SHOW CREATE ALL TABLES] WHERE table_name = 'tables' AND schema_name = 'crdb_internal'
+----
+CREATE TABLE crdb_internal.tables (
+    table_id INT8 NOT NULL,
+    parent_id INT8 NOT NULL,
+    name STRING NOT NULL,
+    database_name STRING NULL,
+    version INT8 NOT NULL,
+    mod_time TIMESTAMP NOT NULL,
+    mod_time_logical DECIMAL NOT NULL,
+    format_version STRING NOT NULL,
+    state STRING NOT NULL,
+    sc_lease_node_id INT8 NULL,
+    sc_lease_expiration_time TIMESTAMP NULL,
+    drop_time TIMESTAMP NULL,
+    audit_mode STRING NOT NULL,
+    schema_name STRING NOT NULL,
+    parent_schema_id INT8 NOT NULL,
+    locality STRING NULL
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE ALL TABLES] WHERE table_name = 'tables' AND schema_name = 'crdb_internal'
+----
+schema_name    table_name
+crdb_internal  tables
+
+query T
+SELECT create_statement FROM [SHOW CREATE ALL TABLES] WHERE table_name = 't'
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE ALL TABLES] WHERE table_name = 't'
+----
+schema_name  table_name
+public       t
+
+query T
+SELECT create_statement FROM [SHOW CREATE ALL TABLES] WHERE table_name IN ('t', 't2');
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    FAMILY f1 (x, y)
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE ALL TABLES] WHERE table_name IN ('t', 't2');
+----
+schema_name  table_name
+public       t
+public       t2
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLES t]
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE TABLES t]
+----
+schema_name  table_name
+public       t
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLES t, t2, t3]
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    FAMILY f1 (x, y)
+);
+CREATE TABLE public.t3 (
+    x INT8 NULL,
+    y INT8 NULL,
+    INDEX idx (x ASC, y ASC),
+    FAMILY f1 (x, y, rowid)
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE TABLES t, t2, t3]
+----
+schema_name  table_name
+public       t
+public       t2
+public       t3
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLES t, t2]
+----
+CREATE TABLE public.t (
+    x INT8 NULL,
+    FAMILY "primary" (x, rowid)
+);
+CREATE TABLE public.t2 (
+    x INT8 NOT NULL,
+    y INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (x ASC),
+    FAMILY f1 (x, y)
+);
+
+query TT colnames
+SELECT schema_name, table_name FROM [SHOW CREATE TABLES t, t2]
+----
+schema_name  table_name
+public       t
+public       t2
+
+# SHOW CREATE ALL TABLES and SHOW CREATE TABLES should only show tables in the
+# current database (test).
+
+statement ok
+CREATE DATABASE not_test;
+CREATE TABLE not_test.should_not_appear()
+
+query TT
+SELECT schema_name, table_name FROM [SHOW CREATE TABLES not_test.should_not_appear]
+----
+
+query TT
+SELECT schema_name, table_name FROM [SHOW CREATE ALL TABLES] WHERE table_name = 'should_not_appear'
+----
