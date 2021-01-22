@@ -1714,7 +1714,7 @@ func doRestorePlan(
 
 	var sj *jobs.StartableJob
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
+		sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn)
 		if err != nil {
 			return err
 		}
@@ -1729,7 +1729,13 @@ func doRestorePlan(
 	}
 
 	collectTelemetry()
-	return sj.Run(ctx)
+	if err := sj.Start(ctx); err != nil {
+		return err
+	}
+	if err := sj.AwaitCompletion(ctx); err != nil {
+		return err
+	}
+	return sj.ReportExecutionResults(ctx, resultsCh)
 }
 
 func init() {

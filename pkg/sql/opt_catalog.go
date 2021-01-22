@@ -1068,7 +1068,7 @@ func (ot *optTable) UniqueCount() int {
 }
 
 // Unique is part of the cat.Table interface.
-func (ot *optTable) Unique(i int) cat.UniqueConstraint {
+func (ot *optTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	return &ot.uniqueConstraints[i]
 }
 
@@ -1891,7 +1891,7 @@ func (ot *optVirtualTable) UniqueCount() int {
 }
 
 // Unique is part of the cat.Table interface.
-func (ot *optVirtualTable) Unique(i int) cat.UniqueConstraint {
+func (ot *optVirtualTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	panic(errors.AssertionFailedf("no unique constraints"))
 }
 

@@ -291,19 +291,19 @@ func (r *Registry) makeJobID() int64 {
 // job will be started with (canceling ctx will not cause the job to cancel).
 func (r *Registry) CreateAndStartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
-) (*Job, <-chan error, error) {
+) (*StartableJob, error) {
 	var rj *StartableJob
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		rj, err = r.CreateStartableJobWithTxn(ctx, record, txn, resultsCh)
+		rj, err = r.CreateStartableJobWithTxn(ctx, record, txn)
 		return err
 	}); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	errCh, err := rj.Start(ctx)
+	err := rj.Start(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return rj.Job, errCh, nil
+	return rj, nil
 }
 
 // Run starts previously unstarted jobs from a list of scheduled
@@ -496,7 +496,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 // back then the caller must call CleanupOnRollback to unregister the job from
 // the Registry.
 func (r *Registry) CreateStartableJobWithTxn(
-	ctx context.Context, record Record, txn *kv.Txn, resultsCh chan<- tree.Datums,
+	ctx context.Context, record Record, txn *kv.Txn,
 ) (*StartableJob, error) {
 	j, err := r.CreateJobWithTxn(ctx, record, txn)
 	if err != nil {
@@ -542,8 +542,8 @@ func (r *Registry) CreateStartableJobWithTxn(
 		resumer:    resumer,
 		resumerCtx: resumerCtx,
 		cancel:     cancel,
-		resultsCh:  resultsCh,
 		span:       span,
+		execDone:   make(chan struct{}),
 	}, nil
 }
 
@@ -1043,10 +1043,8 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id int64) error {
 // Resumers are created through registered Constructor functions.
 //
 type Resumer interface {
-	// Resume is called when a job is started or resumed. Sending results on the
-	// chan will return them to a user, if a user's session is connected. execCtx
-	// is a sql.JobExecCtx.
-	Resume(ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums) error
+	// Resume is called when a job is started or resumed. execCtx is a sql.JobExecCtx.
+	Resume(ctx context.Context, execCtx interface{}) error
 
 	// OnFailOrCancel is called when a job fails or is cancel-requested.
 	//
@@ -1066,6 +1064,15 @@ type PauseRequester interface {
 	// If an error is returned, the pause request will fail. execCtx is a
 	// sql.JobExecCtx.
 	OnPauseRequest(ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress) error
+}
+
+// JobResultsReporter is an interface for reporting the results of the job execution.
+// Resumer implementations may also implement this interface if they wish to return
+// data to the user upon successful completion.
+type JobResultsReporter interface {
+	// ReportResults sends job results on the specified channel.
+	// This method will only be called if Resume() ran successfully to completion.
+	ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
@@ -1118,13 +1125,7 @@ func (r retryJobError) Error() string {
 // be closed by the caller after errCh sends a value. errCh returns an error if
 // the job was not completed with success. status is the current job status.
 func (r *Registry) stepThroughStateMachine(
-	ctx context.Context,
-	execCtx interface{},
-	resumer Resumer,
-	resultsCh chan<- tree.Datums,
-	job *Job,
-	status Status,
-	jobErr error,
+	ctx context.Context, execCtx interface{}, resumer Resumer, job *Job, status Status, jobErr error,
 ) error {
 	payload := job.Payload()
 	jobType := payload.Type()
@@ -1146,11 +1147,11 @@ func (r *Registry) stepThroughStateMachine(
 		func() {
 			jm.CurrentlyRunning.Inc(1)
 			defer jm.CurrentlyRunning.Dec(1)
-			err = resumer.Resume(resumeCtx, execCtx, resultsCh)
+			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 		if err == nil {
 			jm.ResumeCompleted.Inc(1)
-			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusSucceeded, nil)
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusSucceeded, nil)
 		}
 		if resumeCtx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to
@@ -1176,7 +1177,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusReverting, err)
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, err)
 	case StatusPauseRequested:
 		return errors.Errorf("job %s", status)
 	case StatusCancelRequested:
@@ -1202,7 +1203,7 @@ func (r *Registry) stepThroughStateMachine(
 			// TODO(spaskob): this is silly, we should remove the OnSuccess hooks and
 			// execute them in resume so that the client can handle these errors
 			// better.
-			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", *job.ID()))
 		}
 		return nil
 	case StatusReverting:
@@ -1226,7 +1227,7 @@ func (r *Registry) stepThroughStateMachine(
 			if HasErrJobCanceled(jobErr) {
 				nextStatus = StatusCanceled
 			}
-			return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, nextStatus, jobErr)
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, nextStatus, jobErr)
 		}
 		if onFailOrCancelCtx.Err() != nil {
 			jm.FailOrCancelRetryError.Inc(1)
@@ -1246,7 +1247,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, execCtx, resumer, resultsCh, job, StatusFailed,
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusFailed,
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", *job.ID()))
 	case StatusFailed:
 		if jobErr == nil {

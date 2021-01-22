@@ -11,6 +11,7 @@
 package testcat
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -500,7 +501,7 @@ func (tt *Table) addUniqueConstraint(
 
 	// We didn't find an existing constraint, so add a new one.
 	u := UniqueConstraint{
-		name:           string(name),
+		name:           tt.makeUniqueConstraintName(name, columns),
 		tabID:          tt.TabID,
 		columnOrdinals: cols,
 		withoutIndex:   withoutIndex,
@@ -761,6 +762,20 @@ func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 		} else {
 			name = "secondary"
 		}
+	}
+	return name
+}
+
+func (tt *Table) makeUniqueConstraintName(defName tree.Name, columns tree.IndexElemList) string {
+	name := string(defName)
+	if name == "" {
+		var buf bytes.Buffer
+		buf.WriteString("unique")
+		for i := range columns {
+			buf.WriteRune('_')
+			buf.WriteString(string(columns[i].Column))
+		}
+		name = buf.String()
 	}
 	return name
 }

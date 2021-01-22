@@ -4662,17 +4662,15 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type fakeResumer struct {
-	OnResume     func(context.Context, chan<- tree.Datums) error
+	OnResume     func(context.Context) error
 	FailOrCancel func(context.Context) error
 }
 
 var _ jobs.Resumer = fakeResumer{}
 
-func (d fakeResumer) Resume(
-	ctx context.Context, _ interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (d fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if d.OnResume != nil {
-		if err := d.OnResume(ctx, resultsCh); err != nil {
+		if err := d.OnResume(ctx); err != nil {
 			return err
 		}
 	}
@@ -4721,7 +4719,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return fakeResumer{
-			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+			OnResume: func(ctx context.Context) error {
 				<-done
 				return nil
 			},
@@ -4732,8 +4730,8 @@ func TestImportControlJobRBAC(t *testing.T) {
 		}
 	})
 
-	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.Job {
-		job, _, err := registry.CreateAndStartJob(ctx, nil, record)
+	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
+		job, err := registry.CreateAndStartJob(ctx, nil, record)
 		require.NoError(t, err)
 		return job
 	}

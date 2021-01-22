@@ -136,7 +136,7 @@ func createTypeChangeJobFromDesc(
 		// Type change jobs are not cancellable.
 		NonCancelable: true,
 	}
-	job, err := jr.CreateStartableJobWithTxn(ctx, record, txn, nil /* resultsCh */)
+	job, err := jr.CreateStartableJobWithTxn(ctx, record, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func createSchemaChangeJobsFromMutations(
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
-		newJob, err := jr.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil)
+		newJob, err := jr.CreateStartableJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
 			return nil, err
 		}

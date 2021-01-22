@@ -130,7 +130,7 @@ type Table interface {
 
 	// Unique returns the ith unique constraint defined on this table, where
 	// i < UniqueCount.
-	Unique(i int) UniqueConstraint
+	Unique(i UniqueOrdinal) UniqueConstraint
 }
 
 // CheckConstraint contains the SQL text and the validity status for a check
@@ -278,3 +278,10 @@ type UniqueConstraint interface {
 	// needs to be enforced on new mutations.
 	Validated() bool
 }
+
+// UniqueOrdinal identifies a unique constraint (in the context of a Table).
+type UniqueOrdinal = int
+
+// UniqueOrdinals identifies a list of unique constraints (in the context of
+// a Table).
+type UniqueOrdinals = []UniqueOrdinal

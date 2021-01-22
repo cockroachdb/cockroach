@@ -235,6 +235,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"ScheduleCommand":   {fullName: "tree.ScheduleCommand", passByVal: true},
 		"IndexOrdinal":      {fullName: "cat.IndexOrdinal", passByVal: true},
 		"IndexOrdinals":     {fullName: "cat.IndexOrdinals", passByVal: true},
+		"UniqueOrdinals":    {fullName: "cat.UniqueOrdinals", passByVal: true},
 		"ViewDeps":          {fullName: "opt.ViewDeps", passByVal: true},
 		"LockingItem":       {fullName: "tree.LockingItem", isPointer: true},
 		"MaterializeClause": {fullName: "tree.MaterializeClause", passByVal: true},

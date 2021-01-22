@@ -471,7 +471,7 @@ func startGCJob(
 	jobRecord := CreateGCJobRecord(schemaChangeDescription, username, details)
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultCh */); err != nil {
+		if sj, err = jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn); err != nil {
 			return err
 		}
 		return nil
@@ -479,7 +479,7 @@ func startGCJob(
 		return err
 	}
 	log.Infof(ctx, "starting GC job %d", *sj.ID())
-	if _, err := sj.Start(ctx); err != nil {
+	if err := sj.Start(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -873,7 +873,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 				},
 			},
 		)
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
+		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
 			return err
 		}
@@ -888,7 +888,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		return err
 	}
 	if cleanupJob != nil {
-		if _, err := cleanupJob.Start(ctx); err != nil {
+		if err := cleanupJob.Start(ctx); err != nil {
 			log.Warningf(ctx, "starting job %d failed with error: %v", *cleanupJob.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *cleanupJob.ID())
@@ -989,7 +989,7 @@ func (sc *SchemaChanger) createIndexGCJob(
 	}
 
 	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().UsernameProto.Decode(), indexGCDetails)
-	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn)
 	if err != nil {
 		return nil, err
 	}
@@ -1369,7 +1369,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		return err
 	}
 	for _, job := range childJobs {
-		if _, err := job.Start(ctx); err != nil {
+		if err := job.Start(ctx); err != nil {
 			log.Warningf(ctx, "starting job %d failed with error: %v", *job.ID(), err)
 		}
 		log.VEventf(ctx, 2, "started job %d", *job.ID())
@@ -2071,9 +2071,7 @@ type schemaChangeResumer struct {
 	job *jobs.Job
 }
 
-func (r schemaChangeResumer) Resume(
-	ctx context.Context, execCtx interface{}, resultsCh chan<- tree.Datums,
-) error {
+func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 	if p.ExecCfg().SchemaChangerTestingKnobs.SchemaChangeJobNoOp != nil &&
@@ -2384,7 +2382,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
 		}
-		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn, nil /* resultsCh */)
+		job, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, jobRecord, txn)
 		if err != nil {
 			return nil, err
 		}
