@@ -11,10 +11,10 @@ import {
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
-  ActivateDiagnosticsModalRef,
-  ColumnDescriptor,
-  SortedTable,
-} from "src/index";
+} from "src/barCharts";
+import { ActivateDiagnosticsModalRef } from "src/statementsDiagnostics";
+import { ColumnDescriptor, SortedTable } from "src/sortedtable";
+
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import {
   StatementTableTitle,

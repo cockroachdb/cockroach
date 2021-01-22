@@ -20,7 +20,10 @@ import {
   getMatchParamByName,
   formatNumberForDisplay,
 } from "src/util";
-import { Loading, Button, SqlBox, SortSetting } from "src";
+import { Loading } from "src/loading";
+import { Button } from "src/button";
+import { SqlBox } from "src/sql";
+import { SortSetting } from "src/sortedtable";
 import { Tooltip } from "src/tooltip";
 import { PlanView } from "./planView";
 import { SummaryCard } from "src/summaryCard";
