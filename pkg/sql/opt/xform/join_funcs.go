@@ -614,7 +614,6 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		invertedJoin.Table = scanPrivate.Table
 		invertedJoin.Index = index.Ordinal()
 		invertedJoin.InvertedExpr = invertedExpr
-		invertedJoin.InvertedCol = scanPrivate.Table.IndexColumnID(index, 0)
 		invertedJoin.Cols = indexCols.Union(inputCols)
 		if continuationCol != 0 {
 			invertedJoin.Cols.Add(continuationCol)
@@ -761,7 +760,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 
 	// Ensure that this join expression was not added to the memo by a previous
 	// reordering, as well as that the join does not have hints.
-	return !private.WasReordered && c.NoJoinHints(private)
+	return !private.SkipReorderJoins && c.NoJoinHints(private)
 }
 
 // ReorderJoins adds alternate orderings of the given join tree to the memo. The

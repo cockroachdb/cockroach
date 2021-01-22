@@ -2203,6 +2203,14 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	numInputNodeCols, planToStreamColMap, post, types :=
 		mappingHelperForLookupJoins(plan, n.input, n.table, n.isFirstJoinInPairedJoiner)
 
+	invertedJoinerSpec.PrefixEqualityColumns = make([]uint32, len(n.prefixEqCols))
+	for i, col := range n.prefixEqCols {
+		if plan.PlanToStreamColMap[col] == -1 {
+			panic("lookup column not in planToStreamColMap")
+		}
+		invertedJoinerSpec.PrefixEqualityColumns[i] = uint32(plan.PlanToStreamColMap[col])
+	}
+
 	indexVarMap := makeIndexVarMapForLookupJoins(numInputNodeCols, n.table, plan, &post)
 	if invertedJoinerSpec.InvertedExpr, err = physicalplan.MakeExpression(
 		n.invertedExpr, planCtx, indexVarMap,

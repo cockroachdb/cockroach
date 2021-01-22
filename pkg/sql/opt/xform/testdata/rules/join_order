@@ -132,7 +132,23 @@ Source expression:
    └── filters
         └── abc.b = bx.b
 
-New expression 1 of 1:
+New expression 1 of 2:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── scan cy
+   │    ├── inner-join (hash)
+   │    │    ├── scan dz
+   │    │    ├── scan abc
+   │    │    │    └── constraint: /10: [/1 - /1]
+   │    │    └── filters
+   │    │         └── dz.d = abc.c
+   │    └── filters
+   │         └── cy.c = dz.d
+   └── filters
+        └── abc.b = bx.b
+
+New expression 2 of 2:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -166,7 +182,22 @@ Source expression:
    └── filters
         └── abc.b = bx.b
 
-New expression 1 of 3:
+New expression 1 of 4:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── scan cy
+   │    ├── inner-join (lookup dz)
+   │    │    ├── lookup columns are key
+   │    │    ├── scan abc
+   │    │    │    └── constraint: /10: [/1 - /1]
+   │    │    └── filters (true)
+   │    └── filters
+   │         └── cy.c = dz.d
+   └── filters
+        └── abc.b = bx.b
+
+New expression 2 of 4:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -181,7 +212,7 @@ New expression 1 of 3:
    └── filters
         └── abc.b = bx.b
 
-New expression 2 of 3:
+New expression 3 of 4:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -197,7 +228,7 @@ New expression 2 of 3:
    └── filters
         └── abc.b = bx.b
 
-New expression 3 of 3:
+New expression 4 of 4:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -230,7 +261,21 @@ Source expression:
    └── filters
         └── abc.b = bx.b
 
-New expression 1 of 3:
+New expression 1 of 4:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (lookup cy)
+   │    ├── lookup columns are key
+   │    ├── inner-join (lookup dz)
+   │    │    ├── lookup columns are key
+   │    │    ├── scan abc
+   │    │    │    └── constraint: /10: [/1 - /1]
+   │    │    └── filters (true)
+   │    └── filters (true)
+   └── filters
+        └── abc.b = bx.b
+
+New expression 2 of 4:
   inner-join (hash)
    ├── inner-join (lookup cy)
    │    ├── lookup columns are key
@@ -244,7 +289,7 @@ New expression 1 of 3:
    └── filters
         └── abc.b = bx.b
 
-New expression 2 of 3:
+New expression 3 of 4:
   inner-join (hash)
    ├── scan cy
    ├── inner-join (hash)
@@ -259,7 +304,7 @@ New expression 2 of 3:
    └── filters
         └── cy.c = dz.d
 
-New expression 3 of 3:
+New expression 4 of 4:
   inner-join (hash)
    ├── inner-join (hash)
    │    ├── scan bx
@@ -333,8 +378,8 @@ memo (optimized, ~24KB, required=[presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10
 memo join-limit=2
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~36KB, required=[presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+8) (lookup-join G3 G8 bx,keyCols=[8],outCols=(1,2,4,5,7-10)) (merge-join G5 G6 G8 inner-join,+4,+9) (lookup-join G6 G8 cy,keyCols=[9],outCols=(1,2,4,5,7-10))
+memo (optimized, ~43KB, required=[presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+8) (merge-join G2 G3 G8 inner-join,+1,+8) (lookup-join G3 G8 bx,keyCols=[8],outCols=(1,2,4,5,7-10)) (merge-join G5 G6 G8 inner-join,+4,+9) (lookup-join G6 G8 cy,keyCols=[9],outCols=(1,2,4,5,7-10))
  │    └── [presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[8],outCols=(1,2,4,5,7-10))
  │         └── cost: 17.13
@@ -345,11 +390,11 @@ memo (optimized, ~36KB, required=[presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10
  │    └── []
  │         ├── best: (scan bx,cols=(1,2))
  │         └── cost: 1044.02
- ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G8 inner-join,+4,+9) (lookup-join G10 G7 abc,keyCols=[12],outCols=(4,5,7-10)) (lookup-join G9 G8 cy,keyCols=[9],outCols=(4,5,7-10))
+ ├── G3: (inner-join G5 G9 G7) (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G8 inner-join,+4,+9) (lookup-join G10 G7 abc,keyCols=[12],outCols=(4,5,7-10)) (merge-join G5 G9 G8 inner-join,+4,+9) (lookup-join G11 G7 abc,keyCols=[13],outCols=(4,5,7-10)) (lookup-join G9 G8 cy,keyCols=[9],outCols=(4,5,7-10))
  │    └── []
  │         ├── best: (lookup-join G9 G8 cy,keyCols=[9],outCols=(4,5,7-10))
  │         └── cost: 11.13
- ├── G4: (filters G11)
+ ├── G4: (filters G12)
  ├── G5: (scan cy,cols=(4,5))
  │    ├── [ordering: +4]
  │    │    ├── best: (scan cy,cols=(4,5))
@@ -357,39 +402,43 @@ memo (optimized, ~36KB, required=[presentation: b:1,x:2,c:4,y:5,a:7,b:8,c:9,d:10
  │    └── []
  │         ├── best: (scan cy,cols=(4,5))
  │         └── cost: 1044.02
- ├── G6: (inner-join G2 G9 G4) (inner-join G9 G2 G4) (merge-join G2 G9 G8 inner-join,+1,+8) (lookup-join G12 G4 abc,keyCols=[13],outCols=(1,2,7-10)) (lookup-join G9 G8 bx,keyCols=[8],outCols=(1,2,7-10))
+ ├── G6: (inner-join G2 G9 G4) (inner-join G9 G2 G4) (merge-join G2 G9 G8 inner-join,+1,+8) (lookup-join G13 G4 abc,keyCols=[14],outCols=(1,2,7-10)) (lookup-join G9 G8 bx,keyCols=[8],outCols=(1,2,7-10))
  │    └── []
  │         ├── best: (lookup-join G9 G8 bx,keyCols=[8],outCols=(1,2,7-10))
  │         └── cost: 11.13
- ├── G7: (filters G13)
+ ├── G7: (filters G14)
  ├── G8: (filters)
- ├── G9: (select G14 G15) (scan abc,cols=(7-10),constrained)
+ ├── G9: (select G15 G16) (scan abc,cols=(7-10),constrained)
  │    └── []
  │         ├── best: (scan abc,cols=(7-10),constrained)
  │         └── cost: 5.09
- ├── G10: (project G5 G16 c y)
+ ├── G10: (project G5 G17 c y)
  │    └── []
- │         ├── best: (project G5 G16 c y)
+ │         ├── best: (project G5 G17 c y)
  │         └── cost: 1064.03
- ├── G11: (eq G17 G18)
- ├── G12: (project G2 G16 b x)
+ ├── G11: (project G5 G17 c y)
  │    └── []
- │         ├── best: (project G2 G16 b x)
+ │         ├── best: (project G5 G17 c y)
  │         └── cost: 1064.03
- ├── G13: (eq G19 G20)
- ├── G14: (scan abc,cols=(7-10))
+ ├── G12: (eq G18 G19)
+ ├── G13: (project G2 G17 b x)
+ │    └── []
+ │         ├── best: (project G2 G17 b x)
+ │         └── cost: 1064.03
+ ├── G14: (eq G20 G21)
+ ├── G15: (scan abc,cols=(7-10))
  │    └── []
  │         ├── best: (scan abc,cols=(7-10))
  │         └── cost: 1084.02
- ├── G15: (filters G21)
- ├── G16: (projections G22)
- ├── G17: (variable abc.b)
- ├── G18: (variable bx.b)
- ├── G19: (variable abc.c)
- ├── G20: (variable cy.c)
- ├── G21: (eq G23 G22)
- ├── G22: (const 1)
- └── G23: (variable a)
+ ├── G16: (filters G22)
+ ├── G17: (projections G23)
+ ├── G18: (variable abc.b)
+ ├── G19: (variable bx.b)
+ ├── G20: (variable abc.c)
+ ├── G21: (variable cy.c)
+ ├── G22: (eq G24 G23)
+ ├── G23: (const 1)
+ └── G24: (variable a)
 
 opt join-limit=3 expect=ReorderJoins
 SELECT * FROM bx, cy, dz, abc WHERE a = 1
@@ -570,8 +619,8 @@ memo (optimized, ~24KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
 memo join-limit=3
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
 ----
-memo (optimized, ~51KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:11,c:12,d:13])
- ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (inner-join G13 G14 G12) (inner-join G14 G13 G12) (inner-join G15 G16 G12) (inner-join G16 G15 G12) (inner-join G17 G18 G12) (inner-join G18 G17 G12) (merge-join G11 G10 G19 inner-join,+10,+8) (merge-join G14 G13 G19 inner-join,+10,+8) (merge-join G16 G15 G19 inner-join,+10,+8) (lookup-join G17 G19 abc,keyCols=[8],outCols=(1,2,4,5,7,8,10-13)) (merge-join G18 G17 G19 inner-join,+10,+8)
+memo (optimized, ~52KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:11,c:12,d:13])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (inner-join G10 G11 G12) (inner-join G11 G10 G12) (inner-join G13 G14 G12) (inner-join G14 G13 G12) (inner-join G15 G16 G12) (inner-join G16 G15 G12) (inner-join G17 G18 G12) (inner-join G18 G17 G12) (merge-join G11 G10 G19 inner-join,+10,+8) (merge-join G14 G13 G19 inner-join,+10,+8) (merge-join G16 G15 G19 inner-join,+10,+8) (lookup-join G17 G19 abc,keyCols=[8],outCols=(1,2,4,5,7,8,10-13)) (merge-join G18 G17 G19 inner-join,+10,+8)
  │    └── [presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:11,c:12,d:13]
  │         ├── best: (inner-join G3 G2 G4)
  │         └── cost: 5494.19
@@ -582,7 +631,7 @@ memo (optimized, ~51KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  │    └── []
  │         ├── best: (scan bx,cols=(1,2))
  │         └── cost: 1044.02
- ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (inner-join G10 G14 G12) (inner-join G14 G10 G12) (inner-join G15 G18 G12) (inner-join G18 G15 G12) (merge-join G14 G10 G19 inner-join,+10,+8) (lookup-join G15 G19 abc,keyCols=[8],outCols=(4,5,7,8,10-13)) (merge-join G18 G15 G19 inner-join,+10,+8)
+ ├── G3: (inner-join G5 G9 G7) (inner-join G5 G9 G7) (inner-join G9 G5 G7) (inner-join G10 G14 G12) (inner-join G14 G10 G12) (inner-join G15 G18 G12) (inner-join G18 G15 G12) (merge-join G14 G10 G19 inner-join,+10,+8) (lookup-join G15 G19 abc,keyCols=[8],outCols=(4,5,7,8,10-13)) (merge-join G18 G15 G19 inner-join,+10,+8)
  │    └── []
  │         ├── best: (inner-join G5 G9 G7)
  │         └── cost: 3339.84
@@ -606,7 +655,7 @@ memo (optimized, ~51KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  │    └── []
  │         ├── best: (inner-join G2 G5 G4)
  │         └── cost: 2216.07
- ├── G9: (inner-join G10 G18 G12) (inner-join G18 G10 G12) (lookup-join G10 G19 abc,keyCols=[8],outCols=(7,8,10-13)) (merge-join G18 G10 G19 inner-join,+10,+8)
+ ├── G9: (inner-join G10 G18 G12) (inner-join G10 G18 G12) (inner-join G18 G10 G12) (lookup-join G10 G19 abc,keyCols=[8],outCols=(7,8,10-13)) (lookup-join G10 G19 abc,keyCols=[8],outCols=(7,8,10-13)) (merge-join G18 G10 G19 inner-join,+10,+8)
  │    └── []
  │         ├── best: (inner-join G10 G18 G12)
  │         └── cost: 2167.96
@@ -1927,65 +1976,6 @@ ABC D    refs [AD] [left]
 
 Joins Considered: 12
 --------------------------------------------------------------------------------
-----Join Tree #5----
-inner-join (hash)
- ├── anti-join (hash)
- │    ├── left-join (hash)
- │    │    ├── scan bx
- │    │    ├── scan cy
- │    │    └── filters
- │    │         └── bx.b = cy.c
- │    ├── scan abc
- │    └── filters
- │         └── bx.b = a
- ├── scan dz
- └── filters
-      └── bx.b = dz.d
-
-----Vertexes----
-A:
-scan bx
-
-D:
-scan cy
-
-B:
-scan abc
-
-C:
-scan dz
-
-----Edges----
-bx.b = cy.c [left]
-bx.b = a [anti]
-bx.b = dz.d [inner]
-
-----Joining AD----
-A D    refs [AD] [left]
-----Joining AB----
-A B    refs [AB] [anti]
-----Joining ADB----
-AB D    refs [AD] [left]
-AD B    refs [AB] [anti]
-----Joining AC----
-A C    refs [AC] [inner]
-C A    refs [AC] [inner]
-----Joining ADC----
-AC D    refs [AD] [left]
-AD C    refs [AC] [inner]
-C AD    refs [AC] [inner]
-----Joining ABC----
-AC B    refs [AB] [anti]
-AB C    refs [AC] [inner]
-C AB    refs [AC] [inner]
-----Joining ADBC----
-ABC D    refs [AD] [left]
-ADC B    refs [AB] [anti]
-ADB C    refs [AC] [inner]
-C ADB    refs [AC] [inner]
-
-Joins Considered: 16
---------------------------------------------------------------------------------
 ----Final Plan----
 semi-join (lookup dz)
  ├── lookup columns are key
@@ -2256,47 +2246,6 @@ Joins Considered: 6
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── scan abc [as=a1]
- │    ├── scan abc [as=a2]
- │    └── filters
- │         └── a1.a = a2.a
- ├── distinct-on
- │    └── scan abc [as=a5]
- └── filters
-      └── a2.c = a5.c
-
-----Vertexes----
-C:
-scan abc [as=a1]
-
-A:
-scan abc [as=a2]
-
-B:
-distinct-on
- └── scan abc [as=a5]
-
-----Edges----
-a1.a = a2.a [inner]
-a2.c = a5.c [inner]
-
-----Joining CA----
-C A    refs [CA] [inner]
-A C    refs [CA] [inner]
-----Joining AB----
-A B    refs [AB] [inner]
-B A    refs [AB] [inner]
-----Joining CAB----
-C AB    refs [CA] [inner]
-AB C    refs [CA] [inner]
-CA B    refs [AB] [inner]
-B CA    refs [AB] [inner]
-
-Joins Considered: 8
---------------------------------------------------------------------------------
-----Join Tree #5----
-inner-join (hash)
- ├── inner-join (hash)
- │    ├── scan abc [as=a1]
  │    ├── semi-join (hash)
  │    │    ├── scan abc [as=a2]
  │    │    ├── scan abc [as=a5]
@@ -2340,7 +2289,7 @@ D CA    refs [AD] [inner]
 
 Joins Considered: 8
 --------------------------------------------------------------------------------
-----Join Tree #6----
+----Join Tree #5----
 inner-join (hash)
  ├── inner-join (hash)
  │    ├── inner-join (hash)
@@ -2413,6 +2362,274 @@ inner-join (hash)
  │    └── filters (true)
  └── filters
       └── a2.b = a3.b
+--------------------------------------------------------------------------------
+----
+----
+
+# Regression test for #59076. Do not reorder on the inner join produced by
+# CommuteSemiJoin when it matches on an already-reordered semi join. The
+# following test output should only have 6 join trees.
+reorderjoins format=hide-all
+SELECT * FROM cy
+WHERE EXISTS (SELECT 1 FROM dz WHERE z = y)
+AND EXISTS (SELECT 1 FROM bx WHERE x = y)
+AND EXISTS (SELECT 1 FROM abc WHERE a = y)
+----
+----
+--------------------------------------------------------------------------------
+----Join Tree #1----
+semi-join (hash)
+ ├── scan cy
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+----Edges----
+a = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+
+Joins Considered: 1
+--------------------------------------------------------------------------------
+----Join Tree #2----
+inner-join (hash)
+ ├── scan cy
+ ├── scan abc
+ └── filters
+      └── a = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+----Edges----
+a = y [inner]
+
+----Joining AB----
+A B    refs [AB] [inner]
+B A    refs [AB] [inner]
+
+Joins Considered: 2
+--------------------------------------------------------------------------------
+----Join Tree #3----
+semi-join (hash)
+ ├── semi-join (hash)
+ │    ├── scan cy
+ │    ├── scan abc
+ │    └── filters
+ │         └── a = y
+ ├── scan bx
+ └── filters
+      └── x = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+----Edges----
+a = y [semi]
+x = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+
+Joins Considered: 4
+--------------------------------------------------------------------------------
+----Join Tree #4----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── scan cy
+ │    ├── scan abc
+ │    └── filters
+ │         └── a = y
+ ├── distinct-on
+ │    └── scan bx
+ └── filters
+      └── x = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+distinct-on
+ └── scan bx
+
+----Edges----
+a = y [semi]
+x = y [inner]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [inner]
+C A    refs [AC] [inner]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [inner]
+C AB    refs [AC] [inner]
+
+Joins Considered: 6
+--------------------------------------------------------------------------------
+----Join Tree #5----
+semi-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan abc
+ │    │    └── filters
+ │    │         └── a = y
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── scan dz
+ └── filters
+      └── z = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+D:
+scan dz
+
+----Edges----
+a = y [semi]
+x = y [semi]
+z = y [semi]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+----Joining AD----
+A D    refs [AD] [semi]
+----Joining ABD----
+AD B    refs [AB] [semi]
+AB D    refs [AD] [semi]
+----Joining ACD----
+AD C    refs [AC] [semi]
+AC D    refs [AD] [semi]
+----Joining ABCD----
+ACD B    refs [AB] [semi]
+ABD C    refs [AC] [semi]
+ABC D    refs [AD] [semi]
+
+Joins Considered: 12
+--------------------------------------------------------------------------------
+----Join Tree #6----
+inner-join (hash)
+ ├── semi-join (hash)
+ │    ├── semi-join (hash)
+ │    │    ├── scan cy
+ │    │    ├── scan abc
+ │    │    └── filters
+ │    │         └── a = y
+ │    ├── scan bx
+ │    └── filters
+ │         └── x = y
+ ├── distinct-on
+ │    └── scan dz
+ └── filters
+      └── z = y
+
+----Vertexes----
+A:
+scan cy
+
+B:
+scan abc
+
+C:
+scan bx
+
+D:
+distinct-on
+ └── scan dz
+
+----Edges----
+a = y [semi]
+x = y [semi]
+z = y [inner]
+
+----Joining AB----
+A B    refs [AB] [semi]
+----Joining AC----
+A C    refs [AC] [semi]
+----Joining ABC----
+AC B    refs [AB] [semi]
+AB C    refs [AC] [semi]
+----Joining AD----
+A D    refs [AD] [inner]
+D A    refs [AD] [inner]
+----Joining ABD----
+AD B    refs [AB] [semi]
+AB D    refs [AD] [inner]
+D AB    refs [AD] [inner]
+----Joining ACD----
+AD C    refs [AC] [semi]
+AC D    refs [AD] [inner]
+D AC    refs [AD] [inner]
+----Joining ABCD----
+ACD B    refs [AB] [semi]
+ABD C    refs [AC] [semi]
+ABC D    refs [AD] [inner]
+D ABC    refs [AD] [inner]
+
+Joins Considered: 16
+--------------------------------------------------------------------------------
+----Final Plan----
+project
+ └── semi-join (hash)
+      ├── project
+      │    └── inner-join (hash)
+      │         ├── inner-join (hash)
+      │         │    ├── scan cy
+      │         │    ├── distinct-on
+      │         │    │    └── scan dz
+      │         │    └── filters
+      │         │         └── z = y
+      │         ├── distinct-on
+      │         │    └── scan bx
+      │         └── filters
+      │              └── x = y
+      ├── scan abc
+      └── filters
+           └── a = y
 --------------------------------------------------------------------------------
 ----
 ----

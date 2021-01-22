@@ -1,0 +1,201 @@
+# LogicTest: 5node-default-configs !5node-metadata
+
+statement ok
+SET experimental_enable_multi_column_inverted_indexes=true
+
+statement ok
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON
+)
+
+# Insert many types of JSON values.
+statement ok
+INSERT INTO j1 VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c"}}'),
+  (4, '{"a": {"b": [1]}}'),
+  (5, '{"a": {"b": [1, [2]]}}'),
+  (6, '{"a": {"b": [[2]]}}'),
+  (7, '{"a": "b", "c": "d"}'),
+  (8, '{"a": {"b":true}}'),
+  (9, '{"a": {"b":false}}'),
+  (10, '"a"'),
+  (11, 'null'),
+  (12, 'true'),
+  (13, 'false'),
+  (14, '1'),
+  (15, '1.23'),
+  (16, '[{"a": {"b": [1, [2]]}}, "d"]'),
+  (17, '{}'),
+  (18, '[]'),
+  (19, '["a", "a"]'),
+  (20, '[{"a": "a"}, {"a": "a"}]'),
+  (21, '[[[["a"]]], [[["a"]]]]'),
+  (22, '[1,2,3,1]'),
+  (23, '{"a": 123.123}'),
+  (24, '{"a": 123.123000}'),
+  (25, '{"a": [{}]}'),
+  (26, '[[], {}]'),
+  (27, '[true, false, null, 1.23, "a"]'),
+  (28, '{"a": {}}'),
+  (29, NULL),
+  (30, '{"a": []}'),
+  (31, '{"a": {"b": "c", "d": "e"}, "f": "g"}'),
+  (32, '{"a": [1]}'),
+  (33, '[1, "bar"]'),
+  (34, '{"a": 1}'),
+  (35, '[1]'),
+  (36, '[2]'),
+  (37, '[[1]]'),
+  (38, '[[2]]'),
+  (39, '["a"]'),
+  (40, '{"a": [[]]}'),
+  (41, '[[1, 2]]'),
+  (42, '[[1], [2]]'),
+  (43, '[{"a": "b", "c": "d"}]'),
+  (44, '[{"a": "b"}, {"c": "d"}]')
+
+statement ok
+CREATE TABLE j2 (
+  k INT PRIMARY KEY,
+  i INT,
+  j JSON,
+  INVERTED INDEX ij_idx (i, j)
+)
+
+# Insert combinations of i and j. The first 3 primes after 44 are used to avoid
+# primary key collisions.
+statement ok
+INSERT INTO j2 (
+  SELECT k * i, i, j FROM j1
+  CROSS JOIN (VALUES (47), (53), (59)) t1(i)
+)
+
+statement ok
+ALTER TABLE j2 SPLIT AT VALUES (44), (88)
+
+statement ok
+ALTER TABLE j2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 44), (ARRAY[3], 88)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE j2] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /44      {1}       1
+/44        /88      {2}       2
+/88        NULL     {3}       3
+
+# This query performs an inverted join.
+query T
+EXPLAIN (DISTSQL)
+SELECT * FROM j2@ij_idx, j1 WHERE i IN (2, 3) AND j2.j @> j1.j ORDER BY j1.k, j2.k
+----
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +k,+k
+│
+└── • lookup join
+    │ table: j2@primary
+    │ equality: (k) = (k)
+    │ equality cols are key
+    │ pred: j @> j
+    │
+    └── • inverted join
+        │ table: j2@ij_idx
+        │
+        └── • cross join
+            │
+            ├── • scan
+            │     missing stats
+            │     table: j1@primary
+            │     spans: FULL SCAN
+            │
+            └── • values
+                  size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk12Pk0AUhu_9FSfnqnXHFga6m3A1uxazNbVdaeNHlBgsJ7vQ7gzOgKlp-t8NsLa2CsrlfDzzPjm87NB826CH_oe76fVkBr3xZLFcvJ32YeFP_ZdLeA6vgvkbSLlI0i9JvGWQ2vD-1g986CVQEpyB0-_D9WwMvZQPUhCfC8tyCFJ7kPZhHoz9AG4-lss1g5QP1shQqphm0SMZ9D6hjSHDTKsVGaN0ubWrLkziLXoWw0RmRV5uhwxXShN6O8yTfEPo4TL6uqGAopj00EKGMeVRsqmeTW2R6eQx0j-Q4SKLpPHgBYZ7hqrIjy-aPLon9Ow9-__Ud9GmIDO0TwNduIEeh9VDIdem35hkNSYdAwqpdEya4pOEsCT_deUvureReXitEkl6yE-V50XugbCZ4Ew4jca8y2wm8jvpnOKnQOfso_wqErLDTX-baRCXh-KIUrI2c5kYscqvUc7pIldKPbXF_UPs2JapUusig1QlEpQsJ1QazUBcHSXdg2Q9vismHCbcRk-3i-dC6Zz0cHTqKNwLJuyLxohRl4iATKakofOGNXQ2ZEjxPdU1NarQK7rTalXF1Mt5xVUbMZm8PuX1YiKro-on-x22O8D8HOatsHMCW-ew0wq77bDbCo_a4VErfHkGh_tnPwMAAP__C2vMsw==
+
+statement ok
+CREATE TABLE a1 (
+  k INT PRIMARY KEY,
+  a INT[]
+)
+
+statement ok
+INSERT INTO a1 VALUES
+  (1, '{}'),
+  (2, '{1}'),
+  (3, '{2}'),
+  (4, '{1, 2}'),
+  (5, '{1, 3}'),
+  (6, '{1, 2, 3, 4}'),
+  (7, ARRAY[NULL]::INT[]),
+  (8, NULL)
+
+statement ok
+CREATE TABLE a2 (
+  k INT PRIMARY KEY,
+  i INT,
+  a INT[],
+  INVERTED INDEX ia_idx (i, a)
+)
+
+# Insert combinations of i and a. The first 3 primes after 44 are used to avoid
+# primary key collisions.
+statement ok
+INSERT INTO a2 (
+  SELECT k*i, i, a FROM a1
+  CROSS JOIN (VALUES (47), (53), (59)) t1(i)
+)
+
+statement ok
+ALTER TABLE a2 SPLIT AT VALUES (8), (16)
+
+statement ok
+ALTER TABLE a2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 8), (ARRAY[3], 16)
+
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder
+FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE a2] ORDER BY lease_holder
+----
+start_key  end_key  replicas  lease_holder
+NULL       /8       {1}       1
+/8         /16      {2}       2
+/16        NULL     {3}       3
+
+# This query performs an inverted join.
+query T
+EXPLAIN (DISTSQL)
+SELECT * FROM a2@ia_idx, a1 WHERE i IN (2, 3) AND a2.a @> a1.a ORDER BY a1.k, a2.k
+----
+distribution: full
+vectorized: true
+·
+• sort
+│ order: +k,+k
+│
+└── • lookup join
+    │ table: a2@primary
+    │ equality: (k) = (k)
+    │ equality cols are key
+    │ pred: a @> a
+    │
+    └── • inverted join
+        │ table: a2@ia_idx
+        │
+        └── • cross join
+            │
+            ├── • scan
+            │     missing stats
+            │     table: a1@primary
+            │     spans: FULL SCAN
+            │
+            └── • values
+                  size: 1 column, 2 rows
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk12P0kwUx--fT3FyruDZEdpp2U16NbtSsxiEtRBfoo0Z6cluhZ2pM63BEL67abuCoK32cl5-8__l9N8d2q8bDDB8dze9nsygN54slovX0z4swmn4fAn_w4to_gokF6n8lCZbBtKFt7dhFEIvhZLgDLx-H65nY-hJPpAgPhaO4xFIdyD7MI_GYQQ378vlmoHkgzUyVDqhmXwki8EHdDFmmBm9Imu1Kbd21YVJssXAYZiqrMjL7ZjhShvCYId5mm8IA1zKzxuKSCZkhg4yTCiX6aZ6VroiM-mjNN-R4SKTygbwDOM9Q13kxxdtLu8JA3fP_j31jdwUZIfuaaAPN9DjsHoo1Nr2G5OcxqRjQKG0SchQcpIQl-TfrvxB91bah5c6VWSG_FR5XuQBCJcJzoTXaMy7zGaivpHJKXkK9M4-ys8iITvcDLeZAXF5KI4oJWszn4kRq_wa5bwucqXUU1v838SObZlqvS4y-KJTBVqVEyqNZiCujpL-QbIe3xUTHhN-o6ffxXOhTU5mODp1FP4FE-5FY8SoS0RENtPK0nnDGjobM6TknuqaWl2YFd0Zvapi6uW84qqNhGxen_J6MVHVUfWT_Qq7HWB-DvNW2DuBnXPYa4X9dthvhUft8KgVvjyD4_1_PwIAAP__3rjMPg==
