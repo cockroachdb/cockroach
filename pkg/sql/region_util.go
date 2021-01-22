@@ -214,7 +214,9 @@ func zoneConfigFromTableLocalityConfig(
 
 	switch l := localityConfig.Locality.(type) {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
-		// Inherit everything from the database.
+		// Enable non-blocking transactions.
+		ret.GlobalReads = proto.Bool(true)
+		// Inherit constraints and leaseholders from the database.
 		ret.InheritedConstraints = true
 		ret.InheritedLeasePreferences = true
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
