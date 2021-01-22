@@ -41,6 +41,7 @@ import (
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
 var invertedJoinerBatchSize = util.ConstantWithMetamorphicTestValue(
+	"invered-joiner-batch-size",
 	100, /* defaultValue */
 	1,   /* metamorphicValue */
 )
