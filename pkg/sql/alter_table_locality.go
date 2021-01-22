@@ -87,11 +87,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 	params runParams,
 ) error {
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx,
-		params.extendedEvalCtx.Txn,
-		params.extendedEvalCtx.EvalContext.Codec,
+		params.p.txn,
 		n.tableDesc.GetParentID(),
+		tree.DatabaseLookupFlags{},
 	)
 	if err != nil {
 		return err
@@ -197,11 +197,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 
 func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx,
-		params.extendedEvalCtx.Txn,
-		params.extendedEvalCtx.EvalContext.Codec,
+		params.p.txn,
 		n.tableDesc.GetParentID(),
+		tree.DatabaseLookupFlags{},
 	)
 	if err != nil {
 		return err
