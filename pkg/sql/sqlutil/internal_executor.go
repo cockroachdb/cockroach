@@ -104,6 +104,63 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (tree.Datums, error)
+
+	// QueryIterator executes the query, returning an iterator that can be used
+	// to get the results. If the call is successful, the returned iterator
+	// *must* be closed.
+	//
+	// QueryIterator is deprecated because it may transparently execute a query
+	// as root. Use QueryIteratorEx instead.
+	QueryIterator(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+
+	// QueryIteratorEx executes the query, returning an iterator that can be
+	// used to get the results. If the call is successful, the returned iterator
+	// *must* be closed.
+	QueryIteratorEx(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (InternalRows, error)
+}
+
+// InternalRows is an iterator interface that's exposed by the internal
+// executor. It provides access to the rows from a query.
+type InternalRows interface {
+	// Next advances the iterator by one row, returning false if there are no
+	// more rows in this iterator or if an error is encountered (the latter is
+	// then returned).
+	//
+	// The iterator is automatically closed when false is returned, consequent
+	// calls to Next will return the same values as when the iterator was
+	// closed.
+	Next(context.Context) (bool, error)
+
+	// Cur returns the row at the current position of the iterator. The row is
+	// safe to hold onto (meaning that calling Next() or Close() will not
+	// invalidate it).
+	Cur() tree.Datums
+
+	// Close closes this iterator, releasing any resources it held open. Close
+	// is idempotent and *must* be called once the caller is done with the
+	// iterator.
+	Close() error
+
+	// Types returns the types of the columns returned by this iterator. The
+	// returned array is guaranteed to correspond 1:1 with the tree.Datums rows
+	// returned by Cur().
+	//
+	// WARNING: this method is safe to call anytime *after* the first call to
+	// Next() (including after Close() was called).
+	Types() colinfo.ResultColumns
 }
 
 // SessionBoundInternalExecutorFactory is a function that produces a "session
