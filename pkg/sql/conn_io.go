@@ -858,11 +858,11 @@ type resCloseType bool
 const closed resCloseType = true
 const discarded resCloseType = false
 
-// bufferedCommandResult is a CommandResult that buffers rows and can call a
-// provided callback when closed.
-type bufferedCommandResult struct {
+// streamingCommandResult is a CommandResult that streams rows on the channel
+// and can call a provided callback when closed.
+type streamingCommandResult struct {
+	ch           chan ieIteratorResult
 	err          error
-	rows         []tree.Datums
 	rowsAffected int
 	cols         colinfo.ResultColumns
 
@@ -871,95 +871,104 @@ type bufferedCommandResult struct {
 	errOnly bool
 
 	// closeCallback, if set, is called when Close()/Discard() is called.
-	closeCallback func(*bufferedCommandResult, resCloseType, error)
+	closeCallback func(*streamingCommandResult, resCloseType, error)
 }
 
-var _ RestrictedCommandResult = &bufferedCommandResult{}
-var _ CommandResultClose = &bufferedCommandResult{}
+var _ RestrictedCommandResult = &streamingCommandResult{}
+var _ CommandResultClose = &streamingCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) SetColumns(_ context.Context, cols colinfo.ResultColumns) {
+func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
 	if r.errOnly {
 		panic("SetColumns() called when errOnly is set")
 	}
 	r.cols = cols
+	select {
+	case r.ch <- ieIteratorResult{cols: cols}:
+	case <-ctx.Done():
+	}
 }
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) BufferParamStatusUpdate(key string, val string) {
+func (r *streamingCommandResult) BufferParamStatusUpdate(key string, val string) {
 	panic("unimplemented")
 }
 
 // BufferNotice is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) BufferNotice(notice pgnotice.Notice) {
+func (r *streamingCommandResult) BufferNotice(notice pgnotice.Notice) {
 	panic("unimplemented")
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) ResetStmtType(stmt tree.Statement) {
+func (r *streamingCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.errOnly {
 		panic("AddRow() called when errOnly is set")
 	}
+	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	r.rows = append(r.rows, rowCopy)
+	select {
+	case r.ch <- ieIteratorResult{row: rowCopy}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	return nil
 }
 
-func (r *bufferedCommandResult) DisableBuffering() {
+func (r *streamingCommandResult) DisableBuffering() {
 	panic("cannot disable buffering here")
 }
 
 // SetError is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) SetError(err error) {
+func (r *streamingCommandResult) SetError(err error) {
 	r.err = err
 }
 
 // Err is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) Err() error {
+func (r *streamingCommandResult) Err() error {
 	return r.err
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) IncrementRowsAffected(n int) {
+func (r *streamingCommandResult) IncrementRowsAffected(n int) {
 	r.rowsAffected += n
 }
 
 // RowsAffected is part of the RestrictedCommandResult interface.
-func (r *bufferedCommandResult) RowsAffected() int {
+func (r *streamingCommandResult) RowsAffected() int {
 	return r.rowsAffected
 }
 
 // Close is part of the CommandResultClose interface.
-func (r *bufferedCommandResult) Close(context.Context, TransactionStatusIndicator) {
+func (r *streamingCommandResult) Close(context.Context, TransactionStatusIndicator) {
 	if r.closeCallback != nil {
 		r.closeCallback(r, closed, nil /* err */)
 	}
 }
 
 // Discard is part of the CommandResult interface.
-func (r *bufferedCommandResult) Discard() {
+func (r *streamingCommandResult) Discard() {
 	if r.closeCallback != nil {
 		r.closeCallback(r, discarded, nil /* err */)
 	}
 }
 
 // SetInferredTypes is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetInferredTypes([]oid.Oid) {}
+func (r *streamingCommandResult) SetInferredTypes([]oid.Oid) {}
 
 // SetNoDataRowDescription is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetNoDataRowDescription() {}
+func (r *streamingCommandResult) SetNoDataRowDescription() {}
 
 // SetPrepStmtOutput is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetPrepStmtOutput(context.Context, colinfo.ResultColumns) {}
+func (r *streamingCommandResult) SetPrepStmtOutput(context.Context, colinfo.ResultColumns) {}
 
 // SetPortalOutput is part of the DescribeResult interface.
-func (r *bufferedCommandResult) SetPortalOutput(
+func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
 }
