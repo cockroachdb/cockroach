@@ -458,7 +458,7 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// We'll want to look at statistics below, and finish the test with
-	// no goroutine leakage. To achieve this, cancel the query. and
+	// no goroutine leakage. To achieve this, cancel the query and
 	// drain the goroutine.
 	if _, err := ie.Exec(context.Background(), "cancel-query", nil, "CANCEL QUERY $1", queryID); err != nil {
 		t.Fatal(err)
