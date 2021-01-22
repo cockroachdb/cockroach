@@ -25,6 +25,12 @@ type invertedJoinNode struct {
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.
 	joinType descpb.JoinType
 
+	// prefixEqCols identifies the columns from the input which are used for the
+	// lookup if the index is a multi-column inverted index. These correspond to
+	// the non-inverted prefix columns of the index we are looking up. This is
+	// empty if the index is not a multi-column inverted index.
+	prefixEqCols []int
+
 	// The inverted expression to evaluate.
 	invertedExpr tree.TypedExpr
 

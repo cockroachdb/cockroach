@@ -149,7 +149,10 @@ func newInvertedFilterer(
 	// de-duping. It will reduce the container memory/disk by 2x.
 
 	// Prepare inverted evaluator for later evaluation.
-	ifr.invertedEval.init()
+	_, err := ifr.invertedEval.init()
+	if err != nil {
+		return nil, err
+	}
 
 	return ifr, nil
 }
@@ -245,7 +248,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
 	}
-	if _, err = ifr.invertedEval.prepareAddIndexRow(enc); err != nil {
+	if _, err = ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */); err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}

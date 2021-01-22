@@ -689,6 +689,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	input exec.Node,
 	table cat.Table,
 	index cat.Index,
+	prefixEqCols []exec.NodeColumnOrdinal,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
 	isFirstJoinInPairedJoiner bool,
@@ -716,6 +717,12 @@ func (ef *execFactory) ConstructInvertedJoin(
 		invertedExpr:              invertedExpr,
 		isFirstJoinInPairedJoiner: isFirstJoinInPairedJoiner,
 		reqOrdering:               ReqOrdering(reqOrdering),
+	}
+	if len(prefixEqCols) > 0 {
+		n.prefixEqCols = make([]int, len(prefixEqCols))
+		for i, c := range prefixEqCols {
+			n.prefixEqCols[i] = int(c)
+		}
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
