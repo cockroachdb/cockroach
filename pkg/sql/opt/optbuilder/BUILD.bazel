@@ -86,6 +86,7 @@ go_test(
     embed = [":optbuilder"],
     deps = [
         "//pkg/settings/cluster",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/testutils",
         "//pkg/sql/opt/testutils/opttester",

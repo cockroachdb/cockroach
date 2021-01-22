@@ -30,7 +30,7 @@ type Column struct {
 	datumType                   *types.T
 	kind                        ColumnKind
 	nullable                    bool
-	hidden                      bool
+	visibility                  ColumnVisibility
 	virtualComputed             bool
 	defaultExpr                 string
 	computedExpr                string
@@ -74,12 +74,6 @@ func (c *Column) IsMutation() bool {
 	return c.kind == WriteOnly || c.kind == DeleteOnly
 }
 
-// IsSelectable returns true if this column should be accessible from user
-// queries (based on its Kind).
-func (c *Column) IsSelectable() bool {
-	return c.kind == Ordinary || c.kind == System
-}
-
 // DatumType returns the data type of the column.
 func (c *Column) DatumType() *types.T {
 	return c.datumType
@@ -90,10 +84,9 @@ func (c *Column) IsNullable() bool {
 	return c.nullable
 }
 
-// IsHidden returns true if the column is hidden (e.g., there is always a hidden
-// column called rowid if there is no primary key on the table).
-func (c *Column) IsHidden() bool {
-	return c.hidden
+// Visibility returns the column visibility.
+func (c *Column) Visibility() ColumnVisibility {
+	return c.visibility
 }
 
 // HasDefault returns true if the column has a default value. DefaultExprStr
@@ -169,6 +162,32 @@ const (
 	VirtualInverted
 )
 
+// ColumnVisibility controls if a column is visible for queries and if it is
+// part of the star expansion.
+type ColumnVisibility uint8
+
+const (
+	// Visible columns are visible to queries and are part of the star expansion
+	// (e.g. SELECT * FROM t).
+	Visible ColumnVisibility = iota
+
+	// Hidden columns are visible to queries by name, but are not part of the star
+	// expansion (e.g. implicit PK column "rowid").
+	Hidden
+
+	// Inaccessible columns are not visible to queries in any way.
+	Inaccessible
+)
+
+// MaybeHidden is a helper constructor for either Visible or Hidden, depending
+// on a flag.
+func MaybeHidden(hidden bool) ColumnVisibility {
+	if hidden {
+		return Hidden
+	}
+	return Visible
+}
+
 // InitNonVirtual is used by catalog implementations to populate a non-virtual
 // Column. It should not be used anywhere else.
 func (c *Column) InitNonVirtual(
@@ -178,12 +197,15 @@ func (c *Column) InitNonVirtual(
 	kind ColumnKind,
 	datumType *types.T,
 	nullable bool,
-	hidden bool,
+	visibility ColumnVisibility,
 	defaultExpr *string,
 	computedExpr *string,
 ) {
 	if kind == VirtualInverted {
 		panic(errors.AssertionFailedf("incorrect init method"))
+	}
+	if (kind == WriteOnly || kind == DeleteOnly) && visibility != Inaccessible {
+		panic(errors.AssertionFailedf("mutation columns should always be inaccessible"))
 	}
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -194,7 +216,7 @@ func (c *Column) InitNonVirtual(
 		kind:                        kind,
 		datumType:                   datumType,
 		nullable:                    nullable,
-		hidden:                      hidden,
+		visibility:                  visibility,
 		invertedSourceColumnOrdinal: -1,
 	}
 	if defaultExpr != nil {
@@ -219,7 +241,7 @@ func (c *Column) InitVirtualInverted(
 		kind:                        VirtualInverted,
 		datumType:                   datumType,
 		nullable:                    nullable,
-		hidden:                      true,
+		visibility:                  Inaccessible,
 		invertedSourceColumnOrdinal: invertedSourceColumnOrdinal,
 	}
 }
@@ -232,7 +254,7 @@ func (c *Column) InitVirtualComputed(
 	name tree.Name,
 	datumType *types.T,
 	nullable bool,
-	hidden bool,
+	visibility ColumnVisibility,
 	computedExpr string,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
@@ -244,7 +266,7 @@ func (c *Column) InitVirtualComputed(
 		kind:                        Ordinary,
 		datumType:                   datumType,
 		nullable:                    nullable,
-		hidden:                      hidden,
+		visibility:                  visibility,
 		computedExpr:                computedExpr,
 		virtualComputed:             true,
 		invertedSourceColumnOrdinal: -1,

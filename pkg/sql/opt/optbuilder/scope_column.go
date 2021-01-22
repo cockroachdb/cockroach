@@ -35,10 +35,7 @@ type scopeColumn struct {
 	// columns in the query.
 	id opt.ColumnID
 
-	// hidden is true if the column is not selected by a '*' wildcard operator.
-	// The column must be explicitly referenced by name, or otherwise is not
-	// included.
-	hidden bool
+	visibility cat.ColumnVisibility
 
 	// tableOrdinal is set to the table ordinal corresponding to this column, if
 	// this is a column from a scan.
