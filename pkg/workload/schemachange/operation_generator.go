@@ -56,9 +56,9 @@ type operationGenerator struct {
 	// are added to expectedCommitErrors.
 	candidateExpectedCommitErrors errorCodeSet
 
-	// opsInTxn is a list of previous ops in the current transaction implemented
-	// as a map for fast lookups.
-	opsInTxn map[opType]bool
+	// opsInTxn is a list of previous ops in the current transaction to check
+	// for DDLs after writes.
+	opsInTxn []opType
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -67,7 +67,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 		expectedExecErrors:            makeExpectedErrorSet(),
 		expectedCommitErrors:          makeExpectedErrorSet(),
 		candidateExpectedCommitErrors: makeExpectedErrorSet(),
-		opsInTxn:                      map[opType]bool{},
 	}
 }
 
@@ -80,14 +79,17 @@ func (og *operationGenerator) resetOpState() {
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
-
-	for k := range og.opsInTxn {
-		delete(og.opsInTxn, k)
-	}
+	og.opsInTxn = nil
 }
 
 //go:generate stringer -type=opType
 type opType int
+
+// isDDL returns true if the operation mutates the system config span and thus
+// cannot follow a write elsewhere.
+func (ot opType) isDDL() bool {
+	return ot != insertRow && ot != validate
+}
 
 const (
 	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -175,8 +177,8 @@ func init() {
 var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 1,
-	addUniqueConstraint:     1,
+	addForeignKeyConstraint: 0,
+	addUniqueConstraint:     0,
 	createIndex:             1,
 	createSequence:          1,
 	createTable:             1,
@@ -238,16 +240,10 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, e
 
 		if err == nil {
 			// Screen for schema change after write in the same transaction.
-			if op != insertRow && op != validate {
-				if _, previous := og.opsInTxn[insertRow]; previous {
-					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
-				}
-			}
+			og.checkIfOpViolatesDDLAfterWrite(op)
 
 			// Add candidateExpectedCommitErrors to expectedCommitErrors
 			og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
-
-			og.opsInTxn[op] = true
 
 			return stmt, noops, err
 		}
@@ -257,6 +253,25 @@ func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, e
 
 		noops = append(noops, fmt.Sprintf("NOOP: %s -> %v", op, err))
 	}
+}
+
+func (og *operationGenerator) checkIfOpViolatesDDLAfterWrite(ot opType) {
+	if ot.isDDL() && og.haveInsertBeforeAnyDDLs() {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+	og.opsInTxn = append(og.opsInTxn, ot)
+}
+
+func (og *operationGenerator) haveInsertBeforeAnyDDLs() bool {
+	for _, ot := range og.opsInTxn {
+		if ot.isDDL() {
+			break
+		}
+		if ot == insertRow {
+			return true
+		}
+	}
+	return false
 }
 
 func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
