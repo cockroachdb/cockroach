@@ -293,10 +293,10 @@ func (c *transientCluster) start(
 	}
 
 	// Start up the update check loop.
-	// We don't do this in (*server.Server).Start() because we don't want it
-	// in tests.
+	// We don't do this in (*server.Server).Start() because we don't want this
+	// overhead and possible interference in tests.
 	if !demoCtx.disableTelemetry {
-		c.s.PeriodicallyCheckForUpdates(ctx)
+		c.s.StartDiagnostics(ctx)
 	}
 	return nil
 }

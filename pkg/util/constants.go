@@ -56,14 +56,16 @@ const (
 //
 // you should write:
 //
-// var batchSize = util.ConstantWithMetamorphicTestValue(64, 1)
+// var batchSize = util.ConstantWithMetamorphicTestValue("batch-size", 64, 1)
 //
 // This will often give your code a batch size of 1 in the crdb_test build
 // configuration, increasing the amount of exercise the edge conditions get.
-func ConstantWithMetamorphicTestValue(defaultValue, metamorphicValue int) int {
+//
+// The given name is used for logging.
+func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValue int) int {
 	if metamorphicBuild {
 		if rng.Float64() < metamorphicValueProbability {
-			logMetamorphicValue(metamorphicValue)
+			logMetamorphicValue(name, metamorphicValue)
 			return metamorphicValue
 		}
 	}
@@ -83,21 +85,22 @@ func init() {
 // ConstantWithMetamorphicTestRange is like ConstantWithMetamorphicTestValue
 // except instead of returning a single metamorphic test value, it returns a
 // random test value in a range.
-func ConstantWithMetamorphicTestRange(defaultValue, min, max int) int {
+//
+// The given name is used for logging.
+func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) int {
 	if metamorphicBuild {
 		if rng.Float64() < metamorphicValueProbability {
 			ret := min
 			if max > min {
 				ret = int(rng.Int31())%(max-min) + min
 			}
-			logMetamorphicValue(ret)
+			logMetamorphicValue(name, ret)
 			return ret
 		}
 	}
 	return defaultValue
 }
 
-func logMetamorphicValue(value int) {
-	fmt.Fprintf(os.Stderr, "initialized metamorphic constant with value %d: %s\n",
-		value, GetSmallTrace(1))
+func logMetamorphicValue(name string, value int) {
+	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %d\n", name, value)
 }

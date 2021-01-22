@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
-	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -2059,7 +2059,7 @@ func (s *statusServer) Diagnostics(
 		return status.Diagnostics(ctx, req)
 	}
 
-	return s.admin.server.getReportingInfo(ctx, telemetry.ReadOnly), nil
+	return s.admin.server.sqlServer.diagnosticsReporter.CreateReport(ctx, telemetry.ReadOnly), nil
 }
 
 // Stores returns details for each store.
