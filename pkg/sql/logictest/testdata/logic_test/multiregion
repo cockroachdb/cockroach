@@ -307,6 +307,7 @@ TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
                     range_min_bytes = 134217728,
                     range_max_bytes = 536870912,
                     gc.ttlseconds = 90000,
+                    global_reads = true,
                     num_replicas = 3,
                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                     lease_preferences = '[[+region=ca-central-1]]'
@@ -582,6 +583,7 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 range_min_bytes = 134217728,
                 range_max_bytes = 536870912,
                 gc.ttlseconds = 90000,
+                global_reads = true,
                 num_replicas = 3,
                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                 lease_preferences = '[[+region=ca-central-1]]'
@@ -663,6 +665,7 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 range_min_bytes = 134217728,
                 range_max_bytes = 536870912,
                 gc.ttlseconds = 90000,
+                global_reads = true,
                 num_replicas = 3,
                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                 lease_preferences = '[[+region=ca-central-1]]'
@@ -716,6 +719,7 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 range_min_bytes = 134217728,
                 range_max_bytes = 536870912,
                 gc.ttlseconds = 90000,
+                global_reads = true,
                 num_replicas = 3,
                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                 lease_preferences = '[[+region=ca-central-1]]'
