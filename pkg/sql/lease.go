@@ -717,10 +717,14 @@ type tableState struct {
 		// entry is created with the expiration time of the new lease and
 		// the older entry is removed.
 		active tableSet
-		// Indicates that the table has been dropped, or is being dropped.
+		// Indicates that the descriptor has been, or is being, dropped or taken
+		// offline.
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
-		dropped bool
+		// This flag will be unset by any subsequent lease acquisition, which can
+		// happen after the table came back online again after having been taken
+		// offline temporarily (as opposed to dropped).
+		takenOffline bool
 	}
 }
 
@@ -1024,6 +1028,7 @@ func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool
 		}
 		t := m.findTableState(id, false /* create */)
 		t.mu.Lock()
+		t.mu.takenOffline = false
 		defer t.mu.Unlock()
 		toRelease, err = t.upsertLocked(newCtx, table)
 		if err != nil {
@@ -1065,9 +1070,9 @@ func (t *tableState) release(
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// invalid.
 		removeOnceDereferenced = removeOnceDereferenced ||
-			// Release from the store if the table has been dropped; no leases
-			// can be acquired any more.
-			t.mu.dropped ||
+			// Release from the store if the descriptor has been dropped or taken
+			// offline.
+			t.mu.takenOffline ||
 			// Release from the store if the lease is not for the latest
 			// version; only leases for the latest version can be acquired.
 			s != t.mu.active.findNewest()
@@ -1143,9 +1148,9 @@ func purgeOldVersions(
 		return nil
 	}
 
-	removeInactives := func(drop bool) {
+	removeInactives := func(takenOffline bool) {
 		t.mu.Lock()
-		t.mu.dropped = drop
+		t.mu.takenOffline = takenOffline
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
@@ -1892,9 +1897,9 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 			break
 		}
 		table.mu.Lock()
-		dropped := table.mu.dropped
+		takenOffline := table.mu.takenOffline
 		table.mu.Unlock()
-		if !dropped {
+		if !takenOffline {
 			ids = append(ids, k)
 		}
 	}
