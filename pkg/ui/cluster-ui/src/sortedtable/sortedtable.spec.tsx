@@ -9,7 +9,7 @@ import {
   ColumnDescriptor,
   ISortedTablePagination,
   SortSetting,
-} from "src/index";
+} from "src/sortedtable";
 import styles from "src/sortabletable/sortabletable.module.scss";
 
 const cx = classNames.bind(styles);
