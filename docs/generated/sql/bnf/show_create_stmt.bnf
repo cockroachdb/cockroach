@@ -1,2 +1,4 @@
 show_create_stmt ::=
 	'SHOW' 'CREATE' object_name
+	| 'SHOW' 'CREATE' 'TABLES' object_name_list
+	| 'SHOW' 'CREATE' 'ALL' 'TABLES'

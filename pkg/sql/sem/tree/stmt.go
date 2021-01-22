@@ -814,6 +814,18 @@ func (*ShowCreate) StatementType() StatementType { return Rows }
 func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
 
 // StatementType implements the Statement interface.
+func (*ShowCreateAllTables) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateAllTables) StatementTag() string { return "SHOW CREATE ALL TABLES" }
+
+// StatementType implements the Statement interface.
+func (*ShowCreateTables) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowCreateTables) StatementTag() string { return "SHOW CREATE TABLES" }
+
+// StatementType implements the Statement interface.
 func (*ShowBackup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1163,6 +1175,8 @@ func (n *ShowClusterSettingList) String() string         { return AsString(n) }
 func (n *ShowColumns) String() string                    { return AsString(n) }
 func (n *ShowConstraints) String() string                { return AsString(n) }
 func (n *ShowCreate) String() string                     { return AsString(n) }
+func (n *ShowCreateAllTables) String() string            { return AsString(n) }
+func (n *ShowCreateTables) String() string               { return AsString(n) }
 func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }
 func (n *ShowEnums) String() string                      { return AsString(n) }

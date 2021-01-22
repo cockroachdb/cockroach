@@ -11,9 +11,13 @@
 package delegate
 
 import (
+	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -44,11 +48,15 @@ SELECT
 FROM
     %[4]s.crdb_internal.create_statements
 WHERE
-    descriptor_id = %[6]d
+    descriptor_id = %[6]s
 ORDER BY
     1, 2;`
 
-	return d.showTableDetails(n.Name, showCreateQuery)
+	return d.populateQueryDetails(
+		[]*tree.UnresolvedObjectName{n.Name},
+		showCreateQuery,
+		false, /* onlyQueryCurrentDB */
+	)
 }
 
 func (d *delegator) delegateShowIndexes(n *tree.ShowIndexes) (tree.Statement, error) {
@@ -88,7 +96,11 @@ WHERE
 ORDER BY
     1, 2, 3, 4, 5, 6, 7, 8;`
 
-	return d.showTableDetails(n.Table, getIndexesQuery)
+	return d.populateQueryDetails(
+		[]*tree.UnresolvedObjectName{n.Table},
+		getIndexesQuery,
+		false, /* onlyQueryCurrentDB */
+	)
 }
 
 func (d *delegator) delegateShowColumns(n *tree.ShowColumns) (tree.Statement, error) {
@@ -104,7 +116,7 @@ SELECT
 
 	if n.WithComment {
 		getColumnsQuery += `,
-    col_description(%[6]d, attnum) AS comment`
+    col_description(%[6]s, attnum) AS comment`
 	}
 
 	getColumnsQuery += `
@@ -134,14 +146,18 @@ FROM
 		getColumnsQuery += `
     LEFT OUTER JOIN pg_attribute
         ON column_name = pg_attribute.attname
-        AND attrelid = %[6]d`
+        AND attrelid = %[6]s`
 	}
 
 	getColumnsQuery += `
 ORDER BY
     ordinal_position, 1, 2, 3, 4, 5, 6, 7;`
 
-	return d.showTableDetails(n.Table, getColumnsQuery)
+	return d.populateQueryDetails(
+		[]*tree.UnresolvedObjectName{n.Table},
+		getColumnsQuery,
+		false, /* onlyQueryCurrentDB */
+	)
 }
 
 func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
@@ -168,40 +184,179 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
       AND t.oid = c.conrelid
     ORDER BY 1, 2, 3, 4, 5`
 
-	return d.showTableDetails(n.Table, getConstraintsQuery)
+	return d.populateQueryDetails(
+		[]*tree.UnresolvedObjectName{n.Table},
+		getConstraintsQuery,
+		false, /* onlyQueryCurrentDB */
+	)
 }
 
-// showTableDetails returns the AST of a query which extracts information about
+func (d *delegator) delegateShowCreateTables(n *tree.ShowCreateTables) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateQuery = `
+WITH zone_configs AS (
+    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+    WHERE database_name = %[1]s
+    AND table_name IN (%[2]s)
+    AND raw_config_yaml IS NOT NULL
+    AND raw_config_sql IS NOT NULL
+)
+SELECT
+		schema_name,
+    descriptor_name AS table_name,
+    concat(concat(create_statement, ';'),
+        CASE
+        WHEN NOT has_partitions
+            THEN NULL
+        WHEN (SELECT * FROM zone_configs) IS NULL
+            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e'\n', (SELECT * FROM zone_configs))
+        END
+    ) AS create_statement
+FROM
+    %[4]s.crdb_internal.create_statements
+WHERE
+    descriptor_id IN (%[6]s)
+ORDER BY
+    1, 2, 3;`
+
+	// Convert from TableNames to list of UnresolvedObjectName.
+	var unresolvedObjNames []*tree.UnresolvedObjectName
+	for _, name := range n.Names {
+		unresolvedObjNames = append(unresolvedObjNames, name.ToUnresolvedObjectName())
+	}
+
+	return d.populateQueryDetails(
+		unresolvedObjNames, showCreateQuery, true, /* onlyQueryCurrentDB */
+	)
+}
+
+func (d *delegator) delegateShowCreateAllTables() (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Create)
+
+	const showCreateQuery = `
+WITH zone_configs AS (
+    SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
+    WHERE database_name = %[1]s
+    AND raw_config_yaml IS NOT NULL
+    AND raw_config_sql IS NOT NULL
+)
+SELECT
+    schema_name,
+    descriptor_name AS table_name,
+    concat(concat(create_statement, ';'),
+        CASE
+        WHEN NOT has_partitions
+            THEN NULL
+        WHEN (SELECT * FROM zone_configs) IS NULL
+            THEN e'\n-- Warning: Partitioned table with no zone configurations.'
+        ELSE concat(e'\n', (SELECT * FROM zone_configs))
+        END
+    ) AS create_statement
+FROM
+    %[4]s.crdb_internal.create_statements
+ORDER BY
+    1, 2, 3;`
+
+	return d.populateQueryDetails(nil, showCreateQuery, true)
+}
+
+// populateQueryDetails returns the AST of a query which extracts information about
 // the given table using the given query patterns in SQL. The query pattern must
 // accept the following formatting parameters:
 //   %[1]s the database name as SQL string literal.
-//   %[2]s the unqualified table name as SQL string literal.
+//   %[2]s the unqualified table name(s) as SQL string literal.
 //   %[3]s the given table name as SQL string literal.
 //   %[4]s the database name as SQL identifier.
 //   %[5]s the schema name as SQL string literal.
-//   %[6]s the table ID.
-func (d *delegator) showTableDetails(
-	name *tree.UnresolvedObjectName, query string,
+//   %[6]s the table ID(s)
+func (d *delegator) populateQueryDetails(
+	names []*tree.UnresolvedObjectName, query string, onlyQueryCurrentDB bool,
 ) (tree.Statement, error) {
-	// We avoid the cache so that we can observe the details without
-	// taking a lease, like other SHOW commands.
-	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
-	tn := name.ToTableName()
-	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
-	if err != nil {
-		return nil, err
+	var ids []cat.StableID
+	var resNames []cat.DataSourceName
+	for _, name := range names {
+		// We avoid the cache so that we can observe the details without
+		// taking a lease, like other SHOW commands.
+		flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
+		tn := name.ToTableName()
+		dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, &tn)
+		if err != nil {
+			return nil, err
+		}
+		if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+			return nil, err
+		}
+
+		resNames = append(resNames, resName)
+		ids = append(ids, dataSource.PostgresDescriptorID())
+
+		if err != nil {
+			return nil, err
+		}
+		if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
+			return nil, err
+		}
 	}
-	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
-		return nil, err
+
+	var tableNames string
+	var descriptorIDs string
+	var schemaName string
+	var givenTableName string
+	var databaseLiteral string
+	var databaseIdentifier string
+
+	if onlyQueryCurrentDB {
+		databaseLiteral = d.evalCtx.SessionData.Database
+		// DatabaseIdentifier is used in the query, double quote are needed
+		// in the case where the database name includes spaces.
+		var buf bytes.Buffer
+		lexbase.EncodeEscapedSQLIdent(&buf, databaseLiteral)
+		databaseIdentifier = buf.String()
+	}
+
+	switch {
+	case len(names) == 1:
+		tableNames = resNames[0].Table()
+		descriptorIDs = strconv.Itoa(int(ids[0]))
+		schemaName = resNames[0].Schema()
+		givenTableName = resNames[0].String()
+
+		// If the query was a SHOW CREATE TABLE t query (there is only one table),
+		// and onlyQueryCurrentDB is true, set the database to the database of the
+		// single table.
+		if !onlyQueryCurrentDB {
+			databaseLiteral = resNames[0].Catalog()
+			databaseIdentifier = resNames[0].CatalogName.String()
+		}
+	case len(names) > 1:
+		var descriptorIDLiterals []string
+		var tableNameLiterals []string
+
+		for _, id := range ids {
+			descriptorIDLiterals = append(descriptorIDLiterals, strconv.Itoa(int(id)))
+		}
+
+		for _, resName := range resNames {
+			tableNameLiterals = append(tableNameLiterals, resName.String())
+		}
+
+		tableNames = strings.Join(tableNameLiterals, ",")
+		descriptorIDs = strings.Join(descriptorIDLiterals, ",")
+	case len(names) == 0:
+		break
+	default:
+		panic(fmt.Sprintf("unexpected length for names: %d", len(names)))
 	}
 
 	fullQuery := fmt.Sprintf(query,
-		lex.EscapeSQLString(resName.Catalog()),
-		lex.EscapeSQLString(resName.Table()),
-		lex.EscapeSQLString(resName.String()),
-		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
-		lex.EscapeSQLString(resName.Schema()),
-		dataSource.PostgresDescriptorID(),
+		lex.EscapeSQLString(databaseLiteral),
+		lex.EscapeSQLString(tableNames),
+		lex.EscapeSQLString(givenTableName),
+		databaseIdentifier,
+		lex.EscapeSQLString(schemaName),
+		descriptorIDs,
 	)
 
 	return parse(fullQuery)
