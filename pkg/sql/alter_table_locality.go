@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -237,11 +236,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 
 func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Ensure that the database is multi-region enabled.
-	desc, err := catalogkv.MustGetDatabaseDescByID(
+	desc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx,
-		params.extendedEvalCtx.Txn,
-		params.extendedEvalCtx.EvalContext.Codec,
+		params.p.txn,
 		n.tableDesc.GetParentID(),
+		tree.DatabaseLookupFlags{},
 	)
 	if err != nil {
 		return err
