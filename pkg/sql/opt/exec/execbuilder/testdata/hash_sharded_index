@@ -21,15 +21,15 @@ vectorized: true
 └── • render
     │ columns: (column6, column1, check1)
     │ estimated row count: 2
-    │ render 0: column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    │ render 1: column1
-    │ render 2: column6
+    │ render check1: column6 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    │ render column1: column1
+    │ render column6: column6
     │
     └── • render
         │ columns: (column6, column1)
         │ estimated row count: 2
-        │ render 0: mod(fnv32(COALESCE(column1::STRING, '')), 11)
-        │ render 1: column1
+        │ render column6: mod(fnv32(COALESCE(column1::STRING, '')), 11)
+        │ render column1: column1
         │
         └── • values
               columns: (column1)
@@ -55,17 +55,17 @@ vectorized: true
 └── • render
     │ columns: (column1, column8, column7, check1)
     │ estimated row count: 2
-    │ render 0: column8 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-    │ render 1: column1
-    │ render 2: column7
-    │ render 3: column8
+    │ render check1: column8 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    │ render column1: column1
+    │ render column7: column7
+    │ render column8: column8
     │
     └── • render
         │ columns: (column8, column7, column1)
         │ estimated row count: 2
-        │ render 0: mod(fnv32(COALESCE(column1::STRING, '')), 12)
-        │ render 1: unique_rowid()
-        │ render 2: column1
+        │ render column8: mod(fnv32(COALESCE(column1::STRING, '')), 12)
+        │ render column7: unique_rowid()
+        │ render column1: column1
         │
         └── • values
               columns: (column1)

@@ -187,7 +187,7 @@ vectorized: true
 • render
 │ columns: (x tuple{int AS a, int AS b, int AS c})
 │ estimated row count: 1,000 (missing stats)
-│ render 0: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
+│ render x: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
 │
 └── • scan
       columns: (v int)
@@ -204,14 +204,14 @@ vectorized: true
 • render
 │ columns: (a int, b int, c int)
 │ estimated row count: 1,000 (missing stats)
-│ render 0: (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]
-│ render 1: (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]
-│ render 2: (((x)[tuple{int AS a, int AS b, int AS c}]).c)[int]
+│ render a: (((x)[tuple{int AS a, int AS b, int AS c}]).a)[int]
+│ render b: (((x)[tuple{int AS a, int AS b, int AS c}]).b)[int]
+│ render c: (((x)[tuple{int AS a, int AS b, int AS c}]).c)[int]
 │
 └── • render
     │ columns: (x tuple{int AS a, int AS b, int AS c})
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
+    │ render x: ((((v)[int], (v)[int], (v)[int]) AS a, b, c))[tuple{int AS a, int AS b, int AS c}]
     │
     └── • scan
           columns: (v int)
