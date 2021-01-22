@@ -29,6 +29,11 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	// XXX: I think we want a handle on the tracer object. Or an interface to
+	// it, for the "structured event store".
+	tracer         *Tracer
+	bypassRegistry bool
+
 	traceID      uint64 // probabilistically unique.
 	spanID       uint64 // probabilistically unique.
 	parentSpanID uint64
@@ -77,7 +82,7 @@ type crdbSpanMu struct {
 	tags opentracing.Tags
 
 	stats      SpanStats
-	structured []Structured
+	structured []Structured // XXX: This moves into the tracer registry.
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -163,6 +168,13 @@ func (s *crdbSpan) getRecording(m mode) Recording {
 	return result
 }
 
+// XXX: Would be nice to dump these into our store too. But for now we've
+// limited ourselves to only structured events. Perhaps this isn't necessary,
+// yet. I was just thinking of using all these in-memory objects as "shells"
+// that only contain the metadata, nothing heavier than that. This way they
+// could be fixed in size, and predictable. But we're also not looking to change
+// out how "logging" data is stored (which is in-memory), the same as remote
+// spans.
 func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
@@ -200,9 +212,19 @@ func (s *crdbSpan) record(msg string) {
 }
 
 func (s *crdbSpan) recordStructured(item Structured) {
+	if s.bypassRegistry {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.structured = append(s.mu.structured, item)
+	// s.mu.structured = append(s.mu.structured, item)
+
+	// XXX: We're recording into the tracer object. Probably should expose a
+	// method instead of the raw form here.
+	s.tracer.activeStructuredEvents.Lock()
+	s.tracer.activeStructuredEvents.m[s.spanID] = append(s.tracer.activeStructuredEvents.m[s.spanID], item)
+	s.tracer.activeStructuredEvents.Unlock()
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
@@ -271,17 +293,29 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 		rs.DeprecatedStats = stats
 	}
 
-	if s.mu.structured != nil {
-		rs.InternalStructured = make([]*types.Any, 0, len(s.mu.structured))
-		for i := range s.mu.structured {
-			item, err := types.MarshalAny(s.mu.structured[i])
-			if err != nil {
-				// An error here is an error from Marshal; these
-				// are unlikely to happen.
-				continue
-			}
-			rs.InternalStructured = append(rs.InternalStructured, item)
+	// if s.mu.structured != nil {
+	// 	rs.InternalStructured = make([]*types.Any, 0, len(s.mu.structured))
+	// 	for i := range s.mu.structured {
+	// 		item, err := types.MarshalAny(s.mu.structured[i])
+	// 		if err != nil {
+	// 			// An error here is an error from Marshal; these
+	// 			// are unlikely to happen.
+	// 			continue
+	// 		}
+	// 		rs.InternalStructured = append(rs.InternalStructured, item)
+	// 	}
+	// }
+
+	// XXX: We're grabbing these from the tracer "store".
+	se := s.tracer.getStructuredEvents(s.spanID)
+	for i := range se {
+		item, err := types.MarshalAny(se[i])
+		if err != nil {
+			// An error here is an error from Marshal; these
+			// are unlikely to happen.
+			continue
 		}
+		rs.InternalStructured = append(rs.InternalStructured, item)
 	}
 
 	if len(s.mu.baggage) > 0 {

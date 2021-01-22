@@ -159,6 +159,12 @@ type Tracer struct {
 		syncutil.Mutex
 		m map[*Span]struct{}
 	}
+
+	// XXX: Only records structured events
+	activeStructuredEvents struct {
+		syncutil.Mutex
+		m map[uint64][]Structured // spanID
+	}
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -167,6 +173,7 @@ type Tracer struct {
 func NewTracer() *Tracer {
 	t := &Tracer{}
 	t.activeSpans.m = map[*Span]struct{}{}
+	t.activeStructuredEvents.m = map[uint64][]Structured{}
 	t.noopSpan = &Span{tracer: t}
 	return t
 }
@@ -374,12 +381,14 @@ func (t *Tracer) startSpanGeneric(
 	}{}
 
 	helper.crdbSpan = crdbSpan{
-		traceID:      traceID,
-		spanID:       spanID,
-		operation:    opName,
-		startTime:    startTime,
-		parentSpanID: opts.parentSpanID(),
-		logTags:      opts.LogTags,
+		tracer:         t,
+		bypassRegistry: opts.BypassRegistry,
+		traceID:        traceID,
+		spanID:         spanID,
+		operation:      opName,
+		startTime:      startTime,
+		parentSpanID:   opts.parentSpanID(),
+		logTags:        opts.LogTags,
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
@@ -612,6 +621,25 @@ func (t *Tracer) VisitSpans(visitor func(*Span)) {
 	for _, sp := range sl {
 		visitor(sp)
 	}
+}
+
+// XXX: What does the span visitor look like with a tracer centered storage?
+// This is what would feed into the vtable. Perhaps scan the map for the list of
+// span IDs first? forms the "structured event storage" interface. So trace
+// gives you a way to iterate over all the spans. Spans expose a way to get its
+// recordings, which is coming back here. As for "consuming it", you can now
+// iterate + consume it from here directly? Probably need another kind of
+// iterator. But it avoids the hairy questions of consuming from spans, while
+// still iterating, and what the lifecycle of the span looks like? Right now the
+// verbose "message" recordings are part of the span itself. This is for just
+// the structured events.
+func (t *Tracer) getStructuredEvents(spanID uint64) []Structured {
+	t.activeStructuredEvents.Lock()
+	se := make([]Structured, 0, len(t.activeStructuredEvents.m[spanID]))
+	se = append(se, t.activeStructuredEvents.m[spanID]...)
+	t.activeStructuredEvents.Unlock()
+
+	return se
 }
 
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span

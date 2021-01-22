@@ -1443,6 +1443,7 @@ func WithAnonymizedStatement(err error, stmt tree.Statement) error {
 //
 // SessionTracing and its interactions with the connExecutor are thread-safe;
 // tracing can be turned on at any time.
+// XXX: Study this guy.
 type SessionTracing struct {
 	// enabled is set at times when "session enabled" is active - i.e. when
 	// transactions are being recorded.

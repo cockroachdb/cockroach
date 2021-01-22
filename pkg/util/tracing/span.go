@@ -156,6 +156,10 @@ func (s *Span) ResetRecording() {
 	s.crdb.mu.recording.children = nil
 	s.crdb.mu.recording.remoteSpans = nil
 	s.crdb.mu.Unlock()
+
+	s.tracer.activeStructuredEvents.Lock()
+	delete(s.tracer.activeStructuredEvents.m, s.crdb.spanID)
+	s.tracer.activeStructuredEvents.Unlock()
 }
 
 // GetRecording retrieves the current recording, if the Span has recording
@@ -243,6 +247,9 @@ func (s *Span) Finish() {
 	s.tracer.activeSpans.Lock()
 	delete(s.tracer.activeSpans.m, s)
 	s.tracer.activeSpans.Unlock()
+	s.tracer.activeStructuredEvents.Lock()
+	delete(s.tracer.activeStructuredEvents.m, s.crdb.spanID)
+	s.tracer.activeStructuredEvents.Unlock()
 }
 
 // Meta returns the information which needs to be propagated across process
