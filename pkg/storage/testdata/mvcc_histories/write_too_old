@@ -20,7 +20,7 @@ with t=A
   del   k=a
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=0,0
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,1 min=0,0 seq=0} ts=44.000000000,1 del=true klen=12 vlen=0
 data: "a"/44.000000000,1 -> /<empty>
 data: "a"/44.000000000,0 -> /BYTES/abc
@@ -39,11 +39,11 @@ data: "a"/44.000000000,0 -> /BYTES/abc
 
 run error
 with t=B
-  txn_begin  ts=33 maxTs=55
+  txn_begin  ts=33 globalUncertaintyLimit=55
   cput   k=a v=def
 ----
 >> at end:
-txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false max=55.000000000,0
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=33.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=33.000000000,0 wto=false gul=55.000000000,0
 meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,1 min=0,0 seq=0} ts=44.000000000,1 del=false klen=12 vlen=8
 data: "a"/44.000000000,1 -> /BYTES/def
 data: "a"/44.000000000,0 -> /BYTES/abc

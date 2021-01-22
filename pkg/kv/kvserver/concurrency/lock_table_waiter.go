@@ -600,9 +600,9 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		// need to push again, but expect to eventually succeed in reading,
 		// either after lease movement subsides or after the reader's read
 		// timestamp surpasses its global uncertainty limit.
-		localMaxTS := req.Txn.MaxTimestamp
-		localMaxTS.Backward(w.clock.Now())
-		h.Timestamp.Forward(localMaxTS)
+		localUncertaintyLimit := req.Txn.GlobalUncertaintyLimit
+		localUncertaintyLimit.Backward(w.clock.Now())
+		h.Timestamp.Forward(localUncertaintyLimit)
 	}
 	return h
 }

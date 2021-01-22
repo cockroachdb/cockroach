@@ -1016,10 +1016,10 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				TxnMeta: enginepb.TxnMeta{
 					WriteTimestamp: hlc.Timestamp{WallTime: 10},
 				},
-				Name:          "test",
-				Status:        roachpb.PENDING,
-				ReadTimestamp: hlc.Timestamp{WallTime: 10},
-				MaxTimestamp:  hlc.Timestamp{WallTime: 10},
+				Name:                   "test",
+				Status:                 roachpb.PENDING,
+				ReadTimestamp:          hlc.Timestamp{WallTime: 10},
+				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 10},
 			}
 			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 				LowerBound: testKey1,

@@ -121,10 +121,10 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	maxTS := hlc.Timestamp{WallTime: 15}
+	uncertaintyLimit := hlc.Timestamp{WallTime: 15}
 	makeReq := func() Request {
 		txn := makeTxnProto("request")
-		txn.MaxTimestamp = maxTS
+		txn.GlobalUncertaintyLimit = uncertaintyLimit
 		return Request{
 			Txn:       &txn,
 			Timestamp: txn.ReadTimestamp,
@@ -133,15 +133,15 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			testWaitPush(t, waitFor, makeReq, maxTS)
+			testWaitPush(t, waitFor, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, maxTS)
+			testWaitPush(t, waitForDistinguished, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
-			testWaitPush(t, waitElsewhere, makeReq, maxTS)
+			testWaitPush(t, waitElsewhere, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitSelf", func(t *testing.T) {
@@ -381,10 +381,10 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	maxTS := hlc.Timestamp{WallTime: 15}
+	uncertaintyLimit := hlc.Timestamp{WallTime: 15}
 	makeReq := func() Request {
 		txn := makeTxnProto("request")
-		txn.MaxTimestamp = maxTS
+		txn.GlobalUncertaintyLimit = uncertaintyLimit
 		return Request{
 			Txn:        &txn,
 			Timestamp:  txn.ReadTimestamp,
@@ -394,15 +394,15 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			testErrorWaitPush(t, waitFor, makeReq, maxTS)
+			testErrorWaitPush(t, waitFor, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
-			testErrorWaitPush(t, waitForDistinguished, makeReq, maxTS)
+			testErrorWaitPush(t, waitForDistinguished, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
-			testErrorWaitPush(t, waitElsewhere, makeReq, maxTS)
+			testErrorWaitPush(t, waitElsewhere, makeReq, uncertaintyLimit)
 		})
 
 		t.Run("waitSelf", func(t *testing.T) {
