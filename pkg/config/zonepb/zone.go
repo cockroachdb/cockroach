@@ -418,6 +418,12 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 				z.RangeMaxBytes = proto.Int64(*other.RangeMaxBytes)
 			}
 		}
+		if fieldName == "non_blocking_txns" {
+			z.NonBlockingTxns = nil
+			if other.NonBlockingTxns != nil {
+				z.NonBlockingTxns = proto.Bool(*other.NonBlockingTxns)
+			}
+		}
 		if fieldName == "gc.ttlseconds" {
 			z.GC = nil
 			if other.GC != nil {
