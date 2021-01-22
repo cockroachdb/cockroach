@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -88,13 +89,12 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 		)
 	}
 
-	// Set LocalityConfig to GLOBAL.
-	n.tableDesc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
-		Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
-			Global: &descpb.TableDescriptor_LocalityConfig_Global{},
-		},
+	n.tableDesc.SetTableLocalityGlobal()
+	// Validate the locality config.
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
+	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
+		return err
 	}
-
 	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
 		params.ctx,
 		params.p.txn,
@@ -109,15 +109,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 		tree.Name(resolvedSchema.Name),
 		tree.Name(n.tableDesc.GetName()),
 	)
-
-	// Validate the new locality before updating the table descriptor.
-	if err := tabledesc.ValidateTableLocalityConfig(
-		tableName.String(),
-		n.tableDesc.LocalityConfig,
-		desc,
-	); err != nil {
-		return err
-	}
 
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
@@ -157,35 +148,26 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	var newRegion *descpb.RegionName = nil
-	newRegionName := descpb.RegionName(n.n.Locality.TableRegion)
-
-	// If we haven't been provided a new region, we're altering to the PRIMARY REGION.
-	alterToPrimaryRegion := newRegionName == ""
-	// If we're altering to the primary region, leave the newRegion as nil.
-	if !alterToPrimaryRegion {
-		newRegion = &newRegionName
+	if n.n.Locality.InPrimaryRegion() {
+		n.tableDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+	} else {
+		n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
 	}
 
-	// In all cases if we get down here we need to update the Locality info in the table
-	// descriptor. It's possible here that the LocalityConfig is nil, if we're altering
-	// from a table that was not provided a table locality at creation. Allocate a
-	// LocalityConfig here to be used below. Note that all ALTERs which change the
-	// table locality will result in a LocalityConfig existing on the table (i.e. there
-	// currently is no way to remove the LocalityConfig from a table via ALTER).
-	if n.tableDesc.LocalityConfig == nil {
-		n.tableDesc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	// Validate the new locality before updating the table descriptor.
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
+	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
+		return err
 	}
-
-	// Setup the Locality and Region fields of the LocalityConfig. In cases where we're
-	// altering to the PRIMARY REGION, the Region will be set to nil so that SHOW CREATE
-	// TABLE will show "REGIONAL BY TABLE IN PRIMARY REGION".
-	n.tableDesc.LocalityConfig.Locality =
-		&descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-			RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
-				Region: newRegion,
-			},
-		}
+	// Write out the table descriptor update.
+	if err := params.p.writeSchemaChange(
+		params.ctx,
+		n.tableDesc,
+		descpb.InvalidMutationID,
+		tree.AsStringWithFQNames(&n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
 
 	// Validate the new locality before updating the table descriptor.
 	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
@@ -202,24 +184,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		tree.Name(resolvedSchema.Name),
 		tree.Name(n.tableDesc.GetName()),
 	)
-
-	if err := tabledesc.ValidateTableLocalityConfig(
-		tableName.String(),
-		n.tableDesc.LocalityConfig,
-		desc,
-	); err != nil {
-		return err
-	}
-
-	// Write out the table descriptor update.
-	if err := params.p.writeSchemaChange(
-		params.ctx,
-		n.tableDesc,
-		descpb.InvalidMutationID,
-		tree.AsStringWithFQNames(&n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
 
 	// Update the table's zone configuration.
 	if err := params.p.applyZoneConfigFromTableLocalityConfig(
@@ -254,16 +218,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 
 	newLocality := n.n.Locality
 	existingLocality := n.tableDesc.LocalityConfig
-
-	// If the table's LocalityConfig is nil, it means that the table is REGIONAL BY
-	// TABLE in the PRIMARY REGION. Construct a dummy LocalityConfig to mimic that.
-	if existingLocality == nil {
-		existingLocality = &descpb.TableDescriptor_LocalityConfig{
-			Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-				RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
-			},
-		}
-	}
 
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.

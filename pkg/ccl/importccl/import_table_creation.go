@@ -161,6 +161,7 @@ func MakeSimpleTableDescriptor(
 		parentID,
 		parentSchemaID,
 		tableID,
+		descpb.InvalidID,
 		hlc.Timestamp{WallTime: walltime},
 		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		affected,
