@@ -162,7 +162,7 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit
 		p.txnIgnoredSeqNums = txn.IgnoredSeqNums
 
 		p.localUncertaintyLimit = localUncertaintyLimit
-		p.globalUncertaintyLimit = txn.MaxTimestamp
+		p.globalUncertaintyLimit = txn.GlobalUncertaintyLimit
 		// We must check uncertainty even if p.ts.Less(localUncertaintyLimit)
 		// because the local uncertainty limit cannot be applied to values with
 		// synthetic timestamps.
@@ -352,8 +352,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 
 			// This value is not within the reader's uncertainty window, but
 			// there could be other uncertain committed values, so seek and
-			// check uncertainty using MaxTimestamp.
-			return p.seekVersion(p.txn.MaxTimestamp, true)
+			// check uncertainty using globalUncertaintyLimit.
+			return p.seekVersion(p.globalUncertaintyLimit, true)
 		}
 
 		// 6. Our txn's read timestamp is greater than or equal to the
@@ -411,8 +411,8 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			}
 			// The intent is not within the uncertainty window, but there could
 			// be an uncertain committed value, so seek and check uncertainty
-			// using MaxTimestamp.
-			return p.seekVersion(p.txn.MaxTimestamp, true)
+			// using globalUncertaintyLimit.
+			return p.seekVersion(p.globalUncertaintyLimit, true)
 		}
 		return p.seekVersion(p.ts, false)
 	}

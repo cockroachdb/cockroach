@@ -69,7 +69,7 @@ func ComputeLocalUncertaintyLimit(
 	// the lease before this replica acquired it.
 	obsTs.Forward(status.Lease.Start)
 
-	localUncertaintyLimit := txn.MaxTimestamp
+	localUncertaintyLimit := txn.GlobalUncertaintyLimit
 	localUncertaintyLimit.Backward(obsTs.ToTimestamp())
 	return localUncertaintyLimit
 }

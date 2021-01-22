@@ -923,7 +923,7 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	defer tc.mu.Unlock()
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
-	tc.mu.txn.MaxTimestamp = ts
+	tc.mu.txn.GlobalUncertaintyLimit = ts
 	tc.mu.txn.CommitTimestampFixed = true
 
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed

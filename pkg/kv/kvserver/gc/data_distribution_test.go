@@ -136,9 +136,9 @@ func newDataDistribution(
 		var txn *roachpb.Transaction
 		if len(timestamps) == 0 && haveIntent {
 			txn = &roachpb.Transaction{
-				Status:        roachpb.PENDING,
-				ReadTimestamp: ts,
-				MaxTimestamp:  ts.Next().Next(),
+				Status:                 roachpb.PENDING,
+				ReadTimestamp:          ts,
+				GlobalUncertaintyLimit: ts.Next().Next(),
 			}
 			txn.ID = uuid.MakeV4()
 			txn.WriteTimestamp = ts

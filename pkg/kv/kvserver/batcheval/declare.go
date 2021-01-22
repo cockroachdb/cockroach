@@ -48,8 +48,8 @@ func DefaultDeclareIsolatedKeys(
 		access = spanset.SpanReadOnly
 		if header.Txn != nil {
 			// For transactional reads, acquire read latches all the way up to
-			// the transaction's MaxTimestamp, because reads may observe writes
-			// all the way up to this timestamp.
+			// the transaction's uncertainty limit, because reads may observe
+			// writes all the way up to this timestamp.
 			//
 			// It is critical that reads declare latches up through their
 			// uncertainty interval so that they are properly synchronized with
@@ -62,7 +62,7 @@ func DefaultDeclareIsolatedKeys(
 			// writer (see AckCommittedEntriesBeforeApplication). Latching is
 			// the only mechanism that ensures that any observers of the write
 			// wait for the write apply before reading.
-			timestamp.Forward(header.Txn.MaxTimestamp)
+			timestamp.Forward(header.Txn.GlobalUncertaintyLimit)
 		}
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)

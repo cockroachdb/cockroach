@@ -408,7 +408,7 @@ func getTableID(db *gosql.DB, dbName, tableName string) (tableID descpb.ID, err 
 	return
 }
 
-func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
+func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Limiting how long transactions can run does not work
@@ -438,8 +438,8 @@ func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
-	// Make a non-writing transaction that has a MaxTimestamp after the lease
-	// transfer but a timestamp before.
+	// Make a non-writing transaction that has a GlobalUncertaintyLimit after
+	// the lease transfer but a timestamp before.
 	roTxn := roachpb.MakeTransaction("test", nil, roachpb.NormalUserPriority, ts,
 		timeutil.Now().UnixNano()-ts.WallTime)
 	baRead.Header.Txn = &roTxn
