@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,7 +132,7 @@ func newDistinct(
 	// So we have to set up the account here.
 	d.arena = stringarena.Make(&d.memAcc)
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	if execinfra.ShouldCollectStats(ctx, flowCtx) {
 		d.input = newInputStatCollector(d.input)
 		d.ExecStatsForTrace = d.execStatsForTrace
 	}
