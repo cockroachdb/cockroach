@@ -715,7 +715,7 @@ If problems persist, please see %s.`
 		log.StartAlwaysFlush()
 		return err
 
-	case <-stopper.ShouldStop():
+	case <-stopper.ShouldQuiesce():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
 		<-stopper.IsStopped()
@@ -826,7 +826,7 @@ If problems persist, please see %s.`
 			select {
 			case <-ticker.C:
 				log.Ops.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
-			case <-stopper.ShouldStop():
+			case <-stopper.IsStopped():
 				return
 			case <-stopWithoutDrain:
 				return

@@ -156,7 +156,7 @@ func runSyncer(
 
 	waitFailure := time.After(time.Duration(rand.Int63n(5 * time.Second.Nanoseconds())))
 
-	stopper.RunWorker(ctx, func(ctx context.Context) {
+	if err := stopper.RunAsyncTask(ctx, "syncer", func(ctx context.Context) {
 		<-waitFailure
 		if err := nemesis.On(); err != nil {
 			panic(err)
@@ -167,7 +167,9 @@ func runSyncer(
 			}
 		}()
 		<-stopper.ShouldQuiesce()
-	})
+	}); err != nil {
+		return 0, err
+	}
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, drainSignals...)

@@ -187,14 +187,7 @@ func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
 		log.Infof(context.Background(), "stopping server at %s / %s",
 			c.ServingRPCAddr(), c.ServingSQLAddr())
-		select {
-		case <-c.Stopper().ShouldStop():
-			// If ShouldStop() doesn't block, that means someone has already
-			// called Stop(). We just need to wait.
-			<-c.Stopper().IsStopped()
-		default:
-			c.Stopper().Stop(context.Background())
-		}
+		c.Stopper().Stop(context.Background())
 	}
 }
 

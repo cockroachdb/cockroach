@@ -1296,12 +1296,12 @@ func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 // lost and requires re-bootstrapping.
 func (g *Gossip) bootstrap() {
 	ctx := g.AnnotateCtx(context.Background())
-	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-bootstrap", func(ctx context.Context) {
 		ctx = logtags.AddTag(ctx, "bootstrap", nil)
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {
-			if g.server.stopper.RunTask(ctx, "gossip.Gossip: bootstrap ", func(ctx context.Context) {
+			func(ctx context.Context) {
 				g.mu.Lock()
 				defer g.mu.Unlock()
 				haveClients := g.outgoing.len() > 0
@@ -1322,9 +1322,7 @@ func (g *Gossip) bootstrap() {
 						g.maybeSignalStatusChangeLocked()
 					}
 				}
-			}) != nil {
-				return
-			}
+			}(ctx)
 
 			// Pause an interval before next possible bootstrap.
 			bootstrapTimer.Reset(g.bootstrapInterval)
@@ -1333,7 +1331,7 @@ func (g *Gossip) bootstrap() {
 			case <-bootstrapTimer.C:
 				bootstrapTimer.Read = true
 				// continue
-			case <-g.server.stopper.ShouldStop():
+			case <-g.server.stopper.ShouldQuiesce():
 				return
 			}
 			log.Eventf(ctx, "idling until bootstrap required")
@@ -1342,7 +1340,7 @@ func (g *Gossip) bootstrap() {
 			case <-g.stalledCh:
 				log.Eventf(ctx, "detected stall; commencing bootstrap")
 				// continue
-			case <-g.server.stopper.ShouldStop():
+			case <-g.server.stopper.ShouldQuiesce():
 				return
 			}
 		}
@@ -1361,7 +1359,7 @@ func (g *Gossip) bootstrap() {
 // is notified via the stalled conditional variable.
 func (g *Gossip) manage() {
 	ctx := g.AnnotateCtx(context.Background())
-	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
+	_ = g.server.stopper.RunAsyncTask(ctx, "gossip-manage", func(ctx context.Context) {
 		clientsTimer := timeutil.NewTimer()
 		cullTimer := timeutil.NewTimer()
 		stallTimer := timeutil.NewTimer()
@@ -1374,7 +1372,7 @@ func (g *Gossip) manage() {
 		stallTimer.Reset(jitteredInterval(g.stallInterval))
 		for {
 			select {
-			case <-g.server.stopper.ShouldStop():
+			case <-g.server.stopper.ShouldQuiesce():
 				return
 			case c := <-g.disconnected:
 				g.doDisconnected(c)

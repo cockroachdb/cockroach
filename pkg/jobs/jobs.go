@@ -902,7 +902,8 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			// Launch a goroutine to continue consuming results from the job.
 			if resultsFromJob != nil {
-				go sj.registry.stopper.RunWorker(ctx, func(ctx context.Context) {
+				// TODO(ajwerner): ctx is done; we shouldn't pass it to RunAsyncTask.
+				_ = sj.registry.stopper.RunAsyncTask(ctx, "job-results", func(ctx context.Context) {
 					for {
 						select {
 						case <-errCh:
@@ -911,6 +912,8 @@ func (sj *StartableJob) Run(ctx context.Context) error {
 							if !ok {
 								return
 							}
+						case <-sj.registry.stopper.ShouldQuiesce():
+							return
 						}
 					}
 				})
