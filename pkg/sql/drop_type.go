@@ -133,17 +133,9 @@ func (p *planner) canDropTypeDesc(
 		return err
 	}
 	if len(desc.ReferencingDescriptorIDs) > 0 && behavior != tree.DropCascade {
-		var dependentNames []string
-		for _, id := range desc.ReferencingDescriptorIDs {
-			desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
-			if err != nil {
-				return errors.Wrapf(err, "type has dependent objects")
-			}
-			fqName, err := p.getQualifiedTableName(ctx, desc)
-			if err != nil {
-				return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
-			}
-			dependentNames = append(dependentNames, fqName.FQString())
+		dependentNames, err := p.getFullyQualifiedTableNamesFromIDs(ctx, desc.ReferencingDescriptorIDs)
+		if err != nil {
+			return errors.Wrapf(err, "type %q has dependent objects", desc.Name)
 		}
 		return pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
