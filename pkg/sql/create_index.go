@@ -369,6 +369,32 @@ func maybeCreateAndAddShardCol(
 	return shardCol, created, nil
 }
 
+var interleavedTableDeprecationError = errors.WithIssueLink(
+	pgnotice.Newf("interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2"),
+	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+)
+
+var interleavedTableDisabledError = errors.WithIssueLink(
+	pgerror.New(pgcode.WarningDeprecatedFeature,
+		"interleaved tables and interleaved indexes are disabled due to the sql.defaults."+
+			"interleaved_tables.enabled cluster setting. Note that interleaved tables and interleaved indexes will be "+
+			"removed in a future release. For details, see https://www.cockroachlabs.com/docs/releases/v20.2.0#deprecations"),
+	errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
+)
+
+// interleavedTableDeprecationAction either returns an error, if interleaved
+// tables are disabled, or sends a notice, if they're not.
+func interleavedTableDeprecationAction(params runParams) error {
+	if !InterleavedTablesEnabled.Get(params.p.execCfg.SV()) {
+		return interleavedTableDisabledError
+	}
+	params.p.BufferClientNotice(
+		params.ctx,
+		interleavedTableDeprecationError,
+	)
+	return nil
+}
+
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
 	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
@@ -402,13 +428,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.Interleave != nil {
-		params.p.BufferClientNotice(
-			params.ctx,
-			errors.WithIssueLink(
-				pgnotice.Newf("interleaved tables and indexes are deprecated in 20.2 and will be removed in 21.2"),
-				errors.IssueLink{IssueURL: build.MakeIssueURL(52009)},
-			),
-		)
+		if err := interleavedTableDeprecationAction(params); err != nil {
+			return err
+		}
 	}
 
 	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)

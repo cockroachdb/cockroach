@@ -265,6 +265,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.SQLExecutor.(*sql.ExecutorTestingKnobs).TestingDescriptorValidation = true
 	}
 
+	// For test servers, leave interleaved tables enabled by default. We'll remove
+	// this when we remove interleaved tables altogether.
+	sql.InterleavedTablesEnabled.Override(&cfg.Settings.SV, true)
+
 	return cfg
 }
 
