@@ -974,8 +974,13 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	columnIsInDroppingIndex, err := columnIsInDroppingIndex(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
 
 	codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
