@@ -2763,6 +2763,25 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_shiftlongitude": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ShiftLongitude(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a modified version of a geometry in which the longitude (X coordinate) of each point is ` +
+					`incremented by 360 if it is <0 and decremented by 360 if it is >180. The result is only meaningful ` +
+					`if the coordinates are in longitude/latitude.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Unary predicates
@@ -5983,7 +6002,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
 	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_shiftlongitude":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49034}),
 	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
 	"st_snap":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
