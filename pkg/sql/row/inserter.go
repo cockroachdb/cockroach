@@ -41,7 +41,8 @@ type Inserter struct {
 
 // MakeInserter creates a Inserter for the given table.
 //
-// insertCols must contain every column in the primary key.
+// insertCols must contain every column in the primary key. Virtual columns must
+// be present if they are part of any index.
 func MakeInserter(
 	ctx context.Context,
 	txn *kv.Txn,

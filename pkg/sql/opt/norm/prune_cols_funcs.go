@@ -100,7 +100,6 @@ func (c *CustomFuncs) neededMutationCols(
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
-	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
 	// familyCols returns the columns in the given family.
@@ -112,6 +111,10 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 		return colSet
 	}
+
+	// cols accumulates the result. The column IDs are relative to tabMeta.
+	// TODO(radu): this should be a set of ordinals instead.
+	var cols opt.ColSet
 
 	// addFamilyCols adds all columns in each family containing at least one
 	// column that is being updated.
@@ -152,6 +155,12 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 				updateCols.Add(tabMeta.MetaID.ColumnID(ord))
 			}
 		}
+
+		// The execution code requires that each update column has a
+		// corresponding fetch column (even if the old value is not necessary).
+		// Note that when this limitation is fixed, the rest of the code below
+		// needs to be revisited as well.
+		cols.UnionWith(updateCols)
 
 		// Make sure to consider indexes that are being added or dropped.
 		for i, n := 0, tabMeta.Table.DeletableIndexCount(); i < n; i++ {
