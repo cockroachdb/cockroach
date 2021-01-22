@@ -975,7 +975,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 			defer stopper.Stop(context.Background())
 			store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			txn := newTransaction("test", test.key, 1, store.cfg.Clock)
-			txn.MaxTimestamp = hlc.MaxTimestamp
+			txn.GlobalUncertaintyLimit = hlc.MaxTimestamp
 			h := roachpb.Header{Txn: txn}
 			pArgs := putArgs(test.key, []byte("value"))
 			assignSeqNumsForReqs(txn, &pArgs)
@@ -1041,7 +1041,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 				pArgs := putArgs(test.key, []byte("value"))
 				if useTxn {
 					txn = newTransaction("test", test.key, 1, store.cfg.Clock)
-					txn.MaxTimestamp = hlc.MaxTimestamp
+					txn.GlobalUncertaintyLimit = hlc.MaxTimestamp
 					assignSeqNumsForReqs(txn, &pArgs)
 				}
 				ba := roachpb.BatchRequest{

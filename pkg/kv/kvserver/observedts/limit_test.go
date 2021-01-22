@@ -24,8 +24,8 @@ func TestComputeLocalUncertaintyLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn := &roachpb.Transaction{
-		ReadTimestamp: hlc.Timestamp{WallTime: 10},
-		MaxTimestamp:  hlc.Timestamp{WallTime: 20},
+		ReadTimestamp:          hlc.Timestamp{WallTime: 10},
+		GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 20},
 	}
 	txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 15})
 
