@@ -10,7 +10,12 @@ CREATE TABLE uniq (
   w INT UNIQUE WITHOUT INDEX,
   x INT,
   y INT DEFAULT 5,
-  UNIQUE WITHOUT INDEX (x, y)
+  UNIQUE WITHOUT INDEX (x, y),
+  FAMILY (k),
+  FAMILY (v),
+  FAMILY (w),
+  FAMILY (x),
+  FAMILY (y)
 )
 
 statement ok
@@ -23,7 +28,11 @@ CREATE TABLE uniq_overlaps_pk (
   UNIQUE WITHOUT INDEX (b, c),
   UNIQUE WITHOUT INDEX (a, b, d),
   UNIQUE WITHOUT INDEX (a),
-  UNIQUE WITHOUT INDEX (c, d)
+  UNIQUE WITHOUT INDEX (c, d),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
 )
 
 statement ok
@@ -34,7 +43,11 @@ CREATE TABLE uniq_hidden_pk (
   d INT,
   UNIQUE WITHOUT INDEX (b, c),
   UNIQUE WITHOUT INDEX (a, b, d),
-  UNIQUE WITHOUT INDEX (a)
+  UNIQUE WITHOUT INDEX (a),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
 )
 
 statement ok
@@ -52,7 +65,10 @@ CREATE TABLE uniq_fk_child (
   b INT,
   c INT,
   FOREIGN KEY (b, c) REFERENCES uniq_fk_parent (b, c) ON UPDATE CASCADE,
-  UNIQUE WITHOUT INDEX (c)
+  UNIQUE WITHOUT INDEX (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
 )
 
 statement ok
@@ -69,7 +85,11 @@ CREATE TABLE uniq_enum (
   PRIMARY KEY (r, i),
   UNIQUE INDEX (r, s, j),
   UNIQUE WITHOUT INDEX (i),
-  UNIQUE WITHOUT INDEX (s, j)
+  UNIQUE WITHOUT INDEX (s, j),
+  FAMILY (r),
+  FAMILY (s),
+  FAMILY (i),
+  FAMILY (j)
 )
 
 statement ok
