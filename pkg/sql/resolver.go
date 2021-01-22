@@ -398,6 +398,31 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 	return descs, nil
 }
 
+// getFullyQualifiedTableNamesFromIDs resolves a list of table IDs to their
+// fully qualified names.
+func (p *planner) getFullyQualifiedTableNamesFromIDs(
+	ctx context.Context, ids []descpb.ID,
+) (fullyQualifiedNames []*tree.TableName, _ error) {
+	for _, id := range ids {
+		desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidCached:    true,
+				IncludeDropped: true,
+				IncludeOffline: true,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		fqName, err := p.getQualifiedTableName(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+		fullyQualifiedNames = append(fullyQualifiedNames, fqName)
+	}
+	return fullyQualifiedNames, nil
+}
+
 // getQualifiedTableName returns the database-qualified name of the table
 // or view represented by the provided descriptor. It is a sort of
 // reverse of the Resolve() functions.
