@@ -248,6 +248,9 @@ type TableDescriptor interface {
 	WritableColumns() []descpb.ColumnDescriptor
 
 	GetLocalityConfig() *descpb.TableDescriptor_LocalityConfig
+	IsLocalityRegionalByRow() bool
+	IsLocalityRegionalByTable() bool
+	IsLocalityGlobal() bool
 }
 
 // Index is an interface around the index descriptor types.

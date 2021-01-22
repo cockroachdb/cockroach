@@ -4149,3 +4149,20 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.State = descpb.DescriptorState_OFFLINE
 	desc.OfflineReason = reason
 }
+
+// IsLocalityRegionalByRow returns whether or not the table is REGIONAL BY ROW table
+func (desc *wrapper) IsLocalityRegionalByRow() bool {
+	return desc.LocalityConfig.GetRegionalByRow() != nil
+}
+
+// IsLocalityRegionalByTable returns whether or not the table is REGIONAL BY TABLE table
+// TODO (arulajmani): We can pull out this first check once all multi-region tables contain a LocalityConfig.
+func (desc *wrapper) IsLocalityRegionalByTable() bool {
+	return desc.LocalityConfig == nil ||
+		desc.LocalityConfig.GetRegionalByTable() != nil
+}
+
+// IsLocalityGlobal returns whether or not the table is GLOBAL table
+func (desc *wrapper) IsLocalityGlobal() bool {
+	return desc.LocalityConfig.GetGlobal() != nil
+}

@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -45,6 +46,20 @@ func (s *liveClusterRegions) toStrings() []string {
 		return ret[i] < ret[j]
 	})
 	return ret
+}
+
+// assertIsMultiRegionDatabase ensures that we're in a multi-region database, and
+// if not, returns an assertion error. Takes an "operation" string which describes
+// the operation in progress which requires database to be multi-region.
+func assertIsMultiRegionDatabase(desc *dbdesc.Immutable, operation string) error {
+	if !desc.IsMultiRegion() {
+		return errors.AssertionFailedf(
+			"invalid call to %q on a non-multi-region database. %v",
+			operation,
+			desc,
+		)
+	}
+	return nil
 }
 
 // getLiveClusterRegions returns a set of live region names in the cluster.
@@ -184,8 +199,8 @@ func constraintsConjunctionForRegionalLocality(
 
 // zoneConfigFromTableLocalityConfig generates a desired ZoneConfig based
 // on the locality config for the database.
-// This function can return a nil zonepb.ZoneConfig, meaning no update is required
-// to any zone config.
+// This function can return a nil zonepb.ZoneConfig, meaning no table level zone
+// configuration is required.
 // TODO(#multiregion,aayushshah15): properly configure this for region survivability and leaseholder
 // preferences when new zone configuration parameters merge.
 func zoneConfigFromTableLocalityConfig(
@@ -225,6 +240,9 @@ func zoneConfigFromTableLocalityConfig(
 func (p *planner) applyZoneConfigForMultiRegion(
 	ctx context.Context, zs tree.ZoneSpecifier, zc *zonepb.ZoneConfig, desc string,
 ) error {
+	// TODO(#multiregion): We should check to see if the zone configuration has been updated
+	// by the user. If it has, we need to warn, and only proceed if sql_safe_updates is disabled.
+
 	// Convert the partially filled zone config to re-run as a SQL command.
 	// This avoid us having to modularize planNode logic from set_zone_config
 	// and the optimizer.
@@ -314,9 +332,11 @@ func (p *planner) applyZoneConfigFromTableLocalityConfig(
 	if err != nil {
 		return err
 	}
-	// If we do not have to configure anything, exit early.
+
+	// This means that the table doesn't need an explicit zone configuration. Drop
+	// one if it already exists and return.
 	if localityZoneConfig == nil {
-		return nil
+		return p.dropZoneConfigForTable(ctx, explicitTblName)
 	}
 
 	return p.applyZoneConfigForMultiRegion(
@@ -339,6 +359,25 @@ func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
 		zoneConfigFromRegionConfigForDatabase(regionConfig),
 		"database-multiregion-set-zone-config",
 	)
+}
+
+// dropZoneConfigForTable drops the zone configuration for a table if one exists.
+func (p *planner) dropZoneConfigForTable(ctx context.Context, name tree.TableName) error {
+	// TODO(#multiregion): We should check to see if the zone configuration has been updated
+	// by the user. If it has, we need to warn, and only proceed if sql_safe_updates is disabled.
+	sql := fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE DISCARD", name.String())
+	if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
+		ctx,
+		"table-multiregion-discard-zone-config",
+		p.ExtendedEvalContext().Txn,
+		sessiondata.InternalExecutorOverride{
+			User: p.SessionData().User(),
+		},
+		sql,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 // forEachTableWithLocalityConfigInDatabase loops through each schema and table
