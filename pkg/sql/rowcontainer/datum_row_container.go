@@ -101,6 +101,7 @@ func NewRowContainerWithCapacity(
 }
 
 var rowsPerChunkShift = uint(util.ConstantWithMetamorphicTestValue(
+	"row-container-rows-per-chunk-shift",
 	6, /* defaultValue */
 	1, /* metamorphicValue */
 ))

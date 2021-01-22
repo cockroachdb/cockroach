@@ -79,6 +79,7 @@ var _ Batch = &MemBatch{}
 // (the best number according to that benchmark was 1280, but it was negligibly
 // better, so we decided to keep 1024 as it is a power of 2).
 var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
+	"coldata-batch-size",
 	1024, /* defaultValue */
 	// min is set to 3 to match colexec's minBatchSize setting.
 	3, /* min */
