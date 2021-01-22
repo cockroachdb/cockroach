@@ -42,6 +42,7 @@ func getKVBatchSize(forceProductionKVBatchSize bool) int64 {
 }
 
 var defaultKVBatchSize = int64(util.ConstantWithMetamorphicTestValue(
+	"kv-batch-size",
 	productionKVBatchSize, /* defaultValue */
 	1,                     /* metamorphicValue */
 ))
