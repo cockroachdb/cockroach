@@ -47,10 +47,10 @@ func (x SetOperator) String() string {
 	return proto.EnumName(SetOperator_name, int32(x))
 }
 func (SetOperator) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_d3f9599407c03e9c, []int{0}
+	return fileDescriptor_span_expression_db00f61b9e4f7e02, []int{0}
 }
 
-// SpanExpressionProto is a proto representation of an InvertedExpression
+// SpanExpressionProto is a proto representation of an inverted.Expression
 // tree consisting only of SpanExpressions. It is intended for use in
 // expression execution.
 type SpanExpressionProto struct {
@@ -62,7 +62,7 @@ func (m *SpanExpressionProto) Reset()         { *m = SpanExpressionProto{} }
 func (m *SpanExpressionProto) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto) ProtoMessage()    {}
 func (*SpanExpressionProto) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_d3f9599407c03e9c, []int{0}
+	return fileDescriptor_span_expression_db00f61b9e4f7e02, []int{0}
 }
 func (m *SpanExpressionProto) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -97,7 +97,7 @@ func (m *SpanExpressionProto_Span) Reset()         { *m = SpanExpressionProto_Sp
 func (m *SpanExpressionProto_Span) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto_Span) ProtoMessage()    {}
 func (*SpanExpressionProto_Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_d3f9599407c03e9c, []int{0, 0}
+	return fileDescriptor_span_expression_db00f61b9e4f7e02, []int{0, 0}
 }
 func (m *SpanExpressionProto_Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -133,7 +133,7 @@ func (m *SpanExpressionProto_Node) Reset()         { *m = SpanExpressionProto_No
 func (m *SpanExpressionProto_Node) String() string { return proto.CompactTextString(m) }
 func (*SpanExpressionProto_Node) ProtoMessage()    {}
 func (*SpanExpressionProto_Node) Descriptor() ([]byte, []int) {
-	return fileDescriptor_span_expression_d3f9599407c03e9c, []int{0, 1}
+	return fileDescriptor_span_expression_db00f61b9e4f7e02, []int{0, 1}
 }
 func (m *SpanExpressionProto_Node) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -864,10 +864,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/inverted/span_expression.proto", fileDescriptor_span_expression_d3f9599407c03e9c)
+	proto.RegisterFile("util/inverted/span_expression.proto", fileDescriptor_span_expression_db00f61b9e4f7e02)
 }
 
-var fileDescriptor_span_expression_d3f9599407c03e9c = []byte{
+var fileDescriptor_span_expression_db00f61b9e4f7e02 = []byte{
 	// 396 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x92, 0x4f, 0x6e, 0x1a, 0x31,
 	0x14, 0xc6, 0xc7, 0x60, 0xaa, 0x91, 0xa1, 0x2d, 0x32, 0x48, 0x1d, 0xcd, 0xc2, 0x45, 0x6d, 0x17,

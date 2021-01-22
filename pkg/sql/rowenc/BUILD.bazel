@@ -83,6 +83,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/encoding",
+        "//pkg/util/inverted",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",

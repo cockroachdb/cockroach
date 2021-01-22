@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -1427,8 +1428,13 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexKeys(nil, left)
 		require.NoError(t, err)
 
-		spanExpr, err := EncodeContainingInvertedIndexSpans(nil, right)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(nil, right)
 		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
 
 		if spanExpr.Unique != expectUnique {
 			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, spanExpr.Unique)

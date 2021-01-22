@@ -847,7 +847,7 @@ func EncodeInvertedIndexTableKeys(
 // The input inKey is prefixed to the keys in all returned spans.
 func EncodeContainingInvertedIndexSpans(
 	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spanExpr *inverted.SpanExpression2, err error) {
+) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -907,39 +907,38 @@ func encodeArrayInvertedIndexTableKeys(
 // duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spanExpr *inverted.SpanExpression2, err error) {
+) (invertedExpr inverted.Expression, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array. Return a SpanExpression that
 		// requires a full scan of the inverted index.
-		endKey := roachpb.Key(inKey).PrefixEnd()
-		spanExpr = &inverted.SpanExpression2{
-			Tight:      true,
-			Unique:     false,
-			UnionSpans: roachpb.Spans{roachpb.Span{Key: inKey, EndKey: endKey}},
-		}
-		return spanExpr, nil
+		invertedExpr = inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(inKey), true, /* tight */
+		)
+		return invertedExpr, nil
 	}
 
 	if val.HasNulls {
 		// If there are any nulls, return empty spans. This is needed to ensure
 		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
-		return &inverted.SpanExpression2{Tight: true, Unique: true}, nil
+		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
 	if err != nil {
 		return nil, err
 	}
-	children := make([]*inverted.SpanExpression2, len(keys))
-	for i, key := range keys {
-		endKey := roachpb.Key(key).PrefixEnd()
-		children[i] = &inverted.SpanExpression2{
-			Tight:      true,
-			Unique:     true,
-			UnionSpans: roachpb.Spans{{Key: key, EndKey: endKey}},
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(key), true, /* tight */
+		)
+		spanExpr.Unique = true
+		if invertedExpr == nil {
+			invertedExpr = spanExpr
+		} else {
+			invertedExpr = inverted.And(invertedExpr, spanExpr)
 		}
 	}
-	return inverted.MakeIntersection(children), nil
+	return invertedExpr, nil
 }
 
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys

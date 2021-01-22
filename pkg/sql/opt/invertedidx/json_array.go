@@ -95,7 +95,10 @@ func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 func getInvertedExprForJSONOrArrayIndex(
 	evalCtx *tree.EvalContext, d tree.Datum,
 ) inverted.Expression {
-	invertedExpr, err := invertedexpr.JSONOrArrayToContainingInvertedExpr(evalCtx, d)
+	var b []byte
+	invertedExpr, err := rowenc.EncodeContainingInvertedIndexSpans(
+		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
+	)
 	if err != nil {
 		panic(err)
 	}
