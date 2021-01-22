@@ -73,8 +73,8 @@ LOCALITY REGIONAL BY ROW
 statement ok
 CREATE TABLE regional_by_row_table (
   pk int PRIMARY KEY,
-  a int,
-  b int,
+  a int NOT NULL,
+  b int NOT NULL,
   INDEX (a),
   UNIQUE (b),
   FAMILY (pk, a, b)
@@ -88,8 +88,8 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----
 CREATE TABLE public.regional_by_row_table (
   pk INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
   crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
@@ -199,22 +199,26 @@ ca-central-1    10  11  12
 us-east-1       20  21  22
 ap-southeast-2  23  24  25
 
-# Tests creating a index on a REGIONAL BY ROW table.
+# Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
 CREATE INDEX new_idx ON regional_by_row_table(a, b)
+
+statement ok
+ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----
 CREATE TABLE public.regional_by_row_table (
   pk INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
   crdb_region public.crdb_internal_region NOT NULL DEFAULT gateway_region()::public.crdb_internal_region,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INDEX new_idx (a ASC, b ASC),
+  UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_a_b_crdb_region (pk, a, b, crdb_region)
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING
@@ -264,6 +268,18 @@ ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@new_idx CONFIGURE ZONE USING
   num_replicas = 3,
   constraints = '{+region=us-east-1: 1}',
+  lease_preferences = '[[+region=us-east-1]]';
+ALTER PARTITION "ap-southeast-2" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ap-southeast-2: 1}',
+  lease_preferences = '[[+region=ap-southeast-2]]';
+ALTER PARTITION "ca-central-1" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=ca-central-1: 1}',
+  lease_preferences = '[[+region=ca-central-1]]';
+ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@unique_b_a CONFIGURE ZONE USING
+  num_replicas = 3,
+  constraints = '{+region=us-east-1: 1}',
   lease_preferences = '[[+region=us-east-1]]'
 
 query TTB colnames
@@ -281,6 +297,9 @@ regional_by_row_table_a_idx  a            false
 regional_by_row_table_a_idx  crdb_region  true
 regional_by_row_table_b_key  b            false
 regional_by_row_table_b_key  crdb_region  true
+unique_b_a                   a            false
+unique_b_a                   b            false
+unique_b_a                   crdb_region  true
 
 # Tests for REGIONAL BY TABLE AS
 statement error  cannot use column crdb_region_col which has type INT8 in REGIONAL BY ROW AS\nDETAIL:\s+REGIONAL BY ROW AS must reference a column of type crdb_internal_region.

@@ -242,6 +242,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
+				// We need to allocate IDs upfront in the event we need to update the zone config
+				// in the same transaction.
+				if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+					return err
+				}
+				if err := params.p.configureZoneConfigForNewIndexPartitioning(
+					params.ctx,
+					n.tableDesc,
+					idx,
+				); err != nil {
+					return err
+				}
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
