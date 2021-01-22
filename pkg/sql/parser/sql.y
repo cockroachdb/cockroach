@@ -602,7 +602,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
+%token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -7922,6 +7922,12 @@ survival_goal_clause:
   {
     $$.val = tree.SurvivalGoalZoneFailure
   }
+| SURVIVE opt_equal AVAILABILITY ZONE FAILURE
+  {
+    /* SKIP DOC */
+    $$.val = tree.SurvivalGoalZoneFailure
+  }
+
 
 opt_survival_goal_clause:
   survival_goal_clause
@@ -12183,6 +12189,7 @@ unreserved_keyword:
 | AT
 | ATTRIBUTE
 | AUTOMATIC
+| AVAILABILITY
 | BACKUP
 | BACKUPS
 | BEFORE
