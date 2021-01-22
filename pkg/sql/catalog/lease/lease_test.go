@@ -36,9 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -2371,4 +2373,114 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		totalBackoff += time.Duration(seen.entries[i].Time - seen.entries[i-1].Time)
 	}
 	require.Greater(t, totalBackoff.Nanoseconds(), (3 * minimumBackoff).Nanoseconds())
+}
+
+// TestLeaseWithOfflineTables checks that leases on tables which had
+// previously gone offline at some point are not gratuitously dropped.
+// See #57834.
+func TestLeaseWithOfflineTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var descID uint32
+	testTableID := func() descpb.ID {
+		return descpb.ID(atomic.LoadUint32(&descID))
+	}
+
+	var lmKnobs lease.ManagerTestingKnobs
+	blockDescRefreshed := make(chan struct{}, 1)
+	lmKnobs.TestingDescriptorRefreshedEvent = func(desc *descpb.Descriptor) {
+		t := descpb.TableFromDescriptor(desc, hlc.Timestamp{})
+		if t != nil && testTableID() == t.ID {
+			blockDescRefreshed <- struct{}{}
+		}
+	}
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.SQLLeaseManager = &lmKnobs
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// This statement prevents timer issues due to periodic lease refreshing.
+	_, err := db.Exec(`
+		SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 0;
+	`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`
+		CREATE DATABASE t;
+		CREATE TABLE t.test(s STRING PRIMARY KEY);
+	`)
+	require.NoError(t, err)
+
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	atomic.StoreUint32(&descID, uint32(desc.ID))
+
+	// Sets table descriptor state and waits for that change to propagate to the
+	// lease manager's refresh worker.
+	setTableState := func(expected descpb.DescriptorState, next descpb.DescriptorState) {
+		err := descs.Txn(
+			ctx, s.ClusterSettings(),
+			s.LeaseManager().(*lease.Manager),
+			s.InternalExecutor().(*sql.InternalExecutor),
+			kvDB,
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+				flags.CommonLookupFlags.IncludeOffline = true
+				desc, err := descsCol.GetMutableTableByID(ctx, txn, testTableID(), flags)
+				require.NoError(t, err)
+				require.Equal(t, desc.State, expected)
+				desc.State = next
+				return descsCol.WriteDesc(ctx, false /* kvTrace */, desc, txn)
+			},
+		)
+		require.NoError(t, err)
+		// Wait for the lease manager's refresh worker to have processed the
+		// descriptor update.
+		<-blockDescRefreshed
+	}
+
+	// Checks that the lease manager state for `t.test` matches expectations.
+	checkLeaseState := func(shouldBePresent bool) {
+		var found bool
+		var wasTakenOffline bool
+		fn := func(desc catalog.Descriptor, takenOffline bool, _ int, _ tree.DTimestamp) bool {
+			if testTableID() != desc.GetID() {
+				return true
+			}
+			wasTakenOffline = takenOffline
+			found = true
+			return false
+		}
+		s.LeaseManager().(*lease.Manager).VisitLeases(fn)
+		if found && !wasTakenOffline {
+			require.Truef(t, shouldBePresent, "lease should not have been present but was")
+		} else if found {
+			require.Falsef(t, shouldBePresent, "lease should have been present but was marked as taken offline")
+		} else {
+			require.Falsef(t, shouldBePresent, "lease should have been present but wasn't")
+		}
+	}
+
+	// Check initial state.
+	checkLeaseState(false /* shouldBePresent */)
+
+	// Query the table, this should trigger a lease acquisition.
+	runner.CheckQueryResults(t, "SELECT s FROM t.test", [][]string{})
+	checkLeaseState(true /* shouldBePresent */)
+
+	// Take the table offline and back online again.
+	// This should relinquish the lease.
+	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_OFFLINE)
+	setTableState(descpb.DescriptorState_OFFLINE, descpb.DescriptorState_PUBLIC)
+	checkLeaseState(false /* shouldBePresent */)
+
+	// Query the table, thereby acquiring a lease once again.
+	runner.CheckQueryResults(t, "SELECT s FROM t.test", [][]string{})
+	checkLeaseState(true /* shouldBePresent */)
+
+	// Do a no-op descriptor update, lease should still be present.
+	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_PUBLIC)
+	checkLeaseState(true /* shouldBePresent */)
 }
