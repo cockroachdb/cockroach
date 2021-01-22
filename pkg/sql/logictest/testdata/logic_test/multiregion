@@ -719,3 +719,12 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 num_replicas = 3,
                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                 lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+CREATE DATABASE no_initial_region
+
+statement ok
+CREATE TABLE no_initial_region.t(k INT)
+
+statement ok
+ALTER DATABASE no_initial_region PRIMARY REGION "us-east-1"

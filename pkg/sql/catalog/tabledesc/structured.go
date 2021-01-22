@@ -1698,15 +1698,6 @@ func FormatTableLocalityConfig(c *descpb.TableDescriptor_LocalityConfig, f *tree
 // ValidateTableLocalityConfig validates whether the descriptor's locality
 // config is valid under the given database.
 func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog.DescGetter) error {
-	// There's no validation to do if the locality config is unset. It's worth
-	// noting that this may be the case even if the enclosing database is a
-	// multi-region DB. This is because tables inside are assumed to Regional By
-	// Table tables homed in the primary region if no locality was set explicitly
-	// or the table was created before the first region was added.
-	if desc.LocalityConfig == nil {
-		return nil
-	}
-
 	dbDesc, err := dg.GetDesc(ctx, desc.ParentID)
 	if err != nil {
 		return err
@@ -1714,6 +1705,19 @@ func (desc *wrapper) ValidateTableLocalityConfig(ctx context.Context, dg catalog
 	db, isDB := dbDesc.(catalog.DatabaseDescriptor)
 	if !isDB {
 		return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+	}
+
+	if desc.LocalityConfig == nil {
+		if db.IsMultiRegion() {
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"database %s is multi-region enabled, but table %s has no locality set",
+				db.DatabaseDesc().Name,
+				desc.Name,
+			)
+		}
+		// Nothing to validate for non-multi-region databases.
+		return nil
 	}
 
 	if !db.IsMultiRegion() {
@@ -4175,4 +4179,48 @@ func (desc *Mutable) SetDropped() {
 func (desc *Mutable) SetOffline(reason string) {
 	desc.State = descpb.DescriptorState_OFFLINE
 	desc.OfflineReason = reason
+}
+
+// SetTableLocalityRegionalByTable sets the descriptor's locality config to
+// regional at the table level with homing in the supplied region. An empty
+// region string denotes that the table is homed in the primary region.
+func (desc *Mutable) SetTableLocalityRegionalByTable(region tree.Name) {
+	if desc.LocalityConfig == nil {
+		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	}
+	l := &descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
+		RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{},
+	}
+	if region != tree.PrimaryRegionLocalityName {
+		regionName := descpb.RegionName(region)
+		l.RegionalByTable.Region = &regionName
+	}
+	desc.LocalityConfig.Locality = l
+}
+
+// SetTableLocalityRegionalByRow sets the descriptor's locality config to
+// regional at the row level. An empty regionColName denotes the default
+// crdb_region partitioning column.
+func (desc *Mutable) SetTableLocalityRegionalByRow(regionColName string) {
+	if desc.LocalityConfig == nil {
+		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	}
+	rbr := &descpb.TableDescriptor_LocalityConfig_RegionalByRow{}
+	if regionColName != "" {
+		rbr.As = &regionColName
+	}
+	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+		RegionalByRow: rbr,
+	}
+}
+
+// SetTableLocalityGlobal sets the descriptor's locality config to a global
+// table.
+func (desc *Mutable) SetTableLocalityGlobal() {
+	if desc.LocalityConfig == nil {
+		desc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
+	}
+	desc.LocalityConfig.Locality = &descpb.TableDescriptor_LocalityConfig_Global_{
+		Global: &descpb.TableDescriptor_LocalityConfig_Global{},
+	}
 }

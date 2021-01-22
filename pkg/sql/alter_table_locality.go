@@ -114,16 +114,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		newRegion = &newRegionName
 	}
 
-	// In all cases if we get down here we need to update the Locality info in the table
-	// descriptor. It's possible here that the LocalityConfig is nil, if we're altering
-	// from a table that was not provided a table locality at creation. Allocate a
-	// LocalityConfig here to be used below. Note that all ALTERs which change the
-	// table locality will result in a LocalityConfig existing on the table (i.e. there
-	// currently is no way to remove the LocalityConfig from a table via ALTER).
-	if n.tableDesc.LocalityConfig == nil {
-		n.tableDesc.LocalityConfig = &descpb.TableDescriptor_LocalityConfig{}
-	}
-
 	// Setup the Locality and Region fields of the LocalityConfig. In cases where we're
 	// altering to the PRIMARY REGION, the Region will be set to nil so that SHOW CREATE
 	// TABLE will show "REGIONAL BY TABLE IN PRIMARY REGION".
@@ -135,12 +125,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		}
 
 	// Validate the new locality before updating the table descriptor.
-	tableName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(n.tableDesc.GetName()))
-	if err := tabledesc.ValidateTableLocalityConfig(
-		tableName.String(),
-		n.tableDesc.LocalityConfig,
-		dbDesc,
-	); err != nil {
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
+	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
 		return err
 	}
 
@@ -157,6 +143,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 	// Update the table's zone configuration. If we're altering to the PRIMARY REGION,
 	// we don't want to set a zone configuration (in fact, we'll remove any existing zone
 	// configuration below).
+	tableName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(n.tableDesc.GetName()))
 	if !alterToPrimaryRegion {
 		if err := params.p.applyZoneConfigFromTableLocalityConfig(
 			params.ctx,
