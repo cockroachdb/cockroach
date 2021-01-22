@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -213,7 +212,6 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 				}
 				// We have processed all tuples in the current batch from the
 				// buffered group, so we need to dequeue the next one.
-				b.left.unlimitedAllocator.ReleaseBatch(currentBatch)
 				currentBatch, err = b.left.tuples.dequeue(ctx)
 				if err != nil {
 					colexecerror.InternalError(err)
@@ -319,7 +317,6 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 					}
 					// We have fully processed the current batch, so we need to
 					// get the next one.
-					b.right.unlimitedAllocator.ReleaseBatch(currentBatch)
 					currentBatch, err = b.right.tuples.dequeue(ctx)
 					if err != nil {
 						colexecerror.InternalError(err)
