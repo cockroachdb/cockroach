@@ -85,6 +85,7 @@ type spillingQueue struct {
 // spillingQueueInitialItemsLen is the initial capacity of the in-memory buffer
 // of the spilling queues (memory limit permitting).
 var spillingQueueInitialItemsLen = int64(util.ConstantWithMetamorphicTestRange(
+	"spilling-queue-initial-len",
 	64 /* defaultValue */, 1 /* min */, 16, /* max */
 ))
 
