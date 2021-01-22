@@ -17,21 +17,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SetOperator is an operator on sets.
-type SetOperator int32
-
-const (
-	// None is used in an expression node with no children.
-	None SetOperator = 0
-	// SetUnion unions the children.
-	SetUnion SetOperator = 1
-	// SetIntersection intersects the children.
-	SetIntersection SetOperator = 2
-)
-
 // SpanExpression forms a set expression tree that represents unions and
 // intersections over spans read from an inverted index.
-type SpanExpression struct {
+type SpanExpression2 struct {
 	// Tight is true if the SpanExpression produces no false positives. In other
 	// words, if the SpanExpression is Tight, the original JSON, Array, or spatial
 	// expression will not need to be reevaluated on each row output by the query
@@ -56,19 +44,19 @@ type SpanExpression struct {
 	// Operator is the set operation to apply to the Children (either UNION or
 	// INTERSECTION).
 	Operator SetOperator
-	Children []*SpanExpression
+	Children []*SpanExpression2
 }
 
 // MakeIntersection makes a new span expression that is an intersection of the
 // provided children. The values of Tight and Unique are determined based on the
 // values in the children.
-func MakeIntersection(children []*SpanExpression) *SpanExpression {
+func MakeIntersection(children []*SpanExpression2) *SpanExpression2 {
 	tight, unique := true, true
 	for i := range children {
 		tight = tight && children[i].Tight
 		unique = unique && children[i].Unique
 	}
-	return &SpanExpression{
+	return &SpanExpression2{
 		Operator: SetIntersection,
 		Tight:    tight,
 		Unique:   unique,
@@ -78,7 +66,7 @@ func MakeIntersection(children []*SpanExpression) *SpanExpression {
 
 // ContainsKeys traverses the SpanExpression to determine whether the span
 // expression contains the given keys. It is primarily used for testing.
-func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
+func (s *SpanExpression2) ContainsKeys(keys [][]byte) (bool, error) {
 	// First check that the span expression is valid. Only leaf nodes in a
 	// SpanExpression tree are allowed to have UnionSpans set.
 	if len(s.UnionSpans) > 0 && len(s.Children) > 0 {
@@ -134,7 +122,7 @@ func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
 //   is less than it (according to Span.Compare) or all corresponding spans are
 //   equal but there are fewer spans in a.UnionSpans.
 // - Each node's UnionSpans will itself be sorted using Span.Compare.
-func (s *SpanExpression) SortAndUniquifySpans() {
+func (s *SpanExpression2) SortAndUniquifySpans() {
 	// First sort the union spans.
 	sort.Slice(s.UnionSpans, func(i int, j int) bool {
 		return s.UnionSpans[i].Compare(s.UnionSpans[j]) < 0
@@ -174,7 +162,7 @@ func (s *SpanExpression) SortAndUniquifySpans() {
 // - If neither SpanExpression has children, the result depends on
 //   the output of running compareSpans on the UnionSpans of each
 //   SpanExpression.
-func compare(a, b *SpanExpression) int {
+func compare(a, b *SpanExpression2) int {
 	if len(a.Children) > 0 {
 		return -1
 	}

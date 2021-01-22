@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -356,8 +356,8 @@ type InvertedSpans interface {
 	End(i int) []byte
 }
 
-var _ InvertedSpans = invertedexpr.InvertedSpans{}
-var _ InvertedSpans = invertedexpr.SpanExpressionProtoSpans{}
+var _ InvertedSpans = inverted.Spans{}
+var _ InvertedSpans = inverted.SpanExpressionProtoSpans{}
 
 // SpansFromInvertedSpans constructs spans to scan an inverted index.
 //

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -731,9 +732,9 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
-		var spanExpr *invertedexpr.SpanExpression
+		var spanExpr *inverted.SpanExpression
 		var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
-		var spansToRead invertedexpr.InvertedSpans
+		var spansToRead inverted.Spans
 		var constraint *constraint.Constraint
 		var filterOk, constraintOk bool
 
@@ -787,7 +788,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
 		needInvertedFilter := spanExpr != nil &&
-			(!spanExpr.Unique || spanExpr.Operator != invertedexpr.None)
+			(!spanExpr.Unique || spanExpr.Operator != inverted.None)
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID
@@ -1296,9 +1297,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		}
 
 		// Recursively traverse the span expression to find single-value spans.
-		var vals []invertedexpr.EncInvertedVal
-		var getVals func(invertedExpr invertedexpr.InvertedExpression)
-		getVals = func(invertedExpr invertedexpr.InvertedExpression) {
+		var vals []inverted.EncVal
+		var getVals func(invertedExpr inverted.Expression)
+		getVals = func(invertedExpr inverted.Expression) {
 			if len(vals) >= 2 {
 				// We only need two constraints to plan a zigzag join, so don't bother
 				// exploring further.
@@ -1306,16 +1307,16 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				//  constraints instead of the first two.
 				return
 			}
-			spanExprLocal, ok := invertedExpr.(*invertedexpr.SpanExpression)
+			spanExprLocal, ok := invertedExpr.(*inverted.SpanExpression)
 			if !ok {
 				return
 			}
 			switch spanExprLocal.Operator {
-			case invertedexpr.SetIntersection:
+			case inverted.SetIntersection:
 				getVals(spanExprLocal.Left)
 				getVals(spanExprLocal.Right)
 				return
-			case invertedexpr.SetUnion:
+			case inverted.SetUnion:
 				// Don't recurse into UNIONs. We can't build a zigzag join with those
 				// spans.
 				return

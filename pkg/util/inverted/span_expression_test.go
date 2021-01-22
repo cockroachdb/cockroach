@@ -30,10 +30,10 @@ type spanExprForTest struct {
 }
 
 // makeSpanExpression converts a spanExprForTest to a SpanExpression.
-func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
-	spanExpr := &SpanExpression{
+func (expr spanExprForTest) makeSpanExpression() *SpanExpression2 {
+	spanExpr := &SpanExpression2{
 		UnionSpans: make(roachpb.Spans, len(expr.unionSpans)),
-		Children:   make([]*SpanExpression, len(expr.children)),
+		Children:   make([]*SpanExpression2, len(expr.children)),
 		Operator:   expr.operator,
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/util/inverted"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,7 +88,7 @@ func (b *indexScanBuilder) setScan(scanPrivate *memo.ScanPrivate) {
 // addInvertedFilter wraps the input expression with an InvertedFilter
 // expression having the given span expression.
 func (b *indexScanBuilder) addInvertedFilter(
-	spanExpr *invertedexpr.SpanExpression,
+	spanExpr *inverted.SpanExpression,
 	pfState *invertedexpr.PreFiltererStateForInvertedFilterer,
 	invertedCol opt.ColumnID,
 ) {

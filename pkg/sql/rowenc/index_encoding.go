@@ -847,7 +847,7 @@ func EncodeInvertedIndexTableKeys(
 // The input inKey is prefixed to the keys in all returned spans.
 func EncodeContainingInvertedIndexSpans(
 	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spanExpr *inverted.SpanExpression, err error) {
+) (spanExpr *inverted.SpanExpression2, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -907,12 +907,12 @@ func encodeArrayInvertedIndexTableKeys(
 // duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
-) (spanExpr *inverted.SpanExpression, err error) {
+) (spanExpr *inverted.SpanExpression2, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array. Return a SpanExpression that
 		// requires a full scan of the inverted index.
 		endKey := roachpb.Key(inKey).PrefixEnd()
-		spanExpr = &inverted.SpanExpression{
+		spanExpr = &inverted.SpanExpression2{
 			Tight:      true,
 			Unique:     false,
 			UnionSpans: roachpb.Spans{roachpb.Span{Key: inKey, EndKey: endKey}},
@@ -923,17 +923,17 @@ func encodeContainingArrayInvertedIndexSpans(
 	if val.HasNulls {
 		// If there are any nulls, return empty spans. This is needed to ensure
 		// that `SELECT ARRAY[NULL, 2] @> ARRAY[NULL, 2]` is false.
-		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
+		return &inverted.SpanExpression2{Tight: true, Unique: true}, nil
 	}
 
 	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
 	if err != nil {
 		return nil, err
 	}
-	children := make([]*inverted.SpanExpression, len(keys))
+	children := make([]*inverted.SpanExpression2, len(keys))
 	for i, key := range keys {
 		endKey := roachpb.Key(key).PrefixEnd()
-		children[i] = &inverted.SpanExpression{
+		children[i] = &inverted.SpanExpression2{
 			Tight:      true,
 			Unique:     true,
 			UnionSpans: roachpb.Spans{{Key: key, EndKey: endKey}},
