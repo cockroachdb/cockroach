@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -1126,6 +1127,55 @@ CREATE TABLE crdb_internal.session_trace (
 			if err := addRow(r[:]...); err != nil {
 				return err
 			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalNodeStacks = virtualSchemaTable{
+	comment: `goroutine stacks on the local node`,
+	schema: `
+CREATE TABLE crdb_internal.node_stacks (
+  goroutine_id INT NOT NULL,
+  labels       STRING NOT NULL,    -- TODO use something better
+  stack        STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, _ *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		var buf bytes.Buffer
+		if err := pprof.Lookup("stacks").WriteTo(&buf, 1 /* debug */); err != nil {
+			return err
+		}
+		var prof roachpb.Profile
+		if err := protoutil.Unmarshal(buf.Bytes(), &prof); err != nil {
+			return err
+		}
+		/*
+			// Do something useful here, this is a good starter to learn what to crib:
+			package main
+
+			import (
+				"bytes"
+				"fmt"
+				"runtime/pprof"
+				"github.com/google/pprof/profile"
+			)
+
+			func main() {
+				var buf bytes.Buffer
+				pprof.Lookup("goroutine").WriteTo(&buf, 0)
+				p, err := profile.Parse(&buf)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("%+v", p)
+			}
+		*/
+		if err := addRow(
+			tree.NewDInt(0),
+			tree.NewDString("foo"),
+			tree.NewDString("bar"),
+		); err != nil {
+			return err
 		}
 		return nil
 	},

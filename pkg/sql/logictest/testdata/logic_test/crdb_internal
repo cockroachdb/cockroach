@@ -804,3 +804,7 @@ testdb         root      ALL
 
 statement ok
 SET DATABASE = test
+
+query ITT
+SELECT * FROM crdb_internal.node_stacks
+----
