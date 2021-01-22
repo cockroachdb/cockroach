@@ -319,8 +319,35 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                               lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
+statement ok
 ALTER TABLE regional_by_table_in_primary_region SET LOCALITY GLOBAL
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                     i INT8 NULL,
+                                     FAMILY "primary" (i, rowid)
+) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_primary_region
+----
+TABLE regional_by_table_in_primary_region  ALTER TABLE regional_by_table_in_primary_region CONFIGURE ZONE USING
+                                           range_min_bytes = 134217728,
+                                           range_max_bytes = 536870912,
+                                           gc.ttlseconds = 90000,
+                                           num_replicas = 3,
+                                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                           lease_preferences = '[[+region=ca-central-1]]'
+
+# Drop the table and recreate it to get back to original state (this is required because alter table
+# from global to regional by table is not yet implemented).
+statement ok
+DROP TABLE regional_by_table_in_primary_region
+
+statement ok
+CREATE TABLE regional_by_table_in_primary_region (i int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY ROW
@@ -347,7 +374,7 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                               lease_preferences = '[[+region=ca-central-1]]'
 
-# drop and recreate the table to get it back to the "no region" state
+# Drop and recreate the table to get it back to the "no region" state.
 statement ok
 DROP TABLE regional_by_table_no_region
 
@@ -376,7 +403,7 @@ TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFI
                                    constraints = '{+region=ap-southeast-2: 3}',
                                    lease_preferences = '[[+region=ap-southeast-2]]'
 
-# drop and recreate the table to get it back to the "no region" state
+# Drop and recreate the table to get it back to the "no region" state.
 statement ok
 DROP TABLE regional_by_table_no_region
 
@@ -405,8 +432,35 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                               lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
+statement ok
 ALTER TABLE regional_by_table_no_region SET LOCALITY GLOBAL
+
+query TT
+SHOW CREATE TABLE regional_by_table_no_region
+----
+regional_by_table_no_region  CREATE TABLE public.regional_by_table_no_region (
+                             i INT8 NULL,
+                             FAMILY "primary" (i, rowid)
+) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_no_region
+----
+TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFIGURE ZONE USING
+                                   range_min_bytes = 134217728,
+                                   range_max_bytes = 536870912,
+                                   gc.ttlseconds = 90000,
+                                   num_replicas = 3,
+                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                   lease_preferences = '[[+region=ca-central-1]]'
+
+# Drop the table and recreate it to get back to original state (this is required because alter table
+# from global to regional by table is not yet implemented).
+statement ok
+DROP TABLE regional_by_table_no_region
+
+statement ok
+CREATE TABLE regional_by_table_no_region (i int) LOCALITY REGIONAL BY TABLE
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_no_region SET LOCALITY REGIONAL BY ROW
@@ -483,8 +537,35 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                               lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
+statement ok
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY GLOBAL
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_us_east
+----
+regional_by_table_in_us_east  CREATE TABLE public.regional_by_table_in_us_east (
+                              i INT8 NULL,
+                              FAMILY "primary" (i, rowid)
+) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_table_in_us_east
+----
+TABLE regional_by_table_in_us_east  ALTER TABLE regional_by_table_in_us_east CONFIGURE ZONE USING
+                                    range_min_bytes = 134217728,
+                                    range_max_bytes = 536870912,
+                                    gc.ttlseconds = 90000,
+                                    num_replicas = 3,
+                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Drop the table and recreate it to get back to original state (this is required because alter table
+# from global to regional by table is not yet implemented).
+statement ok
+DROP TABLE regional_by_table_in_us_east
+
+statement ok
+CREATE TABLE regional_by_table_in_us_east (i int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_table_in_us_east SET LOCALITY REGIONAL BY ROW
