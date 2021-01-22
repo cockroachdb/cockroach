@@ -1671,40 +1671,6 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 	return false
 }
 
-// MapFilterCols returns a new FiltersExpr with all the src column IDs in
-// the input expression replaced with column IDs in dst.
-//
-// NOTE: Every ColumnID in src must map to the a ColumnID in dst with the same
-// relative position in the ColSets. For example, if src and dst are (1, 5, 6)
-// and (7, 12, 15), then the following mapping would be applied:
-//
-//   1 => 7
-//   5 => 12
-//   6 => 15
-func (c *CustomFuncs) MapFilterCols(
-	filters memo.FiltersExpr, src, dst opt.ColSet,
-) memo.FiltersExpr {
-	if src.Len() != dst.Len() {
-		panic(errors.AssertionFailedf(
-			"src and dst must have the same number of columns, src: %v, dst: %v",
-			src,
-			dst,
-		))
-	}
-
-	// Map each column in src to a column in dst based on the relative position
-	// of both the src and dst ColumnIDs in the ColSet.
-	var colMap opt.ColMap
-	dstCol, _ := dst.Next(0)
-	for srcCol, ok := src.Next(0); ok; srcCol, ok = src.Next(srcCol + 1) {
-		colMap.Set(int(srcCol), int(dstCol))
-		dstCol, _ = dst.Next(dstCol + 1)
-	}
-
-	newFilters := c.RemapCols(&filters, colMap).(*memo.FiltersExpr)
-	return *newFilters
-}
-
 // MakeSetPrivate constructs a new SetPrivate with given left, right, and out
 // columns.
 func (c *CustomFuncs) MakeSetPrivate(left, right, out opt.ColSet) *memo.SetPrivate {

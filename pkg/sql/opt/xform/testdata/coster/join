@@ -127,21 +127,21 @@ SELECT * FROM g AS g1 INNER INVERTED JOIN g AS g2 ON ST_Contains(g1.geom, g2.geo
 ----
 inner-join (lookup g [as=g2])
  ├── columns: k:1!null geom:2!null k:5!null geom:6!null
- ├── key columns: [5] = [5]
+ ├── key columns: [9] = [5]
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=9801]
- ├── cost: 1101844.05
+ ├── cost: 1101944.05
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── inner-join (inverted g@secondary [as=g2])
- │    ├── columns: g1.k:1!null g1.geom:2 g2.k:5!null
+ │    ├── columns: g1.k:1!null g1.geom:2 g2.k:9!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
- │    │    └── st_contains(g1.geom:2, g2.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(5)=999.956829, null(5)=0]
+ │    │    └── st_contains(g1.geom:2, g2.geom:10)
+ │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(9)=999.956829, null(9)=0]
  │    ├── cost: 41444.03
- │    ├── key: (1,5)
+ │    ├── key: (1,9)
  │    ├── fd: (1)-->(2)
  │    ├── scan g [as=g1]
  │    │    ├── columns: g1.k:1!null g1.geom:2

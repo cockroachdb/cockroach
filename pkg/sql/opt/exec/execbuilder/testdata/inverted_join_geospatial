@@ -39,7 +39,7 @@ vectorized: true
           table: ltable@primary
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGO0zAQhu88xWhOW2lgm3Th4JMRFCmr0ixtD0goWoV4VJmmdrAdVFT13ZGdFUsLregtM55v_OmP9-i_tyhw-vlh9raYw837YrlafpqNYDmdTd-toN0QuE0GHxblR2hD_bVluC-LObj0Lddst4_aKN5BOQcfHrUJ7Dw3wd8M46_iSEZPQKpGSGis4nm9ZY_iC2ZYEXbONuy9dbG1TwOF2qEYE2rT9SG2K8LGOkaxx6BDyyhwFdcuuFbsbsdIqDjUuk1rBwHZOb2t3U8kXHa18QJeImHZBwEyI5ljdSC0fXi-wod6zSiyA_2_RmF-sAus7q027G6zY5O_0kL6TUx3nTtJTuYE8m50pElyQvL1Wdn8Gtko-RRZ_k_R58hm1m76Dr5ZbcAaAdHiLoqd_u3k_ObIeXLWdnKN7YJ9Z43nI9Nzm8eHipDVmodX5G3vGn5wtknXDGWZuNRQ7MNwmg1FYYajKPgnnF2E88twfhGenMDV4cWvAAAA__-3vS0U
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUksGO0zAQhu88xWhOW2lgm3Th4JMRFCmr0ixtD0goWoV4VJmmdrAdVFT13ZGdFUsLregtM55v_OmP9-i_tyhw-vlh9raYw837YrlafpqNYDmdTd-toN0QuE0GHxblR2hD_bVluC-LObj0Lddst4_aKN5BOQcfHrUJ7Dw3wd8M46_iSEZPQKpGSGis4nm9ZY_iC2ZYEXbONuy9dbG1TwOF2qEYE2rT9SG2K8LGOkaxx6BDyyhwFdcuuFbsbsdIqDjUuk1rBwHZOb2t3U8kXHa18QJeImHZBwEyI5ljdSC0fXi-wod6zSiyA_2_RmF-sAus7q027G6zY5O_0kL6TUx3nTtJTuYE8m50pElyQvL1Wdn8Gtko-RRZ_k_R58hm1m76Dr5ZbcAaAdHiLoqd_u3k_ObI-bzt5BrbBfvOGs9Hpuc2jw8VIas1D6_I2941_OBsk64ZyjJxqaHYh-E0G4rCDEdR8E84uwjnl-H8Ijw5gavDi18BAAD__7oxLRY=
 
 query T
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
@@ -91,41 +91,45 @@ ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.g
 distribution: local
 vectorized: true
 ·
-• project
+• sort
 │ columns: (lk, rk1)
 │ ordering: +lk,+rk1
 │ estimated row count: 326,700 (missing stats)
+│ order: +lk,+rk1
+│ already ordered: +lk
 │
 └── • project
-    │ columns: (lk, geom1, rk1, geom)
-    │ ordering: +lk,+rk1
+    │ columns: (lk, rk1)
+    │ ordering: +lk
     │ estimated row count: 326,700 (missing stats)
     │
-    └── • lookup join (inner)
-        │ columns: (lk, geom1, rk1, rk2, geom)
-        │ ordering: +lk,+rk1
-        │ table: rtable@primary
-        │ equality: (rk1, rk2) = (rk1,rk2)
-        │ equality cols are key
-        │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
+    └── • project
+        │ columns: (lk, geom1, rk1, geom)
+        │ ordering: +lk
+        │ estimated row count: 326,700 (missing stats)
         │
-        └── • sort
-            │ columns: (lk, geom1, rk1, rk2)
-            │ ordering: +lk,+rk1
-            │ estimated row count: 10,000 (missing stats)
-            │ order: +lk,+rk1
+        └── • lookup join (inner)
+            │ columns: (lk, geom1, rk1, rk2, rk1, geom)
+            │ ordering: +lk
+            │ table: rtable@primary
+            │ equality: (rk1, rk2) = (rk1,rk2)
+            │ equality cols are key
+            │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
+                │ ordering: +lk
                 │ estimated row count: 10,000 (missing stats)
                 │
                 └── • inverted join (inner)
                     │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
+                    │ ordering: +lk
                     │ table: rtable@geom_index
                     │ inverted expr: st_intersects(geom1, geom_inverted_key) OR st_dwithin(geom1, geom_inverted_key, 2.0)
                     │
                     └── • scan
                           columns: (lk, geom1)
+                          ordering: +lk
                           estimated row count: 1,000 (missing stats)
                           table: ltable@primary
                           spans: FULL SCAN
@@ -156,7 +160,7 @@ vectorized: true
         │ estimated row count: 9,801 (missing stats)
         │
         └── • lookup join (inner)
-            │ columns: (lk, geom1, rk1, rk2, geom)
+            │ columns: (lk, geom1, rk1, rk2, rk1, geom)
             │ ordering: +lk
             │ table: rtable@primary
             │ equality: (rk1, rk2) = (rk1,rk2)
@@ -199,7 +203,7 @@ vectorized: true
     │ estimated row count: 3,267 (missing stats)
     │
     └── • lookup join (inner)
-        │ columns: (lk, geom1, geom2, rk1, rk2, geom)
+        │ columns: (lk, geom1, geom2, rk1, rk2, rk1, geom)
         │ table: rtable@primary
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
@@ -276,7 +280,7 @@ vectorized: true
     │ estimated row count: 10,000 (missing stats)
     │
     └── • lookup join (left outer)
-        │ columns: (lk, geom1, rk1, rk2, cont, geom)
+        │ columns: (lk, geom1, rk1, rk2, cont, rk1, geom)
         │ table: rtable@primary
         │ equality: (rk1, rk2) = (rk1,rk2)
         │ equality cols are key
@@ -446,32 +450,28 @@ vectorized: true
     │ columns: (lk, geom1)
     │ estimated row count: 997 (missing stats)
     │
-    └── • project
-        │ columns: (lk, geom1, rk1)
-        │ estimated row count: 1,100 (missing stats)
+    └── • lookup join (anti)
+        │ columns: (lk, geom1, rk1, rk2, cont)
+        │ table: rtable@primary
+        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality cols are key
+        │ pred: st_covers(geom1, geom)
         │
-        └── • lookup join (anti)
+        └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
-            │ table: rtable@primary
-            │ equality: (rk1, rk2) = (rk1,rk2)
-            │ equality cols are key
-            │ pred: st_covers(geom1, geom)
+            │ estimated row count: 1,111 (missing stats)
             │
-            └── • project
-                │ columns: (lk, geom1, rk1, rk2, cont)
-                │ estimated row count: 1,111 (missing stats)
+            └── • inverted join (left outer)
+                │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
+                │ table: rtable@geom_index
+                │ inverted expr: st_covers(geom1, geom_inverted_key)
+                │ on: (lk > 5) AND (rk1 > 12)
                 │
-                └── • inverted join (left outer)
-                    │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
-                    │ table: rtable@geom_index
-                    │ inverted expr: st_covers(geom1, geom_inverted_key)
-                    │ on: (lk > 5) AND (rk1 > 12)
-                    │
-                    └── • scan
-                          columns: (lk, geom1)
-                          estimated row count: 1,000 (missing stats)
-                          table: ltable@primary
-                          spans: FULL SCAN
+                └── • scan
+                      columns: (lk, geom1)
+                      estimated row count: 1,000 (missing stats)
+                      table: ltable@primary
+                      spans: FULL SCAN
 
 # Bounding box operations.
 statement ok
@@ -488,28 +488,31 @@ vectorized: true
 │ columns: (lk, rk1, rk2)
 │ estimated row count: 9,801 (missing stats)
 │
-└── • lookup join (inner)
-    │ columns: (lk, geom1, rk1, rk2, geom)
+└── • project
+    │ columns: (lk, geom1, rk1, geom, rk2)
     │ estimated row count: 9,801 (missing stats)
-    │ table: rtable@primary
-    │ equality: (rk1, rk2) = (rk1,rk2)
-    │ equality cols are key
-    │ pred: geom1 ~ geom
     │
-    └── • project
-        │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10,000 (missing stats)
+    └── • lookup join (inner)
+        │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
+        │ table: rtable@primary
+        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality cols are key
+        │ pred: geom1 ~ geom
         │
-        └── • inverted join (inner)
-            │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
-            │ table: rtable@geom_index
-            │ inverted expr: st_covers(geom1, geom_inverted_key)
+        └── • project
+            │ columns: (lk, geom1, rk1, rk2)
+            │ estimated row count: 10,000 (missing stats)
             │
-            └── • scan
-                  columns: (lk, geom1)
-                  estimated row count: 1,000 (missing stats)
-                  table: ltable@primary
-                  spans: FULL SCAN
+            └── • inverted join (inner)
+                │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
+                │ table: rtable@geom_index
+                │ inverted expr: st_covers(geom1, geom_inverted_key)
+                │
+                └── • scan
+                      columns: (lk, geom1)
+                      estimated row count: 1,000 (missing stats)
+                      table: ltable@primary
+                      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE)
@@ -522,28 +525,31 @@ vectorized: true
 │ columns: (lk, rk1, rk2)
 │ estimated row count: 9,801 (missing stats)
 │
-└── • lookup join (inner)
-    │ columns: (lk, geom1, rk1, rk2, geom)
+└── • project
+    │ columns: (lk, geom1, rk1, geom, rk2)
     │ estimated row count: 9,801 (missing stats)
-    │ table: rtable@primary
-    │ equality: (rk1, rk2) = (rk1,rk2)
-    │ equality cols are key
-    │ pred: geom ~ geom1
     │
-    └── • project
-        │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10,000 (missing stats)
+    └── • lookup join (inner)
+        │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
+        │ table: rtable@primary
+        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality cols are key
+        │ pred: geom ~ geom1
         │
-        └── • inverted join (inner)
-            │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
-            │ table: rtable@geom_index
-            │ inverted expr: st_coveredby(geom1, geom_inverted_key)
+        └── • project
+            │ columns: (lk, geom1, rk1, rk2)
+            │ estimated row count: 10,000 (missing stats)
             │
-            └── • scan
-                  columns: (lk, geom1)
-                  estimated row count: 1,000 (missing stats)
-                  table: ltable@primary
-                  spans: FULL SCAN
+            └── • inverted join (inner)
+                │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
+                │ table: rtable@geom_index
+                │ inverted expr: st_coveredby(geom1, geom_inverted_key)
+                │
+                └── • scan
+                      columns: (lk, geom1)
+                      estimated row count: 1,000 (missing stats)
+                      table: ltable@primary
+                      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE)
@@ -556,28 +562,31 @@ vectorized: true
 │ columns: (lk, rk1, rk2)
 │ estimated row count: 9,801 (missing stats)
 │
-└── • lookup join (inner)
-    │ columns: (lk, geom1, rk1, rk2, geom)
+└── • project
+    │ columns: (lk, geom1, rk1, geom, rk2)
     │ estimated row count: 9,801 (missing stats)
-    │ table: rtable@primary
-    │ equality: (rk1, rk2) = (rk1,rk2)
-    │ equality cols are key
-    │ pred: geom && geom1
     │
-    └── • project
-        │ columns: (lk, geom1, rk1, rk2)
-        │ estimated row count: 10,000 (missing stats)
+    └── • lookup join (inner)
+        │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
+        │ table: rtable@primary
+        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality cols are key
+        │ pred: geom && geom1
         │
-        └── • inverted join (inner)
-            │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
-            │ table: rtable@geom_index
-            │ inverted expr: st_intersects(geom1, geom_inverted_key)
+        └── • project
+            │ columns: (lk, geom1, rk1, rk2)
+            │ estimated row count: 10,000 (missing stats)
             │
-            └── • scan
-                  columns: (lk, geom1)
-                  estimated row count: 1,000 (missing stats)
-                  table: ltable@primary
-                  spans: FULL SCAN
+            └── • inverted join (inner)
+                │ columns: (lk, geom1, rk1, rk2, geom_inverted_key)
+                │ table: rtable@geom_index
+                │ inverted expr: st_intersects(geom1, geom_inverted_key)
+                │
+                └── • scan
+                      columns: (lk, geom1)
+                      estimated row count: 1,000 (missing stats)
+                      table: ltable@primary
+                      spans: FULL SCAN
 
 statement ok
 CREATE TABLE g (

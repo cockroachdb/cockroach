@@ -1507,11 +1507,9 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 
 	// Apply a post-projection if Cols doesn't contain all input columns.
 	//
-	// NB: For left outer paired-joins, this is where the continuation column and
-	// the PK columns for the right side, which were part of the inputCols, are
-	// projected away. (The GenerateInvertedJoins exploration rule has already
-	// done this for semi and anti paired-joins by adding a Project operator
-	// after the join).
+	// NB: For paired-joins, this is where the continuation column and the PK
+	// columns for the right side, which were part of the inputCols, are projected
+	// away.
 	if !inputCols.SubsetOf(join.Cols) {
 		outCols := join.Cols
 		if join.JoinType == opt.SemiJoinOp || join.JoinType == opt.AntiJoinOp {
