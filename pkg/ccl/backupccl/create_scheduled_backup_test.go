@@ -140,17 +140,17 @@ func (h *testHelper) createBackupSchedule(
 		var id int64
 		require.NoError(t, rows.Scan(&id, &unusedStr, &unusedStr, &unusedTS, &unusedStr, &unusedStr))
 		// Query system.scheduled_job table and load those schedules.
-		datums, cols, err := h.cfg.InternalExecutor.QueryWithCols(
+		datums, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 			context.Background(), "sched-load", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
 			id,
 		)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(datums))
+		require.NotNil(t, datums)
 
 		s := jobs.NewScheduledJob(h.env)
-		require.NoError(t, s.InitFromDatums(datums[0], cols))
+		require.NoError(t, s.InitFromDatums(datums, cols))
 		schedules = append(schedules, s)
 	}
 

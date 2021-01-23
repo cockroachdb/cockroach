@@ -661,17 +661,6 @@ func (ie *wrappedInternalExecutor) ExecEx(
 	return ie.wrapped.ExecEx(ctx, opName, txn, o, stmt, qargs...)
 }
 
-func (ie *wrappedInternalExecutor) QueryWithCols(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	o sessiondata.InternalExecutorOverride,
-	statement string,
-	qargs ...interface{},
-) ([]tree.Datums, colinfo.ResultColumns, error) {
-	panic("unimplemented")
-}
-
 func (ie *wrappedInternalExecutor) QueryRowEx(
 	ctx context.Context,
 	opName string,
@@ -691,6 +680,17 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 func (ie *wrappedInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
+	panic("not implemented")
+}
+
+func (ie *wrappedInternalExecutor) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
 	panic("not implemented")
 }
 
