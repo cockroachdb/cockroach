@@ -26,9 +26,9 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="SQL Connections"
+      title="Open SQL Sessions"
       sources={nodeSources}
-      tooltip={`The total number of active SQL connections ${tooltipSelection}.`}
+      tooltip={`The total number of open SQL Sessions ${tooltipSelection}.`}
     >
       <Axis label="connections">
         {_.map(nodeIDs, (node) => (
@@ -44,6 +44,29 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Open SQL Transactions"
+      sources={nodeSources}
+      tooltip={`The total number of SQL transactions currently open ${tooltipSelection}.`}
+    >
+      <Axis label="transactions">
+        <Metric name="cr.node.sql.txns.open" title="Open Transactions" />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Active SQL Statements"
+      sources={nodeSources}
+      tooltip={`The total number of SQL statements currently running ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric
+          name="cr.node.sql.distsql.queries.active"
+          title="Active Statements"
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="SQL Byte Traffic"
       sources={nodeSources}
       tooltip={`The total amount of SQL client network traffic in bytes per second ${tooltipSelection}.`}
@@ -55,7 +78,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SQL Queries"
+      title="SQL Statements"
       sources={nodeSources}
       tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
         successfully executed per second ${tooltipSelection}.`}
@@ -85,7 +108,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SQL Query Errors"
+      title="SQL Statement Errors"
       sources={nodeSources}
       tooltip={
         "The number of statements which returned a planning or runtime error."
@@ -101,21 +124,8 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Active Distributed SQL Queries"
-      sources={nodeSources}
-      tooltip={`The total number of distributed SQL queries currently running ${tooltipSelection}.`}
-    >
-      <Axis label="queries">
-        <Metric
-          name="cr.node.sql.distsql.queries.active"
-          title="Active Queries"
-        />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Active Flows for Distributed SQL Queries"
-      tooltip="The number of flows on each node contributing to currently running distributed SQL queries."
+      title="Active Flows for Distributed SQL Statements"
+      tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
     >
       <Axis label="flows">
         {_.map(nodeIDs, (node) => (
