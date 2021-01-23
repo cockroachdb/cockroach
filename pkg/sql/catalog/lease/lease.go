@@ -1993,7 +1993,7 @@ func (m *Manager) getResolvedTimestamp() hlc.Timestamp {
 var leaseRefreshLimit = settings.RegisterIntSetting(
 	"sql.tablecache.lease.refresh_limit",
 	"maximum number of descriptors to periodically refresh leases for",
-	50,
+	500,
 )
 
 // PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
