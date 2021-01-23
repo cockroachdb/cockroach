@@ -283,7 +283,7 @@ func (s *jobScheduler) executeSchedules(
 	defer stats.updateMetrics(&s.metrics)
 
 	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
-	rows, cols, err := s.InternalExecutor.QueryWithCols(
+	it, err := s.InternalExecutor.QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
 		txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -293,8 +293,10 @@ func (s *jobScheduler) executeSchedules(
 		return err
 	}
 
-	for _, row := range rows {
-		schedule, numRunning, err := s.unmarshalScheduledJob(row, cols)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		schedule, numRunning, err := s.unmarshalScheduledJob(row, it.Types())
 		if err != nil {
 			stats.malformed++
 			log.Errorf(ctx, "error parsing schedule: %+v", row)
@@ -343,7 +345,7 @@ func (s *jobScheduler) executeSchedules(
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
