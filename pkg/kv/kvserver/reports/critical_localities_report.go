@@ -103,23 +103,24 @@ func (r *replicationCriticalLocalitiesReportSaver) loadPreviousVersion(
 	}
 	const prevViolations = "select zone_id, subzone_id, locality, at_risk_ranges " +
 		"from system.replication_critical_localities"
-	rows, err := ex.Query(
+	it, err := ex.QueryIterator(
 		ctx, "get-previous-replication-critical-localities", txn, prevViolations,
 	)
 	if err != nil {
 		return err
 	}
 
-	r.previousVersion = make(LocalityReport, len(rows))
-	for _, row := range rows {
+	r.previousVersion = make(LocalityReport)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		key := localityKey{}
 		key.ZoneID = (config.SystemTenantObjectID)(*row[0].(*tree.DInt))
 		key.SubzoneID = base.SubzoneID(*row[1].(*tree.DInt))
 		key.locality = (LocalityRepr)(*row[2].(*tree.DString))
 		r.previousVersion[key] = localityStatus{(int32)(*row[3].(*tree.DInt))}
 	}
-
-	return nil
+	return err
 }
 
 func (r *replicationCriticalLocalitiesReportSaver) updateTimestamp(

@@ -146,17 +146,22 @@ func TestLocalityReport(t *testing.T) {
 func TableData(
 	ctx context.Context, tableName string, executor sqlutil.InternalExecutor,
 ) [][]string {
-	if rows, err := executor.Query(
-		ctx, "test-select-"+tableName, nil /* txn */, "select * from "+tableName); err == nil {
-		result := make([][]string, 0, len(rows))
-		for _, row := range rows {
+	if it, err := executor.QueryIterator(
+		ctx, "test-select-"+tableName, nil /* txn */, "select * from "+tableName,
+	); err == nil {
+		var result [][]string
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
 			stringRow := make([]string, 0, row.Len())
 			for _, item := range row {
 				stringRow = append(stringRow, item.String())
 			}
 			result = append(result, stringRow)
 		}
-		return result
+		if err == nil {
+			return result
+		}
 	}
 	return nil
 }

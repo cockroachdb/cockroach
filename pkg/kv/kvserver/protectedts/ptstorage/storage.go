@@ -76,7 +76,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 		meta = []byte{}
 	}
 	s := makeSettings(p.settings)
-	rows, err := p.ex.QueryEx(ctx, "protectedts-protect", txn,
+	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.Spans),
@@ -86,7 +86,17 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if err != nil {
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
-	row := rows[0]
+	ok, err := it.Next(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "failed to write record %v", r.ID)
+	}
+	if !ok {
+		return errors.Newf("failed to write record %v", r.ID)
+	}
+	row := it.Cur()
+	if err := it.Close(); err != nil {
+		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
 		if curNumSpans+int64(len(r.Spans)) > s.maxSpans {
@@ -132,13 +142,13 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-MarkVerified", txn,
+	numRows, err := p.ex.ExecEx(ctx, "protectedts-MarkVerified", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
-	if len(rows) == 0 {
+	if numRows == 0 {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -148,13 +158,13 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 	if txn == nil {
 		return errNoTxn
 	}
-	rows, err := p.ex.QueryEx(ctx, "protectedts-Release", txn,
+	numRows, err := p.ex.ExecEx(ctx, "protectedts-Release", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
-	if len(rows) == 0 {
+	if numRows == 0 {
 		return protectedts.ErrNotExists
 	}
 	return nil
@@ -200,20 +210,23 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 }
 
 func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
-	rows, err := p.ex.QueryEx(ctx, "protectedts-GetRecords", txn,
+	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
 		getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")
 	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	records := make([]ptpb.Record, len(rows))
-	for i, row := range rows {
-		if err := rowToRecord(ctx, row, &records[i]); err != nil {
+	var ok bool
+	var records []ptpb.Record
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var record ptpb.Record
+		if err := rowToRecord(ctx, it.Cur(), &record); err != nil {
 			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
+		records = append(records, record)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read records")
 	}
 	return records, nil
 }
