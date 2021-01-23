@@ -433,7 +433,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
-	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryWithCols(
+	it, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName(), Database: "system"},
 		query,
@@ -441,7 +441,15 @@ func execQuery(
 	if err != nil {
 		return err
 	}
-	return sendResult(ctx, c, cols, rows)
+	var rows []tree.Datums
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		rows = append(rows, it.Cur())
+	}
+	if err != nil {
+		return err
+	}
+	return sendResult(ctx, c, it.Types(), rows)
 }
 
 func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error {
