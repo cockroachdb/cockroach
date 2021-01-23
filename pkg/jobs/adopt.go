@@ -46,7 +46,7 @@ const (
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		rows, err := r.ex.Query(
+		numRows, err := r.ex.Exec(
 			ctx, "claim-jobs", txn, `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
@@ -60,8 +60,8 @@ RETURNING id;`,
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
-		if log.ExpensiveLogEnabled(ctx, 1) || len(rows) > 0 {
-			log.Infof(ctx, "claimed %d jobs", len(rows))
+		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
+			log.Infof(ctx, "claimed %d jobs", numRows)
 		}
 		return nil
 	})
@@ -69,7 +69,7 @@ RETURNING id;`,
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
-	rows, err := r.ex.QueryEx(
+	it, err := r.ex.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 SELECT id FROM system.jobs
@@ -77,16 +77,21 @@ WHERE (status = $1 OR status = $2) AND (claim_session_id = $3 AND claim_instance
 		StatusRunning, StatusReverting, s.ID().UnsafeBytes(), r.ID(),
 	)
 	if err != nil {
-		return errors.Wrapf(err, "could query for claimed jobs")
+		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
 
 	// This map will eventually contain the job ids that must be resumed.
-	claimedToResume := make(map[int64]struct{}, len(rows))
+	claimedToResume := make(map[int64]struct{})
 	// Initially all claimed jobs are supposed to be resumed but some may be
 	// running on this registry already so we will filter them out later.
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		id := int64(*row[0].(*tree.DInt))
 		claimedToResume[id] = struct{}{}
+	}
+	if err != nil {
+		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
 
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
@@ -255,7 +260,7 @@ func (r *Registry) runJob(
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		rows, err := r.ex.QueryEx(
+		it, err := r.ex.QueryIteratorEx(
 			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 UPDATE system.jobs
 SET status =
@@ -270,6 +275,20 @@ RETURNING id, status`,
 			StatusCancelRequested, StatusReverting,
 			s.ID().UnsafeBytes(), r.ID(),
 		)
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+		// Note that we have to buffer all rows first - before processing each
+		// job - because we have to make sure that the query executes without an
+		// error (otherwise, the system.jobs table might diverge from the jobs
+		// registry).
+		// TODO(yuzefovich): use QueryBufferedEx method once it is added to
+		// sqlutil.InternalExecutor interface.
+		var rows []tree.Datums
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			rows = append(rows, it.Cur())
+		}
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
