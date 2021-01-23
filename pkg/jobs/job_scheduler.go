@@ -274,7 +274,7 @@ func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
 
 func (s *jobScheduler) executeSchedules(
 	ctx context.Context, maxSchedules int64, txn *kv.Txn,
-) error {
+) (retErr error) {
 	stats, err := newLoopStats(ctx, s.env, s.InternalExecutor, txn)
 	if err != nil {
 		return err
@@ -283,7 +283,7 @@ func (s *jobScheduler) executeSchedules(
 	defer stats.updateMetrics(&s.metrics)
 
 	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
-	rows, cols, err := s.InternalExecutor.QueryWithCols(
+	it, err := s.InternalExecutor.QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
 		txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -293,8 +293,21 @@ func (s *jobScheduler) executeSchedules(
 		return err
 	}
 
-	for _, row := range rows {
-		schedule, numRunning, err := s.unmarshalScheduledJob(row, cols)
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() {
+		closeErr := it.Close()
+		if retErr == nil {
+			retErr = closeErr
+		}
+	}()
+
+	// The loop below might encounter an error after some schedules have been
+	// executed (i.e. previous iterations succeeded), and this is ok.
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		schedule, numRunning, err := s.unmarshalScheduledJob(row, it.Types())
 		if err != nil {
 			stats.malformed++
 			log.Errorf(ctx, "error parsing schedule: %+v", row)
@@ -343,7 +356,7 @@ func (s *jobScheduler) executeSchedules(
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {

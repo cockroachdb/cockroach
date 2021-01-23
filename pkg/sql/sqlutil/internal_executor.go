@@ -21,17 +21,18 @@ import (
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).
-// It is extracted in this "sql/util" package to avoid circular references and
+// It is extracted in this "sqlutil" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
 type InternalExecutor interface {
 	// Exec executes the supplied SQL statement and returns the number of rows
-	// affected (not like the results; see Query()). If no user has been previously
-	// set through SetSessionData, the statement is executed as the root user.
+	// affected (not like the full results; see QueryIterator()). If no user has
+	// been previously set through SetSessionData, the statement is executed as
+	// the root user.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
 	//
-	// Exec is deprecated because it may transparently execute a query as root. Use
-	// ExecEx instead.
+	// Exec is deprecated because it may transparently execute a query as root.
+	// Use ExecEx instead.
 	Exec(
 		ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
 	) (int, error)
@@ -39,8 +40,8 @@ type InternalExecutor interface {
 	// ExecEx is like Exec, but allows the caller to override some session data
 	// fields.
 	//
-	// The fields set in session that are set override the respective fields if they
-	// have previously been set through SetSessionData().
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
 	ExecEx(
 		ctx context.Context,
 		opName string,
@@ -50,28 +51,19 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (int, error)
 
-	// QueryWithCols executes the supplied SQL statement and returns the
-	// resulting rows as well as the computed ResultColumns of the input query.
+	// QueryRow executes the supplied SQL statement and returns a single row, or
+	// nil if no row is found, or an error if more that one row is returned.
 	//
-	// If txn is not nil, the statement will be executed in the respective txn.
-	QueryWithCols(
-		ctx context.Context, opName string, txn *kv.Txn,
-		o sessiondata.InternalExecutorOverride, statement string, qargs ...interface{},
-	) ([]tree.Datums, colinfo.ResultColumns, error)
-
-	// QueryRow is like Query, except it returns a single row, or nil if not row is
-	// found, or an error if more that one row is returned.
-	//
-	// QueryRow is deprecated (like Query). Use QueryRowEx() instead.
+	// QueryRow is deprecated. Use QueryRowEx() instead.
 	QueryRow(
 		ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
 
-	// QueryRowEx is like QueryRow, but allows the caller to override some session data
-	// fields.
+	// QueryRowEx is like QueryRow, but allows the caller to override some
+	// session data fields.
 	//
-	// The fields set in session that are set override the respective fields if they
-	// have previously been set through SetSessionData().
+	// The fields set in session that are set override the respective fields if
+	// they have previously been set through SetSessionData().
 	QueryRowEx(
 		ctx context.Context,
 		opName string,
@@ -80,6 +72,17 @@ type InternalExecutor interface {
 		stmt string,
 		qargs ...interface{},
 	) (tree.Datums, error)
+
+	// QueryRowExWithCols is like QueryRowEx, additionally returning the
+	// computed ResultColumns of the input query.
+	QueryRowExWithCols(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		session sessiondata.InternalExecutorOverride,
+		stmt string,
+		qargs ...interface{},
+	) (tree.Datums, colinfo.ResultColumns, error)
 
 	// QueryIterator executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
