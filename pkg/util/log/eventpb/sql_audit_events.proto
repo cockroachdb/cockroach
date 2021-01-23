@@ -1,0 +1,131 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// CommonSQLExecDetails contains the field common to all SQL query logs.
+message CommonSQLExecDetails {
+  // How the statement was being executed (exec/prepare, etc.)
+  string exec_mode = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Number of rows returned. For mutation statements (INSERT, etc) that
+  // do not produce result rows, this field reports the number of rows affected.
+  uint64 num_rows = 2 [(gogoproto.jsontag) = ",omitempty"];
+  // The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error.
+  string sqlstate = 3 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The text of the error if any.
+  string error_text = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Age of the query in milliseconds.
+  float age = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // Number of retries, when the txn was reretried automatically by the server.
+  uint32 num_retries = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // Whether the query contains a full table scan.
+  bool full_table_scan = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // Whether the query contains a full secondary index scan.
+  bool full_index_scan = 8 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+
+// Category: SQL Access Audit Events
+// Channel: SENSITIVE_ACCESS
+//
+// Events in this category are generated when a table has been
+// marked as audited via `ALTER ... EXPERIMENTAL_AUDIT SET`.
+//
+// This feature is experimental.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+
+// SensitiveTableAccess is recorded when an access is performed to
+// a table marked as audited.
+message SensitiveTableAccess {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the table being audited.
+  string table_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // How the table was accessed (r=read / rw=read/write).
+  string access_mode = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+
+// Category: SQL Slow Query Log
+// Channel: SQL_PERF
+//
+// Events in this category report slow query execution.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+//
+
+// SlowQuery is recorded when a query triggers the "slow query" condition.
+//
+// As of this writing, the condition requires:
+// - the cluster setting `sql.log.slow_query.latency_threshold`
+//   set to a non-zero value, AND
+// - EITHER of the following conditions:
+//   - the actual age of the query exceeds the configured threshold; OR
+//   - the query performs a full table/index scan.
+message SlowQuery {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Category: SQL Slow Query Log (Internal)
+// Channel: SQL_INTERNAL_PERF
+//
+// Events in this category report slow query execution by
+// internal executors, i.e. when CockroachDB internally issues
+// SQL statements.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+
+// SlowQueryInternal is recorded when a query triggers the "slow query" condition,
+// and the cluster setting `sql.log.slow_query.internal_queries.enabled` is
+// set.
+// See the documentation for the event type `slow_query` for details about
+// the "slow query" condition.
+message SlowQueryInternal {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Category: SQL Execution Log
+// Channel: SQL_EXEC
+//
+// Events in this category report executed queries.
+//
+// Note: these events are not written to `system.eventlog`, even
+// when the cluster setting `system.eventlog.enabled` is set. They
+// are only emitted via external logging.
+
+// QueryExecute is recorded when a query is executed,
+// and the cluster setting `sql.trace.log_statement_execute` is set.
+message QueryExecute {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}

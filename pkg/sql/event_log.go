@@ -31,12 +31,33 @@ import (
 func (p *planner) logEvent(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) error {
+	return p.logEventWithSystemEventLogOption(ctx, descID, event, true /* writeToEventLog */)
+}
+
+func (p *planner) logEventOnlyExternally(
+	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
+) {
+	// The API contract for logEventWithSystemEventLogOption() is that it returns
+	// no error when system.eventlog is not written to.
+	_ = p.logEventWithSystemEventLogOption(ctx, descID, event, false /* writeToEventLog */)
+}
+
+// logEventWithSystemEventLogOption is like logEvent() but it gives
+// control to the caller as to whether the entry is written into
+// system.eventlog.
+//
+// If writeToEventLog is false, this function guarantees that it
+// returns no error.
+func (p *planner) logEventWithSystemEventLogOption(
+	ctx context.Context, descID descpb.ID, event eventpb.EventPayload, writeToEventLog bool,
+) error {
 	// Compute the common fields from data already known to the planner.
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
 
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, event)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, pl, event, writeToEventLog)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -67,7 +88,9 @@ func logEventInternalForSchemaChanges(
 		int32(descID),
 		int32(execCfg.NodeID.SQLInstanceID()),
 		false, /* skipExternalLog */
-		event)
+		event,
+		false, /* onlyLog */
+	)
 }
 
 // logEventInternalForSQLStatements emits a cluster event on behalf of
@@ -75,6 +98,9 @@ func logEventInternalForSchemaChanges(
 // have access to a (*planner) and the current statement metadata.
 //
 // Note: usage of this interface should be minimized.
+//
+// If writeToEventLog is false, this function guarantees that it
+// returns no error.
 func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
@@ -83,7 +109,9 @@ func logEventInternalForSQLStatements(
 	user security.SQLUsername,
 	appName string,
 	stmt string,
+	placeholders tree.QueryArguments,
 	event eventpb.EventPayload,
+	writeToEventLog bool,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
 	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
@@ -96,6 +124,12 @@ func logEventInternalForSQLStatements(
 	m.ApplicationName = appName
 	m.User = user.Normalized()
 	m.DescriptorID = uint32(descID)
+	if len(placeholders) > 0 {
+		m.PlaceholderValues = make([]string, len(placeholders))
+		for idx, val := range placeholders {
+			m.PlaceholderValues[idx] = val.String()
+		}
+	}
 
 	// Delegate the storing of the event to the regular event logic.
 	return InsertEventRecord(ctx, execCfg.InternalExecutor,
@@ -103,7 +137,9 @@ func logEventInternalForSQLStatements(
 		int32(descID),
 		int32(execCfg.NodeID.SQLInstanceID()),
 		false, /* skipExternalLog */
-		event)
+		event,
+		!writeToEventLog,
+	)
 }
 
 var eventLogEnabled = settings.RegisterBoolSetting(
@@ -124,6 +160,9 @@ var eventLogEnabled = settings.RegisterBoolSetting(
 //
 // Note: the targetID and reportingID columns are deprecated and
 // should be removed after v21.1 is released.
+//
+// If onlyLog is set, this function guarantees that it returns no
+// error.
 func InsertEventRecord(
 	ctx context.Context,
 	ex *InternalExecutor,
@@ -131,6 +170,7 @@ func InsertEventRecord(
 	targetID, reportingID int32,
 	skipExternalLog bool,
 	info eventpb.EventPayload,
+	onlyLog bool,
 ) error {
 	eventType := eventpb.GetEventTypeName(info)
 
@@ -140,6 +180,11 @@ func InsertEventRecord(
 	// The caller is responsible for the timestamp field.
 	if info.CommonDetails().Timestamp == 0 {
 		return errors.AssertionFailedf("programming error: timestamp field in event not populated: %T", info)
+	}
+
+	if onlyLog {
+		log.StructuredEvent(ctx, info)
+		return nil
 	}
 
 	// Ensure that the external logging sees the event when the
