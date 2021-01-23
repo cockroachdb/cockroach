@@ -127,7 +127,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 // loadSchedule loads  all columns for the specified scheduled job.
 func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	rows, cols, err := h.cfg.InternalExecutor.QueryWithCols(
+	row, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
@@ -135,9 +135,8 @@ func (h *testHelper) loadSchedule(t *testing.T, id int64) *ScheduledJob {
 			h.env.ScheduledJobsTableName(), id),
 	)
 	require.NoError(t, err)
-
-	require.Equal(t, 1, len(rows))
-	require.NoError(t, j.InitFromDatums(rows[0], cols))
+	require.NotNil(t, row)
+	require.NoError(t, j.InitFromDatums(row, cols))
 	return j
 }
 
