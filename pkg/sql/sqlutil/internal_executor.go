@@ -50,34 +50,10 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (int, error)
 
-	// Query executes the supplied SQL statement and returns the resulting rows.
-	// If no user has been previously set through SetSessionData, the statement is
-	// executed as the root user.
+	// QueryWithCols executes the supplied SQL statement and returns the
+	// resulting rows as well as the computed ResultColumns of the input query.
 	//
 	// If txn is not nil, the statement will be executed in the respective txn.
-	//
-	// Query is deprecated because it may transparently execute a query as root. Use
-	// QueryEx instead.
-	Query(
-		ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
-	) ([]tree.Datums, error)
-
-	// QueryEx is like Query, but allows the caller to override some session data
-	// fields.
-	//
-	// The fields set in session that are set override the respective fields if
-	// they have previously been set through SetSessionData().
-	QueryEx(
-		ctx context.Context,
-		opName string,
-		txn *kv.Txn,
-		session sessiondata.InternalExecutorOverride,
-		stmt string,
-		qargs ...interface{},
-	) ([]tree.Datums, error)
-
-	// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
-	// of the input query.
 	QueryWithCols(
 		ctx context.Context, opName string, txn *kv.Txn,
 		o sessiondata.InternalExecutorOverride, statement string, qargs ...interface{},

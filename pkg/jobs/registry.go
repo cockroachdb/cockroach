@@ -903,44 +903,47 @@ func (r *Registry) cleanupOldJobsPage(
 		"WHERE created < $1 AND id > $2 " +
 		"ORDER BY id " + // the ordering is important as we keep track of the maximum ID we've seen
 		"LIMIT $3"
-	rows, err := r.ex.Query(ctx, "gc-jobs", nil /* txn */, stmt, olderThan, minID, pageSize)
+	it, err := r.ex.QueryIterator(ctx, "gc-jobs", nil /* txn */, stmt, olderThan, minID, pageSize)
 	if err != nil {
 		return false, 0, err
 	}
-	log.VEventf(ctx, 2, "read potentially expired jobs: %d", len(rows))
-
-	if len(rows) == 0 {
-		return true, 0, nil
-	}
-	// Track the highest ID we encounter, so it can serve as the bottom of the
-	// next page.
-	maxID = int64(*(rows[len(rows)-1][0].(*tree.DInt)))
-	// If we got as many rows as we asked for, there might be more.
-	morePages := len(rows) == pageSize
-
 	toDelete := tree.NewDArray(types.Int)
-	toDelete.Array = make(tree.Datums, 0, len(rows))
 	oldMicros := timeutil.ToUnixMicros(olderThan)
-	for _, row := range rows {
-		payload, err := UnmarshalPayload(row[1])
+	var (
+		ok      bool
+		lastRow tree.Datums
+		numRows int
+	)
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		numRows++
+		lastRow = it.Cur()
+		payload, err := UnmarshalPayload(lastRow[1])
 		if err != nil {
 			return false, 0, err
 		}
 		remove := false
-		switch Status(*row[2].(*tree.DString)) {
+		switch Status(*lastRow[2].(*tree.DString)) {
 		case StatusRunning, StatusPending:
 			done, err := r.isOrphaned(ctx, payload)
 			if err != nil {
 				return false, 0, err
 			}
-			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
+			remove = done && lastRow[3].(*tree.DTimestamp).Time.Before(olderThan)
 		case StatusSucceeded, StatusCanceled, StatusFailed:
 			remove = payload.FinishedMicros < oldMicros
 		}
 		if remove {
-			toDelete.Array = append(toDelete.Array, row[0])
+			toDelete.Array = append(toDelete.Array, lastRow[0])
 		}
 	}
+	if err != nil {
+		return false, 0, err
+	}
+	if numRows == 0 {
+		return true, 0, nil
+	}
+
+	log.VEventf(ctx, 2, "read potentially expired jobs: %d", numRows)
 	if len(toDelete.Array) > 0 {
 		log.Infof(ctx, "cleaning up expired job records: %d", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
@@ -955,6 +958,11 @@ func (r *Registry) cleanupOldJobsPage(
 				len(toDelete.Array), nDeleted)
 		}
 	}
+	// If we got as many rows as we asked for, there might be more.
+	morePages := numRows == pageSize
+	// Track the highest ID we encounter, so it can serve as the bottom of the
+	// next page.
+	maxID = int64(*(lastRow[0].(*tree.DInt)))
 	return !morePages, maxID, nil
 }
 

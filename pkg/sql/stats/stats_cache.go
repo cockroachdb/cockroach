@@ -499,7 +499,7 @@ FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
-	rows, err := sc.SQLExecutor.Query(
+	it, err := sc.SQLExecutor.QueryIterator(
 		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
@@ -507,12 +507,16 @@ ORDER BY "createdAt" DESC
 	}
 
 	var statsList []*TableStatistic
-	for _, row := range rows {
-		stats, err := sc.parseStats(ctx, row)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		stats, err := sc.parseStats(ctx, it.Cur())
 		if err != nil {
 			return nil, err
 		}
 		statsList = append(statsList, stats)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return statsList, nil
