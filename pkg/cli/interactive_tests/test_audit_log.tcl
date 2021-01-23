@@ -23,22 +23,25 @@ start_test "Check that statements start being logged synchronously if auditing i
 send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
 eexpect root@
 # check that the audit change itself is recorded.
-system "grep -q 'helloworld.*:READWRITE.*ALTER TABLE.*OK' $logfile"
+# Note: we really would like to check for redaction markers here, alas this grep
+# command is running inside the acceptance image and does not know about UTF-8.
+# So we use an imprecise match instead.
+system "grep -q 'sensitive_table_access.*ALTER TABLE.*helloworld.*\"TableName\":\".*t.public.helloworld.*\",\"AccessMode\":\"rw\"' $logfile"
 send "SELECT * FROM helloworld;\r"
 eexpect root@
-system "grep -q 'helloworld.*:READ}.*SELECT.*OK' $logfile"
+system "grep -q 'sensitive_table_access.*SELECT.*helloworld.*\"TableName\":\".*t.public.helloworld.*\",\"AccessMode\":\"r\"' $logfile"
 end_test
 
 start_test "Check that write statements are logged differently"
 send "INSERT INTO helloworld VALUES(456);\r"
 eexpect root@
-system "grep -q 'helloworld.*:READWRITE.*INSERT.*OK' $logfile"
+system "grep -q 'sensitive_table_access.*INSERT.*helloworld.*AccessMode\":\"rw\"' $logfile"
 end_test
 
 start_test "Check that errors get logged too"
 send "SELECT nonexistent FROM helloworld;\r"
 eexpect root@
-system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
+system "grep -q 'sensitive_table_access.*SELECT.*nonexistent.*SQLSTATE.*42703.*\"AccessMode\":\"r\"' $logfile"
 end_test
 
 # Flush and truncate the logs. The test below must not see the log entries that
@@ -52,7 +55,7 @@ system "if grep -q helloworld $logfile; then false; fi"
 start_test "Check that audit removal is logged too"
 send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET OFF;\r"
 eexpect root@
-system "grep 'helloworld.*:READWRITE.*ALTER TABLE.*SET OFF.*OK' $logfile"
+system "grep -q 'sensitive_table_access.*ALTER TABLE.*helloworld.*SET OFF.*AccessMode\":\"rw\"' $logfile"
 end_test
 
 interrupt

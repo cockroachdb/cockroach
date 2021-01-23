@@ -48,5 +48,8 @@ message CommonSQLEventDetails {
   // This is included in the event to ease filtering of logging output
   // by application.
   string application_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The mapping of SQL placeholders to their values, for prepared statements.
+  repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 

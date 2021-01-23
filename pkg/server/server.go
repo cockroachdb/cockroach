@@ -2137,7 +2137,9 @@ func (s *Server) Decommission(
 					txn,
 					int32(nodeID), int32(s.NodeID()),
 					true, /* skipExternalLog - we already call log.StructuredEvent above */
-					event)
+					event,
+					false, /* onlyLog */
+				)
 			}); err != nil {
 				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
 			}

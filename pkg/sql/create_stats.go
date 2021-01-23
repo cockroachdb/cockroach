@@ -567,9 +567,12 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			evalCtx.SessionData.User(),
 			evalCtx.SessionData.ApplicationName,
 			details.Statement,
+			nil, /* no placeholders known at this point */
 			&eventpb.CreateStatistics{
 				TableName: details.FQTableName,
-			})
+			},
+			true, /* writeToEventLog */
+		)
 	})
 }
 
