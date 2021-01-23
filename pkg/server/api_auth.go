@@ -295,22 +295,22 @@ func (r *roleAuthorizationMux) getRoleForUser(
 		// Shortcut.
 		return superUserRole, nil
 	}
-	rows, _, err := r.ie.QueryWithCols(
+	row, err := r.ie.QueryRowEx(
 		ctx, "check-is-admin", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.is_admin()")
 	if err != nil {
 		return regularRole, err
 	}
-	if len(rows) != 1 {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 row, got %d", len(rows))
+	if row == nil {
+		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 row, got 0")
 	}
-	if len(rows[0]) != 1 {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(rows[0]))
+	if len(row) != 1 {
+		return regularRole, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(row))
 	}
-	dbDatum, ok := tree.AsDBool(rows[0][0])
+	dbDatum, ok := tree.AsDBool(row[0])
 	if !ok {
-		return regularRole, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", rows[0][0])
+		return regularRole, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", row[0])
 	}
 	if dbDatum {
 		return adminRole, nil
@@ -325,22 +325,22 @@ func (r *roleAuthorizationMux) hasRoleOption(
 		// Shortcut.
 		return true, nil
 	}
-	rows, _, err := r.ie.QueryWithCols(
+	row, err := r.ie.QueryRowEx(
 		ctx, "check-role-option", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
 	if err != nil {
 		return false, err
 	}
-	if len(rows) != 1 {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 row, got %d", len(rows))
+	if row == nil {
+		return false, errors.AssertionFailedf("hasRoleOption: expected 1 row, got 0")
 	}
-	if len(rows[0]) != 1 {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 column, got %d", len(rows[0]))
+	if len(row) != 1 {
+		return false, errors.AssertionFailedf("hasRoleOption: expected 1 column, got %d", len(row))
 	}
-	dbDatum, ok := tree.AsDBool(rows[0][0])
+	dbDatum, ok := tree.AsDBool(row[0])
 	if !ok {
-		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", rows[0][0])
+		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
 	}
 	return bool(dbDatum), nil
 }
