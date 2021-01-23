@@ -65,10 +65,21 @@ func (r *Registry) deprecatedMaybeAdoptJob(
 SELECT id, payload, progress IS NULL, status
 FROM system.jobs
 WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
-	rows, err := r.ex.Query(
+	it, err := r.ex.QueryIterator(
 		ctx, "adopt-job", nil /* txn */, stmt,
 		StatusPending, StatusRunning, StatusCancelRequested, StatusPauseRequested, StatusReverting,
 	)
+	if err != nil {
+		return errors.Wrap(err, "failed querying for jobs")
+	}
+
+	// TODO(yuzefovich): use QueryBuffered method once it is added to
+	// sqlutil.InternalExecutor interface.
+	var rows []tree.Datums
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		rows = append(rows, it.Cur())
+	}
 	if err != nil {
 		return errors.Wrap(err, "failed querying for jobs")
 	}

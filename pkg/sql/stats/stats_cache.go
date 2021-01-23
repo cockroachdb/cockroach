@@ -483,7 +483,7 @@ func (sc *TableStatisticsCache) parseStats(
 // for the given table ID.
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID,
-) ([]*TableStatistic, error) {
+) (_ []*TableStatistic, retErr error) {
 	const getTableStatisticsStmt = `
 SELECT
   "tableID",
@@ -499,20 +499,32 @@ FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
-	rows, err := sc.SQLExecutor.Query(
+	it, err := sc.SQLExecutor.QueryIterator(
 		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
 		return nil, err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() {
+		closeErr := it.Close()
+		if retErr == nil {
+			retErr = closeErr
+		}
+	}()
 
 	var statsList []*TableStatistic
-	for _, row := range rows {
-		stats, err := sc.parseStats(ctx, row)
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		stats, err := sc.parseStats(ctx, it.Cur())
 		if err != nil {
 			return nil, err
 		}
 		statsList = append(statsList, stats)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return statsList, nil
