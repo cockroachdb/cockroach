@@ -392,19 +392,6 @@ func (ie *InternalExecutor) QueryEx(
 	return datums, err
 }
 
-// QueryWithCols is like QueryEx, but it also returns the computed ResultColumns
-// of the input query.
-func (ie *InternalExecutor) QueryWithCols(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, colinfo.ResultColumns, error) {
-	return ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 0 /* limit */, qargs...)
-}
-
 func (ie *InternalExecutor) queryInternalBuffered(
 	ctx context.Context,
 	opName string,
