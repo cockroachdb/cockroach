@@ -1187,17 +1187,6 @@ func (m *multiTestContext) findStartKeyLocked(rangeID roachpb.RangeID) roachpb.R
 	return nil // unreached, but the compiler can't tell.
 }
 
-// restart stops and restarts all stores but leaves the engines intact,
-// so the stores should contain the same persistent storage as before.
-func (m *multiTestContext) restart() {
-	for i := range m.stores {
-		m.stopStore(i)
-	}
-	for i := range m.stores {
-		m.restartStore(i)
-	}
-}
-
 // changeReplicas performs a ChangeReplicas operation, retrying until the
 // destination store has been addded or removed. Returns the range's
 // NextReplicaID, which is the ID of the newly-added replica if this is an add.

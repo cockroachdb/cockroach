@@ -377,6 +377,23 @@ func TestHybridManualClock(t *testing.T) {
 	require.LessOrEqual(t, UnixNano()+10, c.Now().WallTime)
 }
 
+// TestHybridManualClockPause test the Pause() functionality of the
+// HybridManualClock.
+func TestHybridManualClockPause(t *testing.T) {
+	m := NewHybridManualClock()
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	now := c.Now().WallTime
+	time.Sleep(10 * time.Millisecond)
+	require.Less(t, now, c.Now().WallTime)
+	m.Pause()
+	now = c.Now().WallTime
+	require.Equal(t, now, c.Now().WallTime)
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, now, c.Now().WallTime)
+	m.Increment(10)
+	require.Equal(t, now+10, c.Now().WallTime)
+}
+
 func TestHLCMonotonicityCheck(t *testing.T) {
 	m := NewManualClock(100000)
 	c := NewClock(m.UnixNano, 100*time.Nanosecond)
