@@ -653,23 +653,12 @@ func (ie *wrappedInternalExecutor) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	panic("unimplemented")
-}
-
-func (ie *wrappedInternalExecutor) QueryEx(
-	ctx context.Context,
-	opName string,
-	txn *kv.Txn,
-	session sessiondata.InternalExecutorOverride,
-	stmt string,
-	qargs ...interface{},
-) ([]tree.Datums, error) {
 	if f := ie.getErrFunc(); f != nil {
 		if err := f(stmt); err != nil {
-			return nil, err
+			return 0, err
 		}
 	}
-	return ie.wrapped.QueryEx(ctx, opName, txn, session, stmt, qargs...)
+	return ie.wrapped.ExecEx(ctx, opName, txn, o, stmt, qargs...)
 }
 
 func (ie *wrappedInternalExecutor) QueryWithCols(
@@ -699,12 +688,6 @@ func (ie *wrappedInternalExecutor) QueryRowEx(
 	return ie.wrapped.QueryRowEx(ctx, opName, txn, session, stmt, qargs...)
 }
 
-func (ie *wrappedInternalExecutor) Query(
-	ctx context.Context, opName string, txn *kv.Txn, statement string, params ...interface{},
-) ([]tree.Datums, error) {
-	panic("not implemented")
-}
-
 func (ie *wrappedInternalExecutor) QueryRow(
 	ctx context.Context, opName string, txn *kv.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
@@ -725,7 +708,12 @@ func (ie *wrappedInternalExecutor) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (sqlutil.InternalRows, error) {
-	panic("not implemented")
+	if f := ie.getErrFunc(); f != nil {
+		if err := f(stmt); err != nil {
+			return nil, err
+		}
+	}
+	return ie.wrapped.QueryIteratorEx(ctx, opName, txn, session, stmt, qargs...)
 }
 
 func (ie *wrappedInternalExecutor) getErrFunc() func(statement string) error {
