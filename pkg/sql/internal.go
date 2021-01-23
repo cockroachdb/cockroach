@@ -63,8 +63,8 @@ type InternalExecutor struct {
 	memMetrics MemoryMetrics
 
 	// sessionData, if not nil, represents the session variables used by
-	// statements executed on this internalExecutor. Note that queries executed by
-	// the executor will run on copies of this data.
+	// statements executed on this internalExecutor. Note that queries executed
+	// by the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
 
 	// syntheticDescriptors stores the synthetic descriptors to be injected into
@@ -118,7 +118,7 @@ func MakeInternalExecutor(
 // SetSessionData binds the session variables that will be used by queries
 // performed through this executor from now on.
 //
-// SetSessionData cannot be called concurently with query execution.
+// SetSessionData cannot be called concurrently with query execution.
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionData = sessionData
@@ -459,17 +459,31 @@ func (ie *InternalExecutor) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	rows, _, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 2 /* limit */, qargs...)
+	rows, _, err := ie.QueryRowExWithCols(ctx, opName, txn, session, stmt, qargs...)
+	return rows, err
+}
+
+// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// ResultColumns of the input query.
+func (ie *InternalExecutor) QueryRowExWithCols(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) (tree.Datums, colinfo.ResultColumns, error) {
+	rows, cols, err := ie.queryInternalBuffered(ctx, opName, txn, session, stmt, 2 /* limit */, qargs...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	switch len(rows) {
 	case 0:
-		return nil, nil
+		return nil, nil, nil
 	case 1:
-		return rows[0], nil
+		return rows[0], cols, nil
 	default:
-		return nil, &tree.MultipleResultsError{SQL: stmt}
+		return nil, nil, &tree.MultipleResultsError{SQL: stmt}
 	}
 }
 
