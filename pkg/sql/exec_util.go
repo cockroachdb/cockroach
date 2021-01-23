@@ -482,6 +482,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaSQLTxnsOpen = metric.Metadata{
+		Name:        "sql.txns.open",
+		Help:        "Number of currently open SQL transactions",
+		Measurement: "Open SQL Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Below are the metadata for the statement started counters.
 
