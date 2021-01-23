@@ -96,7 +96,7 @@ func flushDaemon() {
 func signalFlusher() {
 	ch := sysutil.RefreshSignaledChan()
 	for sig := range ch {
-		Infof(context.Background(), "%s received, flushing logs", sig)
+		Ops.Infof(context.Background(), "%s received, flushing logs", sig)
 		Flush()
 	}
 }
