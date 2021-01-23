@@ -28,18 +28,39 @@ sinks:
 ----
 sinks:
   stderr:
-    channels: DEV
+    channels: [DEV]
 
 
 # Verify that more than one channel can be selected.
 yaml
 sinks:
   stderr:
-   channels: DEV,SESSIONS
+   channels: dev,SESSIONS
 ----
 sinks:
   stderr:
-    channels: DEV,SESSIONS
+    channels: [DEV, SESSIONS]
+
+# Ditto using a native YAML array.
+yaml
+sinks:
+  stderr:
+   channels: [dev,SESSIONS]
+----
+sinks:
+  stderr:
+    channels: [DEV, SESSIONS]
+
+# Ditto using an array included in a string.
+yaml
+sinks:
+  stderr:
+   channels: '[dev,SESSIONS]'
+----
+sinks:
+  stderr:
+    channels: [DEV, SESSIONS]
+
 
 
 # Verify that all channels can be selected.
@@ -52,14 +73,52 @@ sinks:
   stderr:
     channels: all
 
-# Verify that the inverse of a channel list can be selected.
+# Ditto using a native YAML array.
 yaml
-sinks: { stderr: { channels: 'all except DEV,SESSIONS' } }
+sinks:
+  stderr:
+     channels: [all]
 ----
 sinks:
   stderr:
-    channels: OPS,HEALTH,STORAGE,SQL_SCHEMA,USER_ADMIN,PRIVILEGES,SENSITIVE_ACCESS,SQL_EXEC,SQL_PERF,SQL_INTERNAL_PERF
+    channels: all
 
+# Ditto included in a string.
+yaml
+sinks:
+  stderr:
+     channels: '[all]'
+----
+sinks:
+  stderr:
+    channels: all
+
+# Verify that the special keyword "all" is not allowed
+# in a YAML array unless it's on its own.
+yaml
+sinks:
+  stderr:
+     channels: [all,dev]
+----
+ERROR: cannot use ALL if there are other channel names present in the list
+
+
+# Verify that the inverse of a channel list can be selected.
+yaml
+sinks: { stderr: { channels: 'all except DEV ,sessions' } }
+----
+sinks:
+  stderr:
+    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
+      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
+
+yaml
+sinks: { stderr: { channels: 'all except [DEV, sessions]' } }
+----
+sinks:
+  stderr:
+    channels: [OPS, HEALTH, STORAGE, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS,
+      SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
 
 # Try populating all the fields.
 yaml
