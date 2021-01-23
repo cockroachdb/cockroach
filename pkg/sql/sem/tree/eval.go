@@ -3097,7 +3097,12 @@ type EvalSessionAccessor interface {
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
 
-	// HasAdminRole returns nil iff the current session user has the specified
+	// IsRootUser returns true iff the current session user is root.
+	// Callers should generally use HasAdminRole(). This interface
+	// method exists merely for the benefit of a few SQL built-in functions.
+	IsRootUser(ctx context.Context) (bool, error)
+
+	// HasAdminRolereturns nil iff the current session user has the specified
 	// role option.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }

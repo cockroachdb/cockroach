@@ -295,6 +295,16 @@ type planTop struct {
 	// flags is populated during planning and execution.
 	flags planFlags
 
+	// adminRoleUsed is set if/when authorization checks during
+	// execution validate an access based on the current user's
+	// membership to the 'admin' role, i.e.  the 'admin' privilege was
+	// effectively used.
+	//
+	// We use a different field than 'flags' here because flags may be
+	// overwritten during planning after this flag was set by
+	// markAdminUsed().
+	adminRoleUsed adminUseFlags
+
 	// execErr retains the last execution error, if any.
 	execErr error
 

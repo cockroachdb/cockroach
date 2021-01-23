@@ -3850,7 +3850,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := checkPrivilegedUser(ctx); err != nil {
+				if err := checkRootUser(ctx); err != nil {
 					return nil, err
 				}
 				msg := string(*args[0].(*tree.DString))
@@ -3869,7 +3869,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"msg", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := checkPrivilegedUser(ctx); err != nil {
+				if err := checkRootUser(ctx); err != nil {
 					return nil, err
 				}
 				msg := string(*args[0].(*tree.DString))
@@ -4104,7 +4104,7 @@ may increase either contention or retry errors, or both.`,
 			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if err := checkPrivilegedUser(ctx); err != nil {
+				if err := checkRootUser(ctx); err != nil {
 					return nil, err
 				}
 				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
@@ -6816,8 +6816,16 @@ var errInsufficientPriv = pgerror.New(
 	pgcode.InsufficientPrivilege, "insufficient privilege",
 )
 
-func checkPrivilegedUser(ctx *tree.EvalContext) error {
-	if !ctx.SessionData.User().IsRootUser() {
+// checkRootUser checks that the current session's user is root.
+// This is used for the "high risk" functions like force_panic()
+// which really should only be used in tests.
+func checkRootUser(ctx *tree.EvalContext) error {
+	isRoot, err := ctx.SessionAccessor.IsRootUser(ctx.Context)
+	if err != nil {
+		return err
+	}
+
+	if !isRoot {
 		return errInsufficientPriv
 	}
 	return nil

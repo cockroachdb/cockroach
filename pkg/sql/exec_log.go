@@ -99,6 +99,12 @@ var unstructuredQueryLog = settings.RegisterBoolSetting(
 	false,
 )
 
+var adminAuditLogEnabled = settings.RegisterBoolSetting(
+	"sql.log.admin_audit.enabled",
+	"when set, log SQL queries that effectively exploit the user's admin privileges",
+	false,
+)
+
 type executorType int
 
 const (
@@ -139,14 +145,16 @@ func (p *planner) maybeLogStatementInternal(
 	// can't miss any statement.
 
 	logV := log.V(2)
-	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
-	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
-	slowLogFullTableScans := slowQueryLogFullTableScans.Get(&p.execCfg.Settings.SV)
+	sv := &p.execCfg.Settings.SV
+	logExecuteEnabled := logStatementsExecuteEnabled.Get(sv)
+	slowLogThreshold := slowQueryLogThreshold.Get(sv)
+	slowLogFullTableScans := slowQueryLogFullTableScans.Get(sv)
 	slowQueryLogEnabled := slowLogThreshold != 0
-	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
+	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(sv)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
+	adminAuditLog := (p.curPlan.adminRoleUsed != 0) && adminAuditLogEnabled.Get(sv)
 
-	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
+	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled && !adminAuditLog {
 		// Shortcut: avoid the expense of computing anything log-related
 		// if logging is not enabled by configuration.
 		return
@@ -168,7 +176,7 @@ func (p *planner) maybeLogStatementInternal(
 	// The type of execution context (execute/prepare).
 	lbl := execType.logLabel()
 
-	if unstructuredQueryLog.Get(&p.execCfg.Settings.SV) {
+	if unstructuredQueryLog.Get(sv) {
 		// This entire branch exists for the sake of backward
 		// compatibility with log parsers for v20.2 and prior. This format
 		// is obsolete and so this branch can be removed in v21.2.
@@ -187,7 +195,7 @@ func (p *planner) maybeLogStatementInternal(
 		}
 
 		// Now log!
-		if auditEventsDetected {
+		if auditEventsDetected || adminAuditLog {
 			auditErrStr := "OK"
 			if err != nil {
 				auditErrStr = "ERROR"
@@ -203,6 +211,10 @@ func (p *planner) maybeLogStatementInternal(
 				}
 				fmt.Fprintf(&buf, "%s%q[%d]:%s", sep, ev.desc.GetName(), ev.desc.GetID(), mode)
 				sep = ", "
+			}
+			if adminAuditLog {
+				buf.WriteString(sep)
+				buf.WriteString("admin")
 			}
 			buf.WriteByte('}')
 			logTrigger := buf.String()
@@ -314,6 +326,11 @@ func (p *planner) maybeLogStatementInternal(
 	if logExecuteEnabled {
 		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
+	}
+	if adminAuditLog {
+		desc := p.curPlan.adminRoleUsed.getDescription()
+		p.logEventOnlyExternally(ctx, 0, /* log event not trigged by descriptor */
+			&eventpb.AdminQuery{CommonSQLExecDetails: execDetails, AdminUse: desc})
 	}
 }
 

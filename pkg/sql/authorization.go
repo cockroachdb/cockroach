@@ -119,7 +119,7 @@ func (p *planner) CheckPrivilegeForUser(
 		return nil
 	}
 
-	hasPriv, err := p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+	hasPriv, err := p.checkRolePredicate(ctx, user, adminUsePrivilege, func(role security.SQLUsername) bool {
 		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
@@ -170,7 +170,7 @@ func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
 	user := p.SessionData().User()
 
-	return p.checkRolePredicate(ctx, user, func(role security.SQLUsername) bool {
+	return p.checkRolePredicate(ctx, user, adminUseOwnership, func(role security.SQLUsername) bool {
 		return IsOwner(descriptor, role)
 	})
 }
@@ -178,7 +178,10 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor catalog.Descripto
 // checkRolePredicate checks if the predicate is true for the user or
 // any roles the user is a member of.
 func (p *planner) checkRolePredicate(
-	ctx context.Context, user security.SQLUsername, predicate func(role security.SQLUsername) bool,
+	ctx context.Context,
+	user security.SQLUsername,
+	adminUse adminUseFlags,
+	predicate func(role security.SQLUsername) bool,
 ) (bool, error) {
 	if ok := predicate(user); ok {
 		return ok, nil
@@ -189,6 +192,9 @@ func (p *planner) checkRolePredicate(
 	}
 	for role := range memberOf {
 		if ok := predicate(role); ok {
+			if role.IsAdminRole() {
+				p.markAdminUsed(adminUse)
+			}
 			return ok, nil
 		}
 	}
@@ -208,27 +214,19 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 	user := p.SessionData().User()
 	privs := descriptor.GetPrivileges()
 
-	// Check if 'user' itself has privileges.
-	if privs.AnyPrivilege(user) {
-		return nil
-	}
-
 	// Check if 'public' has privileges.
 	if privs.AnyPrivilege(security.PublicRoleName()) {
 		return nil
 	}
 
-	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	hasPrivs, err := p.checkRolePredicate(ctx, user, adminUsePrivilege, func(role security.SQLUsername) bool {
+		return privs.AnyPrivilege(user)
+	})
 	if err != nil {
 		return err
 	}
-
-	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
-	for role := range memberOf {
-		if privs.AnyPrivilege(role) {
-			return nil
-		}
+	if hasPrivs {
+		return nil
 	}
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -239,6 +237,36 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 // UserHasAdminRole implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsername) (bool, error) {
+	return p.userHasAdminRoleInternal(ctx, user, false /* isCurrentUser */)
+}
+
+// markAdminUsed remembers that the admin role's privileges were used
+// during authorization, for tracking by admin audit logging.
+func (p *planner) markAdminUsed(flags adminUseFlags) {
+	p.curPlan.adminRoleUsed |= flags
+}
+
+// userHasAdminRoleInternal is a helper function for
+// UserHasAdminRole() and HasAdminRole(). The argument isCurrentUser
+// should be set to true if the caller has already determined that the
+// user parameter is the SQL session's user.
+func (p *planner) userHasAdminRoleInternal(
+	ctx context.Context, user security.SQLUsername, isCurrentUser bool,
+) (isAdmin bool, err error) {
+	defer func() {
+		// If we determine that the current user has the admin role here,
+		// the caller will go on and exploit this fact to bypass other
+		// authorization checks. This means that the admin role was
+		// effectively used. This is used by admin audit reporting.
+		//
+		// The isCurrentUser argument is an optimization: it prevents
+		// the duplicate comparison of user and p.User() in the common
+		// case where the caller is HasAdminRole().
+		if isAdmin && (isCurrentUser || user == p.User()) {
+			p.markAdminUsed(adminUseSpecialCase)
+		}
+	}()
+
 	if user.Undefined() {
 		return false, errors.AssertionFailedf("empty user")
 	}
@@ -273,7 +301,23 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user security.SQLUsernam
 // HasAdminRole implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
-	return p.UserHasAdminRole(ctx, p.User())
+	return p.userHasAdminRoleInternal(ctx, p.User(), true /* isCurrentUser */)
+}
+
+// IsRootUser returns true iff the current user is the root user.
+// In the general case, callers should call HasAdminRole() instead;
+// this function exists for the benefit of a few built-in functions
+// only.
+func (p *planner) IsRootUser(ctx context.Context) (bool, error) {
+	if p.User().IsRootUser() {
+		// If we determine that the current user has the admin role here,
+		// the caller will go on and exploit this fact to bypass other
+		// authorization checks. This means that the admin role was
+		// effectively used. This is used by admin audit reporting.
+		p.markAdminUsed(adminUseRootSpecialCase)
+		return true, nil
+	}
+	return false, nil
 }
 
 // RequireAdminRole implements the AuthorizationAccessor interface.
@@ -419,6 +463,11 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 
 	user := p.SessionData().User()
 	if user.IsRootUser() || user.IsNodeUser() {
+		// If we determine that the current user has the admin role here,
+		// the caller will go on and exploit this fact to bypass other
+		// authorization checks. This means that the admin role was
+		// effectively used. This is used by admin audit reporting.
+		p.markAdminUsed(adminUseRoleOption)
 		return true, nil
 	}
 
@@ -646,7 +695,7 @@ func (p *planner) HasOwnershipOnSchema(
 	switch resolvedSchema.Kind {
 	case catalog.SchemaPublic:
 		// admin is the owner of the public schema.
-		hasOwnership, err = p.UserHasAdminRole(ctx, p.User())
+		hasOwnership, err = p.HasAdminRole(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -666,4 +715,52 @@ func (p *planner) HasOwnershipOnSchema(
 	}
 
 	return hasOwnership, nil
+}
+
+// adminUseFlags is used throughout the planning and execution code
+// to keep track of whether the current statement is exploiting
+// admin privileges.
+type adminUseFlags uint32
+
+const (
+	// adminUseOwnership is set when the user's admin role bypasses
+	// an ownership check.
+	adminUseOwnership = (1 << iota)
+
+	// adminUsePrivilege is set when the user's admin role bypasses
+	// a privilege check.
+	adminUsePrivilege
+
+	// adminUseSpecialCase is set when the statement semantics have
+	// a special case for admin users, and the user's admin role
+	// triggers it.
+	adminUseSpecialCase
+
+	// adminUseRootSpecialCase is set when the statemant sematics have a
+	// special case for the root user, and the user is actually found to
+	// be root.
+	adminUseRootSpecialCase
+
+	// adminUseRoleOption is set when the user's admin role
+	// bypasses a role option check.
+	adminUseRoleOption
+)
+
+func (a adminUseFlags) getDescription() (r []string) {
+	if 0 != a&adminUseOwnership {
+		r = append(r, "owner")
+	}
+	if 0 != a&adminUsePrivilege {
+		r = append(r, "priv")
+	}
+	if 0 != a&adminUseSpecialCase {
+		r = append(r, "admin")
+	}
+	if 0 != a&adminUseRootSpecialCase {
+		r = append(r, "root")
+	}
+	if 0 != a&adminUseRoleOption {
+		r = append(r, "option")
+	}
+	return r
 }
