@@ -803,7 +803,7 @@ func (m *Manager) migrateSystemNamespace(
 	// Loop until there's no more work to be done.
 	workLeft := true
 	for workLeft {
-		if err := m.db.Txn(migrateCtx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := m.db.Txn(migrateCtx, func(ctx context.Context, txn *kv.Txn) (retErr error) {
 			// Check again to see if someone else wrote the migration key.
 			if kv, err := txn.Get(ctx, migrationKey); err != nil {
 				log.Infof(ctx, "error getting record of system.namespace migration: %s", err.Error())
@@ -826,7 +826,7 @@ func (m *Manager) migrateSystemNamespace(
 				`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]
               WHERE id NOT IN (SELECT id FROM [%d AS namespace]) LIMIT %d`,
 				systemschema.DeprecatedNamespaceTable.ID, systemschema.NamespaceTable.ID, batchSize+1)
-			rows, err := r.sqlExecutor.QueryEx(
+			it, err := r.sqlExecutor.QueryIteratorEx(
 				ctx, "read-deprecated-namespace-table", txn,
 				sessiondata.InternalExecutorOverride{
 					User: security.RootUserName(),
@@ -835,16 +835,28 @@ func (m *Manager) migrateSystemNamespace(
 			if err != nil {
 				return err
 			}
-			log.Infof(ctx, "migrating system.namespace chunk with %d rows", len(rows))
-			for i, row := range rows {
+			// We have to make sure to close the iterator since we might return
+			// from the for loop early (before Next() returns false).
+			defer func() {
+				closeErr := it.Close()
+				if retErr == nil {
+					retErr = closeErr
+				}
+			}()
+			log.Infof(ctx, "migrating system.namespace chunk")
+			var ok bool
+			var rowCount int
+			for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+				rowCount++
 				workLeft = false
 				// We found some rows from the query, which means that we can't quit
 				// just yet.
-				if i >= batchSize {
+				if rowCount > batchSize {
 					workLeft = true
 					// Just process 1000 rows at a time.
 					break
 				}
+				row := it.Cur()
 				parentID := descpb.ID(tree.MustBeDInt(row[0]))
 				name := string(tree.MustBeDString(row[1]))
 				id := descpb.ID(tree.MustBeDInt(row[2]))
@@ -876,7 +888,7 @@ func (m *Manager) migrateSystemNamespace(
 					}
 				}
 			}
-			return nil
+			return err
 		}); err != nil {
 			return err
 		}

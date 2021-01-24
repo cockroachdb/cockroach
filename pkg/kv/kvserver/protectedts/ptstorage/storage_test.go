@@ -694,6 +694,17 @@ func (ie *wrappedInternalExecutor) QueryRowExWithCols(
 	panic("not implemented")
 }
 
+func (ie *wrappedInternalExecutor) QueryBufferedEx(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, error) {
+	panic("not implemented")
+}
+
 func (ie *wrappedInternalExecutor) QueryIterator(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) (sqlutil.InternalRows, error) {

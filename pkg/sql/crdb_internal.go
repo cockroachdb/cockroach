@@ -425,7 +425,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
                      GROUP BY "tableID"
                   ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
             GROUP BY s."tableID"`
-		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-statistics-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
@@ -435,8 +435,13 @@ CREATE TABLE crdb_internal.table_row_statistics (
 
 		// Convert statistics into map: tableID -> rowCount.
 		statMap := make(map[tree.DInt]tree.Datum)
-		for _, r := range statRows {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			r := it.Cur()
 			statMap[tree.MustBeDInt(r[0])] = r[1]
+		}
+		if err != nil {
+			return err
 		}
 
 		// Walk over all available tables and show row count for each of them
@@ -607,7 +612,7 @@ CREATE TABLE crdb_internal.jobs (
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query)
@@ -615,24 +620,10 @@ CREATE TABLE crdb_internal.jobs (
 			return nil, nil, err
 		}
 
-		// Attempt to account for the memory of the retrieved rows and the data
-		// we're going to unmarshal and keep bufferred in RAM.
-		//
-		// TODO(ajwerner): This is a pretty terrible hack. Instead the internal
-		// executor should be hooked into the memory monitor associated with this
-		// conn executor. If we did that we would still want to account for the
-		// unmarshaling. Additionally, it's probably a good idea to paginate this
-		// and other virtual table queries but that's a bigger task.
-		ba := p.ExtendedEvalContext().Mon.MakeBoundAccount()
-		defer ba.Close(ctx)
-		var totalMem int64
-		for _, r := range rows {
-			for _, d := range r {
-				totalMem += int64(d.Size())
+		cleanup := func() {
+			if err := it.Close(); err != nil {
+				log.Infof(ctx, "error closing an iterator: %v", err)
 			}
-		}
-		if err := ba.Grow(ctx, totalMem); err != nil {
-			return nil, nil, err
 		}
 
 		// We'll reuse this container on each loop.
@@ -640,11 +631,11 @@ CREATE TABLE crdb_internal.jobs (
 		return func() (datums tree.Datums, e error) {
 			// Loop while we need to skip a row.
 			for {
-				if len(rows) == 0 {
-					return nil, nil
+				ok, err := it.Next(ctx)
+				if !ok {
+					return nil, err
 				}
-				r := rows[0]
-				rows = rows[1:]
+				r := it.Cur()
 				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
@@ -761,7 +752,7 @@ CREATE TABLE crdb_internal.jobs (
 				)
 				return container, nil
 			}
-		}, nil, nil
+		}, cleanup, nil
 	},
 }
 
