@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -126,8 +127,8 @@ func zoneConfigFromRegionConfigForDatabase(
 func zoneConfigFromRegionConfigForPartition(
 	partitionRegion descpb.DatabaseDescriptor_RegionConfig_Region,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
-) (*zonepb.ZoneConfig, error) {
-	zc := &zonepb.ZoneConfig{
+) (zonepb.ZoneConfig, error) {
+	zc := zonepb.ZoneConfig{
 		NumReplicas: proto.Int32(zoneConfigNumReplicasFromRegionConfig(regionConfig)),
 		LeasePreferences: []zonepb.LeasePreference{
 			{Constraints: []zonepb.Constraint{makeRequiredZoneConstraintForRegion(partitionRegion.Name)}},
@@ -138,7 +139,7 @@ func zoneConfigFromRegionConfigForPartition(
 		partitionRegion.Name,
 		regionConfig,
 	); err != nil {
-		return nil, err
+		return zc, err
 	}
 	return zc, err
 }
@@ -222,6 +223,12 @@ func zoneConfigFromTableLocalityConfig(
 	return &ret, nil
 }
 
+// TODO(#multiregion): everything using this should instead use getZoneConfigRaw
+// and writeZoneConfig instead of calling SQL for each query.
+// This removes the requirement to only call this function after writeSchemaChange
+// is called on creation of tables, and potentially removes the need for ReadingOwnWrites
+// for some subcommands.
+// Requires some logic to "inherit" from parents.
 func (p *planner) applyZoneConfigForMultiRegion(
 	ctx context.Context, zs tree.ZoneSpecifier, zc *zonepb.ZoneConfig, desc string,
 ) error {
@@ -283,7 +290,7 @@ func (p *planner) applyZoneConfigFromTableLocalityConfig(
 						},
 						Partition: tree.Name(region.Name),
 					},
-					zc,
+					&zc,
 					"index-multiregion-set-zone-config",
 				); err != nil {
 					return err
@@ -299,7 +306,7 @@ func (p *planner) applyZoneConfigFromTableLocalityConfig(
 					},
 					Partition: tree.Name(region.Name),
 				},
-				zc,
+				&zc,
 				"primary-index-multiregion-set-zone-config",
 			); err != nil {
 				return err
@@ -325,6 +332,50 @@ func (p *planner) applyZoneConfigFromTableLocalityConfig(
 		localityZoneConfig,
 		"table-multiregion-set-zone-config",
 	)
+}
+
+// addNewZoneConfigSubzonesForIndex updates the ZoneConfig for the given index,
+// assuming a zone config already exists for the given table and that the index
+// has previously not had a subzone defined.
+func (p *planner) addNewZoneConfigSubzonesForIndex(
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	indexID descpb.IndexID,
+	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+) error {
+	tableID := table.GetID()
+	zone, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, tableID)
+	if err != nil {
+		return err
+	}
+	if zone == nil {
+		return errors.AssertionFailedf("expected zone config for table %d", tableID)
+	}
+	for _, region := range regionConfig.Regions {
+		zc, err := zoneConfigFromRegionConfigForPartition(region, regionConfig)
+		if err != nil {
+			return err
+		}
+		zone.SetSubzone(zonepb.Subzone{
+			IndexID:       uint32(indexID),
+			PartitionName: string(region.Name),
+			Config:        zc,
+		})
+	}
+
+	if _, err = writeZoneConfig(
+		ctx,
+		p.txn,
+		tableID,
+		table,
+		zone,
+		p.ExecCfg(),
+		true, /* hasNewSubzones */
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *planner) applyZoneConfigFromDatabaseRegionConfig(
