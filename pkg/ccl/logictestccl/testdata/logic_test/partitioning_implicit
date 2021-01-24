@@ -327,3 +327,73 @@ t_partition_by_c_idx  c             false
 t_partition_by_c_idx  partition_by  false
 t_pk_key              partition_by  true
 t_pk_key              pk            false
+
+statement ok
+DROP TABLE t
+
+# Tests for PARTITION ALL BY RANGE
+statement ok
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  partition_by int,
+  a int,
+  b int,
+  c int,
+  d int,
+  INDEX (a),
+  UNIQUE (b),
+  INDEX (partition_by, c),
+  FAMILY (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (minvalue) TO (2),
+  PARTITION two VALUES FROM (2) TO (maxvalue)
+)
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
+  PARTITION one VALUES IN ((1))
+)
+
+statement ok
+CREATE INDEX created_idx ON t(c)
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+primary               partition_by  true
+primary               pk            false
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INDEX created_idx (c ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (MINVALUE) TO (2),
+  PARTITION two VALUES FROM (2) TO (MAXVALUE)
+)
+-- Warning: Partitioned table with no zone configurations.
