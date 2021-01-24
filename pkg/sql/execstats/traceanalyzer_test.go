@@ -119,7 +119,7 @@ func TestTraceAnalyzer(t *testing.T) {
 				},
 			},
 		)
-		_, err := ie.QueryEx(
+		_, err := ie.ExecEx(
 			ctx,
 			t.Name(),
 			nil, /* txn */

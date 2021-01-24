@@ -100,7 +100,7 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	var err error
 
 	// TODO(davidh): Add pagination to this request.
-	rows, err := s.internalExecutor.QueryEx(ctx, "stmt-diag-get-all", nil, /* txn */
+	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User: security.RootUserName(),
 		},
@@ -116,8 +116,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		return nil, err
 	}
 
-	requests := make([]stmtDiagnosticsRequest, len(rows))
-	for i, row := range rows {
+	var requests []stmtDiagnosticsRequest
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		id := int(*row[0].(*tree.DInt))
 		statementFingerprint := string(*row[1].(*tree.DString))
 		completed := bool(*row[2].(*tree.DBool))
@@ -136,7 +138,10 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			req.RequestedAt = requestedAt.Time
 		}
 
-		requests[i] = req
+		requests = append(requests, req)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	response := &serverpb.StatementDiagnosticsReportsResponse{
