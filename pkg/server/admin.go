@@ -232,7 +232,7 @@ func (s *adminServer) ChartCatalog(
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
-) (*serverpb.DatabasesResponse, error) {
+) (_ *serverpb.DatabasesResponse, retErr error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
 	sessionUser, err := userFromContext(ctx)
@@ -240,7 +240,7 @@ func (s *adminServer) Databases(
 		return nil, err
 	}
 
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: sessionUser},
 		"SHOW DATABASES",
@@ -248,15 +248,28 @@ func (s *adminServer) Databases(
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() {
+		closeErr := it.Close()
+		if retErr == nil && closeErr != nil {
+			retErr = s.serverError(closeErr)
+		}
+	}()
 
 	var resp serverpb.DatabasesResponse
-	for _, row := range rows {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		dbDatum, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
 		dbName := string(dbDatum)
 		resp.Databases = append(resp.Databases, dbName)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 
 	return &resp, nil
@@ -983,7 +996,7 @@ func (s *adminServer) Users(
 		return nil, err
 	}
 	query := `SELECT username FROM system.users WHERE "isRole" = false`
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-users", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		query,
@@ -993,8 +1006,13 @@ func (s *adminServer) Users(
 	}
 
 	var resp serverpb.UsersResponse
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 	return &resp, nil
 }
@@ -1287,7 +1305,7 @@ func (s *adminServer) RangeLog(
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
 	ctx context.Context, userName security.SQLUsername, keys []string,
-) (*serverpb.GetUIDataResponse, error) {
+) (_ *serverpb.GetUIDataResponse, retErr error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
 	}
@@ -1305,7 +1323,7 @@ func (s *adminServer) getUIData(
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-getUIData", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		query.String(), query.QueryArguments()...,
@@ -1313,10 +1331,20 @@ func (s *adminServer) getUIData(
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() {
+		closeErr := it.Close()
+		if retErr == nil && closeErr != nil {
+			retErr = s.serverError(closeErr)
+		}
+	}()
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
-	for _, row := range rows {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		dKey, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
@@ -1337,6 +1365,9 @@ func (s *adminServer) getUIData(
 			Value:       []byte(*dValue),
 			LastUpdated: dLastUpdated.Time,
 		}
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 	return &resp, nil
 }
@@ -1790,7 +1821,7 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"EXPLAIN (DISTSQL, JSON) %s",
 		strings.Trim(req.Query, ";"))
-	rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+	row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 		ctx, "admin-query-plan", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		explain,
@@ -1798,8 +1829,10 @@ func (s *adminServer) QueryPlan(
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	if row == nil {
+		return nil, s.serverError(errors.New("failed to query the physical plan"))
+	}
 
-	row := rows[0]
 	dbDatum, ok := tree.AsDString(row[0])
 	if !ok {
 		return nil, s.serverErrorf("type assertion failed on json: %T", row)
@@ -1958,7 +1991,7 @@ func (s *adminServer) Decommission(
 // DataDistribution returns a count of replicas on each node for each table.
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
-) (*serverpb.DataDistributionResponse, error) {
+) (_ *serverpb.DataDistributionResponse, retErr error) {
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1984,7 +2017,7 @@ func (s *adminServer) DataDistribution(
 	// excluding virtual tables (like crdb_internal.tables itself, for example).
 	tablesQuery := `SELECT name, schema_name, table_id, database_name, drop_time FROM
 									"".crdb_internal.tables WHERE database_name IS NOT NULL`
-	rows1, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		tablesQuery,
@@ -1992,11 +2025,21 @@ func (s *adminServer) DataDistribution(
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func(it sqlutil.InternalRows) {
+		closeErr := it.Close()
+		if retErr == nil && closeErr != nil {
+			retErr = s.serverError(closeErr)
+		}
+	}(it)
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
 	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
 
-	for _, row := range rows1 {
+	var hasNext bool
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		tableName := (*string)(row[0].(*tree.DString))
 		schemaName := (*string)(row[1].(*tree.DString))
 		fqTableName := fmt.Sprintf("%s.%s",
@@ -2029,7 +2072,7 @@ func (s *adminServer) DataDistribution(
 				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s.%s]`,
 				(*tree.Name)(dbName), (*tree.Name)(schemaName), (*tree.Name)(tableName),
 			)
-			rows, err := s.server.sqlServer.internalExecutor.QueryEx(
+			row, err := s.server.sqlServer.internalExecutor.QueryRowEx(
 				ctx, "admin-replica-matrix", nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: userName},
 				zoneConfigQuery,
@@ -2038,13 +2081,7 @@ func (s *adminServer) DataDistribution(
 				return nil, s.serverError(err)
 			}
 
-			if len(rows) != 1 {
-				return nil, s.serverError(fmt.Errorf(
-					"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
-				))
-			}
-			zcRow := rows[0]
-			zcID = int64(tree.MustBeDInt(zcRow[0]))
+			zcID = int64(tree.MustBeDInt(row[0]))
 		}
 
 		// Insert table.
@@ -2055,6 +2092,9 @@ func (s *adminServer) DataDistribution(
 		}
 		dbInfo.TableInfo[fqTableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 
 	// Get replica counts.
@@ -2086,8 +2126,8 @@ func (s *adminServer) DataDistribution(
 			}
 
 			for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
-				tableInfo, ok := tableInfosByTableID[tableID]
-				if !ok {
+				tableInfo, found := tableInfosByTableID[tableID]
+				if !found {
 					// This is a database, skip.
 					continue
 				}
@@ -2106,15 +2146,24 @@ func (s *adminServer) DataDistribution(
 		FROM crdb_internal.zones
 		WHERE target IS NOT NULL
 	`
-	rows2, err := s.server.sqlServer.internalExecutor.QueryEx(
+	it, err = s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-replica-matrix", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		zoneConfigsQuery)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func(it sqlutil.InternalRows) {
+		closeErr := it.Close()
+		if retErr == nil && closeErr != nil {
+			retErr = s.serverError(closeErr)
+		}
+	}(it)
 
-	for _, row := range rows2 {
+	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
+		row := it.Cur()
 		target := string(tree.MustBeDString(row[0]))
 		zcSQL := tree.MustBeDString(row[1])
 		zcBytes := tree.MustBeDBytes(row[2])
@@ -2128,6 +2177,9 @@ func (s *adminServer) DataDistribution(
 			Config:    zcProto,
 			ConfigSQL: string(zcSQL),
 		}
+	}
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 
 	return resp, nil
