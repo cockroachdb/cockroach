@@ -558,9 +558,9 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 
 var ieIteratorChannelBufferSize = util.ConstantWithMetamorphicTestRange(
 	"iterator-channel-buffer-size",
-	32, /* defaultValue */
-	1,  /* min */
-	32, /* max */
+	1, /* defaultValue */
+	1, /* min */
+	1, /* max */
 )
 
 // execInternal executes a statement.
