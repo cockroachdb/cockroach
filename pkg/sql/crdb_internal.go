@@ -2840,14 +2840,16 @@ func getAllNames(
 ) (map[descpb.ID]NamespaceKey, error) {
 	namespace := map[descpb.ID]NamespaceKey{}
 	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
-		rows, err := executor.Query(
+		it, err := executor.QueryIterator(
 			ctx, "get-all-names", txn,
 			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
 		)
 		if err != nil {
 			return nil, err
 		}
-		for _, r := range rows {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			r := it.Cur()
 			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
 			namespace[descpb.ID(id)] = NamespaceKey{
 				ParentID:       descpb.ID(parentID),
@@ -2855,20 +2857,25 @@ func getAllNames(
 				Name:           string(name),
 			}
 		}
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Also get all rows from namespace_deprecated, and add to the namespace map
 	// if it is not already there yet.
 	// If a row exists in both here and namespace, only use the one from namespace.
 	// TODO(sqlexec): In 20.2, this can be removed.
-	deprecatedRows, err := executor.Query(
+	it, err := executor.QueryIterator(
 		ctx, "get-all-names-deprecated-namespace", txn,
 		fmt.Sprintf(`SELECT id, "parentID", name FROM [%d as namespace]`, keys.DeprecatedNamespaceTableID),
 	)
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range deprecatedRows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		r := it.Cur()
 		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
 		if _, ok := namespace[descpb.ID(id)]; !ok {
 			namespace[descpb.ID(id)] = NamespaceKey{
@@ -2876,6 +2883,9 @@ func getAllNames(
 				Name:     string(name),
 			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return namespace, nil
@@ -2932,7 +2942,9 @@ CREATE TABLE crdb_internal.zones (
 			return kv.Value, nil
 		}
 
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		// For some reason, if we use the iterator API here, "concurrent txn use
+		// detected" error might occur, so we buffer up all zones first.
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
 		if err != nil {
 			return err

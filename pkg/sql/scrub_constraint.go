@@ -98,7 +98,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		}
 	}
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
 		ctx, "check-constraint", params.p.txn, tree.AsStringWithFlags(sel, tree.FmtParsable),
 	)
 	if err != nil {

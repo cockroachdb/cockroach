@@ -507,12 +507,7 @@ ORDER BY "createdAt" DESC
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil {
-			retErr = closeErr
-		}
-	}()
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	var statsList []*TableStatistic
 	var ok bool
