@@ -1657,7 +1657,7 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if row == nil {
+		if chunkRow == nil {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
 		}
@@ -2428,6 +2428,9 @@ func (s *adminServer) queryTableID(
 	)
 	if err != nil {
 		return descpb.InvalidID, err
+	}
+	if row == nil {
+		return descpb.InvalidID, errors.Newf("failed to resolve %q as a table name", tableName)
 	}
 	return descpb.ID(tree.MustBeDOid(row[0]).DInt), nil
 }

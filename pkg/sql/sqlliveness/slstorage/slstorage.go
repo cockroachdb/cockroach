@@ -316,6 +316,12 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 		}
 		return
 	}
+	if row == nil {
+		if ctx.Err() == nil {
+			log.Error(ctx, "could not delete expired sessions")
+		}
+		return
+	}
 	deleted := int64(*row[0].(*tree.DInt))
 
 	s.metrics.SessionDeletionsRuns.Inc(1)

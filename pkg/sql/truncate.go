@@ -419,6 +419,9 @@ func (p *planner) reassignIndexComments(
 	if err != nil {
 		return err
 	}
+	if row == nil {
+		return errors.New("failed to update table comments")
+	}
 	if int(tree.MustBeDInt(row[0])) > 0 {
 		for old, new := range indexIDMapping {
 			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
