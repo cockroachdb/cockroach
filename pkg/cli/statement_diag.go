@@ -36,7 +36,7 @@ diagnostics can be activated from the UI or using EXPLAIN ANALYZE (DEBUG).`,
 var stmtDiagListCmd = &cobra.Command{
 	Use:   "list [options]",
 	Short: "list available bundles and outstanding activation requests",
-	Long: `List statements diagnostics that are available for download and outstanding
+	Long: `List statement diagnostics that are available for download and outstanding
 diagnostics activation requests.`,
 	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runStmtDiagList),
@@ -138,7 +138,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) error {
 var stmtDiagDownloadCmd = &cobra.Command{
 	Use:   "download <bundle id> <file> [options]",
 	Short: "download statement diagnostics bundle into a zip file",
-	Long: `Download statements diagnostics bundle into a zip file, using an ID returned by
+	Long: `Download statement diagnostics bundle into a zip file, using an ID returned by
 the list command.`,
 	Args: cobra.ExactArgs(2),
 	RunE: MaybeDecorateGRPCError(runStmtDiagDownload),

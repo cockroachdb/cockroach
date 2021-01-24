@@ -225,6 +225,9 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (re
 		if err != nil {
 			return err
 		}
+		if row == nil {
+			return errors.New("failed to check pending statement diagnostics")
+		}
 		count := int(*row[0].(*tree.DInt))
 		if count != 0 {
 			return errors.New("a pending request for the requested fingerprint already exists")
@@ -239,6 +242,9 @@ func (r *Registry) insertRequestInternal(ctx context.Context, fprint string) (re
 			fprint, timeutil.Now())
 		if err != nil {
 			return err
+		}
+		if row == nil {
+			return errors.New("failed to insert statement diagnostics request")
 		}
 		reqID = requestID(*row[0].(*tree.DInt))
 		return nil
@@ -391,6 +397,9 @@ func (r *Registry) insertStatementDiagnostics(
 			if err != nil {
 				return err
 			}
+			if row == nil {
+				return errors.New("failed to check completed statement diagnostics")
+			}
 			cnt := int(*row[0].(*tree.DInt))
 			if cnt == 0 {
 				// Someone else already marked the request as completed. We've traced for nothing.
@@ -426,6 +435,9 @@ func (r *Registry) insertStatementDiagnostics(
 			if err != nil {
 				return err
 			}
+			if row == nil {
+				return errors.New("failed to check statement bundle chunk")
+			}
 			chunkID := row[0].(*tree.DInt)
 			if err := bundleChunksVal.Append(chunkID); err != nil {
 				return err
@@ -445,6 +457,9 @@ func (r *Registry) insertStatementDiagnostics(
 		)
 		if err != nil {
 			return err
+		}
+		if row == nil {
+			return errors.New("failed to insert statement diagnostics")
 		}
 		diagID = stmtID(*row[0].(*tree.DInt))
 

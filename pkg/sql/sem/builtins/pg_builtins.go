@@ -544,6 +544,9 @@ func evalPrivilegeCheck(
 		if err != nil {
 			return nil, err
 		}
+		if r == nil {
+			return nil, errors.AssertionFailedf("failed to evaluate privilege check")
+		}
 		switch r[0] {
 		case tree.DBoolFalse:
 			return tree.DBoolFalse, nil

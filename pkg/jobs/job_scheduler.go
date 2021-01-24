@@ -219,6 +219,9 @@ func newLoopStats(
 	if err != nil {
 		return nil, err
 	}
+	if datums == nil {
+		return nil, errors.New("failed to read scheduler stats")
+	}
 	stats := &loopStats{}
 	stats.readyToRun = int64(tree.MustBeDInt(datums[0]))
 	stats.jobsRunning = int64(tree.MustBeDInt(datums[1]))
