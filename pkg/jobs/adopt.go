@@ -265,7 +265,11 @@ func (r *Registry) runJob(
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		it, err := r.ex.QueryIteratorEx(
+		// Note that we have to buffer all rows first - before processing each
+		// job - because we have to make sure that the query executes without an
+		// error (otherwise, the system.jobs table might diverge from the jobs
+		// registry).
+		rows, err := r.ex.QueryBufferedEx(
 			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, `
 UPDATE system.jobs
 SET status =
@@ -280,20 +284,6 @@ RETURNING id, status`,
 			StatusCancelRequested, StatusReverting,
 			s.ID().UnsafeBytes(), r.ID(),
 		)
-		if err != nil {
-			return errors.Wrap(err, "could not query jobs table")
-		}
-		// Note that we have to buffer all rows first - before processing each
-		// job - because we have to make sure that the query executes without an
-		// error (otherwise, the system.jobs table might diverge from the jobs
-		// registry).
-		// TODO(yuzefovich): use QueryBufferedEx method once it is added to
-		// sqlutil.InternalExecutor interface.
-		var rows []tree.Datums
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			rows = append(rows, it.Cur())
-		}
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
