@@ -372,15 +372,17 @@ func (r *rowsIterator) Types() colinfo.ResultColumns {
 func (ie *InternalExecutor) Query(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
-	return ie.QueryEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
+	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)
 }
 
-// QueryEx is like Query, but allows the caller to override some session data
-// fields (e.g. the user).
+// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once).
+//
+// If txn is not nil, the statement will be executed in the respective txn.
 //
 // The fields set in session that are set override the respective fields if they
 // have previously been set through SetSessionData().
-func (ie *InternalExecutor) QueryEx(
+func (ie *InternalExecutor) QueryBufferedEx(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,

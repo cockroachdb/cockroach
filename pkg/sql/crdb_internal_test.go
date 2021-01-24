@@ -12,7 +12,6 @@ package sql_test
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"strings"
 	"testing"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -41,9 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/pgtype"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -383,61 +379,6 @@ WHERE
 	if txnStart.After(queryStart) {
 		t.Error("expected txn to start before query")
 	}
-}
-
-// TestCrdbInternalJobsOOM verifies that the memory budget works correctly for
-// crdb_internal.jobs.
-func TestCrdbInternalJobsOOM(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// The budget needs to be large enough to establish the initial database
-	// connection, but small enough to overflow easily. It's set to be comfortably
-	// large enough that the server can start up with a bit of
-	// extra space to overflow.
-	const lowMemoryBudget = 250000
-	const fieldSize = 10000
-	const numRows = 10
-	const statement = "SELECT count(*) FROM crdb_internal.jobs"
-
-	insertRows := func(sqlDB *gosql.DB) {
-		for i := 0; i < numRows; i++ {
-			if _, err := sqlDB.Exec(`
-INSERT INTO system.jobs(id, status, payload, progress)
-VALUES ($1, 'StatusRunning', repeat('a', $2)::BYTES, repeat('a', $2)::BYTES)`, i, fieldSize); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	t.Run("over budget jobs table", func(t *testing.T) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-			SQLMemoryPoolSize: lowMemoryBudget,
-		})
-		defer s.Stopper().Stop(context.Background())
-
-		insertRows(sqlDB)
-		_, err := sqlDB.Exec(statement)
-		if err == nil {
-			t.Fatalf("Expected \"%s\" to consume too much memory, found no error", statement)
-		}
-		if pErr := (*pq.Error)(nil); !(errors.As(err, &pErr) &&
-			pgcode.MakeCode(string(pErr.Code)) == pgcode.OutOfMemory) {
-			t.Fatalf("Expected \"%s\" to consume too much memory, found unexpected error %+v", statement, pErr)
-		}
-	})
-
-	t.Run("under budget jobs table", func(t *testing.T) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-			SQLMemoryPoolSize: 2 * lowMemoryBudget,
-		})
-		defer s.Stopper().Stop(context.Background())
-
-		insertRows(sqlDB)
-		if _, err := sqlDB.Exec(statement); err != nil {
-			t.Fatal(err)
-		}
-	})
 }
 
 // TestInvalidObjects table descriptors that don't validate will show up in
