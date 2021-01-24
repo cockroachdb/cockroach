@@ -134,20 +134,22 @@ type InternalExecutor interface {
 // executor. It provides access to the rows from a query.
 type InternalRows interface {
 	// Next advances the iterator by one row, returning false if there are no
-	// more rows in this iterator or an error if it is encountered (which is
+	// more rows in this iterator or if an error is encountered (the latter is
 	// also returned).
 	//
-	// The iterator is automatically closed when there are no more rows or an
-	// error was encountered, consequent calls to Next will return the same
-	// values as when the iterator was closed.
+	// The iterator is automatically closed when false is returned, consequent
+	// calls to Next will return the same values as when the iterator was
+	// closed.
 	Next(context.Context) (bool, error)
 
 	// Cur returns the row at the current position of the iterator. The row is
-	// safe to hold onto (meaning that calling Next() will not invalidate it).
+	// safe to hold onto (meaning that calling Next() or Close() will not
+	// invalidate it).
 	Cur() tree.Datums
 
 	// Close closes this iterator, releasing any resources it held open. Close
-	// is idempotent.
+	// is idempotent and *must* be called once the caller is done with the
+	// iterator.
 	Close() error
 
 	// Types returns the types of the columns returned by this iterator. The

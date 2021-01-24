@@ -212,9 +212,9 @@ type rowsIterator struct {
 	// an error returned by Next() or Close().
 	errCallback func(err error) error
 
-	// stmtBuf will be closed on Close(). This is necessary in order to exit
-	// from connExecutor.run when the iterator's user wants to short-circuit
-	// the iteration (i.e. before Next() return false).
+	// stmtBuf will be closed on Close(). This is necessary in order to tell
+	// the connExecutor's goroutine to exit when the iterator's user wants to
+	// short-circuit the iteration (i.e. before Next() returns false).
 	stmtBuf *StmtBuf
 
 	// wg can be used to wait for the connExecutor's goroutine to exit.
@@ -259,6 +259,12 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 			return true, nil
 		}
 		if next.cols != nil {
+			// Ignore the result columns if they are already set on the
+			// iterator: it is possible for ROWS statement type to be executed
+			// in a 'rows affected' mode, in such case the correct columns are
+			// set manually when instantiating an iterator, but the result
+			// columns of the statement are also sent by SetColumns() (we need
+			// to keep the former).
 			if r.resultCols == nil {
 				r.resultCols = next.cols
 			}
@@ -284,7 +290,7 @@ func (r *rowsIterator) Cur() tree.Datums {
 
 func (r *rowsIterator) Close() error {
 	// Closing the stmtBuf will tell the connExecutor to stop executing commands
-	// (if it hadn't exited yet).
+	// (if it hasn't exited yet).
 	r.stmtBuf.Close()
 	// We need to finish the span but only after the connExecutor goroutine is
 	// done.
@@ -296,8 +302,8 @@ func (r *rowsIterator) Close() error {
 		}
 	}()
 
-	// We also need to receive from the channel since the run() goroutine might
-	// be blocked on sending the row in AddRow().
+	// We also need to receive from the channel since the connExecutor goroutine
+	// might be blocked on sending the row in AddRow().
 	for {
 		select {
 		case res, ok := <-r.ch:
@@ -305,7 +311,7 @@ func (r *rowsIterator) Close() error {
 				return r.lastErr
 			}
 			// We are only interested in possible errors if we haven't already
-			// seen one.
+			// seen one. All other things are simply ignored.
 			if res.err != nil && r.lastErr == nil {
 				r.lastErr = res.err
 				if r.errCallback != nil {
@@ -386,6 +392,8 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		rows = append(rows, it.Cur())
 		if limit != 0 && len(rows) == limit {
+			// We have accumulated the requested number of rows, so we can
+			// short-circuit the iteration.
 			err = it.Close()
 			break
 		}
@@ -591,8 +599,8 @@ func (ie *InternalExecutor) execInternal(
 
 	// The returned span is finished by this function in all error paths, but if
 	// an iterator is returned, then we transfer the responsibility of closing
-	// the span to the iterator. This is necessary so that the connExecutor is
-	// closed before the span is finished.
+	// the span to the iterator. This is necessary so that the connExecutor
+	// exits before the span is finished.
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 
 	var stmtBuf *StmtBuf
@@ -617,7 +625,7 @@ func (ie *InternalExecutor) execInternal(
 			}
 			sp.Finish()
 		} else {
-			// r must be non-nil.
+			// r must be non-nil here.
 			r.errCallback = func(err error) error {
 				if err != nil && !errIsRetriable(err) {
 					err = errors.Wrapf(err, "%s", opName)
@@ -648,17 +656,17 @@ func (ie *InternalExecutor) execInternal(
 		resultsReceived = true
 		defer close(ch)
 		for _, res := range results {
+			if res.pos == resPos {
+				if emitRowsAffected {
+					ch <- ieIteratorResult{row: tree.Datums{tree.NewDInt(tree.DInt(res.RowsAffected()))}}
+				}
+				return
+			}
 			if res.Err() != nil {
 				// If we encounter an error, there's no point in looking
 				// further; the	rest of the commands in the batch have been
 				// skipped.
 				ch <- ieIteratorResult{err: res.Err()}
-				return
-			}
-			if res.pos == resPos {
-				if emitRowsAffected {
-					ch <- ieIteratorResult{row: tree.Datums{tree.NewDInt(tree.DInt(res.RowsAffected()))}}
-				}
 				return
 			}
 		}

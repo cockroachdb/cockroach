@@ -909,6 +909,9 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	if r.errOnly {
 		panic("AddRow() called when errOnly is set")
 	}
+	// AddRow() and IncrementRowsAffected() are never called on the same command
+	// result, so we will not double count the affected rows by an increment
+	// here.
 	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
