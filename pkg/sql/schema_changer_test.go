@@ -4472,9 +4472,9 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 	}
 
 	if err := tx.Commit(); !testutils.IsError(
-		err, `duplicate key value`,
+		err, `unique constraint "v_unique"`,
 	) {
-		t.Fatal(err)
+		t.Fatalf(`expected 'unique constraint "v_unique"', got %+v`, err)
 	}
 }
 
