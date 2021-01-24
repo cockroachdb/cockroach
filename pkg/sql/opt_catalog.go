@@ -643,13 +643,19 @@ func newOptTable(
 		desc := colDescs[ordinal]
 
 		var kind cat.ColumnKind
+		visibility := cat.Visible
 		switch {
 		case ordinal < numOrdinary:
 			kind = cat.Ordinary
+			if desc.Hidden {
+				visibility = cat.Hidden
+			}
 		case ordinal < numWritable:
 			kind = cat.WriteOnly
+			visibility = cat.Inaccessible
 		default:
 			kind = cat.DeleteOnly
+			visibility = cat.Inaccessible
 		}
 		if !desc.Virtual {
 			ot.columns[ordinal].InitNonVirtual(
@@ -659,7 +665,7 @@ func newOptTable(
 				kind,
 				desc.Type,
 				desc.Nullable,
-				desc.Hidden,
+				visibility,
 				desc.DefaultExpr,
 				desc.ComputeExpr,
 			)
@@ -673,7 +679,7 @@ func newOptTable(
 				tree.Name(desc.Name),
 				desc.Type,
 				desc.Nullable,
-				desc.Hidden,
+				visibility,
 				*desc.ComputeExpr,
 			)
 		}
@@ -701,7 +707,7 @@ func newOptTable(
 				cat.System,
 				sysCol.Type,
 				sysCol.Nullable,
-				sysCol.Hidden,
+				cat.MaybeHidden(sysCol.Hidden),
 				sysCol.DefaultExpr,
 				sysCol.ComputeExpr,
 			)
@@ -1685,10 +1691,10 @@ func newOptVirtualTable(
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
 		types.Int,
-		false, /* nullable */
-		true,  /* hidden */
-		nil,   /* defaultExpr */
-		nil,   /* computedExpr */
+		false,      /* nullable */
+		cat.Hidden, /* hidden */
+		nil,        /* defaultExpr */
+		nil,        /* computedExpr */
 	)
 	for i := range desc.Columns {
 		d := desc.Columns[i]
@@ -1699,7 +1705,7 @@ func newOptVirtualTable(
 			cat.Ordinary,
 			d.Type,
 			d.Nullable,
-			d.Hidden,
+			cat.MaybeHidden(d.Hidden),
 			d.DefaultExpr,
 			d.ComputeExpr,
 		)
