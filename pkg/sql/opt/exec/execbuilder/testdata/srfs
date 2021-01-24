@@ -152,10 +152,10 @@ vectorized: true
 └── • render
     │ columns: ("information_schema._pg_expandarray", x, y, z)
     │ estimated row count: 3,267 (missing stats)
-    │ render 0: ((x, n) AS x, n)
-    │ render 1: x
-    │ render 2: y
-    │ render 3: z
+    │ render information_schema._pg_expandarray: ((x, n) AS x, n)
+    │ render x: x
+    │ render y: y
+    │ render z: z
     │
     └── • project set
         │ columns: (x, y, x, z, x, n)
@@ -330,8 +330,8 @@ vectorized: true
 • render
 │ columns: (group_name, jsonb_array_elements)
 │ estimated row count: 100,000 (missing stats)
-│ render 0: data->>'name'
-│ render 1: jsonb_array_elements
+│ render group_name: data->>'name'
+│ render jsonb_array_elements: jsonb_array_elements
 │
 └── • project set
     │ columns: (id, data, "?column?", jsonb_array_elements)
@@ -355,9 +355,9 @@ vectorized: true
                 ├── • render
                 │   │ columns: (column12, id, data)
                 │   │ estimated row count: 1,000 (missing stats)
-                │   │ render 0: data->>'name'
-                │   │ render 1: id
-                │   │ render 2: data
+                │   │ render column12: data->>'name'
+                │   │ render id: id
+                │   │ render data: data
                 │   │
                 │   └── • scan
                 │         columns: (id, data)
@@ -368,8 +368,8 @@ vectorized: true
                 └── • render
                     │ columns: (column13, "?column?")
                     │ estimated row count: 1,000 (missing stats)
-                    │ render 0: data->>'name'
-                    │ render 1: data->'members'
+                    │ render column13: data->>'name'
+                    │ render ?column?: data->'members'
                     │
                     └── • scan
                           columns: (data)

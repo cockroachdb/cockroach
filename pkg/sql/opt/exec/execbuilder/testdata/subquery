@@ -220,10 +220,10 @@ vectorized: true
     └── • render
         │ columns: (col0, col3, col4, rowid)
         │ estimated row count: 311 (missing stats)
-        │ render 0: col0
-        │ render 1: col3
-        │ render 2: col4
-        │ render 3: rowid
+        │ render col0: col0
+        │ render col3: col3
+        │ render col4: col4
+        │ render rowid: rowid
         │
         └── • filter
             │ columns: (col0, col3, col4, rowid)
@@ -292,7 +292,7 @@ vectorized: true
 └── • render
     │ columns: (column9)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: x - 1
+    │ render column9: x - 1
     │
     └── • scan
           columns: (x)
@@ -349,7 +349,7 @@ vectorized: true
 └── • render
     │ columns: (column9)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: x - 1
+    │ render column9: x - 1
     │
     └── • scan
           columns: (x)

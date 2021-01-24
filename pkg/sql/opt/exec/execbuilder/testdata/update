@@ -131,11 +131,11 @@ vectorized: true
 └── • render
     │ columns: (x, y, z, x_new, y_new)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: 1
-    │ render 1: 2
-    │ render 2: x
-    │ render 3: y
-    │ render 4: z
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
     │
     └── • scan
           columns: (x, y, z)
@@ -186,10 +186,10 @@ vectorized: true
     └── • render
         │ columns: (x_new, x, y, z)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: 2
-        │ render 1: x
-        │ render 2: y
-        │ render 3: z
+        │ render x_new: 2
+        │ render x: x
+        │ render y: y
+        │ render z: z
         │
         └── • scan
               columns: (x, y, z)
@@ -385,10 +385,10 @@ vectorized: true
 └── • render
     │ columns: (a, b, c, c_new)
     │ estimated row count: 1 (missing stats)
-    │ render 0: 2
-    │ render 1: a
-    │ render 2: b
-    │ render 3: c
+    │ render c_new: 2
+    │ render a: a
+    │ render b: b
+    │ render c: c
     │
     └── • filter
         │ columns: (a, b, c)
@@ -589,11 +589,11 @@ vectorized: true
 └── • render
     │ columns: (x, y, z, x_new, y_new)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: 1
-    │ render 1: 2
-    │ render 2: x
-    │ render 3: y
-    │ render 4: z
+    │ render x_new: 1
+    │ render y_new: 2
+    │ render x: x
+    │ render y: y
+    │ render z: z
     │
     └── • scan
           columns: (x, y, z)

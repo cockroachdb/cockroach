@@ -55,7 +55,7 @@ vectorized: true
 • render
 │ columns: (a)
 │ estimated row count: 1,000 (missing stats)
-│ render 0: a
+│ render a: a
 │
 └── • scan
       columns: (a)
@@ -155,7 +155,7 @@ vectorized: true
 └── • render
     │ columns: (n)
     │ estimated row count: 10 (missing stats)
-    │ render 0: column1
+    │ render n: column1
     │
     └── • recursive cte
         │ columns: (column1)

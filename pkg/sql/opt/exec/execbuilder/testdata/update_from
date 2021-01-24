@@ -118,14 +118,14 @@ vectorized: true
 └── • render
     │ columns: (a, b, c, b_new, c_new, a, b, c)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: b + 1
-    │ render 1: c + 2
-    │ render 2: a
-    │ render 3: b
-    │ render 4: c
-    │ render 5: a
-    │ render 6: b
-    │ render 7: c
+    │ render b_new: b + 1
+    │ render c_new: c + 2
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render a: a
+    │ render b: b
+    │ render c: c
     │
     └── • merge join (inner)
         │ columns: (a, b, c, a, b, c)

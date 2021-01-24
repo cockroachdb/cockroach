@@ -261,9 +261,9 @@ vectorized: true
 • render
 │ columns: (x, two, plus1)
 │ estimated row count: 10,000 (missing stats)
-│ render 0: COALESCE(x, x)
-│ render 1: two
-│ render 2: plus1
+│ render x: COALESCE(x, x)
+│ render two: two
+│ render plus1: plus1
 │
 └── • hash join (full outer)
     │ columns: (two, x, plus1, x)
@@ -273,8 +273,8 @@ vectorized: true
     ├── • render
     │   │ columns: (two, x)
     │   │ estimated row count: 1,000 (missing stats)
-    │   │ render 0: 2
-    │   │ render 1: x
+    │   │ render two: 2
+    │   │ render x: x
     │   │
     │   └── • scan
     │         columns: (x)
@@ -285,8 +285,8 @@ vectorized: true
     └── • render
         │ columns: (plus1, x)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: y + 1
-        │ render 1: x
+        │ render plus1: y + 1
+        │ render x: x
         │
         └── • scan
               columns: (x, y)
@@ -416,19 +416,19 @@ vectorized: true
     └── • render
         │ columns: (pktable_cat, update_rule, delete_rule, deferrability, nspname, relname, attname, nspname, relname, attname, conname, generate_series, relname)
         │ estimated row count: 110,908 (missing stats)
-        │ render 0: CAST(NULL AS STRING)
-        │ render 1: CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-        │ render 2: CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-        │ render 3: CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
-        │ render 4: nspname
-        │ render 5: relname
-        │ render 6: attname
-        │ render 7: nspname
-        │ render 8: relname
-        │ render 9: attname
-        │ render 10: conname
-        │ render 11: generate_series
-        │ render 12: relname
+        │ render pktable_cat: CAST(NULL AS STRING)
+        │ render update_rule: CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+        │ render delete_rule: CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+        │ render deferrability: CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
+        │ render nspname: nspname
+        │ render relname: relname
+        │ render attname: attname
+        │ render nspname: nspname
+        │ render relname: relname
+        │ render attname: attname
+        │ render conname: conname
+        │ render generate_series: generate_series
+        │ render relname: relname
         │
         └── • hash join (inner)
             │ columns: (attrelid, attname, attnum, attrelid, attname, attnum, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series, oid, relname, relnamespace, oid, nspname, objid, refobjid, oid, relname, relkind)
@@ -621,9 +621,9 @@ vectorized: true
     ├── • render
     │   │ columns: (column10, a, b)
     │   │ estimated row count: 1,000 (missing stats)
-    │   │ render 0: a + b
-    │   │ render 1: a
-    │   │ render 2: b
+    │   │ render column10: a + b
+    │   │ render a: a
+    │   │ render b: b
     │   │
     │   └── • scan
     │         columns: (a, b)
@@ -657,11 +657,11 @@ vectorized: true
     └── • render
         │ columns: (div, a, b, n, sq)
         │ estimated row count: 1,000,000 (missing stats)
-        │ render 0: (a * b) / 2
-        │ render 1: a
-        │ render 2: b
-        │ render 3: n
-        │ render 4: sq
+        │ render div: (a * b) / 2
+        │ render a: a
+        │ render b: b
+        │ render n: n
+        │ render sq: sq
         │
         └── • cross join (inner)
             │ columns: (a, b, n, sq)
@@ -698,9 +698,9 @@ vectorized: true
     ├── • render
     │   │ columns: (column10, a, b)
     │   │ estimated row count: 1,000 (missing stats)
-    │   │ render 0: a + b
-    │   │ render 1: a
-    │   │ render 2: b
+    │   │ render column10: a + b
+    │   │ render a: a
+    │   │ render b: b
     │   │
     │   └── • scan
     │         columns: (a, b)
@@ -737,9 +737,9 @@ vectorized: true
         ├── • render
         │   │ columns: (column10, a, b)
         │   │ estimated row count: 1,000 (missing stats)
-        │   │ render 0: a + b
-        │   │ render 1: a
-        │   │ render 2: b
+        │   │ render column10: a + b
+        │   │ render a: a
+        │   │ render b: b
         │   │
         │   └── • scan
         │         columns: (a, b)
@@ -1096,9 +1096,9 @@ vectorized: true
 • render
 │ columns: (s, s, s)
 │ estimated row count: 10,000 (missing stats)
-│ render 0: COALESCE(s, s)
-│ render 1: s
-│ render 2: s
+│ render s: COALESCE(s, s)
+│ render s: s
+│ render s: s
 │
 └── • hash join (left outer)
     │ columns: (s, s)
@@ -1126,9 +1126,9 @@ vectorized: true
 • render
 │ columns: (s, s, s)
 │ estimated row count: 10,000 (missing stats)
-│ render 0: COALESCE(s, s)
-│ render 1: s
-│ render 2: s
+│ render s: COALESCE(s, s)
+│ render s: s
+│ render s: s
 │
 └── • hash join (full outer)
     │ columns: (s, s)
@@ -1158,8 +1158,8 @@ vectorized: true
 • render
 │ columns: (a, s)
 │ estimated row count: 1,000 (missing stats)
-│ render 0: COALESCE(s, s)
-│ render 1: a
+│ render s: COALESCE(s, s)
+│ render a: a
 │
 └── • hash join (left outer)
     │ columns: (a, s, a, s)
@@ -1291,10 +1291,10 @@ vectorized: true
 └── • render
     │ columns: (x, y, u, v)
     │ estimated row count: 1,900 (missing stats)
-    │ render 0: COALESCE(x, x)
-    │ render 1: COALESCE(y, y)
-    │ render 2: u
-    │ render 3: v
+    │ render x: COALESCE(x, x)
+    │ render y: COALESCE(y, y)
+    │ render u: u
+    │ render v: v
     │
     └── • merge join (full outer)
         │ columns: (x, y, u, x, y, v)
@@ -1498,10 +1498,10 @@ vectorized: true
 └── • render
     │ columns: (x, y, u, v)
     │ estimated row count: 1,900 (missing stats)
-    │ render 0: COALESCE(x, x)
-    │ render 1: COALESCE(y, y)
-    │ render 2: u
-    │ render 3: v
+    │ render x: COALESCE(x, x)
+    │ render y: COALESCE(y, y)
+    │ render u: u
+    │ render v: v
     │
     └── • merge join (full outer)
         │ columns: (x, y, u, x, y, v)

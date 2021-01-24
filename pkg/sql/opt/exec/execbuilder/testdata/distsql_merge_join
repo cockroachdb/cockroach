@@ -833,11 +833,11 @@ vectorized: true
 • render
 │ columns: (pid1, pa1, cid1, cid2, ca1)
 │ estimated row count: 1,000 (missing stats)
-│ render 0: COALESCE(pid1, pid1)
-│ render 1: pa1
-│ render 2: cid1
-│ render 3: cid2
-│ render 4: ca1
+│ render pid1: COALESCE(pid1, pid1)
+│ render pa1: pa1
+│ render cid1: cid1
+│ render cid2: cid2
+│ render ca1: ca1
 │
 └── • merge join (full outer)
     │ columns: (pid1, pa1, pid1, cid1, cid2, ca1)
@@ -893,12 +893,12 @@ vectorized: true
 • render
 │ columns: (pid1, cid1, cid2, gcid1, gca1, ca1)
 │ estimated row count: 1,999 (missing stats)
-│ render 0: COALESCE(pid1, pid1)
-│ render 1: COALESCE(cid1, cid1)
-│ render 2: COALESCE(cid2, cid2)
-│ render 3: gcid1
-│ render 4: gca1
-│ render 5: ca1
+│ render pid1: COALESCE(pid1, pid1)
+│ render cid1: COALESCE(cid1, cid1)
+│ render cid2: COALESCE(cid2, cid2)
+│ render gcid1: gcid1
+│ render gca1: gca1
+│ render ca1: ca1
 │
 └── • merge join (full outer)
     │ columns: (pid1, cid1, cid2, gcid1, gca1, pid1, cid1, cid2, ca1)
