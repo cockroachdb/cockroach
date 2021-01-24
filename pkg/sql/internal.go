@@ -676,10 +676,7 @@ func (ie *InternalExecutor) execInternal(
 		if resultsReceived {
 			return
 		}
-		select {
-		case ch <- ieIteratorResult{err: err}:
-		case <-ctx.Done():
-		}
+		ch <- ieIteratorResult{err: err}
 		close(ch)
 	}
 	stmtBuf, wg = ie.initConnEx(ctx, txn, ch, sd, syncCallback, errCallback)

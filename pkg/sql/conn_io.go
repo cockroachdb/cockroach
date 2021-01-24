@@ -883,10 +883,7 @@ func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.Re
 		panic("SetColumns() called when errOnly is set")
 	}
 	r.cols = cols
-	select {
-	case r.ch <- ieIteratorResult{cols: cols}:
-	case <-ctx.Done():
-	}
+	r.ch <- ieIteratorResult{cols: cols}
 }
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
@@ -915,11 +912,7 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	select {
-	case r.ch <- ieIteratorResult{row: rowCopy}:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	r.ch <- ieIteratorResult{row: rowCopy}
 	return nil
 }
 
