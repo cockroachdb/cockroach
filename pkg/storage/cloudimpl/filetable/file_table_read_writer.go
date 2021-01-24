@@ -77,7 +77,7 @@ func (i *InternalFileToTableExecutor) Query(
 ) (*FileToTableExecutorRows, error) {
 	result := FileToTableExecutorRows{}
 	var err error
-	result.internalExecResults, err = i.ie.QueryEx(ctx, opName, nil,
+	result.internalExecResults, err = i.ie.QueryBufferedEx(ctx, opName, nil,
 		sessiondata.InternalExecutorOverride{User: username}, query, qargs...)
 	if err != nil {
 		return nil, err
@@ -368,7 +368,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 	if err := e.db.Txn(ctx,
 		func(ctx context.Context, txn *kv.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := e.ie.QueryEx(ctx, "drop-payload-table", txn,
+			_, err := e.ie.ExecEx(ctx, "drop-payload-table", txn,
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
@@ -376,7 +376,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = e.ie.QueryEx(ctx, "drop-file-table", txn,
+			_, err = e.ie.ExecEx(ctx, "drop-file-table", txn,
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {
@@ -471,7 +471,7 @@ type payloadWriter struct {
 // transaction txn.
 func (p *payloadWriter) WriteChunk(buf []byte, txn *kv.Txn) (int, error) {
 	insertChunkQuery := fmt.Sprintf(`INSERT INTO %s VALUES ($1, $2, $3)`, p.payloadTableName)
-	_, err := p.ie.QueryEx(p.ctx, "insert-file-chunk", txn, p.execSessionDataOverride,
+	_, err := p.ie.ExecEx(p.ctx, "insert-file-chunk", txn, p.execSessionDataOverride,
 		insertChunkQuery, p.fileID, p.byteOffset, buf)
 	if err != nil {
 		return 0, err
@@ -618,7 +618,7 @@ func (w *chunkWriter) Close() error {
 	// were actually written to the payload table.
 	updateFileSizeQuery := fmt.Sprintf(`UPDATE %s SET file_size=$1 WHERE filename=$2`,
 		w.fileTableName)
-	_, err := w.pw.ie.QueryEx(w.pw.ctx, "update-file-size",
+	_, err := w.pw.ie.ExecEx(w.pw.ctx, "update-file-size",
 		nil /* txn */, w.execSessionDataOverride, updateFileSizeQuery, w.pw.byteOffset, w.filename)
 
 	return err
@@ -662,18 +662,18 @@ func newFileTableReader(
 		return nil, 0, os.ErrNotExist
 	}
 	fileID := fileIDRow[0]
-	rows, err := ie.QueryEx(ctx, "get-file-size", nil /*txn*/, sessiondata.InternalExecutorOverride{User: username},
+	row, err := ie.QueryRowEx(ctx, "get-file-size", nil /*txn*/, sessiondata.InternalExecutorOverride{User: username},
 		fmt.Sprintf(`SELECT sum_int(length(payload)) FROM %s WHERE file_id=$1`, payloadTableName), fileID,
 	)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	if len(rows) == 0 || rows[0][0] == tree.DNull {
+	if row == nil || row[0] == tree.DNull {
 		return ioutil.NopCloser(bytes.NewReader(nil)), 0, nil
 	}
 
-	sz := int64(tree.MustBeDInt(rows[0][0]))
+	sz := int64(tree.MustBeDInt(row[0]))
 
 	fn := func(p []byte, pos int64) (int, error) {
 		if pos >= sz {
@@ -681,18 +681,18 @@ func newFileTableReader(
 		}
 		query := fmt.Sprintf(
 			`SELECT byte_offset, payload FROM %s WHERE file_id=$1 AND byte_offset <= $2 ORDER BY byte_offset DESC LIMIT 1`, payloadTableName)
-		rows, err := ie.QueryEx(
+		row, err := ie.QueryRowEx(
 			ctx, "get-filename-payload",
 			nil /* txn */, sessiondata.InternalExecutorOverride{User: username}, query, fileID, pos,
 		)
 		if err != nil {
 			return 0, err
 		}
-		if len(rows) == 0 || rows[0][1] == tree.DNull {
+		if row == nil || row[1] == tree.DNull {
 			return 0, io.EOF
 		}
-		block := tree.MustBeDBytes(rows[0][1])
-		offsetInBlock := pos - int64(tree.MustBeDInt(rows[0][0]))
+		block := tree.MustBeDBytes(row[1])
+		offsetInBlock := pos - int64(tree.MustBeDInt(row[0]))
 		n := copy(p, block[offsetInBlock:])
 		return n, nil
 	}
@@ -747,18 +747,18 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	tableExistenceQuery := fmt.Sprintf(
 		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
 		databaseSchema)
-	rows, err := ie.QueryEx(ctx, "tables-exist", nil,
+	numRows, err := ie.ExecEx(ctx, "tables-exist", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
 		return false, err
 	}
 
-	if len(rows) == 1 {
+	if numRows == 1 {
 		return false, errors.New("expected both File and Payload tables to exist, " +
 			"but one of them has been dropped")
 	}
-	return len(rows) == 2, nil
+	return numRows == 2, nil
 }
 
 func (f *FileToTableSystem) createFileAndPayloadTables(
@@ -766,7 +766,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 ) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
-	_, err := ie.QueryEx(ctx, "create-file-table", txn,
+	_, err := ie.ExecEx(ctx, "create-file-table", txn,
 		sessiondata.InternalExecutorOverride{User: f.username},
 		fileTableCreateQuery)
 	if err != nil {
@@ -774,7 +774,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	}
 
 	payloadTableCreateQuery := fmt.Sprintf(payloadTableSchema, f.GetFQPayloadTableName())
-	_, err = ie.QueryEx(ctx, "create-payload-table", txn,
+	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
 		sessiondata.InternalExecutorOverride{User: f.username},
 		payloadTableCreateQuery)
 	if err != nil {
@@ -800,7 +800,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
-	_, err := ie.QueryEx(ctx, "grant-user-file-payload-table-access", txn,
+	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		grantQuery)
 	if err != nil {
@@ -817,7 +817,7 @@ func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
 ) error {
 	getUsersQuery := `SELECT username FROM system.
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
-	rows, err := ie.QueryEx(
+	it, err := ie.QueryIteratorEx(
 		ctx, "get-users", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getUsersQuery, f.username,
@@ -827,15 +827,20 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 	}
 
 	var users []security.SQLUsername
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		username := security.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(row[0])))
 		users = append(users, username)
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to get all the users of the cluster")
 	}
 
 	for _, user := range users {
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
-		_, err = ie.QueryEx(ctx, "revoke-user-privileges", txn,
+		_, err = ie.ExecEx(ctx, "revoke-user-privileges", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			revokeQuery)
 		if err != nil {
