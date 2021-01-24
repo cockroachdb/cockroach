@@ -274,7 +274,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
-		"Image to use to create the vm, ubuntu-1904-disco-v20191008 is a more modern image")
+		"Image to use to create the vm, ubuntu-2004-focal-v20210119a is a more modern image")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
