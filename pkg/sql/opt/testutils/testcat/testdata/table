@@ -186,15 +186,15 @@ TABLE inv
  ├── j jsonb
  ├── g geometry
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
- ├── g_inverted_key geometry not null [hidden] [virtual-inverted]
+ ├── j_inverted_key jsonb not null [virtual-inverted]
+ ├── g_inverted_key geometry not null [virtual-inverted]
  ├── INDEX primary
  │    └── k int not null
  ├── INVERTED INDEX secondary
- │    ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
+ │    ├── j_inverted_key jsonb not null [virtual-inverted]
  │    └── k int not null
  ├── INVERTED INDEX secondary
- │    ├── g_inverted_key geometry not null [hidden] [virtual-inverted]
+ │    ├── g_inverted_key geometry not null [virtual-inverted]
  │    └── k int not null
  └── UNIQUE (k)
 
@@ -218,15 +218,15 @@ TABLE inv2
  ├── g geometry
  ├── rowid int not null default (unique_rowid()) [hidden]
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
- ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
- ├── g_inverted_key geometry not null [hidden] [virtual-inverted]
+ ├── j_inverted_key jsonb not null [virtual-inverted]
+ ├── g_inverted_key geometry not null [virtual-inverted]
  ├── INDEX primary
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INVERTED INDEX secondary
- │    ├── j_inverted_key jsonb not null [hidden] [virtual-inverted]
+ │    ├── j_inverted_key jsonb not null [virtual-inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
  ├── INVERTED INDEX secondary
- │    ├── g_inverted_key geometry not null [hidden] [virtual-inverted]
+ │    ├── g_inverted_key geometry not null [virtual-inverted]
  │    └── rowid int not null default (unique_rowid()) [hidden]
  └── UNIQUE (rowid)
 
@@ -270,3 +270,36 @@ TABLE uniq
  ├── UNIQUE WITHOUT INDEX (j)
  ├── UNIQUE (j, k)
  └── UNIQUE WITHOUT INDEX (l, m)
+
+exec-ddl
+CREATE TABLE mutations (
+  a INT,
+  "b:inaccessible" INT,
+  "c:write-only" INT,
+  "d:delete-only" INT,
+  "v:inaccessible" INT AS (a+1) VIRTUAL,
+  INDEX "idxa:write-only" (a),
+  INDEX "idxb:delete-only" (b)
+)
+----
+
+exec-ddl
+SHOW CREATE mutations
+----
+TABLE mutations
+ ├── a int
+ ├── b int [inaccessible]
+ ├── v int as (a + 1) virtual [inaccessible]
+ ├── rowid int not null default (unique_rowid()) [hidden]
+ ├── c int [write-only]
+ ├── d int [delete-only]
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── INDEX primary
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX idxa (mutation)
+ │    ├── a int
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ ├── INDEX idxb (mutation)
+ │    ├── b int [inaccessible]
+ │    └── rowid int not null default (unique_rowid()) [hidden]
+ └── UNIQUE (rowid)

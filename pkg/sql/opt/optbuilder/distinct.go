@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -24,7 +25,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// We are doing a distinct along all the projected columns.
 	var private memo.GroupingPrivate
 	for i := range inScope.cols {
-		if !inScope.cols[i].hidden {
+		if inScope.cols[i].visibility == cat.Visible {
 			private.GroupingCols.Add(inScope.cols[i].id)
 		}
 	}
