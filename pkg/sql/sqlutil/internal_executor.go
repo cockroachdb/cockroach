@@ -84,6 +84,23 @@ type InternalExecutor interface {
 		qargs ...interface{},
 	) (tree.Datums, colinfo.ResultColumns, error)
 
+	// QueryBuffered executes the supplied SQL statement and returns the
+	// resulting rows (meaning all of them are buffered at once). If no user has
+	// been previously set through SetSessionData, the statement is executed as
+	// the root user.
+	//
+	// If txn is not nil, the statement will be executed in the respective txn.
+	//
+	// QueryBuffered is deprecated because it may transparently execute a query
+	// as root. Use QueryBufferedEx instead.
+	QueryBuffered(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		stmt string,
+		qargs ...interface{},
+	) ([]tree.Datums, error)
+
 	// QueryBufferedEx executes the supplied SQL statement and returns the
 	// resulting rows (meaning all of them are buffered at once).
 	//
