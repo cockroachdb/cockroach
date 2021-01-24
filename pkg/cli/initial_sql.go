@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // runInitialSQL concerns itself with running "initial SQL" code when
@@ -80,21 +81,24 @@ func createAdminUser(ctx context.Context, s *server.Server, adminUser, adminPass
 // given server object.
 func cliDisableReplication(ctx context.Context, s *server.Server) error {
 	return s.RunLocalSQL(ctx,
-		func(ctx context.Context, ie *sql.InternalExecutor) error {
-			rows, err := ie.Query(ctx, "get-zones", nil,
+		func(ctx context.Context, ie *sql.InternalExecutor) (retErr error) {
+			it, err := ie.QueryIterator(ctx, "get-zones", nil,
 				"SELECT target FROM crdb_internal.zones")
 			if err != nil {
 				return err
 			}
+			// We have to make sure to close the iterator since we might return
+			// from the for loop early (before Next() returns false).
+			defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-			for _, row := range rows {
-				zone := string(*row[0].(*tree.DString))
+			var ok bool
+			for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+				zone := string(*it.Cur()[0].(*tree.DString))
 				if _, err := ie.Exec(ctx, "set-zone", nil,
 					fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1", zone)); err != nil {
 					return err
 				}
 			}
-
-			return nil
+			return err
 		})
 }

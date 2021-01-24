@@ -958,7 +958,7 @@ func backupPlanHook(
 
 			// Include all tenants.
 			// TODO(tbg): make conditional on cluster setting.
-			tenantRows, err = p.ExecCfg().InternalExecutor.Query(
+			tenantRows, err = p.ExecCfg().InternalExecutor.QueryBuffered(
 				ctx, "backup-lookup-tenant", p.ExtendedEvalContext().Txn,
 				`SELECT id, active, info FROM system.tenants`,
 			)

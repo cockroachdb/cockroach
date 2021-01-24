@@ -1532,7 +1532,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 // as a datum row, containing object id, sub id (column id in the case of
 // columns), comment text, and comment type (keys.FooCommentType).
 func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+	return p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
 		ctx,
 		"select-comments",
 		p.EvalContext().Txn,
