@@ -55,7 +55,7 @@ func (s *LiveClusterRegions) toStrings() []string {
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.
 func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions, error) {
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryEx(
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.txn,
@@ -68,9 +68,14 @@ func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions
 		return nil, err
 	}
 
-	var ret LiveClusterRegions = make(map[descpb.RegionName]struct{}, len(rows))
-	for _, row := range rows {
+	var ret LiveClusterRegions = make(map[descpb.RegionName]struct{})
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		ret[descpb.RegionName(*row[0].(*tree.DString))] = struct{}{}
+	}
+	if err != nil {
+		return nil, err
 	}
 	return ret, nil
 }
