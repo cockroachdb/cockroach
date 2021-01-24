@@ -388,6 +388,9 @@ func CountLeases(
 	if err != nil {
 		return 0, err
 	}
+	if values == nil {
+		return 0, errors.New("failed to count leases")
+	}
 	count := int(tree.MustBeDInt(values[0]))
 	return count, nil
 }
