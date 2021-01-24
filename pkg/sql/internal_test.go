@@ -71,7 +71,7 @@ func TestInternalExecutor(t *testing.T) {
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		"select case nextval('test.seq') when 1 then crdb_internal.force_retry('1h') else 99 end",
 	)
-	if err != nil {
+	if row == nil || err != nil {
 		t.Fatal(err)
 	}
 	r, ok = row[0].(*tree.DInt)
@@ -97,7 +97,7 @@ func TestInternalExecutor(t *testing.T) {
 		if cnt == 1 {
 			require.Regexp(t, "crdb_internal.force_retry", err)
 		}
-		if err != nil {
+		if row == nil || err != nil {
 			return err
 		}
 		r, ok = row[0].(*tree.DInt)

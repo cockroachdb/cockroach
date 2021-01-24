@@ -484,7 +484,7 @@ RETURNING id
 		username.Normalized(),
 		expiration,
 	)
-	if err != nil {
+	if row == nil || err != nil {
 		return 0, nil, err
 	}
 	if row.Len() != 1 || row[0].ResolvedType().Family() != types.IntFamily {

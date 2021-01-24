@@ -173,7 +173,7 @@ func buildStatementBundle(
 	return diagnosticsBundle{traceJSON: traceJSON, zip: buf.Bytes()}
 }
 
-// insert the bundle in statements diagnostics. Sets bundle.diagID and (in error
+// insert the bundle in statement diagnostics. Sets bundle.diagID and (in error
 // cases) bundle.collectionErr.
 //
 // diagRequestID should be the ID returned by ShouldCollectDiagnostics, or zero
