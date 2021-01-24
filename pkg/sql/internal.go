@@ -361,15 +361,16 @@ func (r *rowsIterator) Types() colinfo.ResultColumns {
 	return r.resultCols
 }
 
-// Query executes the supplied SQL statement and returns the resulting rows.
-// If no user has been previously set through SetSessionData, the statement is
-// executed as the root user.
+// QueryBuffered executes the supplied SQL statement and returns the resulting
+// rows (meaning all of them are buffered at once). If no user has been
+// previously set through SetSessionData, the statement is executed as the root
+// user.
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// Query is deprecated because it may transparently execute a query as root. Use
-// QueryEx instead.
-func (ie *InternalExecutor) Query(
+// QueryBuffered is deprecated because it may transparently execute a query as
+// root. Use QueryBufferedEx instead.
+func (ie *InternalExecutor) QueryBuffered(
 	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, error) {
 	return ie.QueryBufferedEx(ctx, opName, txn, ie.maybeRootSessionDataOverride(opName), stmt, qargs...)

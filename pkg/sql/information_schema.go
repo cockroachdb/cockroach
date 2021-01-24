@@ -2214,10 +2214,13 @@ FROM
 			ro.username = u.username
 			AND option = 'VALID UNTIL';
 `
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+	// For some reason, using the iterator API here causes privilege_builtins
+	// logic test fail in 3node-tenant config with 'txn already encountered an
+	// error' (because of the context cancellation), so we buffer all roles
+	// first.
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 		ctx, "read-roles", p.txn, query,
 	)
-
 	if err != nil {
 		return err
 	}
@@ -2250,16 +2253,26 @@ FROM
 
 func forEachRoleMembership(
 	ctx context.Context, p *planner, fn func(role, member security.SQLUsername, isAdmin bool) error,
-) error {
+) (retErr error) {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
 		ctx, "read-members", p.txn, query,
 	)
 	if err != nil {
 		return err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() {
+		closeErr := it.Close()
+		if retErr == nil {
+			retErr = closeErr
+		}
+	}()
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		roleName := tree.MustBeDString(row[0])
 		memberName := tree.MustBeDString(row[1])
 		isAdmin := row[2].(*tree.DBool)
@@ -2272,7 +2285,7 @@ func forEachRoleMembership(
 			return err
 		}
 	}
-	return nil
+	return err
 }
 
 func userCanSeeDescriptor(

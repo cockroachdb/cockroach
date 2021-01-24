@@ -385,14 +385,16 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, err := p.ExecCfg().InternalExecutor.Query(
+		it, err := p.ExecCfg().InternalExecutor.QueryIterator(
 			ctx, "expand-roles", txn, lookupRolesStmt, m.Normalized(),
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, row := range rows {
+		var ok bool
+		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+			row := it.Cur()
 			roleName := tree.MustBeDString(row[0])
 			isAdmin := row[1].(*tree.DBool)
 
@@ -402,6 +404,9 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 			// We need to expand this role. Let the "pop" worry about already-visited elements.
 			toVisit = append(toVisit, role)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
