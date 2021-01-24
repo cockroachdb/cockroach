@@ -366,6 +366,18 @@ CREATE TABLE schema_to_drop.t (k schema_to_drop.typ PRIMARY KEY);
 statement error pgcode 0A000 unimplemented: cannot drop type "test.schema_to_drop._typ" because other objects \(\[test\.public\.t\]\) still depend on it
 DROP SCHEMA schema_to_drop CASCADE;
 
+
+# We also want to test that it's not a problem when dropping tables which are
+# being deleted but show up as a dependency
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc2.typ AS ENUM ('a');
+CREATE TABLE sc1.table (k sc2.typ);
+DROP SCHEMA sc1 CASCADE;
+DROP TYPE sc2.typ;
+
 statement ok
 DROP TABLE t;
 
