@@ -1694,6 +1694,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// A schema change that fails after the first mutation has completed. The
 	// column is backfilled and the index backfill fails requiring the column
 	// backfill to be rolled back.
+	//
+	// The schema changer may detect a unique constraint violation in 2 ways.
+	//  1. If a duplicate key is processed in the same BulkAdder batch, a
+	//     duplicate key error is returned.
+	//
+	//  2. If the number of index entries we added does not equal the table
+	//     row count, we detect we've violated the constraint.
 	if _, err := sqlDB.Exec(
 		`ALTER TABLE t.test ADD column e INT DEFAULT 0 UNIQUE CREATE FAMILY F4, ADD CHECK (e >= 0)`,
 	); !testutils.IsError(err, ` violates unique constraint`) {
@@ -1705,7 +1712,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		return checkTableKeyCount(context.Background(), kvDB, 1, maxValue)
 	})
 
-	// Check that constraints are cleaned up.
+	// Check that constraints are cleaned up on the latest version of the
+	// descriptor.
+	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
@@ -4472,9 +4481,9 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 	}
 
 	if err := tx.Commit(); !testutils.IsError(
-		err, `duplicate key value`,
+		err, `unique constraint "v_unique"`,
 	) {
-		t.Fatal(err)
+		t.Fatalf(`expected 'unique constraint "v_unique"', got %+v`, err)
 	}
 }
 
