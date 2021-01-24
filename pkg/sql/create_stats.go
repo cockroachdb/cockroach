@@ -599,14 +599,14 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 // pending, running, or paused status that started earlier than this one. If
 // there are, checkRunningJobs returns an error. If job is nil, checkRunningJobs
 // just checks if there are any pending, running, or paused CreateStats jobs.
-func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) error {
+func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) (retErr error) {
 	var jobID jobspb.JobID
 	if job != nil {
 		jobID = job.ID()
 	}
 	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2, $3) ORDER BY created`
 
-	rows, err := p.ExecCfg().InternalExecutor.Query(
+	it, err := p.ExecCfg().InternalExecutor.QueryIterator(
 		ctx,
 		"get-jobs",
 		nil, /* txn */
@@ -618,8 +618,13 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if err != nil {
 		return err
 	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
-	for _, row := range rows {
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
 		payload, err := jobs.UnmarshalPayload(row[1])
 		if err != nil {
 			return err
@@ -636,7 +641,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 			return stats.ConcurrentCreateStatsError
 		}
 	}
-	return nil
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

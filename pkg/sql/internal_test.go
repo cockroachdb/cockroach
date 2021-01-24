@@ -168,7 +168,7 @@ func TestInternalFullTableScan(t *testing.T) {
 
 	// Internal queries that perform full table scans shouldn't fail because of
 	// the setting above.
-	_, err = ie.Query(ctx, "full-table-scan-select", nil, "SELECT * FROM db.t")
+	_, err = ie.Exec(ctx, "full-table-scan-select", nil, "SELECT * FROM db.t")
 	require.NoError(t, err)
 }
 
@@ -383,9 +383,9 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 }
 
 type testInternalExecutor interface {
-	Query(
+	QueryRow(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
-	) ([]tree.Datums, error)
+	) (tree.Datums, error)
 	Exec(
 		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (int, error)
@@ -398,12 +398,12 @@ func testInternalExecutorAppNameInitialization(
 	ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
-	if rows, err := ie.Query(context.Background(), "test-query", nil,
+	if row, err := ie.QueryRow(context.Background(), "test-query", nil,
 		"SHOW application_name"); err != nil {
 		t.Fatal(err)
-	} else if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got: %+v", rows)
-	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
+	} else if row == nil {
+		t.Fatalf("expected 1 row, got 0")
+	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 
@@ -411,7 +411,7 @@ func testInternalExecutorAppNameInitialization(
 	// have this keep running until we cancel it below.
 	errChan := make(chan error)
 	go func() {
-		_, err := ie.Query(context.Background(),
+		_, err := ie.Exec(context.Background(),
 			"test-query",
 			nil, /* txn */
 			"SELECT pg_sleep(1337666)")
@@ -427,7 +427,7 @@ func testInternalExecutorAppNameInitialization(
 	// When it does, we capture the query ID.
 	var queryID string
 	testutils.SucceedsSoon(t, func() error {
-		rows, err := ie.Query(context.Background(),
+		row, err := ie.QueryRow(context.Background(),
 			"find-query",
 			nil, /* txn */
 			// We need to assemble the magic string so that this SELECT
@@ -436,32 +436,29 @@ func testInternalExecutorAppNameInitialization(
 		if err != nil {
 			return err
 		}
-		switch len(rows) {
-		case 0:
+		if row == nil {
 			// The SucceedsSoon test may find this a couple of times before
 			// this succeeds.
 			return fmt.Errorf("query not started yet")
-		case 1:
-			appName := string(*rows[0][1].(*tree.DString))
+		} else {
+			appName := string(*row[1].(*tree.DString))
 			if appName != expectedAppName {
 				return fmt.Errorf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 			}
 
 			// Good app name, retrieve query ID for later cancellation.
-			queryID = string(*rows[0][0].(*tree.DString))
+			queryID = string(*row[0].(*tree.DString))
 			return nil
-		default:
-			return fmt.Errorf("unexpected results: %+v", rows)
 		}
 	})
 
 	// Check that the query shows up in the internal tables without error.
-	if rows, err := ie.Query(context.Background(), "find-query", nil,
+	if row, err := ie.QueryRow(context.Background(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_queries WHERE query LIKE '%337' || '666%'"); err != nil {
 		t.Fatal(err)
-	} else if len(rows) != 1 {
-		t.Fatalf("expected 1 query, got: %+v", rows)
-	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppName {
+	} else if row == nil {
+		t.Fatalf("expected 1 query, got 0")
+	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
 	}
 
@@ -481,12 +478,12 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// Now check that it was properly registered in statistics.
-	if rows, err := ie.Query(context.Background(), "find-query", nil,
+	if row, err := ie.QueryRow(context.Background(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
 		t.Fatal(err)
-	} else if len(rows) != 1 {
-		t.Fatalf("expected 1 query, got: %+v", rows)
-	} else if appName := string(*rows[0][0].(*tree.DString)); appName != expectedAppNameInStats {
+	} else if row == nil {
+		t.Fatalf("expected 1 query, got 0")
+	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppNameInStats {
 		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppNameInStats, appName)
 	}
 }
