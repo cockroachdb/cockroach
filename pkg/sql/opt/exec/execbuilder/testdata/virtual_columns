@@ -80,9 +80,9 @@ vectorized: true
 • render
 │ columns: (a, b, v)
 │ estimated row count: 1,000 (missing stats)
-│ render 0: a + b
-│ render 1: a
-│ render 2: b
+│ render v: a + b
+│ render a: a
+│ render b: b
 │
 └── • scan
       columns: (a, b)
@@ -124,8 +124,8 @@ vectorized: true
 • render
 │ columns: (a, v)
 │ estimated row count: 333 (missing stats)
-│ render 0: a + b
-│ render 1: a
+│ render v: a + b
+│ render a: a
 │
 └── • index join
     │ columns: (a, b)
@@ -227,8 +227,8 @@ vectorized: true
     └── • render
         │ columns: (a, v)
         │ estimated row count: 333 (missing stats)
-        │ render 0: a + b
-        │ render 1: a
+        │ render v: a + b
+        │ render a: a
         │
         └── • scan
               columns: (a, b)
@@ -278,8 +278,8 @@ vectorized: true
 └── • render
     │ columns: (a, v)
     │ estimated row count: 333 (missing stats)
-    │ render 0: a + b
-    │ render 1: a
+    │ render v: a + b
+    │ render a: a
     │
     └── • scan
           columns: (a, b)
@@ -306,8 +306,8 @@ vectorized: true
     └── • render
         │ columns: (a, v)
         │ estimated row count: 333 (missing stats)
-        │ render 0: a + b
-        │ render 1: a
+        │ render v: a + b
+        │ render a: a
         │
         └── • scan
               columns: (a, b)
@@ -330,8 +330,8 @@ vectorized: true
 └── • render
     │ columns: (a, v)
     │ estimated row count: 333 (missing stats)
-    │ render 0: a + b
-    │ render 1: a
+    │ render v: a + b
+    │ render a: a
     │
     └── • index join
         │ columns: (a, b)
@@ -360,8 +360,8 @@ vectorized: true
 └── • render
     │ columns: (a, v)
     │ estimated row count: 333 (missing stats)
-    │ render 0: a + b
-    │ render 1: a
+    │ render v: a + b
+    │ render a: a
     │
     └── • index join
         │ columns: (a, b)

@@ -576,7 +576,7 @@ vectorized: true
 • render
 │ columns: ("?column?")
 │ estimated row count: 1
-│ render 0: last_value
+│ render ?column?: last_value
 │
 └── • sequence select
       columns: (last_value, log_cnt, is_called)
@@ -873,8 +873,8 @@ vectorized: true
 • render
 │ columns: (z int, v int)
 │ estimated row count: 0
-│ render 0: ((count)[int] * (2)[int])[int]
-│ render 1: (v)[int]
+│ render z: ((count)[int] * (2)[int])[int]
+│ render v: (v)[int]
 │
 └── • norows
       columns: (v int, count int)
@@ -921,9 +921,9 @@ vectorized: true
 └── • render
     │ columns: (k int, v int, v_new int)
     │ estimated row count: 333 (missing stats)
-    │ render 0: ((k)[int] + (1)[int])[int]
-    │ render 1: (k)[int]
-    │ render 2: (v)[int]
+    │ render v_new: ((k)[int] + (1)[int])[int]
+    │ render k: (k)[int]
+    │ render v: (v)[int]
     │
     └── • filter
         │ columns: (k int, v int)

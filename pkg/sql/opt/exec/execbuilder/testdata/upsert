@@ -136,8 +136,8 @@ vectorized: true
         └── • render
             │ columns: (column9, k)
             │ estimated row count: 2 (missing stats)
-            │ render 0: CAST(NULL AS INT8)
-            │ render 1: k
+            │ render column9: CAST(NULL AS INT8)
+            │ render k: k
             │
             └── • limit
                 │ columns: (k, v)
@@ -189,15 +189,15 @@ vectorized: true
     └── • render
         │ columns: (check1, column1, column8, column9, column10, a, b, c, d)
         │ estimated row count: 1 (missing stats)
-        │ render 0: column9 > 0
-        │ render 1: column1
-        │ render 2: column8
-        │ render 3: column9
-        │ render 4: column10
-        │ render 5: a
-        │ render 6: b
-        │ render 7: c
-        │ render 8: d
+        │ render check1: column9 > 0
+        │ render column1: column1
+        │ render column8: column8
+        │ render column9: column9
+        │ render column10: column10
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
         │
         └── • cross join (left outer)
             │ columns: (column1, column8, column9, column10, a, b, c, d)
@@ -237,15 +237,15 @@ vectorized: true
     └── • render
         │ columns: (check1, column1, column8, column9, column10, a, b, c, d)
         │ estimated row count: 4 (missing stats)
-        │ render 0: column9 > 0
-        │ render 1: column1
-        │ render 2: column8
-        │ render 3: column9
-        │ render 4: column10
-        │ render 5: a
-        │ render 6: b
-        │ render 7: c
-        │ render 8: d
+        │ render check1: column9 > 0
+        │ render column1: column1
+        │ render column8: column8
+        │ render column9: column9
+        │ render column10: column10
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
         │
         └── • lookup join (left outer)
             │ columns: (column10, column8, column9, column1, a, b, c, d)
@@ -258,10 +258,10 @@ vectorized: true
             └── • render
                 │ columns: (column10, column8, column9, column1)
                 │ estimated row count: 4
-                │ render 0: column1 + 10
-                │ render 1: CAST(NULL AS INT8)
-                │ render 2: 10
-                │ render 3: column1
+                │ render column10: column1 + 10
+                │ render column8: CAST(NULL AS INT8)
+                │ render column9: 10
+                │ render column1: column1
                 │
                 └── • values
                       columns: (column1)
@@ -399,10 +399,10 @@ vectorized: true
                     └── • render
                         │ columns: (column13, a, b, c)
                         │ estimated row count: 1,000 (missing stats)
-                        │ render 0: unique_rowid()
-                        │ render 1: a
-                        │ render 2: b
-                        │ render 3: c
+                        │ render column13: unique_rowid()
+                        │ render a: a
+                        │ render b: b
+                        │ render c: c
                         │
                         └── • scan
                               columns: (a, b, c)
@@ -513,13 +513,13 @@ vectorized: true
     └── • render
         │ columns: (upsert_z, column1, column2, column3, x, y, z)
         │ estimated row count: 2 (missing stats)
-        │ render 0: CASE WHEN x IS NULL THEN column3 ELSE 1 END
-        │ render 1: column1
-        │ render 2: column2
-        │ render 3: column3
-        │ render 4: x
-        │ render 5: y
-        │ render 6: z
+        │ render upsert_z: CASE WHEN x IS NULL THEN column3 ELSE 1 END
+        │ render column1: column1
+        │ render column2: column2
+        │ render column3: column3
+        │ render x: x
+        │ render y: y
+        │ render z: z
         │
         └── • lookup join (left outer)
             │ columns: (column1, column2, column3, x, y, z)
@@ -574,13 +574,13 @@ vectorized: true
     └── • render
         │ columns: (upsert_b, x, y, z, a, b, c)
         │ estimated row count: 311 (missing stats)
-        │ render 0: CASE WHEN a IS NULL THEN y ELSE 5 END
-        │ render 1: x
-        │ render 2: y
-        │ render 3: z
-        │ render 4: a
-        │ render 5: b
-        │ render 6: c
+        │ render upsert_b: CASE WHEN a IS NULL THEN y ELSE 5 END
+        │ render x: x
+        │ render y: y
+        │ render z: z
+        │ render a: a
+        │ render b: b
+        │ render c: c
         │
         └── • merge join (right outer)
             │ columns: (a, b, c, x, y, z)
