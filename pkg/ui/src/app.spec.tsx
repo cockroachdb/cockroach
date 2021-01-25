@@ -32,10 +32,7 @@ import {
 } from "src/views/databases/containers/databases";
 import { TableMain } from "src/views/databases/containers/tableDetails";
 import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
-import {
-  StatementsPage,
-  StatementDetails,
-} from "@cockroachlabs/admin-ui-components";
+import { StatementsPage, StatementDetails } from "@cockroachlabs/cluster-ui";
 import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
 import { CustomChart } from "src/views/reports/containers/customChart";

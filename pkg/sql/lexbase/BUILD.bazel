@@ -30,6 +30,5 @@ genrule(
     outs = ["reserved_keywords.go"],
     cmd = """
           awk -f $(location //pkg/sql/parser:reserved_keywords.awk) < $(location //pkg/sql/parser:sql.y) > $@
-          gofmt -s -w $@
     """,
 )

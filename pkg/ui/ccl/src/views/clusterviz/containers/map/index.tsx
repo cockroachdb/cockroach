@@ -17,7 +17,7 @@ import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasC
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { AdminUIState } from "src/redux/state";
 import { selectEnterpriseEnabled } from "src/redux/license";
 import { Dropdown } from "src/components/dropdown";

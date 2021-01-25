@@ -28,6 +28,8 @@ var formatters = func() map[string]logFormatter {
 	r(formatCrdbV1WithCounter{})
 	r(formatCrdbV1TTY{})
 	r(formatCrdbV1TTYWithCounter{})
+	r(formatCrdbV2{})
+	r(formatCrdbV2TTY{})
 	r(formatFluentJSONCompact{})
 	r(formatFluentJSONFull{})
 	r(formatJSONCompact{})

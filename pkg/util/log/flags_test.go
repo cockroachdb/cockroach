@@ -27,7 +27,7 @@ func TestAppliedStandaloneConfig(t *testing.T) {
   stderr:
     channels: DEV
     filter: INFO
-    format: crdb-v1-tty
+    format: crdb-v2-tty
     redact: false
     redactable: false
     exit-on-error: true

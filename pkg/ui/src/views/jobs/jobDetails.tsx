@@ -24,14 +24,14 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
 import { showSetting, statusSetting, typeSetting } from ".";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import SqlBox from "../shared/components/sql/box";
 import { SummaryCard } from "../shared/components/summaryCard";
 
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { DATE_FORMAT } from "src/util/format";
 import { JobStatusCell } from "./jobStatusCell";

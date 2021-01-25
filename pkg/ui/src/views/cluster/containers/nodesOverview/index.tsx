@@ -29,7 +29,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { LongToMoment } from "src/util/convert";
 import { INodeStatus, MetricConstants } from "src/util/proto";
 import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/admin-ui-components";
+import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
 import { Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
@@ -155,7 +155,6 @@ const getBadgeTypeByNodeStatus = (
   }
 };
 
-// tslint:disable-next-line:variable-name
 const NodeNameColumn: React.FC<{
   record: NodeStatusRow | DecommissionedNodeStatusRow;
 }> = ({ record }) => {
@@ -167,7 +166,6 @@ const NodeNameColumn: React.FC<{
   );
 };
 
-// tslint:disable-next-line:variable-name
 const NodeLocalityColumn: React.FC<{ record: NodeStatusRow }> = ({
   record,
 }) => {
@@ -601,7 +599,6 @@ export const decommissionedNodesTableDataSelector = createSelector(
 /**
  * LiveNodesConnected is a redux-connected HOC of LiveNodeList.
  */
-// tslint:disable-next-line:variable-name
 const NodesConnected = connect(
   (state: AdminUIState) => {
     const liveNodes = partitionedStatuses(state).live || [];
@@ -621,7 +618,6 @@ const NodesConnected = connect(
 /**
  * DecommissionedNodesConnected is a redux-connected HOC of NotLiveNodeList.
  */
-// tslint:disable-next-line:variable-name
 const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
     return {

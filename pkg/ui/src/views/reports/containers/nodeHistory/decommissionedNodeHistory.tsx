@@ -25,7 +25,7 @@ import { LocalSetting } from "src/redux/localsettings";
 
 import "./decommissionedNodeHistory.styl";
 import { Text } from "src/components";
-import { ColumnsConfig, Table } from "@cockroachlabs/admin-ui-components";
+import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 
 const decommissionedNodesSortSetting = new LocalSetting<

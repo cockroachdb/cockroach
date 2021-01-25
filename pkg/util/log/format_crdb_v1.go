@@ -27,20 +27,20 @@ import (
 
 // FormatLegacyEntry writes the legacy log entry to the specified writer.
 func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
-	buf := formatLogEntryInternal(e, false /* isHeader */, true /*showCounter*/, nil)
+	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, nil)
 	defer putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
 }
 
-// formatCrdbV1 is the canonical log format, without
-// a counter column.
+// formatCrdbV1 is the pre-v21.1 canonical log format, without a
+// counter column.
 type formatCrdbV1 struct{}
 
 func (formatCrdbV1) formatterName() string { return "crdb-v1" }
 
 func (formatCrdbV1) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, nil)
 }
 
 func (formatCrdbV1) doc() string { return formatCrdbV1CommonDoc(false /* withCounter */) }
@@ -100,7 +100,10 @@ the following caveats apply:
 - The log entry parser provided by CockroachDB to read log files is faulty
   and is unable to recognize the aforementioned pitfall; nor can it read
   entries larger than 64KiB successfully. Generally, use of this internal
-  log entry parser is discouraged.
+  log entry parser is discouraged for entries written with this format.
+
+See the newer format ` + "`crdb-v2`" + ` for an alternative
+without these limitations.
 
 ### Header lines
 
@@ -168,7 +171,7 @@ type formatCrdbV1WithCounter struct{}
 func (formatCrdbV1WithCounter) formatterName() string { return "crdb-v1-count" }
 
 func (formatCrdbV1WithCounter) formatEntry(entry logEntry) *buffer {
-	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, nil)
 }
 
 func (formatCrdbV1WithCounter) doc() string { return formatCrdbV1CommonDoc(true /* withCounter */) }
@@ -185,7 +188,7 @@ func (formatCrdbV1TTY) formatEntry(entry logEntry) *buffer {
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, false /*showCounter*/, cp)
 }
 
 const ttyFormatDoc = `
@@ -210,7 +213,7 @@ func (formatCrdbV1TTYWithCounter) formatEntry(entry logEntry) *buffer {
 	if logging.stderrSink.noColor.Get() {
 		cp = nil
 	}
-	return formatLogEntryInternal(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
+	return formatLogEntryInternalV1(entry.convertToLegacy(), entry.header, true /*showCounter*/, cp)
 }
 
 func (formatCrdbV1TTYWithCounter) doc() string {
@@ -219,12 +222,12 @@ func (formatCrdbV1TTYWithCounter) doc() string {
 
 const severityChar = "IWEF"
 
-// formatEntryInternal renders a log entry.
+// formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.
 // It uses a newly allocated *buffer. The caller is responsible
 // for calling putBuffer() afterwards.
 //
-func formatLogEntryInternal(
+func formatLogEntryInternalV1(
 	entry logpb.Entry, isHeader, showCounter bool, cp ttycolor.Profile,
 ) *buffer {
 	buf := getBuffer()
@@ -446,9 +449,24 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 			entry.Tags = string(r.msg)
 		}
 
-		// Process the log message itself
+		// If there's an entry counter at the start of the message, process it.
+		msg := b[len(m[0]):]
+		i := 0
+		for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
+			entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
+		}
+		if i > 0 && i < len(msg) && msg[i] == ' ' {
+			// Only accept the entry counter if followed by a space. In all
+			// other cases, the number was part of the message string.
+			msg = msg[i+1:]
+		} else {
+			// This was not truly an entry counter. Ignore the work done previously.
+			entry.Counter = 0
+		}
+
+		// Process the remainder of the log message.
 		r := redactablePackage{
-			msg:        trimFinalNewLines(b[len(m[0]):]),
+			msg:        trimFinalNewLines(msg),
 			redactable: redactable,
 		}
 		r = d.sensitiveEditor(r)

@@ -19,7 +19,7 @@ import { StatementsResponseMessage } from "src/util/api";
 import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
-import { TransactionsPage } from "@cockroachlabs/admin-ui-components";
+import { TransactionsPage } from "@cockroachlabs/cluster-ui";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
