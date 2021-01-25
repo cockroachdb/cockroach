@@ -61,6 +61,13 @@ export function addStatementStats(
 ): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
+  let statCountA = FixLong(a.count).toInt();
+  const statCountB = FixLong(b.count).toInt();
+  if (statCountA === 0 && statCountB === 0) {
+    // If both counts are zero, artificially set the one count to one to avoid
+    // division by zero when calculating the mean in addNumericStats.
+    statCountA = 1;
+  }
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -78,20 +85,30 @@ export function addStatementStats(
       countA,
       countB,
     ),
-    bytes_sent_over_network:
-      a.bytes_sent_over_network && b.bytes_sent_over_network
-        ? addNumericStats(
-            a.bytes_sent_over_network,
-            b.bytes_sent_over_network,
-            countA,
-            countB,
-          )
-        : null,
     bytes_read: addNumericStats(a.bytes_read, b.bytes_read, countA, countB),
     rows_read: addNumericStats(a.rows_read, b.rows_read, countA, countB),
     sensitive_info: coalesceSensitiveInfo(a.sensitive_info, b.sensitive_info),
     legacy_last_err: "",
     legacy_last_err_redacted: "",
+    bytes_sent_over_network:
+      a.bytes_sent_over_network && b.bytes_sent_over_network
+        ? addNumericStats(
+        a.bytes_sent_over_network,
+        b.bytes_sent_over_network,
+        statCountA,
+        statCountB,
+        )
+        : null,
+    max_mem_usage:
+      a.max_mem_usage && b.max_mem_usage
+        ? addNumericStats(
+        a.max_mem_usage,
+        b.max_mem_usage,
+        statCountA,
+        statCountB,
+        )
+        : null,
+    stat_collection_count: a.stat_collection_count.add(b.stat_collection_count),
   };
 }
 
