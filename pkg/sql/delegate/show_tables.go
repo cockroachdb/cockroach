@@ -72,6 +72,7 @@ LEFT JOIN crdb_internal.table_row_statistics AS s ON (s.table_id = pc.oid::INT8)
 LEFT JOIN crdb_internal.tables AS ct ON (pc.oid::int8 = ct.table_id)
 WHERE pc.relkind IN ('r', 'v', 'S', 'm') %[2]s
 ORDER BY schema_name, table_name
+AS OF SYSTEM TIME -10s
 `
 	var descJoin string
 	var comment string
