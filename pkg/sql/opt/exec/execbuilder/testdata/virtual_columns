@@ -16,10 +16,14 @@ statement ok
 CREATE TABLE t_idx (
   a INT PRIMARY KEY,
   b INT,
+  c INT,
   v INT AS (a+b) VIRTUAL,
+  w INT AS (c+1) VIRTUAL,
   INDEX (v),
+  UNIQUE (w),
   FAMILY (a),
-  FAMILY (b)
+  FAMILY (b),
+  FAMILY (c)
 )
 
 query TT
@@ -40,11 +44,15 @@ SHOW CREATE TABLE t_idx
 t_idx  CREATE TABLE public.t_idx (
        a INT8 NOT NULL,
        b INT8 NULL,
+       c INT8 NULL,
        v INT8 NULL AS (a + b) VIRTUAL,
+       w INT8 NULL AS (c + 1:::INT8) VIRTUAL,
        CONSTRAINT "primary" PRIMARY KEY (a ASC),
        INDEX t_idx_v_idx (v ASC),
+       UNIQUE INDEX t_idx_w_key (w ASC),
        FAMILY fam_0_a (a),
-       FAMILY fam_1_b (b)
+       FAMILY fam_1_b (b),
+       FAMILY fam_2_c (c)
 )
 
 subtest Select
@@ -179,7 +187,7 @@ vectorized: true
       row 0, expr 2: 2
 
 query T
-EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1)
+EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (1, 1, 1)
 ----
 distribution: local
 vectorized: true
@@ -187,12 +195,14 @@ vectorized: true
 • insert fast path
   columns: ()
   estimated row count: 0 (missing stats)
-  into: t_idx(a, b, v)
+  into: t_idx(a, b, c, v, w)
   auto commit
-  size: 3 columns, 1 row
+  size: 5 columns, 1 row
   row 0, expr 0: 1
   row 0, expr 1: 1
-  row 0, expr 2: 2
+  row 0, expr 2: 1
+  row 0, expr 3: 2
+  row 0, expr 4: 2
 
 subtest Delete
 
@@ -276,13 +286,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, v)
+    │ columns: (a, v, w)
     │ estimated row count: 333 (missing stats)
     │ render v: a + b
+    │ render w: c + 1
     │ render a: a
     │
     └── • scan
-          columns: (a, b)
+          columns: (a, b, c)
           estimated row count: 333 (missing stats)
           table: t_idx@primary
           spans: /2-
@@ -304,13 +315,14 @@ vectorized: true
     │ auto commit
     │
     └── • render
-        │ columns: (a, v)
+        │ columns: (a, v, w)
         │ estimated row count: 333 (missing stats)
         │ render v: a + b
+        │ render w: c + 1
         │ render a: a
         │
         └── • scan
-              columns: (a, b)
+              columns: (a, b, c)
               estimated row count: 333 (missing stats)
               table: t_idx@primary
               spans: /2-
@@ -328,13 +340,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, v)
+    │ columns: (a, v, w)
     │ estimated row count: 333 (missing stats)
     │ render v: a + b
+    │ render w: c + 1
     │ render a: a
     │
     └── • index join
-        │ columns: (a, b)
+        │ columns: (a, b, c)
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@primary
         │ key columns: a
@@ -358,13 +371,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (a, v)
+    │ columns: (a, v, w)
     │ estimated row count: 333 (missing stats)
     │ render v: a + b
+    │ render w: c + 1
     │ render a: a
     │
     └── • index join
-        │ columns: (a, b)
+        │ columns: (a, b, c)
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@primary
         │ key columns: a
@@ -374,3 +388,321 @@ vectorized: true
               estimated row count: 10 (missing stats)
               table: t_idx@t_idx_v_idx
               spans: /1-/2
+
+query T
+EXPLAIN (VERBOSE) UPDATE t SET a=a+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, v, a_new, column12)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column12: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render v: v
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, a, b)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render a: a
+        │ render b: b
+        │
+        └── • scan
+              columns: (a, b)
+              estimated row count: 1,000 (missing stats)
+              table: t@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: (a, b, v)
+│ estimated row count: 333 (missing stats)
+│ table: t
+│ set: b, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, v, b_new, column12)
+    │ estimated row count: 333 (missing stats)
+    │ render column12: a + b_new
+    │ render a: a
+    │ render b: b
+    │ render v: v
+    │ render b_new: b_new
+    │
+    └── • render
+        │ columns: (b_new, v, a, b)
+        │ estimated row count: 333 (missing stats)
+        │ render b_new: b + 1
+        │ render v: a + b
+        │ render a: a
+        │ render b: b
+        │
+        └── • filter
+            │ columns: (a, b)
+            │ estimated row count: 333 (missing stats)
+            │ filter: (a + b) = 45
+            │
+            └── • scan
+                  columns: (a, b)
+                  estimated row count: 1,000 (missing stats)
+                  table: t@primary
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_idx
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, v, w, a_new, column16)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column16: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render v: v
+    │ render w: w
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, w, a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render w: c + 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 1,000 (missing stats)
+              table: t_idx@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v, w)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • update
+    │ columns: (a, v, w)
+    │ estimated row count: 1,000 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, column16)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column16: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 1,000 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_idx@primary
+                  spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (v, w)
+│ estimated row count: 333 (missing stats)
+│
+└── • update
+    │ columns: (a, v, w)
+    │ estimated row count: 333 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, column16)
+        │ estimated row count: 333 (missing stats)
+        │ render column16: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 333 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • index join
+                │ columns: (a, b, c)
+                │ estimated row count: 333 (missing stats)
+                │ table: t_idx@primary
+                │ key columns: a
+                │
+                └── • scan
+                      columns: (a)
+                      estimated row count: 10 (missing stats)
+                      table: t_idx@t_idx_v_idx
+                      spans: /45-/46
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ table: t_idx
+│ set: c, w
+│ auto commit
+│
+└── • render
+    │ columns: (a, c, w, c_new, column17)
+    │ estimated row count: 1 (missing stats)
+    │ render column17: 7
+    │ render c_new: 6
+    │ render w: c + 1
+    │ render a: a
+    │ render c: c
+    │
+    └── • scan
+          columns: (a, c)
+          estimated row count: 1 (missing stats)
+          table: t_idx@primary
+          spans: /2/0-/2/1 /2/2/1-/2/2/2
+          locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET a=a+1 RETURNING a,v,w
+----
+distribution: local
+vectorized: true
+·
+• update
+│ columns: (a, v, w)
+│ estimated row count: 1,000 (missing stats)
+│ table: t_idx
+│ set: a, v
+│ auto commit
+│
+└── • render
+    │ columns: (a, b, c, v, w, a_new, column16)
+    │ estimated row count: 1,000 (missing stats)
+    │ render column16: a_new + b
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render v: v
+    │ render w: w
+    │ render a_new: a_new
+    │
+    └── • render
+        │ columns: (a_new, v, w, a, b, c)
+        │ estimated row count: 1,000 (missing stats)
+        │ render a_new: a + 1
+        │ render v: a + b
+        │ render w: c + 1
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │
+        └── • scan
+              columns: (a, b, c)
+              estimated row count: 1,000 (missing stats)
+              table: t_idx@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (w)
+│ estimated row count: 1,000 (missing stats)
+│
+└── • update
+    │ columns: (a, w)
+    │ estimated row count: 1,000 (missing stats)
+    │ table: t_idx
+    │ set: b, v
+    │ auto commit
+    │
+    └── • render
+        │ columns: (a, b, v, w, b_new, column16)
+        │ estimated row count: 1,000 (missing stats)
+        │ render column16: a + b_new
+        │ render a: a
+        │ render b: b
+        │ render v: v
+        │ render w: w
+        │ render b_new: b_new
+        │
+        └── • render
+            │ columns: (b_new, v, w, a, b)
+            │ estimated row count: 1,000 (missing stats)
+            │ render b_new: b + 1
+            │ render v: a + b
+            │ render w: c + 1
+            │ render a: a
+            │ render b: b
+            │
+            └── • scan
+                  columns: (a, b, c)
+                  estimated row count: 1,000 (missing stats)
+                  table: t_idx@primary
+                  spans: FULL SCAN
