@@ -342,13 +342,24 @@ func (s *Stopper) RunAsyncTask(
 		return ErrUnavailable
 	}
 
-	ctx, span := tracing.ForkCtxSpan(ctx, taskName)
+	var sp *tracing.Span
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
+		// NB: we don't use auto collection because it does not make
+		// sense for spans that extend past the lifetime of their
+		// parent. Nobody will collect the recording, but setting up
+		// a span is still helpful when an external tracer is set up.
+		ctx, sp = sp.Tracer().StartSpanCtx(ctx, taskName, tracing.WithParentAndManualCollection(sp.Meta()))
+	}
 
 	// Call f.
 	go func() {
 		defer s.Recover(ctx)
 		defer s.runPostlude(taskName)
-		defer span.Finish()
+		defer func() {
+			if sp != nil {
+				sp.Finish()
+			}
+		}()
 
 		f(ctx)
 	}()
