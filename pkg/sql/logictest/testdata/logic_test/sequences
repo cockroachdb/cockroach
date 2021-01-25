@@ -58,6 +58,26 @@ SELECT lastval()
 ----
 11
 
+query I
+SELECT nextval(53::regclass)
+----
+3
+
+query I
+SELECT lastval()
+----
+3
+
+query I
+SELECT nextval(54::regclass)
+----
+12
+
+query I
+SELECT lastval()
+----
+12
+
 # SEQUENCE CREATION
 
 statement ok
@@ -223,6 +243,16 @@ SELECT currval('foo')
 ----
 2
 
+query I
+SELECT nextval(55::regclass)
+----
+3
+
+query I
+SELECT currval(55::regclass)
+----
+3
+
 query T
 SELECT pg_sequence_parameters('foo'::regclass::oid)
 ----
@@ -263,6 +293,11 @@ SELECT nextval('baz')
 ----
 7
 
+query I
+SELECT nextval(73::regclass)
+----
+12
+
 query T
 SELECT pg_sequence_parameters('baz'::regclass::oid)
 ----
@@ -282,6 +317,11 @@ query I
 SELECT nextval('down_test')
 ----
 -6
+
+query I
+SELECT nextval(74::regclass)
+----
+-7
 
 query T
 SELECT pg_sequence_parameters('down_test'::regclass::oid)
@@ -398,6 +438,22 @@ SELECT lastval()
 ----
 11
 
+query I
+SELECT setval(82::regclass, 20)
+----
+20
+
+# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+query I
+SELECT currval(82::regclass)
+----
+11
+
+query I
+SELECT nextval(82::regclass)
+----
+21
+
 # setval doesn't let you set values outside the bounds.
 
 statement ok
@@ -454,6 +510,36 @@ SELECT nextval('setval_is_called_test')
 ----
 22
 
+query I
+SELECT setval(84::regclass, 30, false)
+----
+30
+
+query I
+SELECT nextval(84::regclass)
+----
+30
+
+query I
+SELECT nextval(84::regclass)
+----
+31
+
+query I
+SELECT setval(84::regclass, 30, true)
+----
+30
+
+query I
+SELECT nextval(84::regclass)
+----
+31
+
+query I
+SELECT nextval(84::regclass)
+----
+32
+
 # You can use setval to reset to minvalue.
 
 statement ok
@@ -506,6 +592,9 @@ SELECT nextval('limit_test')
 
 statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
 SELECT nextval('limit_test')
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval(86::regclass)
 
 query I
 SELECT currval('limit_test')
