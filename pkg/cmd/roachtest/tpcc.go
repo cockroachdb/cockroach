@@ -244,15 +244,14 @@ func registerTPCC(r *testRegistry) {
 		Tags:    []string{`default`},
 		Cluster: mixedHeadroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
-			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			oldV, err := PredecessorVersion(r.buildVersion)
-			if err != nil {
-				t.Fatal(err)
-			}
-
 			crdbNodes := c.Range(1, 4)
 			workloadNode := c.Node(5)
+
+			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			if local {
+				headroomWarehouses = 10
+			}
 
 			// We'll need this below.
 			tpccBackgroundStepper := backgroundStepper{
@@ -275,6 +274,19 @@ func registerTPCC(r *testRegistry) {
 				n1         = 1
 			)
 
+			// NB: the original number was sourced from the clearrange roachtest,
+			// which runs on a ten node cluster and imports this dataset in "well
+			// below 3h". Since we have a four node cluster here, divide by two.
+			bankRows := 65104166 / 2
+			if local {
+				bankRows = 1000
+			}
+
+			oldV, err := PredecessorVersion(r.buildVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(crdbNodes, oldV),
 				waitForUpgradeStep(crdbNodes), // let predecessor version settle (gossip etc)
@@ -283,6 +295,10 @@ func registerTPCC(r *testRegistry) {
 				// version to load some data and hopefully create some state that will
 				// need work by long-running migrations.
 				importTPCCStep(oldV, headroomWarehouses, crdbNodes),
+				// Add a lot of cold data to this cluster. This further stresses the version
+				// upgrade machinery, in which a) all ranges are touched and b) work proportional
+				// to the amount data may be carried out.
+				importLargeBankStep(oldV, bankRows, crdbNodes),
 				// Upload and restart cluster into the new
 				// binary (stays at old cluster version).
 				binaryUpgradeStep(crdbNodes, mainBinary),
@@ -297,7 +313,7 @@ func registerTPCC(r *testRegistry) {
 				setClusterSettingVersionStep,
 				// Wait until TPCC background run terminates
 				// and fail if it reports an error.
-				tpccBackgroundStepper.stop,
+				tpccBackgroundStepper.wait,
 			).run(ctx, t)
 		},
 	})
