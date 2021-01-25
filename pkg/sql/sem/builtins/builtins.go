@@ -1841,6 +1841,20 @@ var builtins = map[string]builtinDefinition{
 			Info:       "Advances the given sequence and returns its new value.",
 			Volatility: tree.VolatilityVolatile,
 		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				res, err := evalCtx.Sequence.IncrementSequenceByID(evalCtx.Ctx(), int64(oid.DInt))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info:       "Advances the given sequence and returns its new value.",
+			Volatility: tree.VolatilityVolatile,
+		},
 	),
 
 	"currval": makeBuiltin(
@@ -1859,6 +1873,20 @@ var builtins = map[string]builtinDefinition{
 					return nil, err
 				}
 				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info:       "Returns the latest value obtained with nextval for this sequence in this session.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequenceByID(evalCtx.Ctx(), int64(oid.DInt))
 				if err != nil {
 					return nil, err
 				}
@@ -1947,6 +1975,22 @@ var builtins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityVolatile,
 		},
 		tree.Overload{
+			Types:      tree.ArgTypes{{SequenceNameArg, types.RegClass}, {"value", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				newVal := tree.MustBeDInt(args[1])
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(oid.DInt), int64(newVal), true); err != nil {
+					return nil, err
+				}
+				return args[1], nil
+			},
+			Info: "Set the given sequence's current value. The next call to nextval will return " +
+				"`value + Increment`",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
 			Types: tree.ArgTypes{
 				{SequenceNameArg, types.String}, {"value", types.Int}, {"is_called", types.Bool},
 			},
@@ -1963,6 +2007,26 @@ var builtins = map[string]builtinDefinition{
 				newVal := tree.MustBeDInt(args[1])
 				if err := evalCtx.Sequence.SetSequenceValue(
 					evalCtx.Ctx(), qualifiedName, int64(newVal), isCalled); err != nil {
+					return nil, err
+				}
+				return args[1], nil
+			},
+			Info: "Set the given sequence's current value. If is_called is false, the next call to " +
+				"nextval will return `value`; otherwise `value + Increment`.",
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{SequenceNameArg, types.RegClass}, {"value", types.Int}, {"is_called", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0])
+				isCalled := bool(tree.MustBeDBool(args[2]))
+
+				newVal := tree.MustBeDInt(args[1])
+				if err := evalCtx.Sequence.SetSequenceValueByID(
+					evalCtx.Ctx(), int64(oid.DInt), int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
 				return args[1], nil
