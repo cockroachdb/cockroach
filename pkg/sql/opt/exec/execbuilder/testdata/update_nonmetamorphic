@@ -24,10 +24,10 @@ vectorized: true
 └── • render
     │ columns: (a, c, d, c_new)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: c + 1
-    │ render 1: a
-    │ render 2: c
-    │ render 3: d
+    │ render c_new: c + 1
+    │ render a: a
+    │ render c: c
+    │ render d: d
     │
     └── • scan
           columns: (a, c, d)

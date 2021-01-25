@@ -636,11 +636,11 @@ vectorized: true
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1)
 │           │ estimated row count: 2
-│           │ render 0: column1 IN ('us-east', 'us-west', 'eu-west')
-│           │ render 1: column1
-│           │ render 2: column2
-│           │ render 3: column3
-│           │ render 4: column4
+│           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
+│           │ render column1: column1
+│           │ render column2: column2
+│           │ render column3: column3
+│           │ render column4: column4
 │           │
 │           └── • values
 │                 columns: (column1, column2, column3, column4)
@@ -747,19 +747,19 @@ vectorized: true
 │       └── • render
 │           │ columns: (column9, column1, column2, column10, check1)
 │           │ estimated row count: 2
-│           │ render 0: column9 IN ('us-east', 'us-west', 'eu-west')
-│           │ render 1: column1
-│           │ render 2: column2
-│           │ render 3: column9
-│           │ render 4: column10
+│           │ render check1: column9 IN ('us-east', 'us-west', 'eu-west')
+│           │ render column1: column1
+│           │ render column2: column2
+│           │ render column9: column9
+│           │ render column10: column10
 │           │
 │           └── • render
 │               │ columns: (column9, column10, column1, column2)
 │               │ estimated row count: 2
-│               │ render 0: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
-│               │ render 1: CAST(NULL AS INT8)
-│               │ render 2: column1
-│               │ render 3: column2
+│               │ render column9: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
+│               │ render column10: CAST(NULL AS INT8)
+│               │ render column1: column1
+│               │ render column2: column2
 │               │
 │               └── • values
 │                     columns: (column1, column2)
@@ -829,11 +829,11 @@ vectorized: true
 │       └── • render
 │           │ columns: (column1, column2, column3, column4, check1)
 │           │ estimated row count: 0 (missing stats)
-│           │ render 0: column1 IN ('us-east', 'us-west', 'eu-west')
-│           │ render 1: column1
-│           │ render 2: column2
-│           │ render 3: column3
-│           │ render 4: column4
+│           │ render check1: column1 IN ('us-east', 'us-west', 'eu-west')
+│           │ render column1: column1
+│           │ render column2: column2
+│           │ render column3: column3
+│           │ render column4: column4
 │           │
 │           └── • project
 │               │ columns: (column1, column2, column3, column4)
@@ -1406,25 +1406,25 @@ vectorized: true
 │       └── • render
 │           │ columns: (r, s, i, j, r_new, s_new, i_new, check1)
 │           │ estimated row count: 10 (missing stats)
-│           │ render 0: r_new IN ('us-east', 'us-west', 'eu-west')
-│           │ render 1: r
-│           │ render 2: s
-│           │ render 3: i
-│           │ render 4: j
-│           │ render 5: r_new
-│           │ render 6: s_new
-│           │ render 7: i_new
+│           │ render check1: r_new IN ('us-east', 'us-west', 'eu-west')
+│           │ render r: r
+│           │ render s: s
+│           │ render i: i
+│           │ render j: j
+│           │ render r_new: r_new
+│           │ render s_new: s_new
+│           │ render i_new: i_new
 │           │
 │           └── • render
 │               │ columns: (r_new, s_new, i_new, r, s, i, j)
 │               │ estimated row count: 10 (missing stats)
-│               │ render 0: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
-│               │ render 1: 'baz'
-│               │ render 2: 3
-│               │ render 3: r
-│               │ render 4: s
-│               │ render 5: i
-│               │ render 6: j
+│               │ render r_new: CASE (random() * 3.0)::INT8 WHEN 0 THEN 'us-east' WHEN 1 THEN 'us-west' ELSE 'eu-west' END
+│               │ render s_new: 'baz'
+│               │ render i_new: 3
+│               │ render r: r
+│               │ render s: s
+│               │ render i: i
+│               │ render j: j
 │               │
 │               └── • scan
 │                     columns: (r, s, i, j)
@@ -2197,31 +2197,31 @@ vectorized: true
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_i)
 │               │ estimated row count: 2 (missing stats)
-│               │ render 0: upsert_r IN ('us-east', 'us-west', 'eu-west')
-│               │ render 1: column1
-│               │ render 2: column2
-│               │ render 3: column3
-│               │ render 4: column4
-│               │ render 5: r
-│               │ render 6: s
-│               │ render 7: i
-│               │ render 8: j
-│               │ render 9: upsert_r
-│               │ render 10: upsert_i
+│               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
+│               │ render column1: column1
+│               │ render column2: column2
+│               │ render column3: column3
+│               │ render column4: column4
+│               │ render r: r
+│               │ render s: s
+│               │ render i: i
+│               │ render j: j
+│               │ render upsert_r: upsert_r
+│               │ render upsert_i: upsert_i
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_i, column1, column2, column3, column4, r, s, i, j)
 │                   │ estimated row count: 2 (missing stats)
-│                   │ render 0: CASE WHEN r IS NULL THEN column1 ELSE r END
-│                   │ render 1: CASE WHEN r IS NULL THEN column3 ELSE i END
-│                   │ render 2: column1
-│                   │ render 3: column2
-│                   │ render 4: column3
-│                   │ render 5: column4
-│                   │ render 6: r
-│                   │ render 7: s
-│                   │ render 8: i
-│                   │ render 9: j
+│                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
+│                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE i END
+│                   │ render column1: column1
+│                   │ render column2: column2
+│                   │ render column3: column3
+│                   │ render column4: column4
+│                   │ render r: r
+│                   │ render s: s
+│                   │ render i: i
+│                   │ render j: j
 │                   │
 │                   └── • lookup join (left outer)
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)
@@ -2339,35 +2339,35 @@ vectorized: true
 │           └── • render
 │               │ columns: (check1, column1, column2, column3, column4, r, s, i, j, upsert_r, upsert_s, upsert_i, upsert_j)
 │               │ estimated row count: 2 (missing stats)
-│               │ render 0: upsert_r IN ('us-east', 'us-west', 'eu-west')
-│               │ render 1: column1
-│               │ render 2: column2
-│               │ render 3: column3
-│               │ render 4: column4
-│               │ render 5: r
-│               │ render 6: s
-│               │ render 7: i
-│               │ render 8: j
-│               │ render 9: upsert_r
-│               │ render 10: upsert_s
-│               │ render 11: upsert_i
-│               │ render 12: upsert_j
+│               │ render check1: upsert_r IN ('us-east', 'us-west', 'eu-west')
+│               │ render column1: column1
+│               │ render column2: column2
+│               │ render column3: column3
+│               │ render column4: column4
+│               │ render r: r
+│               │ render s: s
+│               │ render i: i
+│               │ render j: j
+│               │ render upsert_r: upsert_r
+│               │ render upsert_s: upsert_s
+│               │ render upsert_i: upsert_i
+│               │ render upsert_j: upsert_j
 │               │
 │               └── • render
 │                   │ columns: (upsert_r, upsert_s, upsert_i, upsert_j, column1, column2, column3, column4, r, s, i, j)
 │                   │ estimated row count: 2 (missing stats)
-│                   │ render 0: CASE WHEN r IS NULL THEN column1 ELSE r END
-│                   │ render 1: CASE WHEN r IS NULL THEN column2 ELSE s END
-│                   │ render 2: CASE WHEN r IS NULL THEN column3 ELSE 3 END
-│                   │ render 3: CASE WHEN r IS NULL THEN column4 ELSE j END
-│                   │ render 4: column1
-│                   │ render 5: column2
-│                   │ render 6: column3
-│                   │ render 7: column4
-│                   │ render 8: r
-│                   │ render 9: s
-│                   │ render 10: i
-│                   │ render 11: j
+│                   │ render upsert_r: CASE WHEN r IS NULL THEN column1 ELSE r END
+│                   │ render upsert_s: CASE WHEN r IS NULL THEN column2 ELSE s END
+│                   │ render upsert_i: CASE WHEN r IS NULL THEN column3 ELSE 3 END
+│                   │ render upsert_j: CASE WHEN r IS NULL THEN column4 ELSE j END
+│                   │ render column1: column1
+│                   │ render column2: column2
+│                   │ render column3: column3
+│                   │ render column4: column4
+│                   │ render r: r
+│                   │ render s: s
+│                   │ render i: i
+│                   │ render j: j
 │                   │
 │                   └── • project
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)

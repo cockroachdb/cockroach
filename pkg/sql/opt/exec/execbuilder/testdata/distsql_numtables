@@ -362,9 +362,9 @@ vectorized: true
 └── • render
     │ columns: (res, y, str)
     │ estimated row count: 1,000 (missing stats)
-    │ render 0: repeat('test', y)
-    │ render 1: y
-    │ render 2: str
+    │ render res: repeat('test', y)
+    │ render y: y
+    │ render str: str
     │
     └── • scan
           columns: (y, str)
@@ -392,9 +392,9 @@ vectorized: true
     └── • render
         │ columns: (res, y, str)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: repeat('test', y)
-        │ render 1: y
-        │ render 2: str
+        │ render res: repeat('test', y)
+        │ render y: y
+        │ render str: str
         │
         └── • scan
               columns: (y, str)

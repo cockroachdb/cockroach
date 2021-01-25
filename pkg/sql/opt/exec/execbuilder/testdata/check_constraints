@@ -34,17 +34,17 @@ vectorized: true
 └── • render
     │ columns: (a, b, b_new, check1)
     │ estimated row count: 1 (missing stats)
-    │ render 0: a > b_new
-    │ render 1: a
-    │ render 2: b
-    │ render 3: b_new
+    │ render check1: a > b_new
+    │ render a: a
+    │ render b: b
+    │ render b_new: b_new
     │
     └── • render
         │ columns: (b_new, a, b)
         │ estimated row count: 1 (missing stats)
-        │ render 0: b + 1
-        │ render 1: a
-        │ render 2: b
+        │ render b_new: b + 1
+        │ render a: a
+        │ render b: b
         │
         └── • scan
               columns: (a, b)
@@ -68,13 +68,13 @@ vectorized: true
 └── • render
     │ columns: (a, b, c, d, e, a_new, check1)
     │ estimated row count: 1 (missing stats)
-    │ render 0: b < 2
-    │ render 1: 2
-    │ render 2: a
-    │ render 3: b
-    │ render 4: c
-    │ render 5: d
-    │ render 6: e
+    │ render check1: b < 2
+    │ render a_new: 2
+    │ render a: a
+    │ render b: b
+    │ render c: c
+    │ render d: d
+    │ render e: e
     │
     └── • scan
           columns: (a, b, c, d, e)

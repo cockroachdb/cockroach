@@ -73,7 +73,7 @@ vectorized: true
     └── • render
         │ columns: (ntile_1_arg1)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: 1
+        │ render ntile_1_arg1: 1
         │
         └── • scan
               columns: ()
@@ -99,8 +99,8 @@ vectorized: true
     └── • render
         │ columns: (nth_value_1_arg1, nth_value_1_arg2)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: 1
-        │ render 1: 2
+        │ render nth_value_1_arg1: 1
+        │ render nth_value_1_arg2: 2
         │
         └── • scan
               columns: ()
@@ -238,9 +238,9 @@ vectorized: true
     └── • render
         │ columns: ("?column?" decimal, k int, variance decimal)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: ((k)[int] + (stddev)[decimal])[decimal]
-        │ render 1: (k)[int]
-        │ render 2: (variance)[decimal]
+        │ render ?column?: ((k)[int] + (stddev)[decimal])[decimal]
+        │ render k: (k)[int]
+        │ render variance: (variance)[decimal]
         │
         └── • window
             │ columns: (k int, v int, d decimal, stddev decimal, variance decimal)
@@ -276,9 +276,9 @@ vectorized: true
     └── • render
         │ columns: ("?column?" decimal, max int, variance decimal)
         │ estimated row count: 1,000 (missing stats)
-        │ render 0: ((max)[int] + (stddev)[decimal])[decimal]
-        │ render 1: (max)[int]
-        │ render 2: (variance)[decimal]
+        │ render ?column?: ((max)[int] + (stddev)[decimal])[decimal]
+        │ render max: (max)[int]
+        │ render variance: (variance)[decimal]
         │
         └── • window
             │ columns: (v int, d decimal, max int, stddev decimal, variance decimal)
@@ -360,9 +360,9 @@ vectorized: true
         └── • render
             │ columns: (lag_1_arg1, lag_1_arg3, lag_1_partition_1)
             │ estimated row count: 1,000 (missing stats)
-            │ render 0: 1
-            │ render 1: CAST(NULL AS INT8)
-            │ render 2: 2
+            │ render lag_1_arg1: 1
+            │ render lag_1_arg3: CAST(NULL AS INT8)
+            │ render lag_1_partition_1: 2
             │
             └── • scan
                   columns: ()
