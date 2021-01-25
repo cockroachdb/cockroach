@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -150,6 +151,12 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	if pErr != nil {
 		rd.MoveToDraining(errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan))
 		return nil, rd.DrainHelper()
+	}
+
+	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
+			restoreKnobs.RunAfterProcessingRestoreSpanEntry(rd.Ctx)
+		}
 	}
 
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress

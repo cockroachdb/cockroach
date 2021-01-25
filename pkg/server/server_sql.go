@@ -403,6 +403,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if cfg.TestingKnobs.JobsTestingKnobs != nil {
 		distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 	}
+	if cfg.TestingKnobs.BackupRestore != nil {
+		distSQLCfg.TestingKnobs.BackupRestoreTestingKnobs = cfg.TestingKnobs.BackupRestore
+	}
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
