@@ -343,6 +343,7 @@ ALL_TESTS = [
     "//pkg/workload/cli:cli_test",
     "//pkg/workload/faker:faker_test",
     "//pkg/workload/movr:movr_test",
+    "//pkg/workload/schemachange:schemachange_test",
     "//pkg/workload/tpcc:tpcc_test",
     "//pkg/workload/workloadimpl:workloadimpl_test",
     "//pkg/workload/workloadsql:workloadsql_test",
