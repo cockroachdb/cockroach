@@ -133,6 +133,10 @@ func (g *sqlSmith) Ops(
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
+	if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
