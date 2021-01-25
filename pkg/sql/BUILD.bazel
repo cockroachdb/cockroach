@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sql",
@@ -218,6 +219,10 @@ go_library(
         "zero.go",
         "zigzag_join.go",
         "zone_config.go",
+        ":gen-advancecode-stringer",  # keep
+        ":gen-nodestatus-stringer",  # keep
+        ":gen-txnevent-stringer",  # keep
+        ":gen-txntype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql",
     visibility = ["//visibility:public"],
@@ -587,4 +592,28 @@ go_test(
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-txnevent-stringer",
+    file = "txn_state.go",
+    typ = "txnEvent",
+)
+
+stringer(
+    name = "gen-txntype-stringer",
+    file = "txn_state.go",
+    typ = "txnType",
+)
+
+stringer(
+    name = "gen-advancecode-stringer",
+    file = "txn_state.go",
+    typ = "advanceCode",
+)
+
+stringer(
+    name = "gen-nodestatus-stringer",
+    file = "distsql_physical_planner.go",
+    typ = "NodeStatus",
 )

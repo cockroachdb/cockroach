@@ -1,6 +1,9 @@
 # Define the top level namespace. This lets everything be addressable using
 # `@cockroach//...`.
-workspace(name = "cockroach")
+workspace(
+    name = "cockroach",
+    managed_directories = {"@npm": ["node_modules"]},
+)
 
 # Load the things that let us load other things.
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
@@ -14,6 +17,13 @@ http_archive(
         "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
         "https://github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
     ],
+)
+
+# Like the above, but for nodeJS.
+http_archive(
+    name = "build_bazel_rules_nodejs",
+    sha256 = "6142e9586162b179fdd570a55e50d1332e7d9c030efd853453438d607569721d",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.0.0/rules_nodejs-3.0.0.tar.gz"],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -81,6 +91,15 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 go_rules_dependencies()
 
 go_register_toolchains(go_version = "1.15.6")
+
+# Configure nodeJS.
+load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
+
+yarn_install(
+    name = "npm",
+    package_json = "//pkg/ui:package.json",
+    yarn_lock = "//pkg/ui:yarn.lock",
+)
 
 # NB: @bazel_skylib comes from go_rules_dependencies().
 load("@bazel_skylib//lib:versions.bzl", "versions")

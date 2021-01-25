@@ -1355,6 +1355,7 @@ func TestHealthAPI(t *testing.T) {
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	ts := s.(*TestServer)
 
 	// We need to retry because the node ID isn't set until after
 	// bootstrapping.
@@ -1363,15 +1364,26 @@ func TestHealthAPI(t *testing.T) {
 		return getAdminJSONProto(s, "health", &resp)
 	})
 
+	// Make the SQL listener appear unavailable. Verify that health fails after that.
+	ts.sqlServer.acceptingClients.Set(false)
+	var resp serverpb.HealthResponse
+	err := getAdminJSONProto(s, "health?ready=1", &resp)
+	if err == nil {
+		t.Error("server appears ready even though SQL listener is not")
+	}
+	ts.sqlServer.acceptingClients.Set(true)
+	err = getAdminJSONProto(s, "health?ready=1", &resp)
+	if err != nil {
+		t.Errorf("server not ready after SQL listener is ready again: %v", err)
+	}
+
 	// Expire this node's liveness record by pausing heartbeats and advancing the
 	// server's clock.
-	ts := s.(*TestServer)
 	defer ts.nodeLiveness.PauseAllHeartbeatsForTest()()
 	self, ok := ts.nodeLiveness.Self()
 	assert.True(t, ok)
 	s.Clock().Update(self.Expiration.ToTimestamp().Add(1, 0).UnsafeToClockTimestamp())
 
-	var resp serverpb.HealthResponse
 	testutils.SucceedsSoon(t, func() error {
 		err := getAdminJSONProto(s, "health?ready=1", &resp)
 		if err == nil {

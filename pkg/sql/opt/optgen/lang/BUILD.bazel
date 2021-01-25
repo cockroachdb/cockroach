@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "lang",
@@ -13,6 +14,8 @@ go_library(
         "token_string.go",
         ":gen-expr",  # keep
         ":gen-operator",  # keep
+        ":gen-operator-stringer",  # keep
+        ":gen-token-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
     visibility = ["//visibility:public"],
@@ -77,4 +80,16 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(location lang.opt)
     """,
     tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+)
+
+stringer(
+    name = "gen-token-stringer",
+    file = "scanner.go",
+    typ = "Token",
+)
+
+stringer(
+    name = "gen-operator-stringer",
+    file = "operator.og.go",
+    typ = "Operator",
 )

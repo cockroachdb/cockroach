@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "kvcoord",
@@ -28,6 +29,7 @@ go_library(
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
         "txnstate_string.go",
+        ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
     visibility = ["//visibility:public"],
@@ -148,4 +150,10 @@ go_test(
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-txnstate-stringer",
+    file = "txn_coord_sender.go",
+    typ = "txnState",
 )
