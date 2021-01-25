@@ -260,6 +260,8 @@ func (desc *wrapper) collectConstraintInfo(
 				"duplicate constraint name: %q", uc.Name)
 		}
 		detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypeUnique}
+		// Constraints in the Validating state are considered Unvalidated for this purpose
+		detail.Unvalidated = uc.Validity != descpb.ConstraintValidity_Validated
 		var err error
 		detail.Columns, err = desc.NamesForColumnIDs(uc.ColumnIDs)
 		if err != nil {
