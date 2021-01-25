@@ -163,6 +163,8 @@ type Tracer struct {
 		syncutil.Mutex
 		m map[*Span]struct{}
 	}
+
+	includeAsyncSpansInRecordings bool // see TestingIncludeAsyncSpansInRecordings
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -621,22 +623,37 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	return nil
 }
 
+// TestingIncludeAsyncSpansInRecordings is a test-only helper that configures
+// the tracer to include recordings from forked/async child spans, when
+// retrieving the recording for a parent span.
+func (t *Tracer) TestingIncludeAsyncSpansInRecordings() {
+	t.includeAsyncSpansInRecordings = true
+}
+
 // ForkCtxSpan checks if ctx has a Span open; if it does, it creates a new Span
 // that "follows from" the original Span. This allows the resulting context to be
 // used in an async task that might outlive the original operation.
 //
 // Returns the new context and the new Span (if any). The Span should be
-// closed via FinishSpan.
+// closed via FinishSpan. Its recording will not be propagated automatically,
+// i.e. this becomes the responsibility of the caller as well[1].
 //
 // See also ChildSpan() for a "parent-child relationship".
+//
+// [1]: Unless configured differently by tests, see
+//      TestingIncludeAsyncSpansInRecordings.
 func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(
-		ctx, opName, WithParentAndAutoCollection(sp), WithFollowsFrom(),
-	)
+	collectionOpt := WithParentAndManualCollection(sp.Meta())
+	if sp.Tracer().includeAsyncSpansInRecordings {
+		// Using auto collection here ensures that recordings from async spans
+		// also show up at the parent.
+		collectionOpt = WithParentAndAutoCollection(sp)
+	}
+	return sp.Tracer().StartSpanCtx(ctx, opName, WithFollowsFrom(), collectionOpt)
 }
 
 // ChildSpan opens a Span as a child of the current Span in the context (if
@@ -707,17 +724,16 @@ func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.
 	return ctx, sp
 }
 
-// ContextWithRecordingSpan returns a context with an embedded trace Span which
-// returns its contents when getRecording is called and must be stopped by
-// calling the cancel method when done with the context (getRecording() needs to
-// be called before cancel()).
+// ContextWithRecordingSpanUsing returns a context with an embedded trace Span.
+// The Span is derived from the provided Tracer. The Span returns its contents
+// when `getRecording` is called, and must be stopped using `cancel`, when done
+// with the context (`getRecording` needs to be called before `cancel`).
 //
 // Note that to convert the recorded spans into text, you can use
 // Recording.String(). Tests can also use FindMsgInRecording().
-func ContextWithRecordingSpan(
-	ctx context.Context, opName string,
+func ContextWithRecordingSpanUsing(
+	ctx context.Context, tr *Tracer, opName string,
 ) (_ context.Context, getRecording func() Recording, cancel func()) {
-	tr := NewTracer()
 	ctx, sp := tr.StartSpanCtx(ctx, opName, WithForceRealSpan())
 	sp.SetVerbose(true)
 	ctx, cancelCtx := context.WithCancel(ctx)
@@ -729,4 +745,14 @@ func ContextWithRecordingSpan(
 		tr.Close()
 	}
 	return ctx, sp.GetRecording, cancel
+}
+
+// ContextWithRecordingSpan is like ContextWithRecordingSpanUsing, but for when
+// an existing Tracer is unavailable. Tests should typically expect to use
+// ContextWithRecordingSpanUsing instead.
+func ContextWithRecordingSpan(
+	ctx context.Context, opName string,
+) (_ context.Context, getRecording func() Recording, cancel func()) {
+	tr := NewTracer()
+	return ContextWithRecordingSpanUsing(ctx, tr, opName)
 }
