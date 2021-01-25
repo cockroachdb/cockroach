@@ -65,7 +65,8 @@ type streamIngestionProcessor struct {
 	// that it can be forwarded through the DistSQL flow.
 	ingestionErr error
 
-	progressCh chan jobspb.ResolvedSpan
+	// eventCh is the merged event channel of all of the partition event streams.
+	eventCh chan partitionEvent
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -87,18 +88,36 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
+	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
+	if err != nil {
+		return nil, err
+	}
+
 	sip := &streamIngestionProcessor{
 		flowCtx:  flowCtx,
 		spec:     spec,
 		output:   output,
 		curBatch: make([]storage.MVCCKeyValue, 0),
-		client:   streamclient.NewStreamClient(),
-		// TODO: This channel size was chosen arbitrarily.
-		progressCh: make(chan jobspb.ResolvedSpan, 10),
+		client:   streamClient,
+	}
+
+	evalCtx := flowCtx.EvalCtx
+	db := flowCtx.Cfg.DB
+	sip.batcher, err = bulk.MakeStreamSSTBatcher(sip.Ctx, db, evalCtx.Settings,
+		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+	if err != nil {
+		return nil, errors.Wrap(err, "making sst batcher")
 	}
 
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
-		execinfra.ProcStateOpts{}); err != nil {
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{},
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+				sip.close()
+				return nil
+			},
+		},
+	); err != nil {
 		return nil, err
 	}
 
@@ -109,26 +128,17 @@ func newStreamIngestionDataProcessor(
 func (sip *streamIngestionProcessor) Start(ctx context.Context) context.Context {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName)
 
-	go func() {
-		defer close(sip.progressCh)
-
-		startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
-		eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
-		for _, partitionAddress := range sip.spec.PartitionAddresses {
-			eventCh, err := sip.client.ConsumePartition(partitionAddress, startTime)
-			if err != nil {
-				sip.ingestionErr = err
-				return
-			}
-			eventChs[partitionAddress] = eventCh
+	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
+	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
+	for _, partitionAddress := range sip.spec.PartitionAddresses {
+		eventCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
+		if err != nil {
+			sip.ingestionErr = errors.Wrapf(err, "consuming partition %v", partitionAddress)
 		}
-		eventCh := merge(sip.Ctx, eventChs)
+		eventChs[partitionAddress] = eventCh
+	}
+	sip.eventCh = merge(ctx, eventChs)
 
-		if err := sip.startIngestion(eventCh); err != nil {
-			sip.ingestionErr = err
-			return
-		}
-	}()
 	return ctx
 }
 
@@ -138,9 +148,14 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	progressUpdate, ok := <-sip.progressCh
-	if ok {
-		progressBytes, err := protoutil.Marshal(&progressUpdate)
+	progressUpdate, err := sip.consumeEvents()
+	if err != nil {
+		sip.MoveToDraining(err)
+		return nil, sip.DrainHelper()
+	}
+
+	if progressUpdate != nil {
+		progressBytes, err := protoutil.Marshal(progressUpdate)
 		if err != nil {
 			sip.MoveToDraining(err)
 			return nil, sip.DrainHelper()
@@ -162,62 +177,15 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 
 // ConsumerClosed is part of the RowSource interface.
 func (sip *streamIngestionProcessor) ConsumerClosed() {
-	if sip.batcher != nil {
-		sip.batcher.Close()
-	}
-
-	sip.InternalClose()
+	sip.close()
 }
 
-func (sip *streamIngestionProcessor) startIngestion(eventCh chan partitionEvent) error {
-	var err error
-	evalCtx := sip.flowCtx.EvalCtx
-	db := sip.flowCtx.Cfg.DB
-
-	sip.batcher, err = bulk.MakeStreamSSTBatcher(sip.Ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
-	if err != nil {
-		sip.ingestionErr = err
-	}
-
-	for event := range eventCh {
-		switch event.Type() {
-		case streamingccl.KVEvent:
-			kv := event.GetKV()
-			mvccKey := storage.MVCCKey{
-				Key:       kv.Key,
-				Timestamp: kv.Value.Timestamp,
-			}
-			sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
-		case streamingccl.CheckpointEvent:
-			// TODO: In addition to flushing when receiving a checkpoint event, we
-			// should also flush when we've buffered sufficient KVs. A buffering adder
-			// would save us here.
-			// TODO: Add a setting to control the max flush-rate. This would be a time
-			// interval to allow us to limit the number of flushes we do on
-			// checkpoints.
-			resolvedTimePtr := event.GetResolved()
-			if resolvedTimePtr == nil {
-				return errors.New("checkpoint event was expected to have a resolved timestamp")
-			}
-			resolvedTime := *resolvedTimePtr
-			if err := sip.flush(); err != nil {
-				return err
-			}
-			spanStartKey := roachpb.Key(event.partition)
-			sip.progressCh <- jobspb.ResolvedSpan{
-				Span: roachpb.Span{
-					Key:    spanStartKey,
-					EndKey: spanStartKey.Next(),
-				},
-				Timestamp: resolvedTime,
-			}
-		default:
-			return errors.Newf("unknown streaming event type %v", event.Type())
+func (sip *streamIngestionProcessor) close() {
+	if sip.InternalClose() {
+		if sip.batcher != nil {
+			sip.batcher.Close()
 		}
 	}
-
-	return nil
 }
 
 func (sip *streamIngestionProcessor) flush() error {
@@ -252,17 +220,17 @@ func merge(
 	for partition, eventCh := range partitionStreams {
 		go func(partition streamingccl.PartitionAddress, eventCh <-chan streamingccl.Event) {
 			defer wg.Done()
-			for {
+			for event := range eventCh {
+				pe := partitionEvent{
+					Event:     event,
+					partition: partition,
+				}
+
 				select {
-				case event, ok := <-eventCh:
-					if !ok {
-						return
-					}
-					merged <- partitionEvent{
-						Event:     event,
-						partition: partition,
-					}
+				case merged <- pe:
 				case <-ctx.Done():
+					// TODO: Add ctx.Err() to an error channel once ConsumePartition
+					// supports an error ch.
 					return
 				}
 			}
@@ -274,6 +242,58 @@ func merge(
 	}()
 
 	return merged
+}
+
+// consumeEvents handles processing events on the merged event queue and returns
+// once a checkpoint event has been emitted so that it can inform the downstream
+// frontier processor to consider updating the frontier.
+//
+// It should only make a claim that about the resolved timestamp of a partition
+// increasing after it has flushed all KV events previously received by that
+// partition.
+func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpan, error) {
+	for event := range sip.eventCh {
+		switch event.Type() {
+		case streamingccl.KVEvent:
+			kv := event.GetKV()
+			if kv == nil {
+				return nil, errors.New("kv event expected to have kv")
+			}
+			mvccKey := storage.MVCCKey{
+				Key:       kv.Key,
+				Timestamp: kv.Value.Timestamp,
+			}
+			sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+		case streamingccl.CheckpointEvent:
+			// TODO: In addition to flushing when receiving a checkpoint event, we
+			// should also flush when we've buffered sufficient KVs. A buffering adder
+			// would save us here.
+			//
+			// TODO: Add a setting to control the max flush-rate. This would be a time
+			// interval to allow us to limit the number of flushes we do on
+			// checkpoints.
+			resolvedTimePtr := event.GetResolved()
+			if resolvedTimePtr == nil {
+				return nil, errors.New("checkpoint event expected to have a resolved timestamp")
+			}
+			resolvedTime := *resolvedTimePtr
+			if err := sip.flush(); err != nil {
+				return nil, errors.Wrap(err, "flushing")
+			}
+
+			// Each partition is represented by a span defined by the
+			// partition address.
+			spanStartKey := roachpb.Key(event.partition)
+			return &jobspb.ResolvedSpan{
+				Span:      roachpb.Span{Key: spanStartKey, EndKey: spanStartKey.Next()},
+				Timestamp: resolvedTime,
+			}, nil
+		default:
+			return nil, errors.Newf("unknown streaming event type %v", event.Type())
+		}
+	}
+
+	return nil, nil
 }
 
 func init() {

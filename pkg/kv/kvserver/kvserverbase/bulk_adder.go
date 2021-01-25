@@ -47,10 +47,10 @@ type BulkAdderOptions struct {
 	// BulkAdder buffer if the memory monitor permits.
 	StepBufferSize int64
 
-	// SkipLocalDuplicates configures handling of duplicate keys within a local
-	// sorted batch. When true if the same key/value pair is added more than once
+	// SkipDuplicates configures handling of duplicate keys within a local sorted
+	// batch. When true if the same key/value pair is added more than once
 	// subsequent additions will be ignored instead of producing an error. If an
-	// attempt to add the same key has a differnet value, it is always an error.
+	// attempt to add the same key has a different value, it is always an error.
 	// Once a batch is flushed – explicitly or automatically – local duplicate
 	// detection does not apply.
 	SkipDuplicates bool

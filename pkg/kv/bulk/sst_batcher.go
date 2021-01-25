@@ -64,12 +64,17 @@ type SSTBatcher struct {
 	// which are the same, will all correspond to the same kv in the inverted
 	// index. The method which generates these kvs does not dedup, thus we rely on
 	// the SSTBatcher to dedup them (by skipping), rather than throwing a
-	// DuplicateKeyError. This is also true when used with IMPORT. Import
+	// DuplicateKeyError.
+	// This is also true when used with IMPORT. Import
 	// generally prohibits the ingestion of KVs which will shadow existing data,
 	// with the exception of duplicates having the same value and timestamp. To
 	// maintain uniform behavior, duplicates in the same batch with equal values
 	// will not raise a DuplicateKeyError.
 	skipDuplicates bool
+	// ingestAll can only be set when disallowShadowing and skipDuplicates are
+	// false. It will never return a duplicateKey error and continue ingesting all
+	// data provided to it.
+	ingestAll bool
 
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
@@ -117,7 +122,7 @@ func MakeSSTBatcher(
 func MakeStreamSSTBatcher(
 	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: false, skipDuplicates: true}
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -143,7 +148,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
-	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
+	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
 		}

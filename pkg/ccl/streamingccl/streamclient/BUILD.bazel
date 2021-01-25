@@ -4,11 +4,25 @@ go_library(
     name = "streamclient",
     srcs = [
         "client.go",
+        "random_stream_client.go",
         "stream_client.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/ccl/streamingccl"],
+    deps = [
+        "//pkg/ccl/streamingccl",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
 )
 
 go_test(
