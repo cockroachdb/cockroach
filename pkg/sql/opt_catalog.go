@@ -670,9 +670,9 @@ func newOptTable(
 				desc.ComputeExpr,
 			)
 		} else {
-			if kind != cat.Ordinary {
-				return nil, errors.AssertionFailedf("virtual mutation column")
-			}
+			// Note: a WriteOnly or DeleteOnly mutation column doesn't require any
+			// special treatment inside the optimizer, other than having the correct
+			// visibility.
 			ot.columns[ordinal].InitVirtualComputed(
 				ordinal,
 				cat.StableID(desc.ID),
