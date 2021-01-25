@@ -2191,6 +2191,7 @@ func TestReplicateAddAndRemove(t *testing.T) {
 // to constantly catch up the slower node via snapshots. See #8659.
 func TestQuotaPool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 59382, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	const quota = 10000
