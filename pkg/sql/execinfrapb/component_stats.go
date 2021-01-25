@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -39,6 +40,15 @@ func StreamComponentID(flowID FlowID, streamID StreamID) ComponentID {
 		FlowID: flowID,
 		Type:   ComponentID_STREAM,
 		ID:     int32(streamID),
+	}
+}
+
+// FlowComponentID returns a ComponentID for the given flow.
+func FlowComponentID(nodeID roachpb.NodeID, flowID FlowID) ComponentID {
+	return ComponentID{
+		FlowID: flowID,
+		Type:   ComponentID_FLOW,
+		NodeID: nodeID,
 	}
 }
 

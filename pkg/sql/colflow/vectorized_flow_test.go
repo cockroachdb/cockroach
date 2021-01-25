@@ -222,7 +222,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
-		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
+		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, false, &wg, &execinfra.RowChannel{},
 		nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		nil /* fdSemaphore */, descs.DistSQLTypeResolver{},
 	)

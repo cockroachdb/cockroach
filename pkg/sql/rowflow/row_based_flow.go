@@ -382,7 +382,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		atomic.AddInt32(&f.numOutboxes, 1)
-		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, sid, &f.numOutboxes)
+		outbox := flowinfra.NewOutbox(&f.FlowCtx, spec.TargetNodeID, sid, &f.numOutboxes, f.FlowCtx.Gateway)
 		f.AddStartable(outbox)
 		return outbox, nil
 
