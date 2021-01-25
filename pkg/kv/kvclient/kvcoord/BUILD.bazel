@@ -28,7 +28,6 @@ go_library(
         "txn_interceptor_span_refresher.go",
         "txn_lock_gatekeeper.go",
         "txn_metrics.go",
-        "txnstate_string.go",
         ":gen-txnstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",

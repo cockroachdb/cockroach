@@ -31,7 +31,6 @@ go_library(
         "import.go",
         "init.go",
         "initial_sql.go",
-        "keytype_string.go",
         "log_flags.go",
         "mt.go",
         "mt_cert.go",

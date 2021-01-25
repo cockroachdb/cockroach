@@ -7,7 +7,6 @@ go_library(
         "authentication.go",
         "backend_dialer.go",
         "error.go",
-        "errorcode_string.go",
         "frontend_admitter.go",
         "idle_disconnect_connection.go",
         "metrics.go",

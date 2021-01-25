@@ -5,10 +5,8 @@ go_library(
     name = "pgdate",
     srcs = [
         "field_extract.go",
-        "field_string.go",
         "fields.go",
         "math.go",
-        "parsemode_string.go",
         "parsing.go",
         "pgdate.go",
         "setters.go",

@@ -48,6 +48,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # - A testdata "repo" that looks like a go package, but isn't
 #   (testdata/src/example.com).
 # - A few auto-generated sql parser files.
+# - Stringer files auto-generated with "go:generate stringer".
 # - The vendor directory. We're using external targets for go dependencies,
 #   generated without actually looking at vendor. See #58229.
 #
@@ -68,6 +69,40 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/opt/rule_name_string.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
 # gazelle:exclude vendor
+# gazelle:exclude pkg/kv/kvclient/kvcoord/txnstate_string.go
+# gazelle:exclude pkg/kv/kvserver/refreshraftreason_string.go
+# gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
+# gazelle:exclude pkg/util/timeutil/pgdate/parsemode_string.go
+# gazelle:exclude pkg/clusterversion/key_string.go
+# gazelle:exclude pkg/roachpb/method_string.go
+# gazelle:exclude pkg/roachpb/errordetailtype_string.go
+# gazelle:exclude pkg/ccl/sqlproxyccl/errorcode_string.go
+# gazelle:exclude pkg/cli/keytype_string.go
+# gazelle:exclude pkg/workload/schemachange/optype_string.go
+# gazelle:exclude pkg/base/testclusterreplicationmode_string.go
+# gazelle:exclude pkg/sql/roleoption/option_string.go
+# gazelle:exclude pkg/sql/privilege/kind_string.go
+# gazelle:exclude pkg/sql/sem/tree/createtypevariety_string.go
+# gazelle:exclude pkg/sql/sem/tree/statementtype_string.go
+# gazelle:exclude pkg/sql/catalog/descpb/privilegedescversion_string.go
+# gazelle:exclude pkg/sql/catalog/descpb/formatversion_string.go
+# gazelle:exclude pkg/sql/catalog/catalogkv/descriptorkind_string.go
+# gazelle:exclude pkg/sql/colfetcher/fetcherstate_string.go
+# gazelle:exclude pkg/sql/opt/optgen/lang/token_string.go
+# gazelle:exclude pkg/sql/opt/optgen/lang/operator_string.go
+# gazelle:exclude pkg/sql/schemachange/columnconversionkind_string.go
+# gazelle:exclude pkg/sql/execinfra/procstate_string.go
+# gazelle:exclude pkg/sql/execinfra/consumerstatus_string.go
+# gazelle:exclude pkg/sql/txnevent_string.go
+# gazelle:exclude pkg/sql/txntype_string.go
+# gazelle:exclude pkg/sql/advancecode_string.go
+# gazelle:exclude pkg/sql/nodestatus_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/pgnumericsign_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/formatcode_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/clientmessagetype_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/servermessagetype_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/servererrfieldtype_string.go
+# gazelle:exclude pkg/sql/pgwire/pgwirebase/preparetype_string.go
 
 # Generally useful references:
 #

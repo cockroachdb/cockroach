@@ -9,12 +9,10 @@ go_library(
         "column.go",
         "constraint.go",
         "descriptor.go",
-        "formatversion_string.go",
         "index.go",
         "join_type.go",
         "locking.go",
         "privilege.go",
-        "privilegedescversion_string.go",
         "region_name.go",
         "structured.go",
         ":gen-formatversion-stringer",  # keep

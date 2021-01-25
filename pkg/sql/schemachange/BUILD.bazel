@@ -4,7 +4,6 @@ go_library(
     name = "schemachange",
     srcs = [
         "alter_column_type.go",
-        "columnconversionkind_string.go",
         ":gen-columnconversionkind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachange",
