@@ -8,7 +8,6 @@ go_library(
         "error_code_set.go",
         "error_screening.go",
         "operation_generator.go",
-        "optype_string.go",
         "schemachange.go",
         "txstatus_string.go",
         "type_resolver.go",

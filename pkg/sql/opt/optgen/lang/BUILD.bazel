@@ -8,10 +8,8 @@ go_library(
         "data_type.go",
         "doc.go",
         "expr.go",
-        "operator_string.go",
         "parser.go",
         "scanner.go",
-        "token_string.go",
         ":gen-expr",  # keep
         ":gen-operator",  # keep
         ":gen-operator-stringer",  # keep
