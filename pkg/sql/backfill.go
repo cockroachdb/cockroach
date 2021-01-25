@@ -169,6 +169,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []descpb.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
+	var addedIndexes []descpb.IndexID
 
 	var constraintsToDrop []descpb.ConstraintToUpdate
 	var constraintsToAddBeforeValidation []descpb.ConstraintToUpdate
@@ -220,6 +221,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			case *descpb.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
+				addedIndexes = append(addedIndexes, t.Index.ID)
 			case *descpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case descpb.ConstraintToUpdate_CHECK:
@@ -310,7 +312,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// Add new indexes.
 	if len(addedIndexSpans) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
-		if err := sc.backfillIndexes(ctx, version, addedIndexSpans); err != nil {
+		if err := sc.backfillIndexes(ctx, version, addedIndexSpans, addedIndexes); err != nil {
 			return err
 		}
 	}
@@ -945,6 +947,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	ctx context.Context,
 	version descpb.DescriptorVersion,
 	targetSpans []roachpb.Span,
+	addedIndexes []descpb.IndexID,
 	filter backfill.MutationFilter,
 	indexBackfillBatchSize int64,
 ) error {
@@ -1023,7 +1026,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			true /* distribute */)
 		chunkSize := sc.getChunkSize(indexBackfillBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize, addedIndexes)
 		if err != nil {
 			return err
 		}
@@ -1733,7 +1736,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 func (sc *SchemaChanger) backfillIndexes(
-	ctx context.Context, version descpb.DescriptorVersion, addingSpans []roachpb.Span,
+	ctx context.Context,
+	version descpb.DescriptorVersion,
+	addingSpans []roachpb.Span,
+	addedIndexes []descpb.IndexID,
 ) error {
 	log.Infof(ctx, "backfilling %d indexes", len(addingSpans))
 
@@ -1754,7 +1760,8 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	if err := sc.distIndexBackfill(
-		ctx, version, addingSpans, backfill.IndexMutationFilter, indexBackfillBatchSize); err != nil {
+		ctx, version, addingSpans, addedIndexes, backfill.IndexMutationFilter, indexBackfillBatchSize,
+	); err != nil {
 		return err
 	}
 
