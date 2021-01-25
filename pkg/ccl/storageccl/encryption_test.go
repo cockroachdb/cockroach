@@ -57,6 +57,99 @@ func TestEncryptDecrypt(t *testing.T) {
 		require.EqualError(t, err, "file does not appear to be encrypted")
 	})
 
+	t.Run("ReadAt", func(t *testing.T) {
+		rng, _ := randutil.NewTestPseudoRand()
+
+		encryptionChunkSizeV2 = 32
+
+		plaintext := randutil.RandBytes(rng, 256)
+		plainReader := bytes.NewReader(plaintext)
+
+		ciphertext, err := encryptFile(plaintext, key, true)
+		require.NoError(t, err)
+
+		r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+		require.NoError(t, err)
+
+		t.Run("start", func(t *testing.T) {
+			expected := make([]byte, 24)
+			got := make([]byte, len(expected))
+
+			expectedN, expectedErr := plainReader.ReadAt(expected, 0)
+			gotN, gotErr := r.(io.ReaderAt).ReadAt(got, 0)
+
+			require.Equal(t, expectedN, gotN)
+			require.Equal(t, expectedErr, gotErr)
+			require.Equal(t, expected, got)
+		})
+
+		t.Run("spanning", func(t *testing.T) {
+			expected := make([]byte, 24)
+			got := make([]byte, len(expected))
+
+			expectedN, expectedErr := plainReader.ReadAt(expected, 30)
+			gotN, gotErr := r.(io.ReaderAt).ReadAt(got, 30)
+
+			require.Equal(t, expectedN, gotN)
+			require.Equal(t, expectedErr, gotErr)
+			require.Equal(t, expected, got)
+
+			expectedEmpty := make([]byte, 0)
+			gotEmpty := make([]byte, 0)
+			expectedEmptyN, expectedEmptyErr := plainReader.ReadAt(expectedEmpty, 30)
+			gotEmptyN, gotEmptyErr := r.(io.ReaderAt).ReadAt(gotEmpty, 30)
+
+			require.Equal(t, expectedEmptyN, gotEmptyN)
+			require.Equal(t, expectedEmptyErr != nil, gotEmptyErr != nil)
+			require.Equal(t, expectedEmpty, gotEmpty)
+		})
+
+		t.Run("to-end", func(t *testing.T) {
+			expected := make([]byte, 24)
+			got := make([]byte, len(expected))
+
+			expectedN, expectedErr := plainReader.ReadAt(expected, 256-24)
+			gotN, gotErr := r.(io.ReaderAt).ReadAt(got, 256-24)
+
+			require.Equal(t, expectedN, gotN)
+			require.Equal(t, expectedErr, gotErr)
+			require.Equal(t, expected, got)
+		})
+
+		t.Run("spanning-end", func(t *testing.T) {
+			expected := make([]byte, 100)
+			got := make([]byte, len(expected))
+
+			expectedN, expectedErr := plainReader.ReadAt(expected, 180)
+			gotN, gotErr := r.(io.ReaderAt).ReadAt(got, 180)
+
+			require.Equal(t, expectedN, gotN)
+			require.Equal(t, expectedErr, gotErr)
+			require.Equal(t, expected, got)
+		})
+
+		t.Run("after-end", func(t *testing.T) {
+			expected := make([]byte, 24)
+			got := make([]byte, len(expected))
+
+			expectedN, _ := plainReader.ReadAt(expected, 300)
+			gotN, gotErr := r.(io.ReaderAt).ReadAt(got, 300)
+
+			require.Equal(t, expectedN, gotN)
+			require.NotNil(t, gotErr)
+			require.Equal(t, expected, got)
+
+			expectedEmpty := make([]byte, 0)
+			gotEmpty := make([]byte, 0)
+			expectedEmptyN, expectedEmptyErr := plainReader.ReadAt(expectedEmpty, 300)
+			gotEmptyN, gotEmptyErr := r.(io.ReaderAt).ReadAt(gotEmpty, 300)
+
+			require.Equal(t, expectedEmptyN, gotEmptyN)
+			require.Equal(t, expectedEmptyErr != nil, gotEmptyErr != nil)
+			require.Equal(t, expectedEmpty, gotEmpty)
+		})
+	})
+
 	t.Run("Random", func(t *testing.T) {
 		rng, _ := randutil.NewTestPseudoRand()
 		t.Run("DecryptFile", func(t *testing.T) {
@@ -81,6 +174,37 @@ func TestEncryptDecrypt(t *testing.T) {
 						}
 					}
 				})
+			}
+		})
+
+		t.Run("ReadAt", func(t *testing.T) {
+			// For each random size of chunk and text, verify random reads.
+			const chunkSizes, textSizes, reads = 10, 100, 500
+
+			for i := 0; i < chunkSizes; i++ {
+				encryptionChunkSizeV2 = rng.Intn(1024*24) + 1
+				for j := 0; j < textSizes; j++ {
+					plaintext := randutil.RandBytes(rng, rng.Intn(1024*32))
+					plainReader := bytes.NewReader(plaintext)
+					ciphertext, err := encryptFile(plaintext, key, encryptionChunkSizeV2 > 0)
+					require.NoError(t, err)
+					r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+					require.NoError(t, err)
+					for k := 0; k < reads; k++ {
+						start := rng.Int63n(int64(float64(len(plaintext)) * 1.1))
+						expected := make([]byte, rng.Int63n(int64(len(plaintext))/2))
+						got := make([]byte, len(expected))
+						expectedN, expectedErr := plainReader.ReadAt(expected, start)
+						gotN, gotErr := r.(io.ReaderAt).ReadAt(got, start)
+						require.Equal(t, expectedN, gotN)
+						if start < int64(len(plaintext)) {
+							require.Equal(t, expectedErr, gotErr)
+						} else {
+							require.Equal(t, expectedErr != nil, gotErr != nil)
+						}
+						require.Equal(t, expected[:expectedN], got[:gotN])
+					}
+				}
 			}
 		})
 	})
@@ -147,11 +271,11 @@ func BenchmarkEncryption(b *testing.B) {
 						ciphertext := bytes.NewReader(ciphertextOriginal[chunkSizeNum])
 						for i := 0; i < b.N; i++ {
 							ciphertext.Reset(ciphertextOriginal[chunkSizeNum])
-							r, err := DecryptingReader(ciphertext, key)
+							r, err := decryptingReader(ciphertext, key)
 							if err != nil {
 								b.Fatal(err)
 							}
-							_, err = io.Copy(ioutil.Discard, r)
+							_, err = io.Copy(ioutil.Discard, r.(io.Reader))
 							if err != nil {
 								b.Fatal(err)
 							}

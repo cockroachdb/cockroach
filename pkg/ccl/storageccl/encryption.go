@@ -17,8 +17,11 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
+	"os"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -148,28 +151,30 @@ func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 // and reading the IV from a prefix of the file. See comments on EncryptFile
 // for intended usage, and see DecryptFile
 func DecryptFile(ciphertext, key []byte) ([]byte, error) {
-	r, err := DecryptingReader(bytes.NewReader(ciphertext), key)
+	r, err := decryptingReader(bytes.NewReader(ciphertext), key)
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(r)
+	return ioutil.ReadAll(r.(io.Reader))
 }
 
 type decryptReader struct {
-	ciphertext io.Reader
+	ciphertext io.ReaderAt
 	g          cipher.AEAD
 	fileIV     []byte
 
-	eof       bool
 	ivScratch []byte
 	buf       []byte
-	pos       int
+	pos       int64 // pos is used to transform Read() to ReadAt(pos).
 	chunk     int64
 }
 
-// DecryptingReader returns a reader that decrypts on the fly with the given
-// key.
-func DecryptingReader(ciphertext io.Reader, key []byte) (io.Reader, error) {
+type readerAndReaderAt interface {
+	io.Reader
+	io.ReaderAt
+}
+
+func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.ReadableFile, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err
@@ -202,7 +207,7 @@ func DecryptingReader(ciphertext io.Reader, key []byte) (io.Reader, error) {
 			return nil, err
 		}
 		buf, err = gcm.Open(buf[:0], iv, buf, nil)
-		return bytes.NewReader(buf), errors.Wrap(err, "failed to decrypt — maybe incorrect key")
+		return vfs.NewMemFile(buf), errors.Wrap(err, "failed to decrypt — maybe incorrect key")
 	}
 	buf := make([]byte, nonceSize, encryptionChunkSizeV2+tagSize+nonceSize)
 	ivScratch := buf[:nonceSize]
@@ -211,34 +216,29 @@ func DecryptingReader(ciphertext io.Reader, key []byte) (io.Reader, error) {
 	return r, err
 }
 
-func (r *decryptReader) fill() error {
-	if r.eof {
-		return io.EOF
+// fill loads the requested chunk into the buffer.
+func (r *decryptReader) fill(chunk int64) error {
+	if chunk == r.chunk {
+		return nil // this chunk is already loaded in buf.
 	}
-	r.pos = 0
-	r.buf = r.buf[:cap(r.buf)]
-	r.chunk++
-	var read int
-	for read < len(r.buf) {
-		n, err := r.ciphertext.Read(r.buf[read:])
-		read += n
 
-		// If we've reached end of the ciphertext, we still need to need to unseal
-		// the current chunk (even if it was empty, to detect truncations).
-		if err == io.EOF {
-			r.eof = true
-			break
-		}
-		if err != nil {
-			return err
-		}
+	r.chunk = -1 // invalidate the current buffered chunk while we fill it.
+	ciphertextChunkSize := int64(encryptionChunkSizeV2) + tagSize
+	// Load the region of ciphertext that corresponds to chunk.
+	n, err := r.ciphertext.ReadAt(r.buf[:cap(r.buf)], headerSize+chunk*ciphertextChunkSize)
+	if err != nil && err != io.EOF {
+		return err
 	}
-	var err error
-	r.buf, err = r.g.Open(r.buf[:0], r.chunkIV(r.chunk), r.buf[:read], nil)
-	if r.eof && len(r.buf) >= encryptionChunkSizeV2 {
-		return errors.Wrap(io.ErrUnexpectedEOF, "encrypted file appears truncated")
+	r.buf = r.buf[:n]
+
+	// Decrypt the ciphertext chunk into buf.
+	buf, err := r.g.Open(r.buf[:0], r.chunkIV(chunk), r.buf, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to decrypt — maybe incorrect key")
 	}
-	return errors.Wrap(err, "failed to decrypt — maybe incorrect key")
+	r.buf = buf
+	r.chunk = chunk
+	return err
 }
 
 func (r *decryptReader) chunkIV(num int64) []byte {
@@ -247,16 +247,48 @@ func (r *decryptReader) chunkIV(num int64) []byte {
 	return r.ivScratch
 }
 
-func (r *decryptReader) Read(p []byte) (int, error) {
-	if r.pos >= len(r.buf) {
-		if err := r.fill(); err != nil {
-			r.chunk = -1
-			return 0, err
-		}
+func (r *decryptReader) ReadAt(p []byte, offset int64) (int, error) {
+	if offset < 0 {
+		return 0, errors.New("bad offset")
 	}
-	read := copy(p, r.buf[r.pos:])
-	r.pos += read
-	return read, nil
+
+	var read int
+	for {
+		chunk := offset / int64(encryptionChunkSizeV2)
+		offsetInChunk := offset % int64(encryptionChunkSizeV2)
+
+		if err := r.fill(chunk); err != nil {
+			return read, err
+		}
+
+		// If the decrypted chunk is too small to contain offset, that implies EOF.
+		if offsetInChunk >= int64(len(r.buf)) {
+			return read, io.EOF
+		}
+
+		// Copy from the chunk.
+		n := copy(p[read:], r.buf[offsetInChunk:])
+		read += n
+
+		// Return if we've fulfilled the request.
+		if read == len(p) {
+			return read, nil
+		}
+
+		// Return EOF if this was the last chunk (<chunksize).
+		if len(r.buf) < encryptionChunkSizeV2 {
+			return read, io.EOF
+		}
+
+		// Move offset by how much we read and go again.
+		offset += int64(n)
+	}
+}
+
+func (r *decryptReader) Read(p []byte) (int, error) {
+	n, err := r.ReadAt(p, r.pos)
+	r.pos += int64(n)
+	return n, err
 }
 
 func (r *decryptReader) Close() error {
@@ -264,6 +296,23 @@ func (r *decryptReader) Close() error {
 		return closer.Close()
 	}
 	return nil
+}
+
+// Size returns the size of the file.
+func (r *decryptReader) Stat() (os.FileInfo, error) {
+	stater, ok := r.ciphertext.(interface{ Stat() (os.FileInfo, error) })
+	if !ok {
+		return nil, errors.Newf("%T does not support stat", r.ciphertext)
+	}
+	stat, err := stater.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	size := stat.Size()
+	size -= headerSize
+	size -= tagSize * ((size / (int64(encryptionChunkSizeV2) + tagSize)) + 1)
+	return sizeStat(size), nil
 }
 
 func aesgcm(key []byte) (cipher.AEAD, error) {
