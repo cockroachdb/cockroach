@@ -623,7 +623,8 @@ func (t *Tracer) VisitSpans(visitor func(*Span)) {
 // used in an async task that might outlive the original operation.
 //
 // Returns the new context and the new Span (if any). The Span should be
-// closed via FinishSpan.
+// closed via FinishSpan. Its recording will not be propagated automatically,
+// i.e. this becomes the responsibility of the caller as well.
 //
 // See also ChildSpan() for a "parent-child relationship".
 func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
@@ -632,7 +633,7 @@ func ForkCtxSpan(ctx context.Context, opName string) (context.Context, *Span) {
 		return ctx, nil
 	}
 	return sp.Tracer().StartSpanCtx(
-		ctx, opName, WithParentAndAutoCollection(sp), WithFollowsFrom(),
+		ctx, opName, WithParentAndManualCollection(sp.Meta()), WithFollowsFrom(),
 	)
 }
 
