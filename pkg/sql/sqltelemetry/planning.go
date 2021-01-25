@@ -106,6 +106,12 @@ var ExplainOptUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt")
 // ExplainVecUseCounter is to be incremented whenever EXPLAIN (VEC) is run.
 var ExplainVecUseCounter = telemetry.GetCounterOnce("sql.plan.explain-vec")
 
+// ExplainDDLStages is to be incremented whenever EXPLAIN (DDL, STAGES) is run.
+var ExplainDDLStages = telemetry.GetCounterOnce("sql.plan.explain-ddl-stages")
+
+// ExplainDDLDeps is to be incremented whenever EXPLAIN (DDL, DEPS) is run.
+var ExplainDDLDeps = telemetry.GetCounterOnce("sql.plan.explain-ddl-deps")
+
 // ExplainOptVerboseUseCounter is to be incremented whenever
 // EXPLAIN (OPT, VERBOSE) is run.
 var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt-verbose")

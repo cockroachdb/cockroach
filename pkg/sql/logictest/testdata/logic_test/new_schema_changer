@@ -7,6 +7,12 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
+EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+EXPLAIN (DDL, DEPS) ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
 ALTER TABLE foo ADD COLUMN j INT
 
 statement ok
