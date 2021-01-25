@@ -24,13 +24,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// WriteResumeSpan writes a checkpoint for the backfill work on origSpan.
+// origSpan is the span of keys that were assigned to be backfilled,
+// resume is the left over work from origSpan.
+func WriteResumeSpan(
+	ctx context.Context,
+	db *kv.DB,
+	codec keys.SQLCodec,
+	id descpb.ID,
+	mutationID descpb.MutationID,
+	filter backfill.MutationFilter,
+	finished roachpb.Spans,
+	jobsRegistry *jobs.Registry,
+) error {
+	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
+	defer traceSpan.Finish()
+
+	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		resumeSpans, job, mutationIdx, error := rowexec.GetResumeSpans(
+			ctx, jobsRegistry, txn, codec, id, mutationID, filter,
+		)
+		if error != nil {
+			return error
+		}
+
+		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
+		return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
+	})
+}
 
 func TestWriteResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -150,7 +181,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := rowexec.WriteResumeSpan(
+		if err := WriteResumeSpan(
 			ctx, kvDB, keys.SystemSQLCodec, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
 		); err != nil {
 			t.Error(err)
