@@ -782,6 +782,10 @@ type ExecutorConfig struct {
 	// version` but before executing it. It can carry out arbitrary migrations
 	// that allow us to eventually remove legacy code.
 	VersionUpgradeHook func(ctx context.Context, from, to clusterversion.ClusterVersion) error
+
+	// IndexBackfiller is used to backfill indexes. It is another rather circular
+	// object which mostly just holds on to an ExecConfig.
+	IndexBackfiller *IndexBackfillPlanner
 }
 
 // Organization returns the value of cluster.organization.
