@@ -151,3 +151,43 @@ SELECT species FROM users
 ----
 cat woo
 rat woo
+
+# Test that renaming columns works inside transactions that create resources
+# which reference those columns.
+
+subtest rename_in_transaction
+
+statement ok
+CREATE TABLE foo (j INT);
+
+statement ok
+BEGIN;
+    ALTER TABLE foo ADD CONSTRAINT check_not_negative CHECK (j >= 0);
+    ALTER TABLE foo RENAME COLUMN j TO i;
+COMMIT;
+
+statement ok
+BEGIN;
+    ALTER TABLE foo ADD COLUMN k INT AS (i+1) STORED;
+    ALTER TABLE foo RENAME COLUMN i TO j;
+COMMIT;
+
+statement ok
+BEGIN;
+    ALTER TABLE foo ALTER COLUMN j SET NOT NULL;
+    ALTER TABLE foo RENAME COLUMN j TO i;
+COMMIT;
+
+statement ok
+BEGIN;
+    CREATE INDEX ON foo(i) WHERE i > 0;
+    ALTER TABLE foo RENAME COLUMN i TO j;
+COMMIT;
+
+statement ok
+INSERT INTO foo(j) VALUES (1);
+
+query II
+SELECT j, k FROM foo;
+----
+1  2
