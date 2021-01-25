@@ -46,9 +46,6 @@ statement ok
 ALTER TABLE c ADD CONSTRAINT check_b CHECK (b IN (1, 2, 3)) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES d (d) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a) NOT VALID;
-
-# TODO(rytaft): Add this to the above block once it no longer causes an error.
-statement error pgcode 0A000 unique constraints without an index are not yet supported
 ALTER TABLE c ADD CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID;
 
 query TT
@@ -63,7 +60,8 @@ c  CREATE TABLE public.c (
    FAMILY fam_0_a_rowid (a, rowid),
    FAMILY fam_1_b (b),
    CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)) NOT VALID,
-   CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b)
+   CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
+   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID
 );
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
@@ -73,6 +71,7 @@ statement ok
 ALTER TABLE c VALIDATE CONSTRAINT check_b;
 ALTER TABLE c VALIDATE CONSTRAINT fk_a;
 ALTER TABLE c VALIDATE CONSTRAINT unique_a;
+ALTER TABLE c VALIDATE CONSTRAINT unique_b;
 ALTER TABLE c VALIDATE CONSTRAINT unique_a_b;
 
 query TT
@@ -87,7 +86,8 @@ c  CREATE TABLE public.c (
    FAMILY fam_0_a_rowid (a, rowid),
    FAMILY fam_1_b (b),
    CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)),
-   CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b)
+   CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
+   CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b)
 );
 COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
