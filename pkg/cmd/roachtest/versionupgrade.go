@@ -569,3 +569,23 @@ func importTPCCStep(oldV string, headroomWarehouses int, crdbNodes nodeListOptio
 		m.Wait()
 	}
 }
+
+func importLargeBankStep(oldV string, rows int, crdbNodes nodeListOption) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		// Use the predecessor binary to load into the predecessor
+		// cluster to avoid random breakage due to flag changes, etc.
+		binary := "./cockroach"
+		if oldV != "" {
+			binary = filepath.Join("v"+oldV, "cockroach")
+		}
+
+		// Use a monitor so that we fail cleanly if the cluster crashes
+		// during import.
+		m := newMonitor(ctx, u.c, crdbNodes)
+		m.Go(func(ctx context.Context) error {
+			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
+				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
+		})
+		m.Wait()
+	}
+}
