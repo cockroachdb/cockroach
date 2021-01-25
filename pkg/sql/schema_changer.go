@@ -1713,6 +1713,25 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 				constraint.ForeignKey.Name,
 			)
 		}
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Unvalidated {
+			return nil
+		}
+		for j, c := range desc.UniqueWithoutIndexConstraints {
+			if c.Name == constraint.UniqueWithoutIndexConstraint.Name {
+				desc.UniqueWithoutIndexConstraints = append(
+					desc.UniqueWithoutIndexConstraints[:j], desc.UniqueWithoutIndexConstraints[j+1:]...,
+				)
+				return nil
+			}
+		}
+		if log.V(2) {
+			log.Infof(
+				ctx,
+				"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
+				constraint.UniqueWithoutIndexConstraint.Name,
+			)
+		}
 	default:
 		return errors.AssertionFailedf("unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 	}
