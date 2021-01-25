@@ -1410,6 +1410,19 @@ ALTER TABLE t_cannot_rename_constraint_over_index RENAME CONSTRAINT "primary" TO
 
 subtest unique_without_index
 
+statement error pq: unique constraints without an index are not yet supported
+CREATE TABLE unique_without_index_error (
+  a INT UNIQUE WITHOUT INDEX
+)
+
+statement ok
+CREATE TABLE unique_without_index_error (
+  a INT
+)
+
+statement error pq: unique constraints without an index are not yet supported
+ALTER TABLE unique_without_index_error ADD CONSTRAINT a_key UNIQUE WITHOUT INDEX (a)
+
 statement ok
 SET experimental_enable_unique_without_index_constraints = true
 
@@ -1433,30 +1446,63 @@ CREATE TABLE uwi_child (
   CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e)
 )
 
-# We don't yet support adding unique constraints without an index after a table
-# is created.
-statement error pgcode 0A000 unique constraints without an index are not yet supported
-ALTER TABLE unique_without_index ADD COLUMN d INT UNIQUE WITHOUT INDEX
+# We don't yet support adding a column marked as UNIQUE WITHOUT INDEX after a
+# table is created. (The full error message includes a hint with a workaround.)
+statement error pgcode 0A000 pq: adding a column marked as UNIQUE WITHOUT INDEX is unsupported
+ALTER TABLE unique_without_index ADD COLUMN f INT UNIQUE WITHOUT INDEX
 
-statement error pgcode 0A000 unique constraints without an index are not yet supported
-ALTER TABLE unique_without_index ADD CONSTRAINT ab UNIQUE WITHOUT INDEX (a, c) NOT VALID
+# To add a UNIQUE WITHOUT INDEX column, first add the column, then add the
+# constraint.
+statement ok
+ALTER TABLE unique_without_index ADD COLUMN f INT;
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_f UNIQUE WITHOUT INDEX (f)
 
-# All constraints are already valid, so validation should succeed.
+# The unique constraint prevents new duplicate values.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
+INSERT INTO unique_without_index (f) VALUES (1), (1)
+
+# There is no unique constraint on e, yet, so this insert succeeds.
+statement ok
+INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
+
+# But trying to add a unique constraint now fails.
+statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
+
+# We can create not-valid constraints, however.
+statement ok
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e) NOT VALID;
+ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
+
+# Trying to validate one of the constraints will fail.
+statement error pgcode 23505 pq: could not create unique constraint "my_unique_e"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
+
+# But after we delete a row, validation should succeed.
+statement ok
+DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
+ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
+
+# All these constraints are already valid, so validation should succeed.
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_without_index_c_key
 
-query TTTTB
+query TTTTB colnames
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (a, b)  true
-unique_without_index  unique_b                    UNIQUE  UNIQUE WITHOUT INDEX (b)     true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)     true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)               true
+table_name            constraint_name             constraint_type  details                             validated
+unique_without_index  my_unique_e                 UNIQUE           UNIQUE WITHOUT INDEX (e)            true
+unique_without_index  my_unique_e2                UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID  false
+unique_without_index  my_unique_f                 UNIQUE           UNIQUE WITHOUT INDEX (f)            true
+unique_without_index  unique_a_b                  UNIQUE           UNIQUE WITHOUT INDEX (a, b)         true
+unique_without_index  unique_b                    UNIQUE           UNIQUE WITHOUT INDEX (b)            true
+unique_without_index  unique_b_1                  UNIQUE           UNIQUE WITHOUT INDEX (b)            true
+unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOUT INDEX (c)            true
+unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)            true
+unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)         true
+unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                      true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1473,13 +1519,16 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)  true
-unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
-unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
-unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
-unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)      true
-unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)   true
-unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)            true
+unique_without_index  my_unique_e2                UNIQUE  UNIQUE WITHOUT INDEX (e) NOT VALID  false
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)            true
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)        true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)            true
+unique_without_index  unique_b_2                  UNIQUE  UNIQUE WITHOUT INDEX (b)            true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)            true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)            true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)         true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                      true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
@@ -1487,8 +1536,25 @@ ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
 statement error pgcode 42704 constraint \"unique_b\" does not exist
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_b
 
-statement error pgcode 0A000 dropping valid unique constraints without an index is not yet supported
+# Drop a valid constraint.
+statement ok
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_b_2
+
+# Drop a not-valid constraint.
+statement ok
+ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
+
+query TTTTB
+SHOW CONSTRAINTS FROM unique_without_index
+----
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)      true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)      true
+unique_without_index  unique_a_b                  UNIQUE  UNIQUE WITHOUT INDEX (aa, b)  true
+unique_without_index  unique_b_1                  UNIQUE  UNIQUE WITHOUT INDEX (b)      true
+unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)      true
+unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)      true
+unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)   true
+unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)                true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1497,6 +1563,8 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)     true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)     true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)     true
 unique_without_index  unique_d                    UNIQUE  UNIQUE WITHOUT INDEX (d)     true
 unique_without_index  unique_d_e                  UNIQUE  UNIQUE WITHOUT INDEX (d, e)  true
@@ -1519,15 +1587,14 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB
 SHOW CONSTRAINTS FROM unique_without_index
 ----
+unique_without_index  my_unique_e                 UNIQUE  UNIQUE WITHOUT INDEX (e)  true
+unique_without_index  my_unique_f                 UNIQUE  UNIQUE WITHOUT INDEX (f)  true
 unique_without_index  unique_c                    UNIQUE  UNIQUE WITHOUT INDEX (c)  true
 unique_without_index  unique_without_index_c_key  UNIQUE  UNIQUE (c ASC)            true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
 ----
-
-# TODO(rytaft): Add test cases for dropping both a valid and not-valid
-# unique constraint once supported.
 
 # Regression for #54629.
 statement ok

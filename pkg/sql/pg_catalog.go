@@ -855,6 +855,9 @@ func populateTableConstraints(
 				}
 				f.WriteString(strings.Join(colNames, ", "))
 				f.WriteByte(')')
+				if con.UniqueWithoutIndexConstraint.Validity != descpb.ConstraintValidity_Validated {
+					f.WriteString(" NOT VALID")
+				}
 			} else {
 				return errors.AssertionFailedf(
 					"Index or UniqueWithoutIndexConstraint must be non-nil for a unique constraint",
