@@ -49,18 +49,9 @@ func TransferLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
 
-	// For now, don't allow replicas of type LEARNER to be leaseholders. There's
-	// no reason this wouldn't work in principle, but it seems inadvisable. In
-	// particular, learners can't become raft leaders, so we wouldn't be able to
-	// co-locate the leaseholder + raft leader, which is going to affect tail
-	// latencies. Additionally, as of the time of writing, learner replicas are
-	// only used for a short time in replica addition, so it's not worth working
-	// out the edge cases. If we decide to start using long-lived learners at some
-	// point, that math may change.
-	//
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
-	if err := checkCanReceiveLease(&args.Lease, cArgs.EvalCtx); err != nil {
+	if err := CheckCanReceiveLease(args.Lease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}
 

@@ -312,20 +312,19 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								// t.Logf("found log entry: %+v", *entry)
 
-								parts := strings.SplitN(entry.Message, " ", 4)
-								if len(parts) < 4 || parts[1] != "Structured" || parts[2] != "entry:" {
+								if !strings.HasPrefix(entry.Message, "={") {
 									// TODO(knz): Enhance this when the log file
 									// contains proper markers for structured entries.
 									t.Errorf("malformed structured message: %q", entry.Message)
 								}
 
-								jsonPayload := []byte(parts[3])
+								jsonPayload := []byte(entry.Message[1:])
 								if entry.Redactable {
 									jsonPayload = redact.RedactableBytes(jsonPayload).StripMarkers()
 								}
 								var info map[string]interface{}
 								if err := json.Unmarshal(jsonPayload, &info); err != nil {
-									t.Fatalf("unable to decode json: %q: %v", jsonPayload, err)
+									return errors.Wrapf(err, "unable to decode json: %q", jsonPayload)
 								}
 								// Erase non-deterministic fields.
 								info["Timestamp"] = "XXX"
@@ -337,7 +336,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								fmt.Fprintf(&buf, "%s %s\n", parts[0], msg)
+								fmt.Fprintf(&buf, "%d %s\n", entry.Counter, msg)
 							}
 							lastLogMsg := entries[0].Message
 							if !re.MatchString(lastLogMsg) {

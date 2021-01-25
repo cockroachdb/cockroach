@@ -38,7 +38,7 @@ import {
   StatementDetailsStateProps,
   StatementDetailsProps,
   AggregateStatistics,
-} from "@cockroachlabs/admin-ui-components";
+} from "@cockroachlabs/cluster-ui";
 import { createStatementDiagnosticsReportAction } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import {

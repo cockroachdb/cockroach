@@ -33,10 +33,7 @@ import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/state
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { getMatchParamByName } from "src/util/query";
 
-import {
-  StatementsPage,
-  AggregateStatistics,
-} from "@cockroachlabs/admin-ui-components";
+import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
 import {
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,

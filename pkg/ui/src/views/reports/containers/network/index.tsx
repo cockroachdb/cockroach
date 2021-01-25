@@ -35,7 +35,7 @@ import {
   NodeFilterList,
   NodeFilterListProps,
 } from "src/views/reports/components/nodeFilterList";
-import { Loading } from "@cockroachlabs/admin-ui-components";
+import { Loading } from "@cockroachlabs/cluster-ui";
 import { Latency } from "./latency";
 import { Legend } from "./legend";
 import Sort from "./sort";

@@ -42,7 +42,6 @@ genrule(
     outs = ["keywords.go"],
     cmd = """
         $(location //pkg/sql/lex/allkeywords) < $(location //pkg/sql/parser:sql.y) > $@
-        gofmt -s -w $@
     """,
 )
 

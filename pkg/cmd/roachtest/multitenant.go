@@ -93,15 +93,15 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 
 	// Check that the server identifiers are present in the tenant log file.
 	if err := c.RunE(ctx, c.Node(1),
-		"grep", "-q", "'\\[config\\] clusterID:'", "cockroach.log"); err != nil {
+		"grep", "-q", "'\\[config\\] .* clusterID:'", "cockroach.log"); err != nil {
 		t.Fatal(errors.Wrap(err, "cluster ID not found in log file"))
 	}
 	if err := c.RunE(ctx, c.Node(1),
-		"grep", "-q", "'\\[config\\] tenantID:'", "cockroach.log"); err != nil {
+		"grep", "-q", "'\\[config\\] .* tenantID:'", "cockroach.log"); err != nil {
 		t.Fatal(errors.Wrap(err, "tenant ID not found in log file"))
 	}
 	if err := c.RunE(ctx, c.Node(1),
-		"grep", "-q", "'\\[config\\] instanceID:'", "cockroach.log"); err != nil {
+		"grep", "-q", "'\\[config\\] .* instanceID:'", "cockroach.log"); err != nil {
 		t.Fatal(errors.Wrap(err, "SQL instance ID not found in log file"))
 	}
 }

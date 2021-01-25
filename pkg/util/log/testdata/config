@@ -10,14 +10,14 @@ sinks:
       max-group-size: 100MiB
       buffered-writes: true
       filter: INFO
-      format: crdb-v1
+      format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v1-tty
+    format: crdb-v2-tty
     redact: false
     redactable: true
     exit-on-error: true
@@ -42,7 +42,7 @@ sinks:
       max-group-size: 100MiB
       buffered-writes: false
       filter: INFO
-      format: crdb-v1-count
+      format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
@@ -52,14 +52,14 @@ sinks:
       max-group-size: 100MiB
       buffered-writes: true
       filter: INFO
-      format: crdb-v1
+      format: crdb-v2
       redact: false
       redactable: true
       exit-on-error: true
   stderr:
     channels: all
     filter: NONE
-    format: crdb-v1-tty
+    format: crdb-v2-tty
     redact: false
     redactable: true
     exit-on-error: true
