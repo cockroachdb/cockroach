@@ -538,3 +538,15 @@ SHOW RANGES FROM TABLE crdb_internal.tables
 
 query error \"crdb_internal.tables\" is a virtual table
 SHOW RANGE FROM TABLE crdb_internal.tables FOR ROW (0, 0)
+
+# Regression test for incorrectly handling an excessive number of values in
+# SPLIT/UNSPLIT AT statements (#59011).
+statement ok
+CREATE TABLE t59011 (id UUID NOT NULL DEFAULT gen_random_uuid(), level INT8 NULL DEFAULT 0:::INT8, CONSTRAINT "primary" PRIMARY KEY (id ASC), INDEX i59011 (level ASC));
+INSERT INTO t59011(level) SELECT 2 FROM generate_series(1, 10);
+
+statement error excessive number of values provided: expected 1, got 2
+ALTER INDEX i59011 SPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
+
+statement error excessive number of values provided: expected 1, got 2
+ALTER INDEX i59011 UNSPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
