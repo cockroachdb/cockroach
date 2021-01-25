@@ -1345,9 +1345,6 @@ func (txn *Txn) ChildTxn(
 	ctx context.Context, retryable func(_ context.Context, childTxn *Txn) error,
 ) error {
 
-	// TODO(ajwerner): Validate the state of the parent transaction. It should be
-	// open (non-terminal), and a root transaction at the very least.
-
 	var childTxn *Txn
 	{
 		childID, childSender, err := txn.Sender().NewChildTransaction()
@@ -1376,7 +1373,5 @@ func (txn *Txn) ChildTxn(
 			paErr.AncestorTxn)
 		txn.handleErrIfRetryableLocked(ctx, err)
 	}
-	// TODO(ajwerner): Push the parent transaction to the commit timestamp of the
-	// child.
 	return err
 }
