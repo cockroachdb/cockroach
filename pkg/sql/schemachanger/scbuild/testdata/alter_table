@@ -1,0 +1,444 @@
+create-table
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT
+----
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 2
+        storeColumnNames:
+        - j
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 2
+        tableId: 52
+  state: PUBLIC
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
+----
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          defaultExpr: 123:::INT8
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 2
+        storeColumnNames:
+        - j
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 2
+        tableId: 52
+  state: PUBLIC
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
+ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
+----
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          defaultExpr: 123:::INT8
+          id: 2
+          name: j
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 2
+        - 3
+        storeColumnNames:
+        - j
+        - k
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 2
+        tableId: 52
+  state: PUBLIC
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          defaultExpr: 456:::INT8
+          id: 3
+          name: k
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
+----
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          computeExpr: i + 1:::INT8
+          id: 2
+          name: a
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 2
+        storeColumnNames:
+        - a
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 2
+        tableId: 52
+  state: PUBLIC
+
+create-table
+CREATE TABLE defaultdb.bar (j INT);
+----
+
+build
+ALTER TABLE defaultdb.foo ADD COLUMN a INT;
+ALTER TABLE defaultdb.bar ADD COLUMN b INT;
+----
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          id: 2
+          name: a
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 2
+        storeColumnNames:
+        - a
+        tableId: 52
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 1
+          columnNames:
+          - i
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+          version: 2
+        otherPrimaryIndex: 2
+        tableId: 52
+  state: PUBLIC
+- target:
+    direction: ADD
+    elementProto:
+      column:
+        column:
+          id: 3
+          name: b
+          nullable: true
+          type:
+            family: IntFamily
+            oid: 20
+            width: 64
+        familyName: primary
+        tableId: 53
+  state: ABSENT
+- target:
+    direction: ADD
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 2
+          columnNames:
+          - rowid
+          foreignKey: {}
+          geoConfig: {}
+          id: 2
+          interleave: {}
+          name: new_primary_key
+          partitioning: {}
+          sharded: {}
+          unique: true
+        otherPrimaryIndex: 1
+        storeColumnIds:
+        - 1
+        - 3
+        storeColumnNames:
+        - j
+        - b
+        tableId: 53
+  state: ABSENT
+- target:
+    direction: DROP
+    elementProto:
+      primaryIndex:
+        index:
+          columnDirections:
+          - ASC
+          columnIds:
+          - 2
+          columnNames:
+          - rowid
+          foreignKey: {}
+          geoConfig: {}
+          id: 1
+          interleave: {}
+          name: primary
+          partitioning: {}
+          sharded: {}
+          unique: true
+        otherPrimaryIndex: 2
+        storeColumnIds:
+        - 1
+        storeColumnNames:
+        - j
+        tableId: 53
+  state: PUBLIC
