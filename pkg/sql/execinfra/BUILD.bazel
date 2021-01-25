@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "execinfra",
@@ -18,6 +19,8 @@ go_library(
         "server_config.go",
         "testutils.go",
         "version.go",
+        ":gen-consumerstatus-stringer",  # keep
+        ":gen-procstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra",
     visibility = ["//visibility:public"],
@@ -87,4 +90,16 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
     ],
+)
+
+stringer(
+    name = "gen-procstate-stringer",
+    file = "processorsbase.go",
+    typ = "procState",
+)
+
+stringer(
+    name = "gen-consumerstatus-stringer",
+    file = "base.go",
+    typ = "ConsumerStatus",
 )

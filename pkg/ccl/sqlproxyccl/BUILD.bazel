@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "sqlproxyccl",
@@ -12,6 +13,7 @@ go_library(
         "metrics.go",
         "proxy.go",
         "server.go",
+        ":gen-errorcode-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
     visibility = ["//visibility:public"],
@@ -57,4 +59,10 @@ go_test(
         "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-errorcode-stringer",
+    file = "error.go",
+    typ = "ErrorCode",
 )

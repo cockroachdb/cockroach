@@ -58,3 +58,27 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+# TODO (alanmas): Solve stringer issue "stringer: can't handle non-integer constant type Type"
+# Seems that we need to include pkg/util/encoding/encodingtype somehow.
+# We already tried to copy the source files over so bazel source now are enconding and encodingtype
+# but it is still failing due to the same error.
+
+# genrule(
+#     name = "gen-type-stringer",
+#     srcs = [
+#         "//pkg/util/encoding/encodingtype:encoding_type.go",
+#         "encoding.go",
+#     ],
+#     outs = ["type_string.go"],
+#     cmd = """
+#        cp $(location encoding.go) `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go
+#        env PATH=`dirname $(location @go_sdk//:bin/go)` HOME=$(GENDIR) \
+#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
+#        -type=Type `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go $(location //pkg/util/encoding/encodingtype:encoding_type.go)
+#     """,
+#     tools = [
+#         "@go_sdk//:bin/go",
+#         "@org_golang_x_tools//cmd/stringer",
+#     ],
+# )

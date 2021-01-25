@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "pgwirebase",
@@ -14,6 +15,12 @@ go_library(
         "servererrfieldtype_string.go",
         "servermessagetype_string.go",
         "too_big_error.go",
+        ":gen-clientmessagetype-stringer",  # keep
+        ":gen-formatcode-stringer",  # keep
+        ":gen-pgnumericsign-stringer",  # keep
+        ":gen-preparetype-stringer",  # keep
+        ":gen-servererrfieldtype-stringer",  # keep
+        ":gen-servermessagetype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase",
     visibility = ["//visibility:public"],
@@ -38,4 +45,40 @@ go_library(
         "@com_github_jackc_pgx//pgtype",
         "@com_github_lib_pq//oid",
     ],
+)
+
+stringer(
+    name = "gen-pgnumericsign-stringer",
+    file = "encoding.go",
+    typ = "PGNumericSign",
+)
+
+stringer(
+    name = "gen-formatcode-stringer",
+    file = "encoding.go",
+    typ = "FormatCode",
+)
+
+stringer(
+    name = "gen-clientmessagetype-stringer",
+    file = "msg.go",
+    typ = "ClientMessageType",
+)
+
+stringer(
+    name = "gen-servermessagetype-stringer",
+    file = "msg.go",
+    typ = "ServerMessageType",
+)
+
+stringer(
+    name = "gen-servererrfieldtype-stringer",
+    file = "msg.go",
+    typ = "ServerErrFieldType",
+)
+
+stringer(
+    name = "gen-preparetype-stringer",
+    file = "msg.go",
+    typ = "PrepareType",
 )

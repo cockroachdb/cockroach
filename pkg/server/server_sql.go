@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
@@ -111,6 +112,10 @@ type SQLServer struct {
 	// connManager is the connection manager to use to set up additional
 	// SQL listeners in AcceptClients().
 	connManager netutil.Server
+
+	// set to true when the server has started accepting client conns.
+	// Used by health checks.
+	acceptingClients syncutil.AtomicBool
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are

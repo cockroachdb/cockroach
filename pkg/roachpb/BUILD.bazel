@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg:STRINGER.bzl", "stringer")
 
 go_library(
     name = "roachpb",
@@ -21,6 +22,8 @@ go_library(
         "span_group.go",
         "tenant.go",
         "version.go",
+        ":gen-errordetailtype-stringer",  # keep
+        ":gen-method-stringer",  # keep
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
@@ -145,4 +148,18 @@ go_proto_library(
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+# Using common function for stringer to create method_string.go
+stringer(
+    name = "gen-method-stringer",
+    file = "method.go",
+    typ = "Method",
+)
+
+# Using common function for stringer to create errordetailtype_string.go
+stringer(
+    name = "gen-errordetailtype-stringer",
+    file = "errors.go",
+    typ = "ErrorDetailType",
 )
