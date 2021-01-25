@@ -16,6 +16,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
 	"hash"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -4785,6 +4787,71 @@ may increase either contention or retry errors, or both.`,
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
 				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
 				" job has left the cluster in a consistent state.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.pickle_session": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryMultiTenancy,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.TxnState != sql.NoTxnStateStr {
+					return tree.NewDString("cannot pickle"), nil
+				}
+				// TODO(rafi): marshal local parameters too.
+				sd := ctx.SessionData
+				sessiondata.MarshalNonLocal(sd, &sd.SessionData)
+				sdBytes, err := sd.Marshal()
+				if err != nil {
+					return nil, err
+				}
+				// TODO(rafi): add interface to ctx.Planner to return serialized
+				// prepared statements
+				sdEnc := base64.StdEncoding.EncodeToString(sdBytes)
+				return tree.NewDString(sdEnc), nil
+			},
+			Info: "Serializes the current session state and returns it as a base64-encoded string. The state" +
+				"includes session variables and prepared statements.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.unpickle_session": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryMultiTenancy,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"pickled_session", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if ctx.TxnState != sql.NoTxnStateStr {
+					return tree.NewDString("cannot unpickle"), nil
+				}
+				sdBytes, err := base64.StdEncoding.DecodeString(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				proto := sessiondatapb.SessionData{}
+				if err := proto.Unmarshal(sdBytes); err != nil {
+					return nil, err
+				}
+				// TODO(rafi): unmarshal local parameters too.
+				sd, err := sessiondata.UnmarshalNonLocal(proto)
+				if err != nil {
+					return nil, err
+				}
+				ctx.SessionData
+				// TODO(rafi): add interface to ctx.Planner to return serialized
+				// prepared statements
+				sdEnc := base64.StdEncoding.EncodeToString(sdBytes)
+				return tree.NewDString(sdEnc), nil
+			},
+			Info: "Deserializes the given base64-encoded session state and loads it into the current session. The state" +
+				"includes session variables and prepared statements. Returns true on success.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
