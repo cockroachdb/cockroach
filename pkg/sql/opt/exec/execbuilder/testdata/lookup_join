@@ -1782,10 +1782,10 @@ vectorized: true
         └── • render
             │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
             │ estimated row count: 10 (missing stats)
-            │ render 0: 495.6
-            │ render 1: pk
-            │ render 2: col0
-            │ render 3: col3
+            │ render lookup_join_const_col_@15: 495.6
+            │ render pk: pk
+            │ render col0: col0
+            │ render col3: col3
             │
             └── • index join
                 │ columns: (pk, col0, col3)

@@ -403,7 +403,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if ob.flags.Verbose {
 			a := n.args.(*renderArgs)
 			for i := range a.Exprs {
-				ob.Expr(fmt.Sprintf("render %d", i), a.Exprs[i], a.Input.Columns())
+				ob.Expr(fmt.Sprintf("render %s", a.Columns[i].Name), a.Exprs[i], a.Input.Columns())
 			}
 		}
 
