@@ -247,12 +247,11 @@ func (s *Stopper) Recover(ctx context.Context) {
 func (s *Stopper) AddCloser(c Closer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	select {
-	case <-s.stopped:
+	if s.mu.stopCalled {
 		c.Close()
-	default:
-		s.mu.closers = append(s.mu.closers, c)
+		return
 	}
+	s.mu.closers = append(s.mu.closers, c)
 }
 
 // WithCancelOnQuiesce returns a child context which is canceled when the
