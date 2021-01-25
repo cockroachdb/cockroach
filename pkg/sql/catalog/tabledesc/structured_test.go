@@ -1823,32 +1823,66 @@ func TestColumnNeedsBackfill(t *testing.T) {
 	// Define variable strings here such that we can pass their address below.
 	null := "NULL"
 	four := "4:::INT8"
+
 	// Create Column Descriptors that reflect the definition of a column with a
 	// default value of NULL that was set implicitly, one that was set explicitly,
 	// and one that has an INT default value, respectively.
-	implicitNull := &descpb.ColumnDescriptor{
-		Name: "im", ID: 2, Type: types.Int, DefaultExpr: nil, Nullable: true, ComputeExpr: nil,
+	testCases := []struct {
+		info string
+		desc descpb.ColumnDescriptor
+		// add is true of we expect backfill when adding this column.
+		add bool
+		// drop is true of we expect backfill when adding this column.
+		drop bool
+	}{
+		{
+			info: "implicit SET DEFAULT NULL",
+			desc: descpb.ColumnDescriptor{
+				Name: "am", ID: 2, Type: types.Int, DefaultExpr: nil, Nullable: true, ComputeExpr: nil,
+			},
+			add:  false,
+			drop: true,
+		}, {
+			info: "explicit SET DEFAULT NULL",
+			desc: descpb.ColumnDescriptor{
+				Name: "ex", ID: 3, Type: types.Int, DefaultExpr: &null, Nullable: true, ComputeExpr: nil,
+			},
+			add:  false,
+			drop: true,
+		},
+		{
+			info: "explicit SET DEFAULT non-NULL",
+			desc: descpb.ColumnDescriptor{
+				Name: "four", ID: 4, Type: types.Int, DefaultExpr: &four, Nullable: true, ComputeExpr: nil,
+			},
+			add:  true,
+			drop: true,
+		},
+		{
+			info: "computed stored",
+			desc: descpb.ColumnDescriptor{
+				Name: "stored", ID: 5, Type: types.Int, DefaultExpr: nil, ComputeExpr: &four,
+			},
+			add:  true,
+			drop: true,
+		},
+		{
+			info: "computed virtual",
+			desc: descpb.ColumnDescriptor{
+				Name: "virtual", ID: 6, Type: types.Int, DefaultExpr: nil, ComputeExpr: &four, Virtual: true,
+			},
+			add:  false,
+			drop: false,
+		},
 	}
-	explicitNull := &descpb.ColumnDescriptor{
-		Name: "ex", ID: 3, Type: types.Int, DefaultExpr: &null, Nullable: true, ComputeExpr: nil,
-	}
-	defaultNotNull := &descpb.ColumnDescriptor{
-		Name: "four", ID: 4, Type: types.Int, DefaultExpr: &four, Nullable: true, ComputeExpr: nil,
-	}
-	// Verify that a backfill doesn't occur according to the ColumnNeedsBackfill
-	// function for the default NULL values, and that it does occur for an INT
-	// default value.
-	if ColumnNeedsBackfill(implicitNull) != false {
-		t.Fatal("Expected implicit SET DEFAULT NULL to not require a backfill," +
-			" ColumnNeedsBackfill states that it does.")
-	}
-	if ColumnNeedsBackfill(explicitNull) != false {
-		t.Fatal("Expected explicit SET DEFAULT NULL to not require a backfill," +
-			" ColumnNeedsBackfill states that it does.")
-	}
-	if ColumnNeedsBackfill(defaultNotNull) != true {
-		t.Fatal("Expected explicit SET DEFAULT NULL to require a backfill," +
-			" ColumnNeedsBackfill states that it does not.")
+
+	for _, tc := range testCases {
+		if ColumnNeedsBackfill(descpb.DescriptorMutation_ADD, &tc.desc) != tc.add {
+			t.Errorf("expected ColumnNeedsBackfill to be %v for adding %s", tc.add, tc.info)
+		}
+		if ColumnNeedsBackfill(descpb.DescriptorMutation_DROP, &tc.desc) != tc.drop {
+			t.Errorf("expected ColumnNeedsBackfill to be %v for dropping %s", tc.drop, tc.info)
+		}
 	}
 }
 

@@ -4571,6 +4571,44 @@ func TestAddComputedColumn(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT * FROM t.test ORDER BY a`, [][]string{{"2", "7"}, {"10", "15"}})
 }
 
+// TestNoBackfillForVirtualColumn verifies that adding or dropping a virtual
+// column does not involve a backfill.
+func TestNoBackfillForVirtualColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sawBackfill := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				sawBackfill = true
+				return nil
+			},
+		},
+	}
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(context.Background())
+	db := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE t`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1), (2), (3)`)
+	sqlDB.Exec(t, `SET experimental_enable_virtual_columns = true`)
+
+	sawBackfill = false
+	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN b INT AS (a + 5) VIRTUAL`)
+	if sawBackfill {
+		t.Fatal("saw backfill when adding virtual column")
+	}
+
+	sqlDB.Exec(t, `ALTER TABLE t.test DROP COLUMN b`)
+	if sawBackfill {
+		t.Fatal("saw backfill when dropping virtual column")
+	}
+}
+
 func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
