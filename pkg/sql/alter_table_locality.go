@@ -70,17 +70,43 @@ func (n *alterTableSetLocalityNode) Next(runParams) (bool, error) { return false
 func (n *alterTableSetLocalityNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableSetLocalityNode) Close(context.Context)        {}
 
-func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable() error {
-	return unimplemented.New("alter table locality from GLOBAL to REGIONAL BY TABLE", "implementation pending")
+func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
+	params runParams, dbDesc *dbdesc.Immutable,
+) error {
+	if !n.tableDesc.IsLocalityGlobal() {
+		f := tree.NewFmtCtx(tree.FmtSimple)
+		if err := tabledesc.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
+			// While we're in an error path and generally it's bad to return a
+			// different error in an error path, we will only get an error here if the
+			// locality is corrupted, in which case, it's probably the right error
+			// to return.
+			return err
+		}
+		return errors.AssertionFailedf(
+			"invalid call %q on incorrect table locality %s",
+			"alter table locality GLOBAL to REGIONAL BY TABLE",
+			f.String(),
+		)
+	}
+
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
+
+	// Finalize the alter by writing a new table descriptor and updating the zone
+	// configuration.
+	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+		params,
+		dbDesc,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
-	params runParams, desc *dbdesc.Immutable,
+	params runParams, dbDesc *dbdesc.Immutable,
 ) error {
 	const operation string = "alter table locality REGIONAL BY TABLE to GLOBAL"
-	if err := assertIsMultiRegionDatabase(desc, operation); err != nil {
-		return err
-	}
 	if !n.tableDesc.IsLocalityRegionalByTable() {
 		return errors.AssertionFailedf(
 			"invalid call %q on incorrect table locality. %v",
@@ -90,42 +116,12 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 	}
 
 	n.tableDesc.SetTableLocalityGlobal()
-	// Validate the locality config.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
-	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
-		return err
-	}
-	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx,
-		params.p.txn,
-		n.tableDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
 
-	tableName := tree.MakeTableNameWithSchema(
-		tree.Name(desc.Name),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(n.tableDesc.GetName()),
-	)
-
-	// Write out the table descriptor update.
-	if err := params.p.writeSchemaChange(
-		params.ctx,
-		n.tableDesc,
-		descpb.InvalidMutationID,
-		tree.AsStringWithFQNames(&n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
-
-	// Update the zone configuration.
-	if err := params.p.applyZoneConfigFromTableLocalityConfig(
-		params.ctx,
-		tableName,
-		n.tableDesc.TableDesc(),
-		*desc.RegionConfig,
+	// Finalize the alter by writing a new table descriptor and updating the zone
+	// configuration.
+	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+		params,
+		dbDesc,
 	); err != nil {
 		return err
 	}
@@ -134,12 +130,9 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 }
 
 func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalByTable(
-	params runParams, desc *dbdesc.Immutable,
+	params runParams, dbDesc *dbdesc.Immutable,
 ) error {
 	const operation string = "alter table locality REGIONAL BY TABLE to REGIONAL BY TABLE"
-	if err := assertIsMultiRegionDatabase(desc, operation); err != nil {
-		return err
-	}
 	if !n.tableDesc.IsLocalityRegionalByTable() {
 		return errors.AssertionFailedf(
 			"invalid call %q on incorrect table locality. %v",
@@ -148,49 +141,12 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	if n.n.Locality.InPrimaryRegion() {
-		n.tableDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
-	} else {
-		n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
-	}
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
 
-	// Validate the new locality before updating the table descriptor.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
-	if err := n.tableDesc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
-		return err
-	}
-	// Write out the table descriptor update.
-	if err := params.p.writeSchemaChange(
-		params.ctx,
-		n.tableDesc,
-		descpb.InvalidMutationID,
-		tree.AsStringWithFQNames(&n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
-
-	// Validate the new locality before updating the table descriptor.
-	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx,
-		params.p.txn,
-		n.tableDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{})
-	if err != nil {
-		return err
-	}
-
-	tableName := tree.MakeTableNameWithSchema(
-		tree.Name(desc.Name),
-		tree.Name(resolvedSchema.Name),
-		tree.Name(n.tableDesc.GetName()),
-	)
-
-	// Update the table's zone configuration.
-	if err := params.p.applyZoneConfigFromTableLocalityConfig(
-		params.ctx,
-		tableName,
-		n.tableDesc.TableDesc(),
-		*desc.RegionConfig,
+	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
+	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+		params,
+		dbDesc,
 	); err != nil {
 		return err
 	}
@@ -200,7 +156,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 
 func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Ensure that the database is multi-region enabled.
-	desc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx,
 		params.p.txn,
 		n.tableDesc.GetParentID(),
@@ -209,7 +165,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	if !desc.IsMultiRegion() {
+	if !dbDesc.IsMultiRegion() {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"cannot alter a table's LOCALITY if its database is not multi-region enabled",
@@ -231,7 +187,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 			// GLOBAL to REGIONAL BY ROW
 			return unimplemented.New("alter table locality to REGIONAL BY ROW", "implementation pending")
 		case tree.LocalityLevelTable:
-			if err = n.alterTableLocalityGlobalToRegionalByTable(); err != nil {
+			if err = n.alterTableLocalityGlobalToRegionalByTable(params, dbDesc); err != nil {
 				return err
 			}
 		default:
@@ -240,14 +196,14 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			err = n.alterTableLocalityRegionalByTableToGlobal(params, desc)
+			err = n.alterTableLocalityRegionalByTableToGlobal(params, dbDesc)
 			if err != nil {
 				return err
 			}
 		case tree.LocalityLevelRow:
 			return unimplemented.New("alter table locality to REGIONAL BY ROW", "implementation pending")
 		case tree.LocalityLevelTable:
-			err = n.alterTableLocalityRegionalByTableToRegionalByTable(params, desc)
+			err = n.alterTableLocalityRegionalByTableToRegionalByTable(params, dbDesc)
 			if err != nil {
 				return err
 			}
@@ -278,4 +234,58 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		&eventpb.AlterTable{
 			TableName: n.n.Name.String(),
 		})
+}
+
+// validateAndWriteNewTableLocalityAndZoneConfig validates the newly updated
+// LocalityConfig in a table descriptor, writes that table descriptor, and
+// writes a new zone configuration for the given table.
+func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfig(
+	params runParams, dbDesc *dbdesc.Immutable,
+) error {
+	// Get the fully resolved table name for use in the calls below.
+	resolvedSchema, err := params.p.Descriptors().GetImmutableSchemaByID(
+		params.ctx,
+		params.p.txn,
+		n.tableDesc.GetParentSchemaID(),
+		tree.SchemaLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	tableName := tree.MakeTableNameWithSchema(
+		tree.Name(dbDesc.Name),
+		tree.Name(resolvedSchema.Name),
+		tree.Name(n.tableDesc.GetName()),
+	)
+
+	// Validate the new locality before updating the table descriptor.
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
+	if err := n.tableDesc.ValidateTableLocalityConfig(
+		params.ctx,
+		dg,
+	); err != nil {
+		return err
+	}
+
+	// Write out the table descriptor update.
+	if err := params.p.writeSchemaChange(
+		params.ctx,
+		n.tableDesc,
+		descpb.InvalidMutationID,
+		tree.AsStringWithFQNames(&n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Update the zone configuration.
+	if err := params.p.applyZoneConfigFromTableLocalityConfig(
+		params.ctx,
+		tableName,
+		n.tableDesc.TableDesc(),
+		*dbDesc.RegionConfig,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
