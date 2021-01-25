@@ -437,10 +437,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				jobDesc := fmt.Sprintf("removing view %q dependent on column %q which is being dropped",
 					viewDesc.Name, colToDrop.ColName())
-				droppedViews, err = params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc, jobDesc)
+				cascadedViews, err := params.p.removeDependentView(params.ctx, n.tableDesc, viewDesc, jobDesc)
 				if err != nil {
 					return err
 				}
+				qualifiedView, err := params.p.getQualifiedTableName(params.ctx, viewDesc)
+				if err != nil {
+					return err
+				}
+
+				droppedViews = append(droppedViews, cascadedViews...)
+				droppedViews = append(droppedViews, qualifiedView.String())
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
@@ -924,10 +931,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 	return params.p.logEvent(params.ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterTable{
-			TableName:  params.p.ResolvedName(n.n.Table).FQString(),
-			MutationID: uint32(mutationID),
-			// TODO(knz): This is missing some qualification, see
-			// https://github.com/cockroachdb/cockroach/issues/57735
+			TableName:           params.p.ResolvedName(n.n.Table).FQString(),
+			MutationID:          uint32(mutationID),
 			CascadeDroppedViews: droppedViews,
 		})
 }

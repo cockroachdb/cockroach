@@ -223,12 +223,18 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
+
+			qualifiedView, err := p.getQualifiedTableName(ctx, dependentDesc)
+			if err != nil {
+				return cascadeDroppedViews, err
+			}
+
 			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
 			cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
-			cascadeDroppedViews = append(cascadeDroppedViews, dependentDesc.Name)
+			cascadeDroppedViews = append(cascadeDroppedViews, qualifiedView.String())
 		}
 	}
 
