@@ -297,7 +297,7 @@ func TestSchemaChanger(t *testing.T) {
 			}
 
 			for _, phase := range []scplan.Phase{
-				scplan.PostStatementPhase,
+				scplan.StatementPhase,
 				scplan.PreCommitPhase,
 			} {
 				sc, err := scplan.MakePlan(targetStates, scplan.Params{
@@ -391,7 +391,7 @@ func TestSchemaChanger(t *testing.T) {
 			require.NoError(t, err)
 
 			for _, phase := range []scplan.Phase{
-				scplan.PostStatementPhase,
+				scplan.StatementPhase,
 				scplan.PreCommitPhase,
 			} {
 				sc, err := scplan.MakePlan(targetStates, scplan.Params{

@@ -238,6 +238,9 @@ type LocalOnlySessionData struct {
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	EnableUniqueWithoutIndexConstraints bool
+
+	// NewSchemaChangerMode indicates whether to use the new schema changer.
+	NewSchemaChangerMode NewSchemaChangerMode
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
@@ -397,6 +400,48 @@ func SerialNormalizationModeFromString(val string) (_ SerialNormalizationMode, o
 		return SerialUsesVirtualSequences, true
 	case "SQL_SEQUENCE":
 		return SerialUsesSQLSequences, true
+	default:
+		return 0, false
+	}
+}
+
+// NewSchemaChangerMode controls if and when the new schema changer is in use.
+// Since 2.1, we run everything through the DistSQL infrastructure,
+// and these settings control whether to use a distributed plan, or use a plan
+// that only involves local DistSQL processors.
+type NewSchemaChangerMode int64
+
+const (
+	// UseNewSchemaChangerOff means that we never distribute queries.
+	UseNewSchemaChangerOff NewSchemaChangerMode = iota
+	// UseNewSchemaChangerOn means that we distribute queries that are supported.
+	UseNewSchemaChangerOn
+	// UseNewSchemaChangerAlways means that we only distribute; unsupported queries fail.
+	UseNewSchemaChangerUnsafeAlways
+)
+
+func (m NewSchemaChangerMode) String() string {
+	switch m {
+	case UseNewSchemaChangerOff:
+		return "off"
+	case UseNewSchemaChangerOn:
+		return "on"
+	case UseNewSchemaChangerUnsafeAlways:
+		return "unsafe_always"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// NewSchemaChangerModeFromString converts a string into a NewSchemaChangerMode
+func NewSchemaChangerModeFromString(val string) (_ NewSchemaChangerMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "OFF":
+		return UseNewSchemaChangerOff, true
+	case "ON":
+		return UseNewSchemaChangerOn, true
+	case "UNSAFE_ALWAYS":
+		return UseNewSchemaChangerUnsafeAlways, true
 	default:
 		return 0, false
 	}
