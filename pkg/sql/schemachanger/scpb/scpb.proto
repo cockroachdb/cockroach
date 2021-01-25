@@ -1,0 +1,105 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.sql.schemachanger.scpb;
+option go_package = "scpb";
+
+import "sql/catalog/descpb/structured.proto";
+import "gogoproto/gogo.proto";
+
+message ElementProto {
+  option (gogoproto.onlyone) = true;
+  Column column = 1;
+  PrimaryIndex primary_index = 2;
+  SecondaryIndex secondary_index = 3;
+  SequenceDependency sequence_dependency = 4;
+  UniqueConstraint unique_constraint = 5;
+  CheckConstraint check_constraint = 6;
+}
+
+message Target {
+  enum Direction {
+    UNKNOWN = 0;
+    ADD = 1;
+    DROP = 2;
+  }
+
+  ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+  Direction direction = 2;
+}
+
+enum State {
+  UNKNOWN = 0;
+  ABSENT = 1;
+  DELETE_ONLY = 2;
+  DELETE_AND_WRITE_ONLY = 3;
+  BACKFILLED = 4;
+  VALIDATED = 5;
+  PUBLIC = 6;
+}
+
+message Column {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.FamilyID"];
+  string family_name = 3;
+  cockroach.sql.sqlbase.ColumnDescriptor column = 4 [(gogoproto.nullable) = false];
+}
+
+
+message PrimaryIndex {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
+  uint32 other_primary_index = 3 [(gogoproto.customname) = "OtherPrimaryIndex", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  uint32 replacement_for = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated uint32 store_column_ids = 5 [(gogoproto.customname) = "StoreColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  repeated string store_column_names = 6 [(gogoproto.customname) = "StoreColumnNames"];
+}
+
+message SecondaryIndex {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  cockroach.sql.sqlbase.IndexDescriptor index = 2 [(gogoproto.nullable) = false];
+  uint32 primary_index = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  }
+
+message SequenceDependency {
+  option (gogoproto.equal) = true;
+
+  enum Type {
+    UNKNOWN = 0;
+    USES = 1;
+    OWNS = 2;
+  }
+
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  uint32 sequence_id = 3 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  Type type = 4;
+}
+
+message UniqueConstraint {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+}
+
+message CheckConstraint {
+  option (gogoproto.equal) = true;
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  string name = 2;
+  string expr = 3;
+  repeated uint32 column_ids = 4 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
+  bool validated = 5;
+}
+
