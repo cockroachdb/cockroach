@@ -180,13 +180,10 @@ func MakeUpdater(
 
 	if primaryKeyColChange {
 		// These fields are only used when the primary key is changing.
-		// When changing the primary key, we delete the old values and reinsert
-		// them, so request them all.
 		var err error
-		tableCols := tableDesc.DeletableColumns()
-		ru.rd = MakeDeleter(codec, tableDesc, tableCols)
+		ru.rd = MakeDeleter(codec, tableDesc, requestedCols)
 		if ru.ri, err = MakeInserter(
-			ctx, txn, codec, tableDesc, tableCols, alloc,
+			ctx, txn, codec, tableDesc, requestedCols, alloc,
 		); err != nil {
 			return Updater{}, err
 		}
@@ -255,7 +252,11 @@ func (ru *Updater) UpdateRow(
 	// Update the row values.
 	copy(ru.newValues, oldValues)
 	for i, updateCol := range ru.UpdateCols {
-		ru.newValues[ru.FetchColIDtoRowIndex.GetDefault(updateCol.ID)] = updateValues[i]
+		idx, ok := ru.FetchColIDtoRowIndex.Get(updateCol.ID)
+		if !ok {
+			return nil, errors.AssertionFailedf("update column without a corresponding fetch column")
+		}
+		ru.newValues[idx] = updateValues[i]
 	}
 
 	rowPrimaryKeyChanged := false

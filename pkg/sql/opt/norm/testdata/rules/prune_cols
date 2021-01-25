@@ -137,7 +137,9 @@ exec-ddl
 CREATE TABLE virt (
   a INT PRIMARY KEY,
   b INT,
-  v INT AS (a+b) VIRTUAL
+  v INT AS (a+b) VIRTUAL,
+  FAMILY (a),
+  FAMILY (b)
 )
 ----
 
@@ -145,8 +147,38 @@ exec-ddl
 CREATE TABLE virt_idx (
   a INT PRIMARY KEY,
   b INT,
+  c INT,
   v INT AS (a+b) VIRTUAL,
-  INDEX (v)
+  INDEX (v),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
+)
+----
+
+exec-ddl
+CREATE TABLE virt_idx2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (b+1) VIRTUAL,
+  INDEX (v),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
+)
+----
+
+exec-ddl
+CREATE TABLE virt_idx3 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  v INT AS (b+1) VIRTUAL,
+  INDEX (c, v),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c)
 )
 ----
 
@@ -3498,29 +3530,181 @@ DELETE FROM virt_idx WHERE a > 1
 ----
 delete virt_idx
  ├── columns: <none>
- ├── fetch columns: a:5 v:7
+ ├── fetch columns: a:6 v:9
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: v:7 a:5!null
+      ├── columns: v:9 a:6!null
       ├── immutable
-      ├── key: (5)
-      ├── fd: (5)-->(7)
+      ├── key: (6)
+      ├── fd: (6)-->(9)
       ├── select
-      │    ├── columns: a:5!null b:6
-      │    ├── key: (5)
-      │    ├── fd: (5)-->(6)
+      │    ├── columns: a:6!null b:7
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7)
       │    ├── scan virt_idx
-      │    │    ├── columns: a:5!null b:6
+      │    │    ├── columns: a:6!null b:7
       │    │    ├── computed column expressions
-      │    │    │    └── v:7
-      │    │    │         └── a:5 + b:6
-      │    │    ├── key: (5)
-      │    │    └── fd: (5)-->(6)
+      │    │    │    └── v:9
+      │    │    │         └── a:6 + b:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
       │    └── filters
-      │         └── a:5 > 1 [outer=(5), constraints=(/5: [/2 - ]; tight)]
+      │         └── a:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
       └── projections
-           └── a:5 + b:6 [as=v:7, outer=(5,6), immutable]
+           └── a:6 + b:7 [as=v:9, outer=(6,7), immutable]
+
+# We cannot prune the virtual column because it is modified.
+norm
+UPDATE virt_idx SET a = a + 1
+----
+update virt_idx
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 v:9
+ ├── update-mapping:
+ │    ├── a_new:11 => a:1
+ │    └── column12:12 => v:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: column12:12 a:6!null b:7 c:8 v:9 a_new:11!null
+      ├── immutable
+      ├── key: (6)
+      ├── fd: (6)-->(7-9,11), (7,11)-->(12)
+      ├── project
+      │    ├── columns: a_new:11!null v:9 a:6!null b:7 c:8
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7-9,11)
+      │    ├── scan virt_idx
+      │    │    ├── columns: a:6!null b:7 c:8
+      │    │    ├── computed column expressions
+      │    │    │    └── v:9
+      │    │    │         └── a:6 + b:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── projections
+      │         ├── a:6 + 1 [as=a_new:11, outer=(6), immutable]
+      │         └── a:6 + b:7 [as=v:9, outer=(6,7), immutable]
+      └── projections
+           └── a_new:11 + b:7 [as=column12:12, outer=(7,11), immutable]
+
+# We cannot prune column v because it is affected by the change.
+norm
+UPDATE virt_idx SET b = b + 1
+----
+update virt_idx
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 v:9
+ ├── update-mapping:
+ │    ├── b_new:11 => b:2
+ │    └── column12:12 => v:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: column12:12 a:6!null b:7 v:9 b_new:11
+      ├── immutable
+      ├── key: (6)
+      ├── fd: (6)-->(7,9,12), (7)-->(11)
+      ├── project
+      │    ├── columns: b_new:11 v:9 a:6!null b:7
+      │    ├── immutable
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7,9), (7)-->(11)
+      │    ├── scan virt_idx
+      │    │    ├── columns: a:6!null b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:9
+      │    │    │         └── a:6 + b:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── projections
+      │         ├── b:7 + 1 [as=b_new:11, outer=(7), immutable]
+      │         └── a:6 + b:7 [as=v:9, outer=(6,7), immutable]
+      └── projections
+           └── a:6 + b_new:11 [as=column12:12, outer=(6,11), immutable]
+
+# We should prune columns b and v because they are unaffected by the update.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPDATE virt_idx SET c = c + 1
+----
+update virt_idx
+ ├── columns: <none>
+ ├── fetch columns: a:6 c:8
+ ├── update-mapping:
+ │    └── c_new:11 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: c_new:11 a:6!null c:8
+      ├── immutable
+      ├── key: (6)
+      ├── fd: (6)-->(8), (8)-->(11)
+      ├── scan virt_idx
+      │    ├── columns: a:6!null c:8
+      │    ├── computed column expressions
+      │    │    └── v:9
+      │    │         └── a:6 + b:7
+      │    ├── key: (6)
+      │    └── fd: (6)-->(8)
+      └── projections
+           └── c:8 + 1 [as=c_new:11, outer=(8), immutable]
+
+# Even though v doesn't depend on a changed column, we cannot prune it because
+# the PK is changed and corresponding index entries need to be updated.
+norm expect=PruneMutationInputCols expect-not=PruneMutationFetchCols
+UPDATE virt_idx2 SET a = a + 1
+----
+update virt_idx2
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8 v:9
+ ├── update-mapping:
+ │    └── a_new:11 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: a_new:11!null v:9 a:6!null b:7 c:8
+      ├── immutable
+      ├── key: (6)
+      ├── fd: (6)-->(7,8,11), (7)-->(9)
+      ├── scan virt_idx2
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── computed column expressions
+      │    │    └── v:9
+      │    │         └── b:7 + 1
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── projections
+           ├── a:6 + 1 [as=a_new:11, outer=(6), immutable]
+           └── b:7 + 1 [as=v:9, outer=(7), immutable]
+
+# We cannot prune column v because it forms secondary index keys with the
+# modified column.
+norm expect=(PruneMutationFetchCols,PruneMutationInputCols)
+UPDATE virt_idx3 SET c = c + 1
+----
+update virt_idx3
+ ├── columns: <none>
+ ├── fetch columns: a:6 c:8 v:9
+ ├── update-mapping:
+ │    └── c_new:11 => c:3
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── project
+      ├── columns: c_new:11 v:9 a:6!null c:8
+      ├── immutable
+      ├── key: (6)
+      ├── fd: (6)-->(8,9,11), (8)-->(11)
+      ├── scan virt_idx3
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── computed column expressions
+      │    │    └── v:9
+      │    │         └── b:7 + 1
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── projections
+           ├── c:8 + 1 [as=c_new:11, outer=(8), immutable]
+           └── b:7 + 1 [as=v:9, outer=(7), immutable]
 
 # ------------------------------------------------------------------------------
 # PruneMutationReturnCols
