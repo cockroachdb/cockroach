@@ -41,7 +41,6 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl",  # keep
-        "//pkg/ccl/streamingccl/streamclient",  # keep
         "//pkg/roachpb",
         "//pkg/security",  # keep
         "//pkg/sql/catalog/descpb",
