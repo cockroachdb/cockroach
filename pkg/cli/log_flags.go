@@ -387,7 +387,7 @@ func (s *settableBool) Set(v string) error {
 
 func addPredefinedLogFiles(c *logconfig.Config) {
 	if c.Sinks.FileGroups == nil {
-		c.Sinks.FileGroups = make(map[string]*logconfig.FileConfig)
+		c.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
 	}
 	m := c.Sinks.FileGroups
 	for ch, prefix := range predefinedLogFiles {
@@ -398,7 +398,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 		if prefix == "sql-audit" && cliCtx.deprecatedLogOverrides.sqlAuditLogDir.isSet {
 			dir = &cliCtx.deprecatedLogOverrides.sqlAuditLogDir.s
 		}
-		m[prefix] = &logconfig.FileConfig{
+		m[prefix] = &logconfig.FileSinkConfig{
 			Channels: logconfig.ChannelList{Channels: []logpb.Channel{ch}},
 			Dir:      dir,
 			CommonSinkConfig: logconfig.CommonSinkConfig{

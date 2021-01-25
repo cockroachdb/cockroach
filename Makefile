@@ -824,6 +824,7 @@ DOCGEN_TARGETS := \
 	docs/generated/redact_safe.md \
 	bin/.docgen_http \
 	bin/.docgen_logformats \
+	docs/generated/logsinks.md \
 	docs/generated/logging.md \
 	docs/generated/eventlog.md
 
@@ -1551,6 +1552,12 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/session_events.proto \
 	pkg/util/log/eventpb/sql_audit_events.proto \
 	pkg/util/log/eventpb/cluster_events.proto
+
+LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
+
+docs/generated/logsinks.md: pkg/util/log/logconfig/gen.go $(LOGSINKDOC_DEP)
+	$(GO) run $(GOMODVENDORFLAGS) $< <$(LOGSINKDOC_DEP) >$@.tmp || { rm -f $@.tmp; exit 1; }
+	mv -f $@.tmp $@
 
 docs/generated/eventlog.md: pkg/util/log/eventpb/gen.go $(EVENTLOG_PROTOS) | bin/.go_protobuf_sources
 	$(GO) run $(GOMODVENDORFLAGS) $< eventlog.md $(EVENTLOG_PROTOS) >$@.tmp || { rm -f $@.tmp; exit 1; }

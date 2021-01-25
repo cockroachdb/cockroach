@@ -75,11 +75,11 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// Validate and fill in defaults for file sinks.
 	for prefix, fc := range c.Sinks.FileGroups {
 		if fc == nil {
-			fc = &FileConfig{}
+			fc = &FileSinkConfig{}
 			c.Sinks.FileGroups[prefix] = fc
 		}
 		fc.prefix = prefix
-		if err := c.validateFileConfig(fc, defaultLogDir); err != nil {
+		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintf(&errBuf, "file group %q: %v\n", prefix, err)
 		}
 	}
@@ -102,7 +102,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	c.Sinks.Stderr.Channels.Sort()
 
 	// fileSinks maps channels to files.
-	fileSinks := make(map[logpb.Channel]*FileConfig)
+	fileSinks := make(map[logpb.Channel]*FileSinkConfig)
 
 	// Check that no channel is listed by more than one file sink,
 	// and every file has at least one channel.
@@ -158,15 +158,15 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	// If there is no file group for DEV yet, create one.
 	devch := logpb.Channel_DEV
 	if def := fileSinks[devch]; def == nil {
-		fc := &FileConfig{
+		fc := &FileSinkConfig{
 			Channels: ChannelList{Channels: []logpb.Channel{devch}},
 		}
 		fc.prefix = "default"
-		if err := c.validateFileConfig(fc, defaultLogDir); err != nil {
+		if err := c.validateFileSinkConfig(fc, defaultLogDir); err != nil {
 			fmt.Fprintln(&errBuf, err)
 		}
 		if c.Sinks.FileGroups == nil {
-			c.Sinks.FileGroups = make(map[string]*FileConfig)
+			c.Sinks.FileGroups = make(map[string]*FileSinkConfig)
 		}
 		c.Sinks.FileGroups[fc.prefix] = fc
 		fileSinks[devch] = fc
@@ -223,7 +223,7 @@ func (c *Config) inheritCommonDefaults(fc, defaults *CommonSinkConfig) {
 	}
 }
 
-func (c *Config) validateFileConfig(fc *FileConfig, defaultLogDir *string) error {
+func (c *Config) validateFileSinkConfig(fc *FileSinkConfig, defaultLogDir *string) error {
 	c.inheritCommonDefaults(&fc.CommonSinkConfig, &c.FileDefaults.CommonSinkConfig)
 
 	// Inherit file-specific defaults.

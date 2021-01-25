@@ -48,7 +48,7 @@ func TestSecondaryGC(t *testing.T) {
 	common := logconfig.DefaultConfig().FileDefaults.CommonSinkConfig
 	common.Format = &f
 	bf := false
-	fc := logconfig.FileConfig{
+	fc := logconfig.FileSinkConfig{
 		CommonSinkConfig: common,
 		Dir:              &s.logDir,
 		MaxFileSize:      &m,

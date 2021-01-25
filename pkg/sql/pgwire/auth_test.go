@@ -168,7 +168,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		cfg := logconfig.DefaultConfig()
 		// Make a sink for just the session log.
 		bt := true
-		cfg.Sinks.FileGroups = map[string]*logconfig.FileConfig{
+		cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
 			"auth": {
 				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				Channels:         logconfig.ChannelList{Channels: []log.Channel{channel.SESSIONS}},
