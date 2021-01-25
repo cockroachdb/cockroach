@@ -268,7 +268,8 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			out, err := rowflow.MakeTestRouter(ctx, &flowCtx, &routerSpec, recvs, colTypes, &wg)
 			require.NoError(t, err)
 
-			proc, err := newSplitAndScatterProcessor(&flowCtx, 0 /* processorID */, c.procSpec, out)
+			post := execinfrapb.PostProcessSpec{}
+			proc, err := newSplitAndScatterProcessor(&flowCtx, 0 /* processorID */, c.procSpec, &post, out)
 			require.NoError(t, err)
 			ssp, ok := proc.(*splitAndScatterProcessor)
 			if !ok {
