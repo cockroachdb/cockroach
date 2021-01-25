@@ -149,7 +149,7 @@ statement error unimplemented: implementation pending
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
 
 statement error unimplemented: implementation pending
-ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE in "ap-southeast"
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
 
 statement error unimplemented: implementation pending
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
@@ -193,14 +193,84 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                               lease_preferences = '[[+region=ca-central-1]]'
 
-statement error unimplemented: implementation pending
+statement ok
 ALTER TABLE global SET LOCALITY REGIONAL BY TABLE
 
-statement error unimplemented: implementation pending
-ALTER TABLE global SET LOCALITY REGIONAL BY TABLE in "ap-southeast"
+query TT
+SHOW CREATE TABLE global
+----
+global             CREATE TABLE public.global (
+                   i INT8 NULL,
+                   FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-statement error unimplemented: implementation pending
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+# Alter back, to get back to original state
+statement ok
+ALTER TABLE global SET LOCALITY GLOBAL
+
+statement ok
+ALTER TABLE global SET LOCALITY REGIONAL BY TABLE in "ap-southeast-2"
+
+query TT
+SHOW CREATE TABLE global
+----
+global             CREATE TABLE public.global (
+                   i INT8 NULL,
+                   FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+TABLE global  ALTER TABLE global CONFIGURE ZONE USING
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 90000,
+              global_reads = true,
+              num_replicas = 3,
+              constraints = '{+region=ap-southeast-2: 3}',
+              lease_preferences = '[[+region=ap-southeast-2]]'
+
+# Alter back, to get back to original state
+statement ok
+ALTER TABLE global SET LOCALITY GLOBAL
+
+statement ok
 ALTER TABLE global SET LOCALITY REGIONAL BY TABLE in PRIMARY REGION
+
+query TT
+SHOW CREATE TABLE global
+----
+global                                          CREATE TABLE public.global (
+                                                i INT8 NULL,
+                                                FAMILY "primary" (i, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 90000,
+                              num_replicas = 3,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              lease_preferences = '[[+region=ca-central-1]]'
+
+# Alter back, to get back to original state
+statement ok
+ALTER TABLE global SET LOCALITY GLOBAL
 
 statement ok
 ALTER TABLE global SET LOCALITY GLOBAL

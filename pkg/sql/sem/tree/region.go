@@ -53,12 +53,6 @@ type Locality struct {
 	RegionalByRowColumn Name
 }
 
-// InPrimaryRegion returns true if the table is REGIONAL BY TABLE and the table
-// region is unset (representing the primary region).
-func (node *Locality) InPrimaryRegion() bool {
-	return node.LocalityLevel == LocalityLevelTable && node.TableRegion == ""
-}
-
 // Format implements the NodeFormatter interface.
 func (node *Locality) Format(ctx *FmtCtx) {
 	ctx.WriteString("LOCALITY ")
