@@ -12997,28 +12997,24 @@ func TestRangeInfoReturned(t *testing.T) {
 	staleLeaseSeq := lease.Sequence - 1
 
 	for _, test := range []struct {
-		req *roachpb.ClientRangeInfo
+		req roachpb.ClientRangeInfo
 		exp *roachpb.RangeInfo
 	}{
 		{
-			req: nil,
-			exp: nil,
-		},
-		{
 			// Empty client info. This case shouldn't happen.
-			req: &roachpb.ClientRangeInfo{},
+			req: roachpb.ClientRangeInfo{},
 			exp: ri,
 		},
 		{
 			// Correct descriptor, missing lease.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: ri.Desc.Generation,
 			},
 			exp: ri,
 		},
 		{
 			// Correct descriptor, stale lease.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: ri.Desc.Generation,
 				LeaseSequence:        staleLeaseSeq,
 			},
@@ -13026,7 +13022,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Correct descriptor, correct lease.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: ri.Desc.Generation,
 				LeaseSequence:        ri.Lease.Sequence,
 			},
@@ -13034,14 +13030,14 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Stale descriptor, no lease.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: staleDescGen,
 			},
 			exp: ri,
 		},
 		{
 			// Stale descriptor, stale lease.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: staleDescGen,
 				LeaseSequence:        staleLeaseSeq,
 			},
@@ -13049,7 +13045,7 @@ func TestRangeInfoReturned(t *testing.T) {
 		},
 		{
 			// Stale desc, good lease. This case shouldn't happen.
-			req: &roachpb.ClientRangeInfo{
+			req: roachpb.ClientRangeInfo{
 				DescriptorGeneration: staleDescGen,
 				LeaseSequence:        staleLeaseSeq,
 			},

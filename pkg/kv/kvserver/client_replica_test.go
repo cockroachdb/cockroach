@@ -1573,189 +1573,6 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	}
 }
 
-func TestRangeInfo(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
-	storeCfg.TestingKnobs.DisableMergeQueue = true
-	storeCfg.TestingKnobs.DisableReplicateQueue = true
-	storeCfg.Clock = nil // manual clock
-	ctx := context.Background()
-	mtc := &multiTestContext{
-		storeConfig: &storeCfg,
-		// This test was written before the multiTestContext started creating many
-		// system ranges at startup, and hasn't been update to take that into
-		// account.
-		startWithSingleRange: true,
-	}
-	defer mtc.Stop()
-	mtc.Start(t, 2)
-
-	// Up-replicate to two replicas.
-	mtc.replicateRange(mtc.stores[0].LookupReplica(roachpb.RKeyMin).RangeID, 1)
-
-	// Split the key space at key "a".
-	splitKey := roachpb.RKey("a")
-	splitArgs := adminSplitArgs(splitKey.AsRawKey())
-	if _, pErr := kv.SendWrapped(
-		context.Background(), mtc.stores[0].TestSender(), splitArgs,
-	); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Get the replicas for each side of the split. This is done within
-	// a SucceedsSoon loop to ensure the split completes.
-	var lhsReplica0, lhsReplica1, rhsReplica0, rhsReplica1 *kvserver.Replica
-	testutils.SucceedsSoon(t, func() error {
-		lhsReplica0 = mtc.stores[0].LookupReplica(roachpb.RKeyMin)
-		lhsReplica1 = mtc.stores[1].LookupReplica(roachpb.RKeyMin)
-		rhsReplica0 = mtc.stores[0].LookupReplica(splitKey)
-		rhsReplica1 = mtc.stores[1].LookupReplica(splitKey)
-		if lhsReplica0 == rhsReplica0 || lhsReplica1 == rhsReplica1 {
-			return errors.Errorf("replicas not post-split %v, %v, %v, %v",
-				lhsReplica0, rhsReplica0, rhsReplica0, rhsReplica1)
-		}
-		return nil
-	})
-	lhsLease, _ := lhsReplica0.GetLease()
-	rhsDesc, rhsLease := rhsReplica0.GetDescAndLease(ctx)
-
-	send := func(args roachpb.Request, returnRangeInfo bool, txn *roachpb.Transaction) *roachpb.BatchResponse {
-		ba := roachpb.BatchRequest{
-			Header: roachpb.Header{
-				ReturnRangeInfo: returnRangeInfo,
-				Txn:             txn,
-			},
-		}
-		ba.Add(args)
-
-		br, pErr := mtc.distSenders[0].Send(ctx, ba)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		return br
-	}
-
-	// Populate the range cache so that the request will be sent to the right
-	// leaseholder, and it will have the up-to-date ClientRangeInfo populated.
-	mtc.distSenders[0].RangeDescriptorCache().Insert(ctx,
-		roachpb.RangeInfo{Desc: rhsDesc, Lease: rhsLease})
-
-	// Verify range info is not set if the request is sent with up-to-date
-	// ClientRangeInfo.
-	getArgs := getArgs(splitKey.AsRawKey())
-	br := send(getArgs, false /* returnRangeInfo */, nil /* txn */)
-	if len(br.RangeInfos) > 0 {
-		t.Fatalf("expected empty range infos if unrequested; got %v", br.RangeInfos)
-	}
-
-	// Verify range info on a get request.
-	br = send(getArgs, true /* returnRangeInfo */, nil /* txn */)
-	expRangeInfos := []roachpb.RangeInfo{
-		{
-			Desc:  *rhsReplica0.Desc(),
-			Lease: rhsLease,
-		},
-	}
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on get reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-
-	// Verify range info on a put request.
-	br = send(putArgs(splitKey.AsRawKey(), []byte("foo")), true /* returnRangeInfo */, nil /* txn */)
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on put reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-
-	// Verify range info on an admin request.
-	adminArgs := &roachpb.AdminTransferLeaseRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: splitKey.AsRawKey(),
-		},
-		Target: rhsLease.Replica.StoreID,
-	}
-	br = send(adminArgs, true /* returnRangeInfo */, nil /* txn */)
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on admin reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-
-	// Verify multiple range infos on a scan request.
-	scanArgs := &roachpb.ScanRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    keys.SystemMax,
-			EndKey: roachpb.KeyMax,
-		},
-	}
-	txn := roachpb.MakeTransaction("test", roachpb.KeyMin, 1, mtc.clock().Now(), 0)
-	br = send(scanArgs, true /* returnRangeInfo */, &txn)
-	expRangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *lhsReplica0.Desc(),
-			Lease: lhsLease,
-		},
-		{
-			Desc:  *rhsReplica0.Desc(),
-			Lease: rhsLease,
-		},
-	}
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-
-	// Verify multiple range infos and order on a reverse scan request.
-	revScanArgs := &roachpb.ReverseScanRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    keys.SystemMax,
-			EndKey: roachpb.KeyMax,
-		},
-	}
-	br = send(revScanArgs, true /* returnRangeInfo */, &txn)
-	expRangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *lhsReplica0.Desc(),
-			Lease: lhsLease,
-		},
-		{
-			Desc:  *rhsReplica0.Desc(),
-			Lease: rhsLease,
-		},
-	}
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on reverse scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-
-	// Change lease holders for both ranges and re-scan.
-	for _, r := range []*kvserver.Replica{lhsReplica1, rhsReplica1} {
-		replDesc, err := r.GetReplicaDescriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = mtc.dbs[0].AdminTransferLease(context.Background(),
-			r.Desc().StartKey.AsRawKey(), replDesc.StoreID); err != nil {
-			t.Fatalf("unable to transfer lease to replica %s: %+v", r, err)
-		}
-	}
-	br = send(scanArgs, true /* returnRangeInfo */, &txn)
-	// Read the expected lease from replica0 rather than replica1 as it may serve
-	// a follower read which will contain the new lease information before
-	// replica1 has applied the lease transfer.
-	lhsLease, _ = lhsReplica0.GetLease()
-	rhsLease, _ = rhsReplica0.GetLease()
-	expRangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *lhsReplica1.Desc(),
-			Lease: lhsLease,
-		},
-		{
-			Desc:  *rhsReplica1.Desc(),
-			Lease: rhsLease,
-		},
-	}
-	if !reflect.DeepEqual(br.RangeInfos, expRangeInfos) {
-		t.Errorf("on scan reply, expected %+v; got %+v", expRangeInfos, br.RangeInfos)
-	}
-}
-
 // Test that, if a client makes a request to a range that has recently split and
 // the client indicates that it has pre-split info, the serve replies with
 // updated info on both sides of the split. The server has a heuristic for
@@ -1807,7 +1624,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 			ba := roachpb.BatchRequest{
 				Header: roachpb.Header{
 					RangeID: tc.rangeID,
-					ClientRangeInfo: &roachpb.ClientRangeInfo{
+					ClientRangeInfo: roachpb.ClientRangeInfo{
 						DescriptorGeneration: preSplitDesc.Generation,
 					},
 				},
@@ -3530,20 +3347,20 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	require.NoError(t, <-err4C)
 }
 
-// getRangeInfo retreives range info by performing a get against the provided
-// key and setting the ReturnRangeInfo flag to true.
+// getRangeInfo retrieves range info by performing a RangeStatsRequest against
+// the provided key.
 func getRangeInfo(
 	ctx context.Context, db *kv.DB, key roachpb.Key,
 ) (ri *roachpb.RangeInfo, err error) {
 	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		b.Header.ReturnRangeInfo = true
-		b.AddRawRequest(roachpb.NewGet(key))
+		b.AddRawRequest(&roachpb.RangeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{Key: key},
+		})
 		if err = db.Run(ctx, b); err != nil {
 			return err
 		}
-		resp := b.RawResponse()
-		ri = &resp.RangeInfos[0]
+		ri = &b.RawResponse().Responses[0].GetRangeStats().RangeInfo
 		return nil
 	})
 	return ri, err
