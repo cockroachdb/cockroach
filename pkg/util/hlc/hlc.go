@@ -127,26 +127,40 @@ func (m *ManualClock) Set(nanos int64) {
 // HybridManualClock is a convenience type to facilitate
 // creating a hybrid logical clock whose physical clock
 // ticks with the wall clock, but that can be moved arbitrarily
-// into the future. HybridManualClock is thread safe.
+// into the future or paused. HybridManualClock is thread safe.
 type HybridManualClock struct {
 	nanos         int64
 	physicalClock func() int64
+	// nanosAtPause records the timestamp of the clock if it was paused. A 0 value
+	// indicates the clock was never paused.
+	nanosAtPause int64
 }
 
 // NewHybridManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewHybridManualClock() *HybridManualClock {
-	return &HybridManualClock{nanos: 0, physicalClock: UnixNano}
+	return &HybridManualClock{nanos: 0, physicalClock: UnixNano, nanosAtPause: 0}
 }
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
 func (m *HybridManualClock) UnixNano() int64 {
-	return atomic.LoadInt64(&m.nanos) + m.physicalClock()
+	nanosAtPause := atomic.LoadInt64(&m.nanosAtPause)
+	nanos := atomic.LoadInt64(&m.nanos)
+	if nanosAtPause > 0 {
+		return nanos + nanosAtPause
+	}
+	return nanos + m.physicalClock()
 }
 
 // Increment atomically increments the hybrid manual clock's timestamp.
 func (m *HybridManualClock) Increment(incr int64) {
 	atomic.AddInt64(&m.nanos, incr)
+}
+
+// Pause pauses the hybrid manual clock and forces it to always return the
+// current timestamp.
+func (m *HybridManualClock) Pause() {
+	atomic.StoreInt64(&m.nanosAtPause, m.physicalClock())
 }
 
 // UnixNano returns the local machine's physical nanosecond
