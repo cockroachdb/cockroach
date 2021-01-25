@@ -1096,17 +1096,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
-			// Add scTable to the collection as an uncommitted descriptor so that
-			// future attempts to resolve a mutable copy find the same pointer.
-			//
-			// TODO(ajwerner): The need to do this implies that we should cache all
-			// mutable descriptors inside of the collection when they are resolved
-			// such that all attempts to resolve a mutable descriptor from a
-			// collection will always give you the same exact pointer.
-			scTable.MaybeIncrementVersion()
-			if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
-				return err
-			}
 			isRollback = mutation.Rollback
 			if indexDesc := mutation.GetIndex(); mutation.Direction == descpb.DescriptorMutation_DROP &&
 				indexDesc != nil {
@@ -1488,14 +1477,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		fksByBackrefTable = make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
-			return err
-		}
-		// TODO(ajwerner): The need to do this implies that we should cache all
-		// mutable descriptors inside of the collection when they are resolved
-		// such that all attempts to resolve a mutable descriptor from a
-		// collection will always give you the same exact pointer.
-		scTable.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(scTable); err != nil {
 			return err
 		}
 
