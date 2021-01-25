@@ -2073,6 +2073,9 @@ func (s *SQLServer) startServeSQL(
 			return err
 		}
 	}
+
+	s.acceptingClients.Set(true)
+
 	return nil
 }
 

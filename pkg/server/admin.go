@@ -1358,13 +1358,13 @@ func (s *adminServer) Health(
 		return resp, nil
 	}
 
-	if err := s.checkReadinessForHealthCheck(); err != nil {
+	if err := s.checkReadinessForHealthCheck(ctx); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *adminServer) checkReadinessForHealthCheck() error {
+func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 	serveMode := s.server.grpc.mode.get()
 	switch serveMode {
 	case modeInitializing:
@@ -1395,6 +1395,43 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 		// grpc.mode being modeDraining, if a RPC client
 		// has requested DrainMode_LEASES but not DrainMode_CLIENT.
 		return status.Errorf(codes.Unavailable, "node is shutting down")
+	}
+
+	if !s.server.sqlServer.acceptingClients.Get() {
+		return status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
+	}
+
+	// Also check the availability of the SQL service.
+	// We do need a timeout on the query, to ensure the health probe
+	// returns a result within a reasonable timeframe, and that
+	// unavailable ranges translate to a health failure.
+	timeoutCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+	if err := s.server.RunLocalSQL(timeoutCtx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "sql-health", nil, `
+SELECT
+  (SELECT count(*) FROM (TABLE system.public.namespace      LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.users          LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.role_options   LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.role_members   LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.jobs           LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.sqlliveness    LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.scheduled_jobs LIMIT 1))+
+  (SELECT count(*) FROM (TABLE system.public.lease          LIMIT 1))
+`+
+			// We use AS OF SYSTEM TIME so that the health query does not
+			// need to create a hotspot at these tables' leaseholder.
+			// However, in order to use AOST we also need a FROM clause.
+			// We use generate_series(1,1) which is a dummy source guaranteed
+			// to return one row.
+			`FROM generate_series(1,1)  AS OF SYSTEM TIME '-5s'
+`)
+		return err
+	}); err != nil {
+		// TODO(knz): When always-on tracing is available via SQL, we may
+		// want to include a trace of the SQL query in the logged error.
+		log.Ops.Errorf(ctx, "SQL health probe failed: %v", err)
+		return status.Errorf(codes.Unavailable, "SQL health check failed")
 	}
 
 	return nil
