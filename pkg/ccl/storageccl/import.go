@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/sstable"
 )
 
 var importBatchSize = func() *settings.ByteSizeSetting {
@@ -89,7 +90,7 @@ var importBufferIncrementSize = func() *settings.ByteSizeSetting {
 var remoteSSTs = settings.RegisterBoolSetting(
 	"kv.bulk_ingest.stream_external_ssts.enabled",
 	"if enabled, external SSTables are iterated directly in some cases, rather than being downloaded entirely first",
-	false,
+	true,
 )
 
 // commandMetadataEstimate is an estimate of how much metadata Raft will add to
@@ -307,40 +308,43 @@ func ExternalSSTReader(
 		return nil, err
 	}
 
-	// TODO(dt): use streaming decryption on the fly wrapper from #58181.
-	if encryption != nil {
-		ciphertext, err := ioutil.ReadAll(f)
-		f.Close()
-		if err != nil {
-			return nil, err
-		}
-		content, err := DecryptFile(ciphertext, encryption.Key)
-		if err != nil {
-			return nil, err
-		}
-		return storage.NewMemSSTIterator(content, false)
-	}
-
 	if !remoteSSTs.Get(&e.Settings().SV) {
 		content, err := ioutil.ReadAll(f)
 		f.Close()
 		if err != nil {
 			return nil, err
 		}
+		if encryption != nil {
+			content, err = DecryptFile(content, encryption.Key)
+			if err != nil {
+				return nil, err
+			}
+		}
 		return storage.NewMemSSTIterator(content, false)
 	}
 
-	iter, err := storage.NewSSTIterator(&sstReader{
+	raw := &sstReader{
 		sz:   sizeStat(sz),
 		body: f,
 		openAt: func(offset int64) (io.ReadCloser, error) {
 			reader, _, err := e.ReadFileAt(ctx, basename, offset)
 			return reader, err
 		},
-	})
+	}
 
+	var reader sstable.ReadableFile = raw
+	if encryption != nil {
+		r, err := decryptingReader(raw, encryption.Key)
+		if err != nil {
+			f.Close()
+			return nil, err
+		}
+		reader = r
+	}
+
+	iter, err := storage.NewSSTIterator(reader)
 	if err != nil {
-		f.Close()
+		reader.Close()
 		return nil, err
 	}
 
@@ -353,6 +357,8 @@ type sstReader struct {
 	// body and pos are mutated by calls to ReadAt and Close.
 	body io.ReadCloser
 	pos  int64
+
+	readPos int64 // readPos is used to transform Read() to ReadAt(readPos).
 }
 
 // Close implements io.Closer.
@@ -367,6 +373,12 @@ func (r *sstReader) Close() error {
 // Stat returns the size of the file.
 func (r *sstReader) Stat() (os.FileInfo, error) {
 	return r.sz, nil
+}
+
+func (r *sstReader) Read(p []byte) (int, error) {
+	n, err := r.ReadAt(p, r.readPos)
+	r.readPos += int64(n)
+	return n, err
 }
 
 // ReadAt implements io.ReaderAt by opening a Reader at an offset before reading
