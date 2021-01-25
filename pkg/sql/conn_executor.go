@@ -21,7 +21,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -37,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1034,6 +1039,8 @@ type connExecutor struct {
 		// still need the statementID hash to disambiguate beyond the capped
 		// statements.
 		transactionStatementsHash util.FNV64
+
+		schemaChangerState SchemaChangerState
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1224,6 +1231,11 @@ func (ns *prepStmtNamespace) resetTo(
 // commits, rolls back or restarts.
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
+	if ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.NewSchemaChanger) {
+		ex.extraTxnState.schemaChangerState = SchemaChangerState{
+			mode: ex.sessionData.NewSchemaChangerMode,
+		}
+	}
 
 	for k := range ex.extraTxnState.schemaChangeJobsCache {
 		delete(ex.extraTxnState.schemaChangeJobsCache, k)
@@ -2166,6 +2178,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
+	evalCtx.SchemaChangerState = &ex.extraTxnState.schemaChangerState
 }
 
 // getTransactionState retrieves a text representation of the given state.
@@ -2502,6 +2515,65 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 				NotifyMutation(desc.GetID(), math.MaxInt32 /* rowsAffected */)
 		}
 	}
+}
+
+// runPreCommitStages is part of the new schema changer infrastructure to
+// mutate descriptors prior to committing a SQL transaction.
+func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
+	if len(ex.extraTxnState.schemaChangerState.nodes) == 0 {
+		return nil
+	}
+	executor := scexec.NewExecutor(
+		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
+		nil /* backfiller */, nil, /* jobTracker */
+	)
+	after, err := runNewSchemaChanger(
+		ctx, scplan.PreCommitPhase,
+		ex.extraTxnState.schemaChangerState.nodes,
+		executor,
+	)
+	if err != nil {
+		return err
+	}
+	scs := &ex.extraTxnState.schemaChangerState
+	scs.nodes = after
+	targetSlice := make([]*scpb.Target, len(scs.nodes))
+	states := make([]scpb.State, len(scs.nodes))
+	for i := range scs.nodes {
+		targetSlice[i] = scs.nodes[i].Target
+		states[i] = scs.nodes[i].State
+	}
+	_, err = ex.planner.extendedEvalCtx.QueueJob(jobs.Record{
+		Description:   "Schema change job", // TODO(ajwerner): use const
+		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
+		Username:      ex.planner.User(),
+		DescriptorIDs: nil, // TODO(ajwerner): populate
+		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
+		Progress:      jobspb.NewSchemaChangeProgress{States: states},
+		RunningStatus: "",
+		NonCancelable: false,
+	})
+	return err
+}
+
+func runNewSchemaChanger(
+	ctx context.Context, phase scplan.Phase, nodes []*scpb.Node, executor *scexec.Executor,
+) (after []*scpb.Node, _ error) {
+	sc, err := scplan.MakePlan(nodes, scplan.Params{
+		ExecutionPhase: phase,
+		// TODO(ajwerner): Populate the set of new descriptors
+	})
+	if err != nil {
+		return nil, err
+	}
+	after = nodes
+	for _, s := range sc.Stages {
+		if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
+			return nil, err
+		}
+		after = s.After
+	}
+	return after, nil
 }
 
 // StatementCounters groups metrics for counting different types of

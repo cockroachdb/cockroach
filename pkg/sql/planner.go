@@ -95,6 +95,8 @@ type extendedEvalContext struct {
 	schemaAccessors *schemaInterface
 
 	sqlStatsCollector *sqlStatsCollector
+
+	SchemaChangerState *SchemaChangerState
 }
 
 // copy returns a deep copy of ctx.

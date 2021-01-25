@@ -31,11 +31,9 @@ import (
 type Phase int
 
 const (
-	// PostStatementPhase refers to execution of ops occurring after statement
+	// StatementPhase refers to execution of ops occurring during statement
 	// execution during the user transaction.
-	// TODO(ajwerner,lucy-zhang): Move the execution for these ops to actual
-	// statement execution for the planNodes and update the name.
-	PostStatementPhase Phase = iota
+	StatementPhase Phase = iota
 	// PreCommitPhase refers to execution of ops occurring during the user
 	// transaction immediately before commit.
 	PreCommitPhase
