@@ -11,6 +11,7 @@
 package tracing
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -211,4 +212,21 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	rec := sp.GetRecording()
 	require.Len(t, rec, 2)
 	require.Len(t, rec[1].InternalStructured, 1)
+}
+
+// TestSpanMaxChildren verifies that a Span can
+// track at most maxChildrenPerSpan direct children.
+func TestSpanMaxChildren(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	for i := 0; i < maxChildrenPerSpan+123; i++ {
+		ch := tr.StartSpan(fmt.Sprintf("child %d", i), WithParentAndAutoCollection(sp), WithForceRealSpan())
+		ch.Finish()
+		exp := i + 1
+		if exp > maxChildrenPerSpan {
+			exp = maxChildrenPerSpan
+		}
+		require.Len(t, sp.crdb.mu.recording.children, exp)
+	}
 }
