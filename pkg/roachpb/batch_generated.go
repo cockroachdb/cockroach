@@ -70,6 +70,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IndeterminateCommit
 	case *ErrorDetail_ParentAborted:
 		return t.ParentAborted
+	case *ErrorDetail_RefreshFailed:
+		return t.RefreshFailed
 	default:
 		return nil
 	}
@@ -332,6 +334,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_IndeterminateCommit{t}
 	case *ParentAbortedError:
 		union = &ErrorDetail_ParentAborted{t}
+	case *RefreshFailedError:
+		union = &ErrorDetail_RefreshFailed{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}

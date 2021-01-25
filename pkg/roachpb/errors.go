@@ -317,6 +317,7 @@ const (
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
 	ParentAbortedErrorType                  ErrorDetailType = 40
+	RefreshFailedErrorType                  ErrorDetailType = 41
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -326,7 +327,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 41
+	NumErrors int = 42
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1238,8 +1239,6 @@ func (e *IndeterminateCommitError) Type() ErrorDetailType {
 	return IndeterminateCommitErrType
 }
 
-var _ ErrorDetailInterface = (*ParentAbortedError)(nil)
-
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
 
 func (m *ParentAbortedError) Error() string {
@@ -1257,3 +1256,28 @@ func (m *ParentAbortedError) message(pErr *Error) string {
 func (m *ParentAbortedError) Type() ErrorDetailType {
 	return ParentAbortedErrorType
 }
+
+var _ ErrorDetailInterface = (*ParentAbortedError)(nil)
+
+func (m *RefreshFailedError) Error() string {
+	return m.message(nil)
+}
+
+func (m *RefreshFailedError) message(pErr *Error) string {
+	conflictType := "key"
+	if m.Intent {
+		conflictType = "intent"
+	}
+	s := fmt.Sprintf("encountered recently written %s %s @%s",
+		conflictType, m.Key, m.Timestamp)
+	if pErr.GetTxn() == nil {
+		return s
+	}
+	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
+}
+
+func (m *RefreshFailedError) Type() ErrorDetailType {
+	return RefreshFailedErrorType
+}
+
+var _ ErrorDetailInterface = (*RefreshFailedError)(nil)

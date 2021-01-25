@@ -482,6 +482,17 @@ message ParentAbortedError {
   optional roachpb.Transaction parent_txn = 1 [(gogoproto.nullable) = false];
 }
 
+// RefreshFailedError indicates that a refresh request failed and optionally
+// provides information on the location at which it failed.
+message RefreshFailedError {
+  // Key is the key corresponding to the discovered conflict.
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  // Timestamp is that timestamp of the conflicting write.
+  optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // Intent indicates whether the conflict is an intent.
+  optional bool intent = 3 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
@@ -520,6 +531,7 @@ message ErrorDetail {
     RangeFeedRetryError rangefeed_retry = 38;
     IndeterminateCommitError indeterminate_commit = 39;
     ParentAbortedError parent_aborted = 40;
+    RefreshFailedError refresh_failed = 41;
   }
 }
 

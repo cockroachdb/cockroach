@@ -63,15 +63,21 @@ func Refresh(
 		return result.Result{}, err
 	} else if val != nil {
 		if ts := val.Timestamp; refreshFrom.LessEq(ts) {
-			return result.Result{}, errors.Errorf("encountered recently written key %s @%s", args.Key, ts)
+			return result.Result{}, &roachpb.RefreshFailedError{
+				Key:       args.Key,
+				Timestamp: ts,
+			}
 		}
 	}
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
-		return result.Result{}, errors.Errorf("encountered recently written intent %s @%s",
-			intent.Key, intent.Txn.WriteTimestamp)
+		return result.Result{}, &roachpb.RefreshFailedError{
+			Key:       args.Key,
+			Timestamp: intent.Txn.WriteTimestamp,
+			Intent:    true,
+		}
 	}
 
 	return result.Result{}, nil
