@@ -431,4 +431,5 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&windowNode{}):                     "window",
 	reflect.TypeOf(&zeroNode{}):                       "norows",
 	reflect.TypeOf(&zigzagJoinNode{}):                 "zigzag join",
+	reflect.TypeOf(&schemaChangePlanNode{}):           "schema change",
 }

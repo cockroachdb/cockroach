@@ -69,6 +69,7 @@ const (
 type Statement interface {
 	fmt.Stringer
 	NodeFormatter
+
 	StatementType() StatementType
 	// StatementTag is a short string identifying the type of statement
 	// (usually a single verb). This is different than the Stringer output,

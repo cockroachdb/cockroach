@@ -319,6 +319,19 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
+// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
+var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
+	"sql.defaults.experimental_new_schema_changer.enabled",
+	"default value for experimental_use_new_schema_changer session setting;"+
+		"disables new schema changer by default",
+	"off",
+	map[int64]string{
+		int64(sessiondata.UseNewSchemaChangerOff):          "off",
+		int64(sessiondata.UseNewSchemaChangerOn):           "on",
+		int64(sessiondata.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
+	},
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2237,6 +2250,10 @@ func (m *sessionDataMutator) SetVirtualColumnsEnabled(val bool) {
 // supported.
 func (m *sessionDataMutator) SetUniqueWithoutIndexConstraints(val bool) {
 	m.data.EnableUniqueWithoutIndexConstraints = val
+}
+
+func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondata.NewSchemaChangerMode) {
+	m.data.NewSchemaChangerMode = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

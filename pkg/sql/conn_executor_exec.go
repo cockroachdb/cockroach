@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -682,6 +683,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		log.VEventf(ctx, 2, "push detected for non-refreshable txn but auto-retry not possible")
 	}
+
 	// No event was generated.
 	return nil, nil, nil
 }
@@ -730,6 +732,12 @@ func (ex *connExecutor) commitSQLTransaction(
 func (ex *connExecutor) commitSQLTransactionInternal(
 	ctx context.Context, ast tree.Statement,
 ) error {
+	if ex.extraTxnState.schemaChangerState.mode != sessiondata.UseNewSchemaChangerOff {
+		if err := ex.runPreCommitStages(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := validatePrimaryKeys(&ex.extraTxnState.descCollection); err != nil {
 		return err
 	}

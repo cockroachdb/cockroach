@@ -89,7 +89,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.State_ABSENT: {
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
-						return flags.ExecutionPhase == PostStatementPhase &&
+						return flags.ExecutionPhase == StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -150,7 +150,7 @@ var rules = map[scpb.Element]targetRules{
 				{
 					predicate: func(this *scpb.Column, flags Params) bool {
 						return !flags.CreatedDescriptorIDs.Contains(this.TableID) &&
-							(flags.ExecutionPhase == PostStatementPhase ||
+							(flags.ExecutionPhase == StatementPhase ||
 								flags.ExecutionPhase == PreCommitPhase)
 					},
 				},
@@ -203,7 +203,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.State_ABSENT: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == PostStatementPhase &&
+						return flags.ExecutionPhase == StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
@@ -294,7 +294,7 @@ var rules = map[scpb.Element]targetRules{
 			scpb.State_PUBLIC: {
 				{
 					predicate: func(this *scpb.PrimaryIndex, flags Params) bool {
-						return flags.ExecutionPhase == PostStatementPhase &&
+						return flags.ExecutionPhase == StatementPhase &&
 							!flags.CreatedDescriptorIDs.Contains(this.TableID)
 					},
 				},
