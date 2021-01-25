@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "cfetcher.go",
         "colbatch_scan.go",
-        "fetcherstate_string.go",
         ":gen-fetcherstate-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colfetcher",

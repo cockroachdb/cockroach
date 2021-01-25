@@ -5,7 +5,6 @@ go_library(
     name = "execinfra",
     srcs = [
         "base.go",
-        "consumerstatus_string.go",
         "flow_context.go",
         "metadata_test_receiver.go",
         "metadata_test_sender.go",
@@ -13,7 +12,6 @@ go_library(
         "operator.go",
         "outboxbase.go",
         "processorsbase.go",
-        "procstate_string.go",
         "readerbase.go",
         "scanbase.go",
         "server_config.go",

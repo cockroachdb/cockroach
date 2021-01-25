@@ -8,7 +8,6 @@ go_library(
     srcs = [
         "clusterversion.go",
         "cockroach_versions.go",
-        "key_string.go",
         "keyed_versions.go",
         "setting.go",
         "testutils.go",

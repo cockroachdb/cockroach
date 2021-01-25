@@ -276,7 +276,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 			includeMutations:       true,
 			includeSystem:          true,
 			includeVirtualInverted: false,
-			includeVirtualComputed: false,
+			includeVirtualComputed: true,
 		}),
 		indexFlags,
 		noRowLocking,

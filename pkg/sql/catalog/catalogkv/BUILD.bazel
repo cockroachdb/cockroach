@@ -5,7 +5,6 @@ go_library(
     name = "catalogkv",
     srcs = [
         "catalogkv.go",
-        "descriptorkind_string.go",
         "namespace.go",
         "test_utils.go",
         ":gen-descriptorkind-stringer",  # keep

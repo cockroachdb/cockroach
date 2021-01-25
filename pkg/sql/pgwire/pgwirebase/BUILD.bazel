@@ -4,16 +4,10 @@ load("//pkg:STRINGER.bzl", "stringer")
 go_library(
     name = "pgwirebase",
     srcs = [
-        "clientmessagetype_string.go",
         "conn.go",
         "doc.go",
         "encoding.go",
-        "formatcode_string.go",
         "msg.go",
-        "pgnumericsign_string.go",
-        "preparetype_string.go",
-        "servererrfieldtype_string.go",
-        "servermessagetype_string.go",
         "too_big_error.go",
         ":gen-clientmessagetype-stringer",  # keep
         ":gen-formatcode-stringer",  # keep

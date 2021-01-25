@@ -4,7 +4,6 @@ load("//pkg:STRINGER.bzl", "stringer")
 go_library(
     name = "roleoption",
     srcs = [
-        "option_string.go",
         "role_option.go",
         ":gen-option-stringer",  # keep
     ],
