@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -33,8 +32,7 @@ type streamStats struct {
 }
 
 type flowStats struct {
-	nodeID roachpb.NodeID
-	stats  []*execinfrapb.ComponentStats
+	stats []*execinfrapb.ComponentStats
 }
 
 // FlowMetadata contains metadata extracted from flows. This information is stored
@@ -50,8 +48,9 @@ type FlowMetadata struct {
 	// streamStats to have nil stats, which indicates that no stats were found
 	// for the given stream in the trace.
 	streamStats map[execinfrapb.StreamID]*streamStats
-	// flowStats maps a flow ID to flow level stats extracted from a trace.
-	flowStats map[execinfrapb.FlowID]*flowStats
+	// flowStats maps a node ID to flow level stats extracted from a trace. Note
+	// that the key is not a FlowID because the same FlowID is used across nodes.
+	flowStats map[roachpb.NodeID]*flowStats
 }
 
 // NewFlowMetadata creates a FlowMetadata with the given physical plan information.
@@ -59,12 +58,12 @@ func NewFlowMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowMetada
 	a := &FlowMetadata{
 		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
 		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
-		flowStats:      make(map[execinfrapb.FlowID]*flowStats),
+		flowStats:      make(map[roachpb.NodeID]*flowStats),
 	}
 
 	// Annotate the maps with physical plan information.
 	for nodeID, flow := range flows {
-		a.flowStats[flow.FlowID] = &flowStats{nodeID: nodeID}
+		a.flowStats[nodeID] = &flowStats{}
 		for _, proc := range flow.Processors {
 			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
 			for _, output := range proc.Output {
@@ -151,13 +150,15 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 			streamStats.stats = componentStats
 
 		case execinfrapb.ComponentID_FLOW:
-			if id := component.FlowID.UUID; id != (uuid.UUID{}) {
-				flowStats := a.flowStats[execinfrapb.FlowID{UUID: id}]
-				if flowStats == nil {
-					return errors.Errorf("trace has span for flow %s but the flow does not exist in the physical plan", id)
-				}
-				flowStats.stats = append(flowStats.stats, componentStats)
+			flowStats := a.flowStats[component.NodeID]
+			if flowStats == nil {
+				return errors.Errorf(
+					"trace has span for flow %s on node %s but the flow does not exist in the physical plan",
+					component.FlowID,
+					component.NodeID,
+				)
 			}
+			flowStats.stats = append(flowStats.stats, componentStats)
 		}
 	}
 
@@ -225,7 +226,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	}
 
 	// Process flowStats.
-	for _, stats := range a.flowStats {
+	for nodeID, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
@@ -235,8 +236,8 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		// flow stats for max memory usage.
 		for _, v := range stats.stats {
 			if v.FlowStats.MaxMemUsage.HasValue() {
-				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.nodeID] {
-					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[stats.nodeID] = memUsage
+				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] {
+					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[nodeID] = memUsage
 				}
 			}
 		}
