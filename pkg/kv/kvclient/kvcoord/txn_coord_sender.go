@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -171,6 +172,79 @@ type TxnCoordSender struct {
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
 	typ kv.TxnType
+
+	// parent is used by pushParentUponCommit.
+	parent ancestorTxn
+}
+
+// ancestorTxn is a handle to an ancestor held by a child. The child must call
+// refreshAncestor on its immediate parent after committing. This logic is
+// important for two reasons:
+//
+//  1. Parent transactions should never logically precede child transactions
+//  2. Child transactions should not invalidate the reads of any of their
+//     ancestors. If they do, it may lead to infinite retries, which would be
+//     bad. The interface here accepts a write set of the child in order to
+//     check whether the child may have done an illegal read and to surface an
+//     error.
+//
+// Note that if the childCommitTimestamp is equal to the parent's current
+// read timestamp then the write set does not need to be consulted as any
+// invalid write would have been pushed by the timestamp cache.
+type ancestorTxn interface {
+	forwardToCommittedDescendant(ctx context.Context, childCommitTimestamp hlc.Timestamp, childWriteSet interval.RangeGroup) error
+}
+
+// pushAncestorsUponCommitLocked is called when a transaction moves to
+// committed to ensure that no ancestor transaction commits at a timestamp
+// which precedes the commit timestamp of any of its descendants.
+func (tc *TxnCoordSender) pushParentUponCommitLocked(ctx context.Context) error {
+	if tc.parent == nil {
+		return nil
+	}
+	writes := interval.NewRangeTree()
+	for i := range tc.mu.txn.LockSpans {
+		writes.Add(tc.mu.txn.LockSpans[i].AsRange())
+	}
+
+	// Copy out the InFlightWrites. When a transaction is asynchronously being
+	// moved to the explicitly committed state, it still contains the
+	// InFlightWrites.
+	for i := range tc.mu.txn.InFlightWrites {
+		writes.Add(roachpb.Span{Key: tc.mu.txn.InFlightWrites[i].Key}.AsRange())
+	}
+
+	return tc.parent.forwardToCommittedDescendant(ctx, tc.mu.txn.WriteTimestamp, writes)
+}
+
+// forwardToCommittedDescendant makes a TxnCoordSender implement ancestorTxn.
+func (tc *TxnCoordSender) forwardToCommittedDescendant(
+	ctx context.Context, descendantCommitTimestamp hlc.Timestamp, childWriteSet interval.RangeGroup,
+) error {
+	if tc.parent != nil {
+		if err := tc.parent.forwardToCommittedDescendant(
+			ctx, descendantCommitTimestamp, childWriteSet,
+		); err != nil {
+			return err
+		}
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.interceptorAlloc.txnSpanRefresher.refreshInvalid {
+		return errors.New("cannot forward provisional commit timestamp " +
+			"due to overlapping write")
+	}
+	if descendantCommitTimestamp.LessEq(tc.mu.txn.ReadTimestamp) {
+		return nil
+	}
+	for _, readSpan := range tc.interceptorAlloc.txnSpanRefresher.refreshFootprint.asSlice() {
+		if childWriteSet.Overlaps(readSpan.AsRange()) {
+			return errors.New("cannot forward provisional commit timestamp " +
+				"due to overlapping write")
+		}
+	}
+	tc.mu.txn.WriteTimestamp.Forward(descendantCommitTimestamp)
+	return nil
 }
 
 var _ kv.TxnSender = &TxnCoordSender{}
@@ -465,6 +539,9 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 		if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
 			return kvpb.NewError(err)
 		}
+		if err := tc.pushParentUponCommitLocked(ctx); err != nil {
+			return kvpb.NewError(err)
+		}
 	}
 	return nil
 }
@@ -538,6 +615,10 @@ func (tc *TxnCoordSender) Send(
 			tc.finalizeAndCleanupTxnLocked(ctx)
 			if et.Commit {
 				if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
+					return nil, kvpb.NewError(err)
+				}
+
+				if err := tc.pushParentUponCommitLocked(ctx); err != nil {
 					return nil, kvpb.NewError(err)
 				}
 			}
@@ -1480,5 +1561,8 @@ func (tc *TxnCoordSender) NewChildTransaction() (id uuid.UUID, child kv.TxnSende
 	// the parent.
 	childTxn.Priority = parent.Priority
 	child = newRootTxnCoordSender(tc.TxnCoordSenderFactory, &childTxn, tc.mu.userPriority)
+	childTC := child.(*TxnCoordSender)
+	childTC.parent = tc
 	return childTxn.ID, child, nil
+
 }

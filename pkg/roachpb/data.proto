@@ -471,7 +471,10 @@ message Transaction {
   // status instead of the COMMITTED status. These in-flight writes must then
   // all be confirmed as successful before the transaction can be moved from
   // STAGING to COMMITTED. Because of this, the set will only ever contain
-  // entries when the transaction is STAGING. For more, see txnCommitter.
+  // entries when the transaction is STAGING. For more, see txnCommitter. It
+  // may be the case that InFlightWrites is populated in a transaction object
+  // which is marked as COMMITTED because the transaction record is still in the
+  // process of being moved to COMMITTED asynchronously.
   //
   // The slice is maintained in sorted order by sequence number. It should be
   // treated as immutable and all updates should be performed on a copy of the

@@ -901,6 +901,27 @@ func TestChildTransactionMetadataPropagates(t *testing.T) {
 	require.True(t, state.called)
 }
 
+// TestChildTransactionPushesParentToCommitTimestamp ensures that the child
+// transaction pushes the parent to its commit timestamp.
+func TestChildTransactionPushesParentToCommitTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Server(0).DB()
+
+	txn := kv.NewTxn(ctx, db, tc.Server(0).NodeID() /* gatewayNodeID */)
+	before := txn.ProvisionalCommitTimestamp()
+	toPushTo := before.Next().Next()
+	require.NoError(t, txn.ChildTxn(ctx, func(ctx context.Context, childTxn *kv.Txn) error {
+		childTxn.SetFixedTimestamp(ctx, toPushTo)
+		return nil
+	}))
+	require.Equal(t, toPushTo, txn.ProvisionalCommitTimestamp())
+}
+
 // TestChildTransactionDeadlockDetection tests that deadlock cycles involving
 // child transactions and parents are properly detected and broken.
 func TestChildTransactionDeadlockDetection(t *testing.T) {
