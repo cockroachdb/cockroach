@@ -43,8 +43,7 @@ type ExplainOptions struct {
 	Flags [numExplainFlags + 1]bool
 }
 
-// ExplainMode indicates the mode of the explain. Currently there are two modes:
-// PLAN (the default) and DISTSQL.
+// ExplainMode indicates the mode of the explain. The default is ExplainPlan.
 type ExplainMode uint8
 
 const (
@@ -69,6 +68,10 @@ const (
 	// EXPLAIN ANALYZE.
 	ExplainDebug
 
+	// ExplainDDL generates a DDL plan diagram for the statement. Not allowed with
+	//
+	ExplainDDL
+
 	numExplainModes = iota
 )
 
@@ -78,6 +81,7 @@ var explainModeStrings = [...]string{
 	ExplainOpt:     "OPT",
 	ExplainVec:     "VEC",
 	ExplainDebug:   "DEBUG",
+	ExplainDDL:     "DDL",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
@@ -105,6 +109,8 @@ const (
 	ExplainFlagEnv
 	ExplainFlagCatalog
 	ExplainFlagJSON
+	ExplainFlagStages
+	ExplainFlagDeps
 	numExplainFlags = iota
 )
 
@@ -114,6 +120,8 @@ var explainFlagStrings = [...]string{
 	ExplainFlagEnv:     "ENV",
 	ExplainFlagCatalog: "CATALOG",
 	ExplainFlagJSON:    "JSON",
+	ExplainFlagStages:  "STAGES",
+	ExplainFlagDeps:    "DEPS",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {

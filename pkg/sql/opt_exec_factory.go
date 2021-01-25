@@ -1893,6 +1893,13 @@ func (ef *execFactory) ConstructExplain(
 			plan:    *wrappedPlan,
 		}, nil
 	}
+	if options.Mode == tree.ExplainDDL {
+		wrappedPlan := plan.(*explain.Plan).WrappedPlan.(*planComponents)
+		return &explainDDLNode{
+			options: options,
+			plan:    *wrappedPlan,
+		}, nil
+	}
 	flags := explain.MakeFlags(options)
 	n := &explainPlanNode{
 		options: options,
