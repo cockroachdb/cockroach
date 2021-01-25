@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,6 +134,17 @@ type txnSpanRefresher struct {
 	refreshFailWithCondensedSpans *metric.Counter
 	refreshMemoryLimitExceeded    *metric.Counter
 	refreshAutoRetries            *metric.Counter
+
+	// parent is a handle to the parent transacton. When non-nil, the
+	// txnCoordSender must refresh the parent to the commit timestamp prior to
+	// committing. This is critical for correctness to ensure that the child did
+	// not invalidate any of its ancestor's reads. If it did, it would not be
+	// detectable after the child committed but it may result in an infinite loop
+	// as the parent retried and thus ran the child again. While this scenario
+	// represents a programming error, it is also beneficial to perform this
+	// forwarding as the parent ought not to commit at a timestamp earlier than
+	// the child.
+	parent ancestorTxn
 }
 
 // SendLocked implements the lockedSender interface.
@@ -264,6 +276,16 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		log.Fatalf(ctx, "unexpected WriteTooOld request. ba: %s (txn: %s)",
 			ba.String(), ba.Txn.String())
 	}
+
+	if sr.parent != nil {
+		args, hasET := ba.GetArg(roachpb.EndTxn)
+		if committing := hasET && args.(*roachpb.EndTxnRequest).Commit; committing {
+			if err := sr.parent.refreshAncestor(ctx, ba.Txn.ReadTimestamp, ba.Txn.ID); err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+	}
+
 	br, pErr := sr.wrapped.SendLocked(ctx, ba)
 
 	// 19.2 servers might give us an error with the WriteTooOld flag set. This
@@ -306,7 +328,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	}
 	if pErr != nil {
 		if maxRefreshAttempts > 0 {
-			br, pErr = sr.maybeRefreshAndRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+			br, pErr = sr.maybeRefreshAndRetrySendLocked(ctx, ba, pErr, maxRefreshAttempts)
 		} else {
 			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
 		}
@@ -315,11 +337,11 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	return br, pErr
 }
 
-// maybeRefreshAndRetrySend attempts to catch serializable errors and avoid them
-// by refreshing the txn at a larger timestamp. If it succeeds at refreshing the
-// txn timestamp, it recurses into sendLockedWithRefreshAttempts and retries the
-// batch. If the refresh fails, the input pErr is returned.
-func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
+// maybeRefreshAndRetrySendLocked attempts to catch serializable errors and
+// avoid them by refreshing the txn at a larger timestamp. If it succeeds at
+// refreshing the txn timestamp, it recurses into sendLockedWithRefreshAttempts
+// and retries the batch. If the refresh fails, the input pErr is returned.
+func (sr *txnSpanRefresher) maybeRefreshAndRetrySendLocked(
 	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Check for an error which can be retried after updating spans.
@@ -330,7 +352,8 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	log.VEventf(ctx, 2, "trying to refresh to %s because of %s", refreshTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	var descendantTxnIDs []uuid.UUID // nil
+	if ok, _ := sr.tryUpdatingTxnSpans(ctx, refreshTxn, descendantTxnIDs); !ok {
 		log.Eventf(ctx, "refresh failed; propagating original retry error")
 		return nil, pErr
 	}
@@ -478,7 +501,8 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 		refreshTxn.ReadTimestamp, ba)
 
 	// Try updating the txn spans at a timestamp that will allow us to commit.
-	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
+	var descendantTxnIDs []uuid.UUID // nil
+	if ok, _ := sr.tryUpdatingTxnSpans(ctx, refreshTxn, descendantTxnIDs); !ok {
 		log.Eventf(ctx, "preemptive refresh failed; propagating retry error")
 		return roachpb.BatchRequest{}, newRetryErrorOnFailedPreemptiveRefresh(ba.Txn)
 	}
@@ -486,6 +510,43 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 	log.Eventf(ctx, "preemptive refresh succeeded")
 	ba.UpdateTxn(refreshTxn)
 	return ba, nil
+}
+
+// forceRefreshLocked refreshes the transaction's read timestamp to its write
+// timestamp. It is assumed to be called from a child transaction on its parent.
+// It must be the case that the parent is refreshable (is a root txn without a
+// fixed timestamp). These properties are validated when constructing the child.
+func (sr *txnSpanRefresher) forceRefreshLocked(
+	ctx context.Context, txn *roachpb.Transaction, descendantTxnIDs ...uuid.UUID,
+) (refreshTxn *roachpb.Transaction, _ error) {
+	// If the transaction has yet to be pushed, no refresh is necessary.
+	if txn.ReadTimestamp == txn.WriteTimestamp {
+		return txn, nil
+	}
+	// Note: we must be able to refresh this transaction.
+	canRefreshTxn, refreshTxn := roachpb.PrepareTransactionForRefresh(txn, txn.WriteTimestamp)
+	if !canRefreshTxn {
+		return nil, errors.AssertionFailedf(
+			"cannot refresh parent transaction %v due to fixed timestamp", txn.ID)
+	}
+	if !sr.canAutoRetry {
+		return nil, errors.AssertionFailedf(
+			"cannot refresh parent transaction %v which is not a root transaction", txn.ID)
+	}
+	log.VEventf(ctx, 2, "force refreshing to timestamp %s",
+		refreshTxn.ReadTimestamp)
+
+	// Try updating the txn spans at a timestamp that will allow us to commit.
+	if ok, pErr := sr.tryUpdatingTxnSpans(ctx, refreshTxn, descendantTxnIDs); !ok {
+		log.Eventf(ctx, "force refresh failed; propagating retry error")
+		if pErr == nil {
+			pErr = newRetryErrorOnFailedPreemptiveRefresh(txn)
+		}
+		return nil, pErr.GoError()
+	}
+
+	log.Eventf(ctx, "preemptive refresh succeeded")
+	return refreshTxn, nil
 }
 
 func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.Error {
@@ -501,10 +562,11 @@ func newRetryErrorOnFailedPreemptiveRefresh(txn *roachpb.Transaction) *roachpb.E
 // during the transaction to ensure that no writes were written more recently
 // than sr.refreshedTimestamp. All implicated timestamp caches are updated with
 // the final transaction timestamp. Returns whether the refresh was successful
-// or not.
+// or not. If a vanilla RefreshFailedError occurs during the refresh, it will
+// be terminated here. Only other errors are propagated from this function.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
-	ctx context.Context, refreshTxn *roachpb.Transaction,
-) (ok bool) {
+	ctx context.Context, refreshTxn *roachpb.Transaction, descendantTxnIDs []uuid.UUID,
+) (ok bool, _ *roachpb.Error) {
 	// Track the result of the refresh in metrics.
 	defer func() {
 		if ok {
@@ -519,11 +581,11 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
-		return false
+		return false, nil
 	} else if sr.refreshFootprint.empty() {
 		log.VEvent(ctx, 2, "there are no txn spans to refresh")
 		sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-		return true
+		return true, nil
 	}
 
 	// Refresh all spans (merge first).
@@ -546,13 +608,15 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 			var req roachpb.Request
 			if len(u.EndKey) == 0 {
 				req = &roachpb.RefreshRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(u),
-					RefreshFrom:   sr.refreshedTimestamp,
+					RequestHeader:  roachpb.RequestHeaderFromSpan(u),
+					RefreshFrom:    sr.refreshedTimestamp,
+					DescendantTxns: descendantTxnIDs,
 				}
 			} else {
 				req = &roachpb.RefreshRangeRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(u),
-					RefreshFrom:   sr.refreshedTimestamp,
+					RequestHeader:  roachpb.RequestHeaderFromSpan(u),
+					RefreshFrom:    sr.refreshedTimestamp,
+					DescendantTxns: descendantTxnIDs,
 				}
 			}
 			refreshSpanBa.Add(req)
@@ -565,11 +629,14 @@ func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	if _, batchErr := sr.wrapped.SendLocked(ctx, refreshSpanBa); batchErr != nil {
 		log.VEventf(ctx, 2, "failed to refresh txn spans (%s)", batchErr)
-		return false
+		if _, isRefreshFailed := batchErr.GetDetail().(*roachpb.RefreshFailedError); isRefreshFailed {
+			batchErr = nil
+		}
+		return false, batchErr
 	}
 
 	sr.refreshedTimestamp.Forward(refreshTxn.ReadTimestamp)
-	return true
+	return true, nil
 }
 
 // appendRefreshSpans appends refresh spans from the supplied batch request,

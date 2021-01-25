@@ -150,6 +150,44 @@ type TxnCoordSender struct {
 	typ kv.TxnType
 }
 
+// ancestorTxn is a handle to an ancestor held by a child. The child must call
+// refreshAncestor on its immediate parent prior to committing. The logic to
+// invoke this behavior lives both in the txnSpanRefresher and in the fast-path
+// of the txnCoordSender for read-only transactions.
+type ancestorTxn interface {
+	refreshAncestor(ctx context.Context, ts hlc.Timestamp, descendantTxnIDs ...uuid.UUID) error
+}
+
+// refreshAncestor makes a TxnCoordSender implement ancestorTxn.
+func (tc *TxnCoordSender) refreshAncestor(
+	ctx context.Context, ts hlc.Timestamp, childrenIDs ...uuid.UUID,
+) error {
+
+	if tc.interceptorAlloc.parent != nil {
+		var id uuid.UUID
+		tc.mu.Lock()
+		id = tc.mu.txn.ID
+		tc.mu.Unlock()
+		if err := tc.interceptorAlloc.parent.refreshAncestor(ctx, ts, append(childrenIDs, id)...); err != nil {
+			return err
+		}
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	txn := tc.mu.txn.Clone()
+	if txn.WriteTimestamp.Less(ts) {
+		txn.WriteTimestamp = ts
+	} else {
+		return nil
+	}
+	updated, err := tc.interceptorAlloc.forceRefreshLocked(ctx, txn, childrenIDs...)
+	if err != nil {
+		return err
+	}
+	tc.mu.txn = *updated
+	return nil
+}
+
 var _ kv.TxnSender = &TxnCoordSender{}
 
 // txnInterceptors are pluggable request interceptors that transform requests
@@ -431,6 +469,11 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 		// We need to bump the epoch and transform this retriable error.
 		ba.Txn = txn
 		return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+	}
+	if parent := tc.interceptorAlloc.txnSpanRefresher.parent; parent != nil {
+		if err := parent.refreshAncestor(ctx, tc.mu.txn.ReadTimestamp); err != nil {
+			return roachpb.NewError(err)
+		}
 	}
 	tc.mu.txnState = txnFinalized
 	// Mark the transaction as committed so that, in case this commit is done by
@@ -1179,5 +1222,8 @@ func (tc *TxnCoordSender) NewChildTransaction() (id uuid.UUID, child kv.TxnSende
 	childTxn.Priority = parent.Priority
 
 	child = newRootTxnCoordSender(tc.TxnCoordSenderFactory, &childTxn, tc.mu.userPriority)
+	childTC := child.(*TxnCoordSender)
+	childTC.interceptorAlloc.parent = tc
 	return childTxn.ID, child, nil
+
 }
