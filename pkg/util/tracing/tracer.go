@@ -37,8 +37,12 @@ import (
 // and since this string goes on the wire, it's a hassle to change it now.
 const verboseTracingBaggageKey = "sb"
 
-// maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
-const maxLogsPerSpan = 1000
+const (
+	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable limit.
+	maxLogsPerSpan = 1000
+	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
+	maxChildrenPerSpan = 1000
+)
 
 // These constants are used to form keys to represent tracing context
 // information in carriers supporting opentracing.HTTPHeaders format.

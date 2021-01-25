@@ -324,7 +324,10 @@ func (s *crdbSpan) getRecordingLocked(m mode) tracingpb.RecordedSpan {
 
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
-	s.mu.recording.children = append(s.mu.recording.children, child)
+	// Only record the child if the parent still has room.
+	if len(s.mu.recording.children) < maxChildrenPerSpan {
+		s.mu.recording.children = append(s.mu.recording.children, child)
+	}
 	s.mu.Unlock()
 }
 
