@@ -41,7 +41,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/streamingccl/streamclient",  # keep
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
