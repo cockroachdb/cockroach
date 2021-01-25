@@ -758,6 +758,14 @@ def go_deps():
         version = "v1.0.0",
     )
     go_repository(
+        name = "com_github_emicklei_dot",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/emicklei/dot",
+        sum = "h1:XDBW0Xco1QNyRb33cqLe10cT04yMWL1XpCZfa98Q6Og=",
+        version = "v0.15.0",
+    )
+
+    go_repository(
         name = "com_github_envoyproxy_go_control_plane",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/envoyproxy/go-control-plane",
