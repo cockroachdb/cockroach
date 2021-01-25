@@ -4,7 +4,6 @@ load("//pkg:STRINGER.bzl", "stringer")
 go_library(
     name = "privilege",
     srcs = [
-        "kind_string.go",
         "privilege.go",
         ":gen-kind-stringer",  # keep
     ],

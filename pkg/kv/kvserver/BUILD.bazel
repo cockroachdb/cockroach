@@ -25,7 +25,6 @@ go_library(
         "raft_log_queue.go",
         "raft_snapshot_queue.go",
         "raft_transport.go",
-        "refreshraftreason_string.go",
         "replica.go",
         "replica_application_cmd.go",
         "replica_application_cmd_buf.go",
