@@ -95,7 +95,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	}
 
 	streamID := execinfrapb.StreamID(1)
-	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */)
+	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(rowenc.OneIntCol)
 
 	// WaitGroup for the outbox and inbound stream. If the WaitGroup is done, no

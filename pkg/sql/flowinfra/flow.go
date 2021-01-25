@@ -15,11 +15,13 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -424,6 +426,20 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	// Release any descriptors accessed by this flow
 	if f.TypeResolverFactory != nil {
 		f.TypeResolverFactory.CleanupFunc(ctx)
+	}
+
+	if f.Gateway {
+		// If this is the gateway node, output the maximum memory usage to the flow
+		// span. Note that non-gateway nodes use the last outbox to send this
+		// information over.
+		if sp := tracing.SpanFromContext(ctx); sp != nil {
+			sp.SetSpanStats(&execinfrapb.ComponentStats{
+				Component: execinfrapb.FlowComponentID(roachpb.NodeID(f.NodeID.SQLInstanceID()), f.FlowCtx.ID),
+				FlowStats: execinfrapb.FlowStats{
+					MaxMemUsage: optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
+				},
+			})
+		}
 	}
 
 	// This closes the monitor opened in ServerImpl.setupFlow.
