@@ -108,7 +108,6 @@ genrule(
     cmd = """
       $(location :help-gen-test) < $< >$@
       mv -f $@.tmp $@
-      gofmt -s -w $@
     """,
     tools = [
         ":help-gen-test",
@@ -125,7 +124,6 @@ genrule(
     outs = ["help_messages.go"],
     cmd = """
       awk -f $(location :help.awk) < $(location :sql.y) > $@
-      gofmt -s -w $@
     """,
 )
 
