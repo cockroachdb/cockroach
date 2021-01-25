@@ -84,6 +84,7 @@ type ebsVolume struct {
 }
 
 const ebsDefaultVolumeSizeGB = 500
+const defaultEBSVolumeType = "gp3"
 
 // Set implements flag Value interface.
 func (d *ebsDisk) Set(s string) error {
@@ -824,7 +825,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
 		if len(p.opts.EBSVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
-			p.opts.DefaultEBSVolume.Disk.VolumeType = "gp2"
+			p.opts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
 		}
 
 		if p.opts.DefaultEBSVolume.Disk.VolumeType != "" {
