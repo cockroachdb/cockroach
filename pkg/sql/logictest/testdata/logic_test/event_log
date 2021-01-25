@@ -658,9 +658,9 @@ FROM system.eventlog
 WHERE "eventType" = 'create_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "sc", "Statement": "CREATE SCHEMA \"\".sc", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "s", "Statement": "CREATE SCHEMA \"\".s", "User": "root"}
-1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.sc", "Statement": "CREATE SCHEMA \"\".sc", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "root", "SchemaName": "test.s", "Statement": "CREATE SCHEMA \"\".s", "User": "root"}
+1  {"EventType": "create_schema", "Owner": "u", "SchemaName": "test.u", "Statement": "CREATE SCHEMA AUTHORIZATION u", "User": "root"}
 
 statement ok
 ALTER SCHEMA u RENAME TO t
@@ -670,7 +670,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'rename_schema'
 ----
-1  {"EventType": "rename_schema", "NewSchemaName": "t", "SchemaName": "u", "Statement": "ALTER SCHEMA \"\".u RENAME TO t", "User": "root"}
+1  {"EventType": "rename_schema", "NewSchemaName": "test.t", "SchemaName": "test.u", "Statement": "ALTER SCHEMA \"\".u RENAME TO t", "User": "root"}
 
 statement ok
 DROP SCHEMA s, t
@@ -684,10 +684,10 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_schema'
 ORDER BY "timestamp", info
 ----
-1  {"EventType": "drop_schema", "SchemaName": "eventlogtonewname", "Statement": "DROP SCHEMA \"\".eventlogtonewname", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "sc", "Statement": "DROP SCHEMA \"\".sc", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
-1  {"EventType": "drop_schema", "SchemaName": "t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.eventlogtonewname", "Statement": "DROP SCHEMA \"\".eventlogtonewname", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.sc", "Statement": "DROP SCHEMA \"\".sc", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.s", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
+1  {"EventType": "drop_schema", "SchemaName": "test.t", "Statement": "DROP SCHEMA \"\".s, \"\".t", "User": "root"}
 
 
 subtest eventlog_setting_disable
@@ -802,7 +802,7 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
 ORDER BY "timestamp", info
 ----
 1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "User": "root"}
-1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "ty", "User": "root"}
 1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "TypeName": "_ty", "User": "root"}
@@ -841,7 +841,7 @@ SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID'
 ORDER BY "timestamp", info
 ----
 1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
-1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "sc", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "v", "SchemaName": "atest.sc", "Statement": "REASSIGN OWNED BY testuser TO v", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.t", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.v", "User": "root"}
 1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "v", "Statement": "REASSIGN OWNED BY testuser TO v", "TableName": "atest.sc.s", "User": "root"}
