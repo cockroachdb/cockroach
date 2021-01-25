@@ -86,6 +86,20 @@ committing the change.
 
 Please follow the instructions above on updating the golang version, omitting the go-version-check.sh step.
 
+## Updating the `bazelbuilder` image
+
+The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. The process for updating the image is as follows:
+
+- Edit `build/bazelbuilder/Dockerfile` as desired.
+- Perform the normal sequence of steps for pushing a new Docker image (for `$TAG`, you can use the value of `date +%Y%m%d-%H%M%S`):
+```
+    docker build build/bazelbuilder
+    docker image tag $IMAGE_HASH cockroachdb/bazel:$TAG
+    docker image push cockroachdb/bazel:$TAG
+```
+- Then, update `build/teamcity-bazel.sh` with the new tag and commit all your changes.
+- Ensure the "Github CI (Optional)" job passes on your PR before merging.
+
 #  Dependencies
 
 Dependencies are managed using `go mod`. We use `go mod vendor` so that we can import and use non-Go files (e.g. protobuf files) using the [modvendor](https://github.com/goware/modvendor) script.
