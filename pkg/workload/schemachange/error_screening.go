@@ -472,15 +472,19 @@ func constraintIsUnique(
 }
 
 func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	// Note that we COALESCE because the column may not exist.
 	return scanBool(tx, `
-     SELECT (
-			 SELECT is_generated
-				 FROM information_schema.columns
-				WHERE table_schema = $1
-				  AND table_name = $2
-				  AND column_name = $3
-            )
-	         = 'YES'
+     SELECT COALESCE(
+        (
+            SELECT is_generated
+              FROM information_schema.columns
+             WHERE table_schema = $1
+               AND table_name = $2
+               AND column_name = $3
+        )
+        = 'YES',
+        false
+       );
 `, tableName.Schema(), tableName.Object(), columnName)
 }
 
