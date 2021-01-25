@@ -552,3 +552,15 @@ CREATE TABLE err_msg (x INT, y INT, z INT, PRIMARY KEY (x, y), INDEX i (z))
 
 statement error HINT: columns \[x y\] are implicitly part of index "i"'s key, include columns \[z x y\] in this order
 SHOW RANGE FROM INDEX err_msg@i FOR ROW (1)
+
+# Regression test for incorrectly handling an excessive number of values in
+# SPLIT/UNSPLIT AT statements (#59011).
+statement ok
+CREATE TABLE t59011 (id UUID NOT NULL DEFAULT gen_random_uuid(), level INT8 NULL DEFAULT 0:::INT8, CONSTRAINT "primary" PRIMARY KEY (id ASC), INDEX i59011 (level ASC));
+INSERT INTO t59011(level) SELECT 2 FROM generate_series(1, 10);
+
+statement error excessive number of values provided: expected 1, got 2
+ALTER INDEX i59011 SPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
+
+statement error excessive number of values provided: expected 1, got 2
+ALTER INDEX i59011 UNSPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
