@@ -295,13 +295,18 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 }
 
 func makeMetrics(internal bool) Metrics {
+	// fullTableIndexScan is only instantiated for non-internal queries.
+	var fullTableIndexScan *metric.Counter
+	if !internal {
+		fullTableIndexScan = metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal))
+	}
 	return Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
-			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
-			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
-			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
-
+			DistSQLSelectCount:        metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptFallbackCount:       metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			SQLOptPlanCacheHits:       metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheMisses:     metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
+			FullTableOrIndexScanCount: fullTableIndexScan,
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewLatency(getMetricMeta(MetaDistSQLExecLatency, internal),
 				6*metricsSampleInterval),

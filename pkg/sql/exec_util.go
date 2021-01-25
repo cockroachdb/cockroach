@@ -488,6 +488,12 @@ var (
 		Measurement: "Open SQL Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaFullTableOrIndexScan = metric.Metadata{
+		Name:        "sql.full.scan.count",
+		Help:        "Number of full table or index scans",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Below are the metadata for the statement started counters.
 
