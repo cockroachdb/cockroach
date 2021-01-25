@@ -73,6 +73,16 @@ func Refresh(
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
 	if intent != nil && intent.Txn.ID != h.Txn.ID {
+
+		// Ensure that the intent was not due to a descendant transaction.
+		// Such an intent would imply that a descendant invalidated a read of one of
+		// its ancestors. That is not allowed.
+		for j := range args.DescendantTxns {
+			if intent.Txn.ID == args.DescendantTxns[j] {
+				return result.Result{}, errors.AssertionFailedf(
+					"found illegal intent due to descendant %v at key %v", intent.Txn.ID, args.Key)
+			}
+		}
 		return result.Result{}, &roachpb.RefreshFailedError{
 			Key:       args.Key,
 			Timestamp: intent.Txn.WriteTimestamp,

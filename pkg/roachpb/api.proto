@@ -1583,6 +1583,12 @@ message RefreshRequest {
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
   util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false];
+
+  // DescendantTxns is a set of IDs of transactions descendant of the current
+  // transaction. Parent transactions should never encounter intents due to
+  // their descendants. Encountering such an intent must trigger an assertion
+  // failure as it is a programming error.
+  repeated bytes descendant_txns = 4 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // RefreshResponse is the response to a Refresh() operation.
@@ -1600,6 +1606,12 @@ message RefreshRangeRequest {
   // refresh_from specifies the lower-bound of the verification. The request verifies that
   // there's no write in the range [refresh_from, txn.read_timestamp].
   util.hlc.Timestamp refresh_from = 3 [(gogoproto.nullable) = false];
+
+  // DescendantTxns is a set of IDs of transactions descendant of the current
+  // transaction. Parent transactions should never encounter intents due to
+  // their descendants. Encountering such an intent must trigger an assertion
+  // failure as it is a programming error.
+  repeated bytes descendant_txns = 4 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // RefreshRangeResponse is the response to a RefreshRange() operation.

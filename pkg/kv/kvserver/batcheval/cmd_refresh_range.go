@@ -56,6 +56,12 @@ func RefreshRange(
 	// collected separately and the callback is only invoked on the latest
 	// committed version. Note also that we include tombstones, which must be
 	// considered as updates on refresh.
+	//
+	// TODO(ajwerner): The mechanics here related to intents are a bummer. Ideally
+	// we'd be able to process intents during an inconsistent iteration as they
+	// arise from inside the callback. Not being able to do so means that a
+	// conflict due to a descendant transaction may be hidden because of a
+	// different, committed, invalidating write.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
 	intents, err := storage.MVCCIterate(
 		ctx, reader, args.Key, args.EndKey, refreshTo,
@@ -77,19 +83,38 @@ func RefreshRange(
 	}
 
 	// Check if any intents which are not owned by this transaction were written
-	// at or beneath the refresh timestamp.
+	// at or beneath the refresh timestamp. If there are descendant txn IDs, then
+	// all of the intents need to be checked.
+	err = nil
 	for _, i := range intents {
 		// Ignore our own intents.
 		if i.Txn.ID == h.Txn.ID {
 			continue
 		}
-		// Return an error if an intent was written to the span.
-		return result.Result{}, &roachpb.RefreshFailedError{
+
+		// Ensure that the intent was not due to a descendant transaction.
+		// Such an intent would imply that a descendant invalidated a read of one of
+		// its ancestors. That is not allowed.
+		for j := range args.DescendantTxns {
+			if i.Txn.ID == args.DescendantTxns[j] {
+				return result.Result{}, errors.AssertionFailedf(
+					"found illegal intent due to descendant %v at key %v", i.Txn.ID, args.Key)
+			}
+		}
+
+		// If an error has already been created, don't create another.
+		if err != nil {
+			continue
+		}
+		err = &roachpb.RefreshFailedError{
 			Key:       i.Key,
 			Timestamp: i.Txn.WriteTimestamp,
 			Intent:    true,
 		}
+		if len(args.DescendantTxns) == 0 {
+			break
+		}
 	}
 
-	return result.Result{}, nil
+	return result.Result{}, err
 }
