@@ -138,6 +138,8 @@ func (m *roachmart) Hooks() workload.Hooks {
 			if !m.partition {
 				return nil
 			}
+			// Ignore error: 20.2 and earlier versions of Cockroach don't support this setting.
+			_, _ = db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`)
 			for _, z := range zones {
 				// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
 				// with 2.0 clusters we still need to try with it if the

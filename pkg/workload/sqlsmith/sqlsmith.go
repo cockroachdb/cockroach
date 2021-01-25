@@ -133,6 +133,9 @@ func (g *sqlSmith) Ops(
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
+	// Ignore error: 20.2 and earlier versions of Cockroach don't support this setting.
+	_, _ = db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`)
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))

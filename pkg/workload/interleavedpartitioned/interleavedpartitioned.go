@@ -747,6 +747,9 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			); err != nil {
 				return err
 			}
+			// Ignore error: 20.2 and earlier versions of Cockroach don't support this setting.
+			_, _ = db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`)
+
 			if _, err := db.Exec(
 				fmt.Sprintf(
 					"ALTER PARTITION west OF TABLE sessions CONFIGURE ZONE USING"+
