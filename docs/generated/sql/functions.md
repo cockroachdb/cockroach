@@ -969,15 +969,23 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="currval"></a><code>currval(sequence_name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the latest value obtained with nextval for this sequence in this session.</p>
 </span></td></tr>
+<tr><td><a name="currval"></a><code>currval(sequence_name: regclass) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the latest value obtained with nextval for this sequence in this session.</p>
+</span></td></tr>
 <tr><td><a name="lastval"></a><code>lastval() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return value most recently obtained with nextval in this session.</p>
 </span></td></tr>
 <tr><td><a name="nextval"></a><code>nextval(sequence_name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Advances the given sequence and returns its new value.</p>
+</span></td></tr>
+<tr><td><a name="nextval"></a><code>nextval(sequence_name: regclass) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Advances the given sequence and returns its new value.</p>
 </span></td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td></tr>
 <tr><td><a name="setval"></a><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. The next call to nextval will return <code>value + Increment</code></p>
 </span></td></tr>
 <tr><td><a name="setval"></a><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>, is_called: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. If is_called is false, the next call to nextval will return <code>value</code>; otherwise <code>value + Increment</code>.</p>
+</span></td></tr>
+<tr><td><a name="setval"></a><code>setval(sequence_name: regclass, value: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. The next call to nextval will return <code>value + Increment</code></p>
+</span></td></tr>
+<tr><td><a name="setval"></a><code>setval(sequence_name: regclass, value: <a href="int.html">int</a>, is_called: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value. If is_called is false, the next call to nextval will return <code>value</code>; otherwise <code>value + Increment</code>.</p>
 </span></td></tr></tbody>
 </table>
 

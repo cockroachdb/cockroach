@@ -3182,6 +3182,23 @@ type SequenceOperators interface {
 	// `newVal` is returned. Otherwise, the next call to nextval will return
 	// `newVal + seqOpts.Increment`.
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
+
+	// IncrementSequenceByID increments the given sequence and returns the result.
+	// It returns an error if the given ID is not a sequence.
+	// Takes in a sequence ID rather than a name, unlike IncrementSequence.
+	IncrementSequenceByID(ctx context.Context, seqID int64) (int64, error)
+
+	// GetLatestValueInSessionForSequenceByID returns the value most recently obtained by
+	// nextval() for the given sequence in this session.
+	// Takes in a sequence ID rather than a name, unlike GetLatestValueInSessionForSequence.
+	GetLatestValueInSessionForSequenceByID(ctx context.Context, seqID int64) (int64, error)
+
+	// SetSequenceValueByID sets the sequence's value.
+	// If isCalled is false, the sequence is set such that the next time nextval() is called,
+	// `newVal` is returned. Otherwise, the next call to nextval will return
+	// `newVal + seqOpts.Increment`.
+	// Takes in a sequence ID rather than a name, unlike SetSequenceValue.
+	SetSequenceValueByID(ctx context.Context, seqID int64, newVal int64, isCalled bool) error
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL

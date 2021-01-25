@@ -240,6 +240,13 @@ func (so *importSequenceOperators) IncrementSequence(
 }
 
 // Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) IncrementSequenceByID(
+	ctx context.Context, seqID int64,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
@@ -247,8 +254,22 @@ func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
 }
 
 // Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) GetLatestValueInSessionForSequenceByID(
+	ctx context.Context, seqID int64,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
+) error {
+	return errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) SetSequenceValueByID(
+	ctx context.Context, seqID int64, newVal int64, isCalled bool,
 ) error {
 	return errSequenceOperators
 }
