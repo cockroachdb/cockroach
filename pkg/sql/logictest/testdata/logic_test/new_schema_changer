@@ -1,0 +1,177 @@
+subtest add_column
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+query II rowsort
+SELECT * FROM foo
+----
+1  1
+
+statement ok
+DROP TABLE foo;
+
+subtest multi_add_column
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+DROP TABLE foo;
+
+subtest add_column_default
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo(i) VALUES (0)
+
+query I rowsort
+SELECT * FROM foo
+----
+0
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT DEFAULT 1
+
+statement ok
+INSERT INTO foo VALUES (1, 1)
+
+statement ok
+INSERT INTO foo(i) VALUES (2)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  1
+2  1
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_computed
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo VALUES (0);
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT AS (i+1) STORED
+
+statement ok
+INSERT INTO foo(i) VALUES (1)
+
+query II rowsort
+SELECT * FROM foo
+----
+0  1
+1  2
+
+statement ok
+DROP TABLE foo
+
+subtest add_column_families
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE foo ADD COLUMN j INT CREATE FAMILY f2
+
+statement ok
+ALTER TABLE foo ADD COLUMN k INT FAMILY f2
+
+statement ok
+INSERT INTO foo VALUES (1, 2, 3)
+
+query III rowsort
+SELECT * FROM foo
+----
+1  2  3
+
+statement ok
+DROP TABLE foo
+
+subtest multi_table
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY);
+CREATE TABLE bar (j INT PRIMARY KEY);
+
+statement ok
+SET experimental_use_new_schema_changer = 'unsafe_always'
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE foo ADD COLUMN a INT
+
+statement ok
+ALTER TABLE bar ADD COLUMN b INT
+
+statement ok
+COMMIT
+
+statement ok
+INSERT INTO foo VALUES (1, 2)
+
+query II colnames,rowsort
+SELECT * FROM foo
+----
+i  a
+1  2
+
+statement ok
+INSERT INTO bar VALUES (3, 4)
+
+query II colnames,rowsort
+SELECT * FROM bar
+----
+j  b
+3  4
+
+statement ok
+SET experimental_use_new_schema_changer = 'on'
+
+statement ok
+DROP TABLE foo, bar
