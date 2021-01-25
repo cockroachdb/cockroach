@@ -82,12 +82,34 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	if err != nil {
 		return 0, err
 	}
+	return incrementSequenceHelper(ctx, p, descriptor)
+}
+
+// IncrementSequenceByID implements the tree.SequenceOperators interface.
+func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64, error) {
+	if p.EvalContext().TxnReadOnly {
+		return 0, readOnlyError("nextval()")
+	}
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	if err != nil {
+		return 0, err
+	}
+	return incrementSequenceHelper(ctx, p, descriptor)
+}
+
+// incrementSequenceHelper is shared by IncrementSequence and IncrementSequenceByID
+// to increment the given sequence.
+func incrementSequenceHelper(
+	ctx context.Context, p *planner, descriptor catalog.TableDescriptor,
+) (int64, error) {
 	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
 		return 0, err
 	}
 
 	seqOpts := descriptor.GetSequenceOpts()
 	var val int64
+	var err error
 	if seqOpts.Virtual {
 		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
 		val = int64(rowid)
@@ -140,7 +162,31 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	if err != nil {
 		return 0, err
 	}
+	return getLatestValueInSessionForSequenceHelper(p, descriptor, seqName)
+}
 
+// GetLatestValueInSessionForSequenceByID implements the tree.SequenceOperators interface.
+func (p *planner) GetLatestValueInSessionForSequenceByID(
+	ctx context.Context, seqID int64,
+) (int64, error) {
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	if err != nil {
+		return 0, err
+	}
+	seqName, err := p.getQualifiedTableName(ctx, descriptor)
+	if err != nil {
+		return 0, err
+	}
+	return getLatestValueInSessionForSequenceHelper(p, descriptor, seqName)
+}
+
+// getLatestValueInSessionForSequenceHelper is shared by
+// GetLatestValueInSessionForSequence and GetLatestValueInSessionForSequenceByID
+// to get the latest value for the given sequence.
+func getLatestValueInSessionForSequenceHelper(
+	p *planner, descriptor catalog.TableDescriptor, seqName *tree.TableName,
+) (int64, error) {
 	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.GetID()))
 	if !ok {
 		return 0, pgerror.Newf(
@@ -164,6 +210,39 @@ func (p *planner) SetSequenceValue(
 	if err != nil {
 		return err
 	}
+	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
+}
+
+// SetSequenceValueByID implements the tree.SequenceOperators interface.
+func (p *planner) SetSequenceValueByID(
+	ctx context.Context, seqID int64, newVal int64, isCalled bool,
+) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("setval()")
+	}
+
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
+	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	if err != nil {
+		return err
+	}
+	seqName, err := p.getQualifiedTableName(ctx, descriptor)
+	if err != nil {
+		return err
+	}
+	return setSequenceValueHelper(ctx, p, descriptor, newVal, isCalled, seqName)
+}
+
+// setSequenceValueHelper is shared by SetSequenceValue and SetSequenceValueByID
+// to set the given sequence to a new given value.
+func setSequenceValueHelper(
+	ctx context.Context,
+	p *planner,
+	descriptor catalog.TableDescriptor,
+	newVal int64,
+	isCalled bool,
+	seqName *tree.TableName,
+) error {
 	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
 		return err
 	}
