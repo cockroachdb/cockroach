@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -202,7 +201,7 @@ func changefeedPlanHook(
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
 					StatementTimeName: table.GetName(),
 				}
-				if err := validateChangefeedTable(targets, table); err != nil {
+				if err := changefeedbase.ValidateTable(targets, table); err != nil {
 					return err
 				}
 			}
@@ -499,52 +498,6 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		}
 	}
 	return details, nil
-}
-
-func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc catalog.TableDescriptor,
-) error {
-	t, ok := targets[tableDesc.GetID()]
-	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
-	}
-
-	// Technically, the only non-user table known not to work is system.jobs
-	// (which creates a cycle since the resolved timestamp high-water mark is
-	// saved in it), but there are subtle differences in the way many of them
-	// work and this will be under-tested, so disallow them all until demand
-	// dictates.
-	if tableDesc.GetID() < keys.MinUserDescID {
-		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
-	}
-	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
-	}
-	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
-	}
-	if families := tableDesc.GetFamilies(); len(families) != 1 {
-		return errors.Errorf(
-			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.GetName(), len(families))
-	}
-
-	if tableDesc.GetState() == descpb.DescriptorState_DROP {
-		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
-	}
-	if tableDesc.GetName() != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
-	}
-
-	// TODO(mrtracy): re-enable this when allow-backfill option is added.
-	// if tableDesc.HasColumnBackfillMutation() {
-	// 	return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
-	// }
-
-	return nil
 }
 
 type changefeedResumer struct {

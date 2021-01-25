@@ -1468,8 +1468,8 @@ func TestChangefeedTruncateRenameDrop(t *testing.T) {
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
-		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped or truncated`) {
-			t.Errorf(`expected ""drop" was dropped or truncated" error got: %+v`, err)
+		if _, err := drop.Next(); !testutils.IsError(err, `"drop" was dropped`) {
+			t.Errorf(`expected ""drop" was dropped" error got: %+v`, err)
 		}
 		assertFailuresCounter(t, metrics, 4)
 	}
