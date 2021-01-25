@@ -196,8 +196,8 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// However we log an event when forced to retry (in case we need to debug)
 			// slow requests or something, so we can inspect the trace in the test to
 			// determine if requests required the expected number of retries.
-
-			addCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, "add")
+			tr := s.Tracer().(*tracing.Tracer)
+			addCtx, getRec, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "add")
 			defer cancel()
 			expectedSplitRetries := 0
 			for _, batch := range testCase {
