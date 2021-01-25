@@ -747,6 +747,10 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 			); err != nil {
 				return err
 			}
+			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+				return err
+			}
+
 			if _, err := db.Exec(
 				fmt.Sprintf(
 					"ALTER PARTITION west OF TABLE sessions CONFIGURE ZONE USING"+
