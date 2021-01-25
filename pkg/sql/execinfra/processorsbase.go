@@ -893,6 +893,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 		// Reset the context so that any incidental uses after this point do not
 		// access the finished span.
 		pb.Ctx = pb.origCtx
+		pb.EvalCtx.Context = pb.origCtx
 
 		// This prevents Next() from returning more rows.
 		pb.Out.consumerClosed()
