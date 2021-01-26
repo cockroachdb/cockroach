@@ -272,7 +272,9 @@ func prepareRightReplicaForSplit(
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
 	// the txnWaitQueue.
-	rightRepl.leasePostApply(ctx, rightLease, false /* permitJump */)
+	rightRepl.mu.Lock()
+	defer rightRepl.mu.Unlock()
+	rightRepl.leasePostApplyLocked(ctx, rightLease, false /* permitJump */)
 	return rightRepl
 }
 
