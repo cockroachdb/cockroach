@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -23,6 +24,7 @@ import (
 
 func TestEncryptDecrypt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 59417, "flaky test")
 
 	passphrase := []byte("this is a a key")
 	salt, err := GenerateSalt()
