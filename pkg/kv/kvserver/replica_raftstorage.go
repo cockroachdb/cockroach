@@ -768,7 +768,7 @@ func (r *Replica) applySnapshot(
 		if err == nil {
 			desc, err := r.GetReplicaDescriptor()
 			if err != nil {
-				log.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot")
+				log.Fatalf(ctx, "could not fetch replica descriptor for range after applying snapshot: %v", err)
 			}
 			if isInitialSnap {
 				r.store.metrics.RangeSnapshotsAppliedForInitialUpreplication.Inc(1)

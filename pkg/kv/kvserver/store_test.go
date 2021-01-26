@@ -810,231 +810,6 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	}
 }
 
-func TestStoreVisitReplicasByKey(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	s, _ := createTestStore(t,
-		testStoreOpts{
-			// This test controls the ranges explicitly.
-			createSystemRanges: false,
-		},
-		stopper)
-
-	// Remove range 1.
-	repl1, err := s.GetReplica(1)
-	require.NoError(t, err)
-	err = s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	})
-	require.NoError(t, err)
-
-	// Add 10 new ranges.
-	const newCount = 10
-	ranges := make([]roachpb.RSpan, 0)
-	for i := 0; i < newCount; i++ {
-		start := roachpb.RKey(fmt.Sprintf("a%02d", i))
-		end := roachpb.RKey(fmt.Sprintf("a%02d", i+1))
-		err = s.AddReplica(createReplica(s, roachpb.RangeID(i+1), start, end))
-		ranges = append(ranges, roachpb.RSpan{Key: start, EndKey: end})
-		require.NoError(t, err)
-	}
-
-	tests := []struct {
-		name       string
-		start, end roachpb.RKey
-		exp        []roachpb.RSpan
-	}{
-		{
-			name:  "all ranges",
-			start: roachpb.RKeyMin,
-			end:   roachpb.RKeyMax,
-			exp:   ranges,
-		},
-		{
-			name:  "some ranges",
-			start: ranges[3].Key,
-			end:   ranges[6].EndKey,
-			exp:   ranges[3:7],
-		},
-		{
-			name:  "some ranges, inexact boundaries",
-			start: ranges[3].Key.Next(),
-			end:   ranges[6].Key.Next(),
-			exp:   ranges[3:7],
-		},
-		{
-			name:  "within range",
-			start: ranges[6].Key.Next(),
-			end:   ranges[6].Key.Next().Next(),
-			exp:   ranges[6:7],
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			// Iterate ascendingly.
-			var visited []roachpb.RSpan
-			s.VisitReplicasByKey(ctx, tc.start, tc.end, AscendingKeyOrder, func(_ context.Context, r KeyRange) bool {
-				visited = append(visited, r.Desc().RSpan())
-				return true
-			})
-			require.Equal(t, tc.exp, visited, tc.exp)
-
-			// Iterate descendingly.
-			visited = visited[:0]
-			s.VisitReplicasByKey(ctx, tc.start, tc.end, DescendingKeyOrder, func(_ context.Context, r KeyRange) bool {
-				visited = append(visited, r.Desc().RSpan())
-				return true
-			})
-			// Reverse the expected values.
-			exp := make([]roachpb.RSpan, len(tc.exp))
-			for i, sp := range tc.exp {
-				exp[len(exp)-i-1] = sp
-			}
-			require.Equal(t, exp, visited)
-		})
-	}
-}
-
-func TestHasOverlappingReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	store, _ := createTestStore(t,
-		testStoreOpts{
-			// This test was written before test stores could start with more than one
-			// range and was not adapted.
-			createSystemRanges: false,
-		},
-		stopper)
-	if _, err := store.GetReplica(0); err == nil {
-		t.Error("expected GetRange to fail on missing range")
-	}
-	// Range 1 already exists. Make sure we can fetch it.
-	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	// Remove range 1.
-	if err := store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
-
-	// Create ranges.
-	rngDescs := []struct {
-		id         int
-		start, end roachpb.RKey
-	}{
-		{2, roachpb.RKey("b"), roachpb.RKey("c")},
-		{3, roachpb.RKey("c"), roachpb.RKey("d")},
-		{4, roachpb.RKey("d"), roachpb.RKey("f")},
-	}
-
-	for _, desc := range rngDescs {
-		repl := createReplica(store, roachpb.RangeID(desc.id), desc.start, desc.end)
-		if err := store.AddReplica(repl); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	testCases := []struct {
-		start, end roachpb.RKey
-		exp        bool
-	}{
-		{roachpb.RKey("a"), roachpb.RKey("c"), true},
-		{roachpb.RKey("b"), roachpb.RKey("c"), true},
-		{roachpb.RKey("b"), roachpb.RKey("d"), true},
-		{roachpb.RKey("d"), roachpb.RKey("e"), true},
-		{roachpb.RKey("d"), roachpb.RKey("g"), true},
-		{roachpb.RKey("e"), roachpb.RKey("e\x00"), true},
-
-		{roachpb.RKey("f"), roachpb.RKey("g"), false},
-		{roachpb.RKey("a"), roachpb.RKey("b"), false},
-	}
-
-	for i, test := range testCases {
-		rngDesc := &roachpb.RangeDescriptor{StartKey: test.start, EndKey: test.end}
-		if r := store.getOverlappingKeyRangeLocked(rngDesc) != nil; r != test.exp {
-			t.Errorf("%d: expected range %v; got %v", i, test.exp, r)
-		}
-	}
-}
-
-func TestLookupPrecedingReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store, _ := createTestStore(t,
-		testStoreOpts{
-			// This test was written before test stores could start with more than one
-			// range and was not adapted.
-			createSystemRanges: false,
-		},
-		stopper)
-
-	// Clobber the existing range so we can test ranges that aren't KeyMin or
-	// KeyMax.
-	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	repl2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(repl2); err != nil {
-		t.Fatal(err)
-	}
-	repl3 := createReplica(store, 3, roachpb.RKey("b"), roachpb.RKey("c"))
-	if err := store.AddReplica(repl3); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.addPlaceholder(&ReplicaPlaceholder{rangeDesc: roachpb.RangeDescriptor{
-		RangeID: 4, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("d"),
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	repl5 := createReplica(store, 5, roachpb.RKey("e"), roachpb.RKey("f"))
-	if err := store.AddReplica(repl5); err != nil {
-		t.Fatal(err)
-	}
-
-	for i, tc := range []struct {
-		key     roachpb.RKey
-		expRepl *Replica
-	}{
-		{roachpb.RKeyMin, nil},
-		{roachpb.RKey("a"), nil},
-		{roachpb.RKey("aa"), nil},
-		{roachpb.RKey("b"), repl2},
-		{roachpb.RKey("bb"), repl2},
-		{roachpb.RKey("c"), repl3},
-		{roachpb.RKey("cc"), repl3},
-		{roachpb.RKey("d"), repl3},
-		{roachpb.RKey("dd"), repl3},
-		{roachpb.RKey("e"), repl3},
-		{roachpb.RKey("ee"), repl3},
-		{roachpb.RKey("f"), repl5},
-		{roachpb.RKeyMax, repl5},
-	} {
-		if repl := store.lookupPrecedingReplica(tc.key); repl != tc.expRepl {
-			t.Errorf("%d: expected replica %v; got %v", i, tc.expRepl, repl)
-		}
-	}
-}
-
 func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1414,9 +1189,9 @@ func TestStoreSendBadRange(t *testing.T) {
 // TestServerInterface.
 // See #702
 // TODO(bdarnell): convert tests that use this function to use AdminSplit instead.
-func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Replica {
+func splitTestRange(store *Store, splitKey roachpb.RKey, t *testing.T) *Replica {
 	ctx := context.Background()
-	repl := store.LookupReplica(key)
+	repl := store.LookupReplica(splitKey)
 	require.NotNil(t, repl)
 	rangeID, err := store.AllocateRangeID(ctx)
 	require.NoError(t, err)
@@ -1447,7 +1222,8 @@ func TestStoreSendOutOfRange(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
-	repl2 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey(roachpb.Key("b")), t)
+	splitKey := roachpb.RKey("b")
+	repl2 := splitTestRange(store, splitKey, t)
 
 	// Range 1 is from KeyMin to "b", so reading "b" from range 1 should
 	// fail because it's just after the range boundary.
@@ -1510,10 +1286,10 @@ func TestStoreReplicasByKey(t *testing.T) {
 		stopper)
 
 	r0 := store.LookupReplica(roachpb.RKeyMin)
-	r1 := splitTestRange(store, roachpb.RKeyMin, roachpb.RKey("A"), t)
-	r2 := splitTestRange(store, roachpb.RKey("A"), roachpb.RKey("C"), t)
-	r3 := splitTestRange(store, roachpb.RKey("C"), roachpb.RKey("X"), t)
-	r4 := splitTestRange(store, roachpb.RKey("X"), roachpb.RKey("ZZ"), t)
+	r1 := splitTestRange(store, roachpb.RKey("A"), t)
+	r2 := splitTestRange(store, roachpb.RKey("C"), t)
+	r3 := splitTestRange(store, roachpb.RKey("X"), t)
+	r4 := splitTestRange(store, roachpb.RKey("ZZ"), t)
 
 	if r := store.LookupReplica(roachpb.RKey("0")); r != r0 {
 		t.Errorf("mismatched replica %s != %s", r, r0)
@@ -1569,14 +1345,11 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
 			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(
-			store, roachpb.RKeyMin, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
+		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), t),
 			1 << 20},
-		{splitTestRange(
-			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
+		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), t),
 			*store.cfg.DefaultZoneConfig.RangeMaxBytes},
-		{splitTestRange(
-			store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+1)), roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
+		{splitTestRange(store, roachpb.RKey(keys.SystemSQLCodec.TablePrefix(baseID+2)), t),
 			2 << 20},
 	}
 
@@ -2872,7 +2645,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	if err := s.addPlaceholderLocked(placeholder1); err != nil {
 		t.Fatalf("could not re-add placeholder after removal, got %s", err)
 	}
-	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
+	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing") {
 		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %+v", err)
 	}
 
@@ -2894,7 +2667,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that placeholder cannot clobber existing replica.
-	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing KeyRange") {
+	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing") {
 		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %+v", err)
 	}
 

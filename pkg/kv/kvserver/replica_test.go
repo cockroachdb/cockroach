@@ -936,7 +936,7 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 
 	key := roachpb.RKey("a")
 	firstRepl := tc.store.LookupReplica(key)
-	newRepl := splitTestRange(tc.store, key, key, t)
+	newRepl := splitTestRange(tc.store, key, t)
 	if _, pErr := newRepl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -4789,7 +4789,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	splitKey := roachpb.RKey("c")
-	splitTestRange(tc.store, splitKey, splitKey, t)
+	splitTestRange(tc.store, splitKey, t)
 	key := roachpb.Key("a")
 	putKey := key
 	for i, test := range []struct {
@@ -4839,7 +4839,7 @@ func setupResolutionTest(
 	t *testing.T, tc testContext, key roachpb.Key, splitKey roachpb.RKey, commit bool,
 ) (*Replica, *roachpb.Transaction) {
 	// Split the range and create an intent at splitKey and key.
-	newRepl := splitTestRange(tc.store, splitKey, splitKey, t)
+	newRepl := splitTestRange(tc.store, splitKey, t)
 
 	txn := newTransaction("test", key, 1, tc.Clock())
 	// This increment is not required, but testing feels safer when zero
@@ -7365,7 +7365,7 @@ func TestGCIncorrectRange(t *testing.T) {
 	// Split range into two ranges.
 	splitKey := roachpb.RKey("c")
 	repl1 := tc.repl
-	repl2 := splitTestRange(tc.store, splitKey, splitKey, t)
+	repl2 := splitTestRange(tc.store, splitKey, t)
 
 	// Write a key to range 2 at two different timestamps so we can
 	// GC the earlier timestamp without needing to delete it.

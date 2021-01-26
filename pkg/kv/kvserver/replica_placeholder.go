@@ -60,20 +60,20 @@ type ReplicaPlaceholder struct {
 	rangeDesc roachpb.RangeDescriptor
 }
 
-var _ KeyRange = &ReplicaPlaceholder{}
+var _ rangeKeyItem = (*ReplicaPlaceholder)(nil)
 
 // Desc returns the range Placeholder's descriptor.
 func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 	return &r.rangeDesc
 }
 
-func (r *ReplicaPlaceholder) startKey() roachpb.RKey {
+func (r *ReplicaPlaceholder) key() roachpb.RKey {
 	return r.Desc().StartKey
 }
 
 // Less implements the btree.Item interface.
 func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
-	return r.Desc().StartKey.Less(i.(rangeKeyItem).startKey())
+	return r.Desc().StartKey.Less(i.(rangeKeyItem).key())
 }
 
 func (r *ReplicaPlaceholder) String() string {
