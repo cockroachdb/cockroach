@@ -805,68 +805,88 @@ func NewColOperator(
 				// hash aggregators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
 				// a disk-backed one here.
-				//
-				// We will divide the available memory equally between the two
-				// usages - the hash aggregation itself and the input tuples
-				// tracking.
-				totalMemLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
 				hashAggregatorMemMonitorName := fmt.Sprintf("hash-aggregator-%d", spec.ProcessorID)
-				hashAggregatorMemAccount := result.createMemAccountForSpillStrategyWithLimit(
-					ctx, flowCtx, hashAggregatorMemMonitorName, totalMemLimit/2,
-				)
-				newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
-				newAggArgs.MemAccount = hashAggregatorMemAccount
-				spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
-				// We need to create a separate memory account for the spilling
-				// queue because it looks at how much memory it has already used
-				// in order to decide when to spill to disk.
-				spillingQueueMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, spillingQueueMemMonitorName)
-				spillingQueueCfg := args.DiskQueueCfg
-				spillingQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
-				spillingQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
-				var inMemoryHashAggregator colexecbase.Operator
-				inMemoryHashAggregator, err = colexec.NewHashAggregator(
-					newAggArgs,
-					&colexec.NewSpillingQueueArgs{
-						UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
-						Types:              inputTypes,
-						MemoryLimit:        totalMemLimit / 2,
-						DiskQueueCfg:       spillingQueueCfg,
-						FDSemaphore:        args.FDSemaphore,
-						DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName),
-					},
-				)
-				ehaMonitorNamePrefix := fmt.Sprintf("external-hash-aggregator-%d", spec.ProcessorID)
-				ehaMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, ehaMonitorNamePrefix)
-				// Note that we will use an unlimited memory account here even
-				// for the in-memory hash aggregator since it is easier to do so
-				// than to try to replace the memory account if the spilling to
-				// disk occurs (if we don't replace it in such case, the wrapped
-				// aggregate functions might hit a memory error even when used
-				// by the external hash aggregator).
-				evalCtx.SingleDatumAggMemAccount = ehaMemAccount
-				result.Op = colexec.NewOneInputDiskSpiller(
-					inputs[0], inMemoryHashAggregator.(colexecbase.BufferingInMemoryOperator),
-					hashAggregatorMemMonitorName,
-					func(input colexecbase.Operator) colexecbase.Operator {
-						newAggArgs := *newAggArgs
-						// Note that the hash-based partitioner will make sure
-						// that partitions to process using the in-memory hash
-						// aggregator fit under the limit, so we use an
-						// unlimited allocator.
-						newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
-						newAggArgs.MemAccount = ehaMemAccount
-						newAggArgs.Input = input
-						return colexec.NewExternalHashAggregator(
-							flowCtx,
-							args,
-							&newAggArgs,
-							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaMonitorNamePrefix, factory),
-							result.createDiskAccount(ctx, flowCtx, ehaMonitorNamePrefix),
-						)
-					},
-					args.TestingKnobs.SpillingCallbackFn,
-				)
+				diskSpillingDisabled := !colexec.HashAggregationDiskSpillingEnabled.Get(&flowCtx.Cfg.Settings.SV)
+				if diskSpillingDisabled {
+					// The disk spilling is disabled by the cluster setting, so
+					// we give an unlimited memory account to the in-memory
+					// hash aggregator and don't set up the disk spiller.
+					hashAggregatorUnlimitedMemAccount := result.createBufferingUnlimitedMemAccount(
+						ctx, flowCtx, hashAggregatorMemMonitorName,
+					)
+					newAggArgs.Allocator = colmem.NewAllocator(
+						ctx, hashAggregatorUnlimitedMemAccount, factory,
+					)
+					newAggArgs.MemAccount = hashAggregatorUnlimitedMemAccount
+					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
+					// The second argument is nil because we disable the
+					// tracking of the input tuples.
+					result.Op, err = colexec.NewHashAggregator(newAggArgs, nil /* newSpillingQueueArgs */)
+				} else {
+					// We will divide the available memory equally between the
+					// two usages - the hash aggregation itself and the input
+					// tuples tracking.
+					totalMemLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+					hashAggregatorMemAccount := result.createMemAccountForSpillStrategyWithLimit(
+						ctx, flowCtx, hashAggregatorMemMonitorName, totalMemLimit/2,
+					)
+					spillingQueueMemMonitorName := hashAggregatorMemMonitorName + "-spilling-queue"
+					// We need to create a separate memory account for the
+					// spilling queue because it looks at how much memory it has
+					// already used in order to decide when to spill to disk.
+					spillingQueueMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, spillingQueueMemMonitorName)
+					spillingQueueCfg := args.DiskQueueCfg
+					spillingQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
+					spillingQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
+					newAggArgs.Allocator = colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory)
+					newAggArgs.MemAccount = hashAggregatorMemAccount
+					var inMemoryHashAggregator colexecbase.Operator
+					inMemoryHashAggregator, err = colexec.NewHashAggregator(
+						newAggArgs,
+						&colexec.NewSpillingQueueArgs{
+							UnlimitedAllocator: colmem.NewAllocator(ctx, spillingQueueMemAccount, factory),
+							Types:              inputTypes,
+							MemoryLimit:        totalMemLimit / 2,
+							DiskQueueCfg:       spillingQueueCfg,
+							FDSemaphore:        args.FDSemaphore,
+							DiskAcc:            result.createDiskAccount(ctx, flowCtx, spillingQueueMemMonitorName),
+						},
+					)
+					if err != nil {
+						return r, err
+					}
+					ehaMonitorNamePrefix := fmt.Sprintf("external-hash-aggregator-%d", spec.ProcessorID)
+					ehaMemAccount := result.createBufferingUnlimitedMemAccount(ctx, flowCtx, ehaMonitorNamePrefix)
+					// Note that we will use an unlimited memory account here
+					// even for the in-memory hash aggregator since it is easier
+					// to do so than to try to replace the memory account if the
+					// spilling to disk occurs (if we don't replace it in such
+					// case, the wrapped aggregate functions might hit a memory
+					// error even when used by the external hash aggregator).
+					evalCtx.SingleDatumAggMemAccount = ehaMemAccount
+					result.Op = colexec.NewOneInputDiskSpiller(
+						inputs[0], inMemoryHashAggregator.(colexecbase.BufferingInMemoryOperator),
+						hashAggregatorMemMonitorName,
+						func(input colexecbase.Operator) colexecbase.Operator {
+							newAggArgs := *newAggArgs
+							// Note that the hash-based partitioner will make
+							// sure that partitions to process using the
+							// in-memory hash aggregator fit under the limit, so
+							// we use an unlimited allocator.
+							newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
+							newAggArgs.MemAccount = ehaMemAccount
+							newAggArgs.Input = input
+							return colexec.NewExternalHashAggregator(
+								flowCtx,
+								args,
+								&newAggArgs,
+								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaMonitorNamePrefix, factory),
+								result.createDiskAccount(ctx, flowCtx, ehaMonitorNamePrefix),
+							)
+						},
+						args.TestingKnobs.SpillingCallbackFn,
+					)
+				}
 			} else {
 				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
 				newAggArgs.Allocator = streamingAllocator

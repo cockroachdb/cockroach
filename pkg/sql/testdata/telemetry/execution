@@ -15,3 +15,18 @@ feature-usage
 SET CLUSTER SETTING sql.defaults.vectorize='off'
 ----
 sql.exec.vectorized-setting.off
+
+# Test for the hash aggregation disk spilling counter. Note that it is
+# incremented only when changing the setting to `false`.
+feature-allowlist
+sql.exec.hash-agg-spilling-disabled
+----
+
+feature-counters
+SET CLUSTER SETTING sql.distsql.temp_storage.hash_agg.enabled=false
+----
+sql.exec.hash-agg-spilling-disabled  1
+
+feature-counters
+SET CLUSTER SETTING sql.distsql.temp_storage.hash_agg.enabled=true
+----
