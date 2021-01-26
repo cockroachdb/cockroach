@@ -57,6 +57,7 @@ describe("statementsDiagnostics sagas", () => {
     });
 
     it("failed request", () => {
+      const error = new Error("Failed request");
       expectSaga(
         createDiagnosticsReportSaga,
         actions.createReport(statementFingerprint),
@@ -64,11 +65,11 @@ describe("statementsDiagnostics sagas", () => {
         .provide([
           [
             call(createStatementDiagnosticsReport, statementFingerprint),
-            throwError(new Error("Failed request")),
+            throwError(error),
           ],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
-        .put(actions.createReportFailed())
+        .put(actions.createReportFailed(error))
         .run();
     });
   });
