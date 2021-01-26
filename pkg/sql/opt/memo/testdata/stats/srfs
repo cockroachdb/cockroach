@@ -162,12 +162,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── immutable
- ├── stats: [rows=9.85601173, distinct(1)=9.85601173, null(1)=0]
+ ├── stats: [rows=9.85601174, distinct(1)=9.85601174, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:11(string!null) unnest:12(string) generate_series:13(int) lower:14(string)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=9.85601173, null(1)=0, distinct(4)=9.9, null(4)=0, distinct(11)=9.9, null(11)=0]
+      ├── stats: [rows=9.90000001, distinct(1)=9.85601174, null(1)=0, distinct(4)=9.90000001, null(4)=0, distinct(11)=9.90000001, null(11)=0]
       ├── fd: (1)-->(4,6), (4)==(11), (11)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:11(string) unnest:12(string) generate_series:13(int) lower:14(string)
@@ -264,12 +264,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── immutable
- ├── stats: [rows=9.85601173, distinct(1)=9.85601173, null(1)=0]
+ ├── stats: [rows=9.85601174, distinct(1)=9.85601174, null(1)=0]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:11(string) unnest:12(string) generate_series:13(int) lower:14(string!null)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=9.85601173, null(1)=0, distinct(4)=1e-10, null(4)=0, distinct(14)=1e-10, null(14)=0]
+      ├── stats: [rows=9.90000001, distinct(1)=9.85601174, null(1)=0, distinct(4)=1e-10, null(4)=0, distinct(14)=1e-10, null(14)=0]
       ├── fd: (1)-->(4,6), (4)==(14), (14)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:11(string) unnest:12(string) generate_series:13(int) lower:14(string)

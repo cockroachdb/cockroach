@@ -427,7 +427,7 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
-func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
+func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {
 	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
@@ -436,8 +436,8 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		n := b.NumRange
 		d := b.DistinctRange
 
-		b.NumEq *= selectivity
-		b.NumRange *= selectivity
+		b.NumEq *= selectivity.selectivity
+		b.NumRange *= selectivity.selectivity
 
 		if d == 0 {
 			continue
@@ -449,7 +449,7 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		//
 		// This formula returns d * selectivity when d=n but is closer to d
 		// when d << n.
-		b.DistinctRange = d - d*math.Pow(1-selectivity, n/d)
+		b.DistinctRange = d - d*math.Pow(1-selectivity.selectivity, n/d)
 	}
 	return res
 }

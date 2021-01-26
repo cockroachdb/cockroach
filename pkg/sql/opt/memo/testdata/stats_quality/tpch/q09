@@ -186,244 +186,244 @@ sort
 
 ----Stats for q9_sort_1----
 column_names  row_count  distinct_count  null_count
-{nation}      175        25              0
-{o_year}      175        7               0
-{sum_profit}  175        175             0
+{nation}      0          0               0
+{o_year}      0          0               0
+{sum_profit}  0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{nation}      1548.00        8.85 <==       25.00               1.00                0.00            1.00
-{o_year}      1548.00        8.85 <==       957.00              136.71 <==          0.00            1.00
-{sum_profit}  1548.00        8.85 <==       1548.00             8.85 <==            0.00            1.00
+{nation}      1548.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{o_year}      1548.00        +Inf <==       957.00              +Inf <==            0.00            1.00
+{sum_profit}  1548.00        +Inf <==       1548.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_group_by_2----
 column_names  row_count  distinct_count  null_count
-{n_name}      175        25              0
-{o_year}      175        7               0
-{sum}         175        175             0
+{n_name}      0          0               0
+{o_year}      0          0               0
+{sum}         0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}      1548.00        8.85 <==       25.00               1.00                0.00            1.00
-{o_year}      1548.00        8.85 <==       957.00              136.71 <==          0.00            1.00
-{sum}         1548.00        8.85 <==       1548.00             8.85 <==            0.00            1.00
+{n_name}      1548.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{o_year}      1548.00        +Inf <==       957.00              +Inf <==            0.00            1.00
+{sum}         1548.00        +Inf <==       1548.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_project_3----
 column_names  row_count  distinct_count  null_count
-{amount}      319404     315234          0
-{n_name}      319404     25              0
-{o_year}      319404     7               0
+{amount}      0          0               0
+{n_name}      0          0               0
+{o_year}      0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{amount}      2450.00        130.37 <==     958.00              329.05 <==          0.00            1.00
-{n_name}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
-{o_year}      2450.00        130.37 <==     957.00              136.71 <==          0.00            1.00
+{amount}      2450.00        +Inf <==       958.00              +Inf <==            0.00            1.00
+{n_name}      2450.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{o_year}      2450.00        +Inf <==       957.00              +Inf <==            0.00            1.00
 
 ----Stats for q9_inner_join_4----
 column_names       row_count  distinct_count  null_count
-{l_discount}       319404     11              0
-{l_extendedprice}  319404     212580          0
-{l_orderkey}       319404     288573          0
-{l_partkey}        319404     10632           0
-{l_quantity}       319404     50              0
-{l_suppkey}        319404     9799            0
-{n_name}           319404     25              0
-{n_nationkey}      319404     25              0
-{o_orderdate}      319404     2406            0
-{o_orderkey}       319404     288573          0
-{p_name}           319404     10680           0
-{p_partkey}        319404     10632           0
-{ps_partkey}       319404     10632           0
-{ps_suppkey}       319404     9799            0
-{ps_supplycost}    319404     34839           0
-{s_nationkey}      319404     25              0
-{s_suppkey}        319404     9799            0
+{l_discount}       0          0               0
+{l_extendedprice}  0          0               0
+{l_orderkey}       0          0               0
+{l_partkey}        0          0               0
+{l_quantity}       0          0               0
+{l_suppkey}        0          0               0
+{n_name}           0          0               0
+{n_nationkey}      0          0               0
+{o_orderdate}      0          0               0
+{o_orderkey}       0          0               0
+{p_name}           0          0               0
+{p_partkey}        0          0               0
+{ps_partkey}       0          0               0
+{ps_suppkey}       0          0               0
+{ps_supplycost}    0          0               0
+{s_nationkey}      0          0               0
+{s_suppkey}        0          0               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       2450.00        130.37 <==     11.00               1.00                0.00            1.00
-{l_extendedprice}  2450.00        130.37 <==     958.00              221.90 <==          0.00            1.00
-{l_orderkey}       2450.00        130.37 <==     1066.00             270.71 <==          0.00            1.00
-{l_partkey}        2450.00        130.37 <==     1065.00             9.98 <==            0.00            1.00
-{l_quantity}       2450.00        130.37 <==     50.00               1.00                0.00            1.00
-{l_suppkey}        2450.00        130.37 <==     1065.00             9.20 <==            0.00            1.00
-{n_name}           2450.00        130.37 <==     25.00               1.00                0.00            1.00
-{n_nationkey}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
-{o_orderdate}      2450.00        130.37 <==     957.00              2.51 <==            0.00            1.00
-{o_orderkey}       2450.00        130.37 <==     1066.00             270.71 <==          0.00            1.00
-{p_name}           2450.00        130.37 <==     2406.00             4.44 <==            0.00            1.00
-{p_partkey}        2450.00        130.37 <==     1065.00             9.98 <==            0.00            1.00
-{ps_partkey}       2450.00        130.37 <==     958.00              11.10 <==           0.00            1.00
-{ps_suppkey}       2450.00        130.37 <==     958.00              10.23 <==           0.00            1.00
-{ps_supplycost}    2450.00        130.37 <==     957.00              36.40 <==           0.00            1.00
-{s_nationkey}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
-{s_suppkey}        2450.00        130.37 <==     1065.00             9.20 <==            0.00            1.00
+{l_discount}       2450.00        +Inf <==       11.00               +Inf <==            0.00            1.00
+{l_extendedprice}  2450.00        +Inf <==       958.00              +Inf <==            0.00            1.00
+{l_orderkey}       2450.00        +Inf <==       1066.00             +Inf <==            0.00            1.00
+{l_partkey}        2450.00        +Inf <==       1065.00             +Inf <==            0.00            1.00
+{l_quantity}       2450.00        +Inf <==       50.00               +Inf <==            0.00            1.00
+{l_suppkey}        2450.00        +Inf <==       1065.00             +Inf <==            0.00            1.00
+{n_name}           2450.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{n_nationkey}      2450.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{o_orderdate}      2450.00        +Inf <==       957.00              +Inf <==            0.00            1.00
+{o_orderkey}       2450.00        +Inf <==       1066.00             +Inf <==            0.00            1.00
+{p_name}           2450.00        +Inf <==       2406.00             +Inf <==            0.00            1.00
+{p_partkey}        2450.00        +Inf <==       1065.00             +Inf <==            0.00            1.00
+{ps_partkey}       2450.00        +Inf <==       958.00              +Inf <==            0.00            1.00
+{ps_suppkey}       2450.00        +Inf <==       958.00              +Inf <==            0.00            1.00
+{ps_supplycost}    2450.00        +Inf <==       957.00              +Inf <==            0.00            1.00
+{s_nationkey}      2450.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{s_suppkey}        2450.00        +Inf <==       1065.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_inner_join_5----
 column_names       row_count  distinct_count  null_count
-{l_discount}       319404     11              0
-{l_extendedprice}  319404     212580          0
-{l_orderkey}       319404     288573          0
-{l_partkey}        319404     10632           0
-{l_quantity}       319404     50              0
-{l_suppkey}        319404     9799            0
-{o_orderdate}      319404     2406            0
-{o_orderkey}       319404     288573          0
-{p_name}           319404     10680           0
-{p_partkey}        319404     10632           0
-{ps_partkey}       319404     10632           0
-{ps_suppkey}       319404     9799            0
-{ps_supplycost}    319404     34839           0
-{s_nationkey}      319404     25              0
-{s_suppkey}        319404     9799            0
+{l_discount}       0          0               0
+{l_extendedprice}  0          0               0
+{l_orderkey}       0          0               0
+{l_partkey}        0          0               0
+{l_quantity}       0          0               0
+{l_suppkey}        0          0               0
+{o_orderdate}      0          0               0
+{o_orderkey}       0          0               0
+{p_name}           0          0               0
+{p_partkey}        0          0               0
+{ps_partkey}       0          0               0
+{ps_suppkey}       0          0               0
+{ps_supplycost}    0          0               0
+{s_nationkey}      0          0               0
+{s_suppkey}        0          0               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       2450.00        130.37 <==     11.00               1.00                0.00            1.00
-{l_extendedprice}  2450.00        130.37 <==     1058.00             200.93 <==          0.00            1.00
-{l_orderkey}       2450.00        130.37 <==     1227.00             235.19 <==          0.00            1.00
-{l_partkey}        2450.00        130.37 <==     1224.00             8.69 <==            0.00            1.00
-{l_quantity}       2450.00        130.37 <==     50.00               1.00                0.00            1.00
-{l_suppkey}        2450.00        130.37 <==     1224.00             8.01 <==            0.00            1.00
-{o_orderdate}      2450.00        130.37 <==     1057.00             2.28 <==            0.00            1.00
-{o_orderkey}       2450.00        130.37 <==     1227.00             235.19 <==          0.00            1.00
-{p_name}           2450.00        130.37 <==     2406.00             4.44 <==            0.00            1.00
-{p_partkey}        2450.00        130.37 <==     1224.00             8.69 <==            0.00            1.00
-{ps_partkey}       2450.00        130.37 <==     1059.00             10.04 <==           0.00            1.00
-{ps_suppkey}       2450.00        130.37 <==     1059.00             9.25 <==            0.00            1.00
-{ps_supplycost}    2450.00        130.37 <==     1056.00             32.99 <==           0.00            1.00
-{s_nationkey}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
-{s_suppkey}        2450.00        130.37 <==     1224.00             8.01 <==            0.00            1.00
+{l_discount}       2450.00        +Inf <==       11.00               +Inf <==            0.00            1.00
+{l_extendedprice}  2450.00        +Inf <==       1058.00             +Inf <==            0.00            1.00
+{l_orderkey}       2450.00        +Inf <==       1227.00             +Inf <==            0.00            1.00
+{l_partkey}        2450.00        +Inf <==       1224.00             +Inf <==            0.00            1.00
+{l_quantity}       2450.00        +Inf <==       50.00               +Inf <==            0.00            1.00
+{l_suppkey}        2450.00        +Inf <==       1224.00             +Inf <==            0.00            1.00
+{o_orderdate}      2450.00        +Inf <==       1057.00             +Inf <==            0.00            1.00
+{o_orderkey}       2450.00        +Inf <==       1227.00             +Inf <==            0.00            1.00
+{p_name}           2450.00        +Inf <==       2406.00             +Inf <==            0.00            1.00
+{p_partkey}        2450.00        +Inf <==       1224.00             +Inf <==            0.00            1.00
+{ps_partkey}       2450.00        +Inf <==       1059.00             +Inf <==            0.00            1.00
+{ps_suppkey}       2450.00        +Inf <==       1059.00             +Inf <==            0.00            1.00
+{ps_supplycost}    2450.00        +Inf <==       1056.00             +Inf <==            0.00            1.00
+{s_nationkey}      2450.00        +Inf <==       25.00               +Inf <==            0.00            1.00
+{s_suppkey}        2450.00        +Inf <==       1224.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_scan_6----
 column_names   row_count  distinct_count  null_count
-{s_nationkey}  10000      25              0
-{s_suppkey}    10000      9920            0
+{s_nationkey}  0          0               0
+{s_suppkey}    0          0               0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_nationkey}  10000.00       1.00           25.00               1.00                0.00            1.00
-{s_suppkey}    10000.00       1.00           9920.00             1.00                0.00            1.00
+{s_nationkey}  10000.00       +Inf <==       25.00               +Inf <==            0.00            1.00
+{s_suppkey}    10000.00       +Inf <==       9920.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_lookup_join_7----
 column_names       row_count  distinct_count  null_count
-{l_discount}       319404     11              0
-{l_extendedprice}  319404     212580          0
-{l_orderkey}       319404     288573          0
-{l_partkey}        319404     10632           0
-{l_quantity}       319404     50              0
-{l_suppkey}        319404     9799            0
-{o_orderdate}      319404     2406            0
-{o_orderkey}       319404     288573          0
-{p_name}           319404     10680           0
-{p_partkey}        319404     10632           0
-{ps_partkey}       319404     10632           0
-{ps_suppkey}       319404     9799            0
-{ps_supplycost}    319404     34839           0
+{l_discount}       0          0               0
+{l_extendedprice}  0          0               0
+{l_orderkey}       0          0               0
+{l_partkey}        0          0               0
+{l_quantity}       0          0               0
+{l_suppkey}        0          0               0
+{o_orderdate}      0          0               0
+{o_orderkey}       0          0               0
+{p_name}           0          0               0
+{p_partkey}        0          0               0
+{ps_partkey}       0          0               0
+{ps_suppkey}       0          0               0
+{ps_supplycost}    0          0               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       2431.00        131.39 <==     11.00               1.00                0.00            1.00
-{l_extendedprice}  2431.00        131.39 <==     1220.00             174.25 <==          0.00            1.00
-{l_orderkey}       2431.00        131.39 <==     1536.00             187.87 <==          0.00            1.00
-{l_partkey}        2431.00        131.39 <==     1535.00             6.93 <==            0.00            1.00
-{l_quantity}       2431.00        131.39 <==     50.00               1.00                0.00            1.00
-{l_suppkey}        2431.00        131.39 <==     1220.00             8.03 <==            0.00            1.00
-{o_orderdate}      2431.00        131.39 <==     1217.00             1.98 <==            0.00            1.00
-{o_orderkey}       2431.00        131.39 <==     1536.00             187.87 <==          0.00            1.00
-{p_name}           2431.00        131.39 <==     2387.00             4.47 <==            0.00            1.00
-{p_partkey}        2431.00        131.39 <==     1535.00             6.93 <==            0.00            1.00
-{ps_partkey}       2431.00        131.39 <==     1220.00             8.71 <==            0.00            1.00
-{ps_suppkey}       2431.00        131.39 <==     1220.00             8.03 <==            0.00            1.00
-{ps_supplycost}    2431.00        131.39 <==     1217.00             28.63 <==           0.00            1.00
+{l_discount}       2431.00        +Inf <==       11.00               +Inf <==            0.00            1.00
+{l_extendedprice}  2431.00        +Inf <==       1220.00             +Inf <==            0.00            1.00
+{l_orderkey}       2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{l_partkey}        2431.00        +Inf <==       1535.00             +Inf <==            0.00            1.00
+{l_quantity}       2431.00        +Inf <==       50.00               +Inf <==            0.00            1.00
+{l_suppkey}        2431.00        +Inf <==       1220.00             +Inf <==            0.00            1.00
+{o_orderdate}      2431.00        +Inf <==       1217.00             +Inf <==            0.00            1.00
+{o_orderkey}       2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{p_name}           2431.00        +Inf <==       2387.00             +Inf <==            0.00            1.00
+{p_partkey}        2431.00        +Inf <==       1535.00             +Inf <==            0.00            1.00
+{ps_partkey}       2431.00        +Inf <==       1220.00             +Inf <==            0.00            1.00
+{ps_suppkey}       2431.00        +Inf <==       1220.00             +Inf <==            0.00            1.00
+{ps_supplycost}    2431.00        +Inf <==       1217.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_lookup_join_8----
 column_names       row_count  distinct_count  null_count
-{l_discount}       319404     11              0
-{l_extendedprice}  319404     212580          0
-{l_orderkey}       319404     288573          0
-{l_partkey}        319404     10632           0
-{l_quantity}       319404     50              0
-{l_suppkey}        319404     9799            0
-{p_name}           319404     10680           0
-{p_partkey}        319404     10632           0
-{ps_partkey}       319404     10632           0
-{ps_suppkey}       319404     9799            0
-{ps_supplycost}    319404     34839           0
+{l_discount}       0          0               0
+{l_extendedprice}  0          0               0
+{l_orderkey}       0          0               0
+{l_partkey}        0          0               0
+{l_quantity}       0          0               0
+{l_suppkey}        0          0               0
+{p_name}           0          0               0
+{p_partkey}        0          0               0
+{ps_partkey}       0          0               0
+{ps_suppkey}       0          0               0
+{ps_supplycost}    0          0               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       2431.00        131.39 <==     11.00               1.00                0.00            1.00
-{l_extendedprice}  2431.00        131.39 <==     1535.00             138.49 <==          0.00            1.00
-{l_orderkey}       2431.00        131.39 <==     1536.00             187.87 <==          0.00            1.00
-{l_partkey}        2431.00        131.39 <==     2429.00             4.38 <==            0.00            1.00
-{l_quantity}       2431.00        131.39 <==     50.00               1.00                0.00            1.00
-{l_suppkey}        2431.00        131.39 <==     1536.00             6.38 <==            0.00            1.00
-{p_name}           2431.00        131.39 <==     2387.00             4.47 <==            0.00            1.00
-{p_partkey}        2431.00        131.39 <==     2429.00             4.38 <==            0.00            1.00
-{ps_partkey}       2431.00        131.39 <==     1536.00             6.92 <==            0.00            1.00
-{ps_suppkey}       2431.00        131.39 <==     1536.00             6.38 <==            0.00            1.00
-{ps_supplycost}    2431.00        131.39 <==     1528.00             22.80 <==           0.00            1.00
+{l_discount}       2431.00        +Inf <==       11.00               +Inf <==            0.00            1.00
+{l_extendedprice}  2431.00        +Inf <==       1535.00             +Inf <==            0.00            1.00
+{l_orderkey}       2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{l_partkey}        2431.00        +Inf <==       2429.00             +Inf <==            0.00            1.00
+{l_quantity}       2431.00        +Inf <==       50.00               +Inf <==            0.00            1.00
+{l_suppkey}        2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{p_name}           2431.00        +Inf <==       2387.00             +Inf <==            0.00            1.00
+{p_partkey}        2431.00        +Inf <==       2429.00             +Inf <==            0.00            1.00
+{ps_partkey}       2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{ps_suppkey}       2431.00        +Inf <==       1536.00             +Inf <==            0.00            1.00
+{ps_supplycost}    2431.00        +Inf <==       1528.00             +Inf <==            0.00            1.00
 
 ----Stats for q9_lookup_join_9----
 column_names     row_count  distinct_count  null_count
-{l_linenumber}   319404     7               0
-{l_orderkey}     319404     288573          0
-{l_partkey}      319404     10632           0
-{l_suppkey}      319404     9799            0
-{p_name}         319404     10680           0
-{p_partkey}      319404     10632           0
-{ps_partkey}     319404     10632           0
-{ps_suppkey}     319404     9799            0
-{ps_supplycost}  319404     34839           0
+{l_linenumber}   0          0               0
+{l_orderkey}     0          0               0
+{l_partkey}      0          0               0
+{l_suppkey}      0          0               0
+{p_name}         0          0               0
+{p_partkey}      0          0               0
+{ps_partkey}     0          0               0
+{ps_suppkey}     0          0               0
+{ps_supplycost}  0          0               0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_linenumber}   813.00         392.87 <==     7.00                1.00                0.00            1.00
-{l_orderkey}     813.00         392.87 <==     813.00              354.95 <==          0.00            1.00
-{l_partkey}      813.00         392.87 <==     813.00              13.08 <==           0.00            1.00
-{l_suppkey}      813.00         392.87 <==     813.00              12.05 <==           0.00            1.00
-{p_name}         813.00         392.87 <==     808.00              13.22 <==           0.00            1.00
-{p_partkey}      813.00         392.87 <==     808.00              13.16 <==           0.00            1.00
-{ps_partkey}     813.00         392.87 <==     813.00              13.08 <==           0.00            1.00
-{ps_suppkey}     813.00         392.87 <==     813.00              12.05 <==           0.00            1.00
-{ps_supplycost}  813.00         392.87 <==     809.00              43.06 <==           0.00            1.00
+{l_linenumber}   813.00         +Inf <==       7.00                +Inf <==            0.00            1.00
+{l_orderkey}     813.00         +Inf <==       813.00              +Inf <==            0.00            1.00
+{l_partkey}      813.00         +Inf <==       813.00              +Inf <==            0.00            1.00
+{l_suppkey}      813.00         +Inf <==       813.00              +Inf <==            0.00            1.00
+{p_name}         813.00         +Inf <==       808.00              +Inf <==            0.00            1.00
+{p_partkey}      813.00         +Inf <==       808.00              +Inf <==            0.00            1.00
+{ps_partkey}     813.00         +Inf <==       813.00              +Inf <==            0.00            1.00
+{ps_suppkey}     813.00         +Inf <==       813.00              +Inf <==            0.00            1.00
+{ps_supplycost}  813.00         +Inf <==       809.00              +Inf <==            0.00            1.00
 
 ----Stats for q9_merge_join_10----
 column_names     row_count  distinct_count  null_count
-{p_name}         42656      10680           0
-{p_partkey}      42656      10632           0
-{ps_partkey}     42656      10632           0
-{ps_suppkey}     42656      9801            0
-{ps_supplycost}  42656      34850           0
+{p_name}         0          0               0
+{p_partkey}      0          0               0
+{ps_partkey}     0          0               0
+{ps_suppkey}     0          0               0
+{ps_supplycost}  0          0               0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}         267683.00      6.28 <==       65464.00            6.13 <==            0.00            1.00
-{p_partkey}      267683.00      6.28 <==       66619.00            6.27 <==            0.00            1.00
-{ps_partkey}     267683.00      6.28 <==       66619.00            6.27 <==            0.00            1.00
-{ps_suppkey}     267683.00      6.28 <==       9920.00             1.01                0.00            1.00
-{ps_supplycost}  267683.00      6.28 <==       93405.00            2.68 <==            0.00            1.00
+{p_name}         267683.00      +Inf <==       65464.00            +Inf <==            0.00            1.00
+{p_partkey}      267683.00      +Inf <==       66619.00            +Inf <==            0.00            1.00
+{ps_partkey}     267683.00      +Inf <==       66619.00            +Inf <==            0.00            1.00
+{ps_suppkey}     267683.00      +Inf <==       9920.00             +Inf <==            0.00            1.00
+{ps_supplycost}  267683.00      +Inf <==       93405.00            +Inf <==            0.00            1.00
 
 ----Stats for q9_select_11----
 column_names  row_count  distinct_count  null_count
-{p_name}      10664      10680           0
-{p_partkey}   10664      10632           0
+{p_name}      0          0               0
+{p_partkey}   0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}      66667.00       6.25 <==       66667.00            6.24 <==            0.00            1.00
-{p_partkey}   66667.00       6.25 <==       66619.00            6.27 <==            0.00            1.00
+{p_name}      66667.00       +Inf <==       66667.00            +Inf <==            0.00            1.00
+{p_partkey}   66667.00       +Inf <==       66619.00            +Inf <==            0.00            1.00
 
 ----Stats for q9_scan_12----
 column_names  row_count  distinct_count  null_count
-{p_name}      200000     198131          0
+{p_name}      200000     120             0
 {p_partkey}   200000     199241          0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}      200000.00      1.00           198131.00           1.00                0.00            1.00
+{p_name}      200000.00      1.00           198131.00           1651.09 <==         0.00            1.00
 {p_partkey}   200000.00      1.00           199241.00           1.00                0.00            1.00
 
 ----Stats for q9_scan_13----
 column_names     row_count  distinct_count  null_count
-{ps_partkey}     800000     199241          0
-{ps_suppkey}     800000     9920            0
-{ps_supplycost}  800000     100379          0
+{ps_partkey}     0          0               0
+{ps_suppkey}     0          0               0
+{ps_supplycost}  0          0               0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}     800000.00      1.00           199241.00           1.00                0.00            1.00
-{ps_suppkey}     800000.00      1.00           9920.00             1.00                0.00            1.00
-{ps_supplycost}  800000.00      1.00           100379.00           1.00                0.00            1.00
+{ps_partkey}     800000.00      +Inf <==       199241.00           +Inf <==            0.00            1.00
+{ps_suppkey}     800000.00      +Inf <==       9920.00             +Inf <==            0.00            1.00
+{ps_supplycost}  800000.00      +Inf <==       100379.00           +Inf <==            0.00            1.00
 
 ----Stats for q9_scan_14----
 column_names   row_count  distinct_count  null_count

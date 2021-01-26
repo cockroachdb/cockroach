@@ -2704,7 +2704,7 @@ memo (optimized, ~8KB, required=[presentation: a:5,b:6,n:2,m:1])
  ├── G1: (inner-join G2 G3 G4)
  │    └── [presentation: a:5,b:6,n:2,m:1]
  │         ├── best: (inner-join G2 G3 G4)
- │         └── cost: 1087.17
+ │         └── cost: 1087.18
  ├── G2: (scan small,cols=(1,2))
  │    └── []
  │         ├── best: (scan small,cols=(1,2))

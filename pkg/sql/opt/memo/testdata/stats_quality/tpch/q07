@@ -193,51 +193,51 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 
 ----Stats for q7_project_3----
 column_names  row_count  distinct_count  null_count
-{l_year}      5924       2               0
-{n_name_1}    5924       2               0
-{n_name}      5924       2               0
-{volume}      5924       5904            0
+{l_year}      5723       2               0
+{n_name_1}    5723       2               0
+{n_name}      5723       2               0
+{volume}      5723       5689            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_year}      7610.00        1.28           731.00              365.50 <==          0.00            1.00
-{n_name}      7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{n_name_1}    7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{volume}      7610.00        1.28           7451.00             1.26                0.00            1.00
+{l_year}      7610.00        1.33           731.00              365.50 <==          0.00            1.00
+{n_name}      7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{n_name_1}    7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{volume}      7610.00        1.33           7451.00             1.31                0.00            1.00
 
 ----Stats for q7_inner_join_4----
 column_names       row_count  distinct_count  null_count
-{c_custkey}        5924       3902            0
-{c_nationkey}      5924       2               0
-{l_discount}       5924       11              0
-{l_extendedprice}  5924       5876            0
-{l_orderkey}       5924       5445            0
-{l_shipdate}       5924       731             0
-{l_suppkey}        5924       796             0
-{n_name_1}         5924       2               0
-{n_name}           5924       2               0
-{n_nationkey_1}    5924       2               0
-{n_nationkey}      5924       2               0
-{o_custkey}        5924       3902            0
-{o_orderkey}       5924       5445            0
-{s_nationkey}      5924       2               0
-{s_suppkey}        5924       796             0
+{c_custkey}        5723       3954            0
+{c_nationkey}      5723       2               0
+{l_discount}       5723       11              0
+{l_extendedprice}  5723       5686            0
+{l_orderkey}       5723       5385            0
+{l_shipdate}       5723       731             0
+{l_suppkey}        5723       791             0
+{n_name_1}         5723       2               0
+{n_name}           5723       2               0
+{n_nationkey_1}    5723       2               0
+{n_nationkey}      5723       2               0
+{o_custkey}        5723       3954            0
+{o_orderkey}       5723       5385            0
+{s_nationkey}      5723       2               0
+{s_suppkey}        5723       791             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        7610.00        1.28           4896.00             1.25                0.00            1.00
-{c_nationkey}      7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{l_discount}       7610.00        1.28           11.00               1.00                0.00            1.00
-{l_extendedprice}  7610.00        1.28           7441.00             1.27                0.00            1.00
-{l_orderkey}       7610.00        1.28           7365.00             1.35                0.00            1.00
-{l_shipdate}       7610.00        1.28           731.00              1.00                0.00            1.00
-{l_suppkey}        7610.00        1.28           7610.00             9.56 <==            0.00            1.00
-{n_name}           7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{n_name_1}         7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{n_nationkey}      7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}    7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{o_custkey}        7610.00        1.28           4896.00             1.25                0.00            1.00
-{o_orderkey}       7610.00        1.28           7365.00             1.35                0.00            1.00
-{s_nationkey}      7610.00        1.28           1.00                2.00 <==            0.00            1.00
-{s_suppkey}        7610.00        1.28           7610.00             9.56 <==            0.00            1.00
+{c_custkey}        7610.00        1.33           4896.00             1.24                0.00            1.00
+{c_nationkey}      7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{l_discount}       7610.00        1.33           11.00               1.00                0.00            1.00
+{l_extendedprice}  7610.00        1.33           7441.00             1.31                0.00            1.00
+{l_orderkey}       7610.00        1.33           7365.00             1.37                0.00            1.00
+{l_shipdate}       7610.00        1.33           731.00              1.00                0.00            1.00
+{l_suppkey}        7610.00        1.33           7610.00             9.62 <==            0.00            1.00
+{n_name}           7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{n_name_1}         7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{n_nationkey}      7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{n_nationkey_1}    7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{o_custkey}        7610.00        1.33           4896.00             1.24                0.00            1.00
+{o_orderkey}       7610.00        1.33           7365.00             1.37                0.00            1.00
+{s_nationkey}      7610.00        1.33           1.00                2.00 <==            0.00            1.00
+{s_suppkey}        7610.00        1.33           7610.00             9.62 <==            0.00            1.00
 
 ----Stats for q7_scan_5----
 column_names   row_count  distinct_count  null_count
@@ -250,101 +250,101 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 
 ----Stats for q7_lookup_join_6----
 column_names       row_count  distinct_count  null_count
-{l_discount}       145703     11              0
-{l_extendedprice}  145703     130516          0
-{l_orderkey}       145703     126329          0
-{l_shipdate}       145703     731             0
-{l_suppkey}        145703     798             0
-{n_name_1}         145703     2               0
-{n_name}           145703     2               0
-{n_nationkey_1}    145703     2               0
-{n_nationkey}      145703     2               0
-{o_custkey}        145703     68151           0
-{o_orderkey}       145703     126329          0
-{s_nationkey}      145703     2               0
-{s_suppkey}        145703     798             0
+{l_discount}       144172     11              0
+{l_extendedprice}  144172     132018          0
+{l_orderkey}       144172     126683          0
+{l_shipdate}       144172     731             0
+{l_suppkey}        144172     792             0
+{n_name_1}         144172     2               0
+{n_name}           144172     2               0
+{n_nationkey_1}    144172     2               0
+{n_nationkey}      144172     2               0
+{o_custkey}        144172     70877           0
+{o_orderkey}       144172     126683          0
+{s_nationkey}      144172     2               0
+{s_suppkey}        144172     792             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       97675.00       1.49           11.00               1.00                0.00            1.00
-{l_extendedprice}  97675.00       1.49           60235.00            2.17 <==            0.00            1.00
-{l_orderkey}       97675.00       1.49           93670.00            1.35                0.00            1.00
-{l_shipdate}       97675.00       1.49           731.00              1.00                0.00            1.00
-{l_suppkey}        97675.00       1.49           530.00              1.51                0.00            1.00
-{n_name}           97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_name_1}         97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_nationkey}      97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}    97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{o_custkey}        97675.00       1.49           62307.00            1.09                0.00            1.00
-{o_orderkey}       97675.00       1.49           93670.00            1.35                0.00            1.00
-{s_nationkey}      97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{s_suppkey}        97675.00       1.49           530.00              1.51                0.00            1.00
+{l_discount}       97675.00       1.48           11.00               1.00                0.00            1.00
+{l_extendedprice}  97675.00       1.48           60235.00            2.19 <==            0.00            1.00
+{l_orderkey}       97675.00       1.48           93670.00            1.35                0.00            1.00
+{l_shipdate}       97675.00       1.48           731.00              1.00                0.00            1.00
+{l_suppkey}        97675.00       1.48           530.00              1.49                0.00            1.00
+{n_name}           97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_name_1}         97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_nationkey}      97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_nationkey_1}    97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{o_custkey}        97675.00       1.48           62307.00            1.14                0.00            1.00
+{o_orderkey}       97675.00       1.48           93670.00            1.35                0.00            1.00
+{s_nationkey}      97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{s_suppkey}        97675.00       1.48           530.00              1.49                0.00            1.00
 
 ----Stats for q7_lookup_join_7----
 column_names       row_count  distinct_count  null_count
-{l_discount}       145703     11              0
-{l_extendedprice}  145703     130516          0
-{l_orderkey}       145703     126329          0
-{l_shipdate}       145703     731             0
-{l_suppkey}        145703     798             0
-{n_name_1}         145703     2               0
-{n_name}           145703     2               0
-{n_nationkey_1}    145703     2               0
-{n_nationkey}      145703     2               0
-{s_nationkey}      145703     2               0
-{s_suppkey}        145703     798             0
+{l_discount}       144172     11              0
+{l_extendedprice}  144172     132018          0
+{l_orderkey}       144172     126683          0
+{l_shipdate}       144172     731             0
+{l_suppkey}        144172     792             0
+{n_name_1}         144172     2               0
+{n_name}           144172     2               0
+{n_nationkey_1}    144172     2               0
+{n_nationkey}      144172     2               0
+{s_nationkey}      144172     2               0
+{s_suppkey}        144172     792             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       97675.00       1.49           11.00               1.00                0.00            1.00
-{l_extendedprice}  97675.00       1.49           92192.00            1.42                0.00            1.00
-{l_orderkey}       97675.00       1.49           93670.00            1.35                0.00            1.00
-{l_shipdate}       97675.00       1.49           731.00              1.00                0.00            1.00
-{l_suppkey}        97675.00       1.49           530.00              1.51                0.00            1.00
-{n_name}           97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_name_1}         97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_nationkey}      97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}    97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{s_nationkey}      97675.00       1.49           1.00                2.00 <==            0.00            1.00
-{s_suppkey}        97675.00       1.49           530.00              1.51                0.00            1.00
+{l_discount}       97675.00       1.48           11.00               1.00                0.00            1.00
+{l_extendedprice}  97675.00       1.48           92192.00            1.43                0.00            1.00
+{l_orderkey}       97675.00       1.48           93670.00            1.35                0.00            1.00
+{l_shipdate}       97675.00       1.48           731.00              1.00                0.00            1.00
+{l_suppkey}        97675.00       1.48           530.00              1.49                0.00            1.00
+{n_name}           97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_name_1}         97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_nationkey}      97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{n_nationkey_1}    97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{s_nationkey}      97675.00       1.48           1.00                2.00 <==            0.00            1.00
+{s_suppkey}        97675.00       1.48           530.00              1.49                0.00            1.00
 
 ----Stats for q7_lookup_join_8----
 column_names     row_count  distinct_count  null_count
-{l_linenumber}   478523     7               0
-{l_orderkey}     478523     411655          0
-{l_suppkey}      478523     798             0
-{n_name_1}       478523     2               0
-{n_name}         478523     2               0
-{n_nationkey_1}  478523     2               0
-{n_nationkey}    478523     2               0
-{s_nationkey}    478523     2               0
-{s_suppkey}      478523     798             0
+{l_linenumber}   474857     7               0
+{l_orderkey}     474857     409519          0
+{l_suppkey}      474857     792             0
+{n_name_1}       474857     2               0
+{n_name}         474857     2               0
+{n_nationkey_1}  474857     2               0
+{n_nationkey}    474857     2               0
+{s_nationkey}    474857     2               0
+{s_suppkey}      474857     792             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_linenumber}   322646.00      1.48           7.00                1.00                0.00            1.00
-{l_orderkey}     322646.00      1.48           290857.00           1.42                0.00            1.00
-{l_suppkey}      322646.00      1.48           530.00              1.51                0.00            1.00
-{n_name}         322646.00      1.48           1.00                2.00 <==            0.00            1.00
-{n_name_1}       322646.00      1.48           1.00                2.00 <==            0.00            1.00
-{n_nationkey}    322646.00      1.48           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}  322646.00      1.48           1.00                2.00 <==            0.00            1.00
-{s_nationkey}    322646.00      1.48           1.00                2.00 <==            0.00            1.00
-{s_suppkey}      322646.00      1.48           530.00              1.51                0.00            1.00
+{l_linenumber}   322646.00      1.47           7.00                1.00                0.00            1.00
+{l_orderkey}     322646.00      1.47           290857.00           1.41                0.00            1.00
+{l_suppkey}      322646.00      1.47           530.00              1.49                0.00            1.00
+{n_name}         322646.00      1.47           1.00                2.00 <==            0.00            1.00
+{n_name_1}       322646.00      1.47           1.00                2.00 <==            0.00            1.00
+{n_nationkey}    322646.00      1.47           1.00                2.00 <==            0.00            1.00
+{n_nationkey_1}  322646.00      1.47           1.00                2.00 <==            0.00            1.00
+{s_nationkey}    322646.00      1.47           1.00                2.00 <==            0.00            1.00
+{s_suppkey}      322646.00      1.47           530.00              1.49                0.00            1.00
 
 ----Stats for q7_lookup_join_9----
 column_names     row_count  distinct_count  null_count
-{n_name_1}       798        2               0
-{n_name}         798        2               0
-{n_nationkey_1}  798        2               0
-{n_nationkey}    798        2               0
-{s_nationkey}    798        2               0
-{s_suppkey}      798        798             0
+{n_name_1}       792        2               0
+{n_name}         792        2               0
+{n_nationkey_1}  792        2               0
+{n_nationkey}    792        2               0
+{s_nationkey}    792        2               0
+{s_suppkey}      792        792             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}         533.00         1.50           1.00                2.00 <==            0.00            1.00
-{n_name_1}       533.00         1.50           1.00                2.00 <==            0.00            1.00
-{n_nationkey}    533.00         1.50           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}  533.00         1.50           1.00                2.00 <==            0.00            1.00
-{s_nationkey}    533.00         1.50           1.00                2.00 <==            0.00            1.00
-{s_suppkey}      533.00         1.50           530.00              1.51                0.00            1.00
+{n_name}         533.00         1.49           1.00                2.00 <==            0.00            1.00
+{n_name_1}       533.00         1.49           1.00                2.00 <==            0.00            1.00
+{n_nationkey}    533.00         1.49           1.00                2.00 <==            0.00            1.00
+{n_nationkey_1}  533.00         1.49           1.00                2.00 <==            0.00            1.00
+{s_nationkey}    533.00         1.49           1.00                2.00 <==            0.00            1.00
+{s_suppkey}      533.00         1.49           530.00              1.49                0.00            1.00
 
 ----Stats for q7_inner_join_10----
 column_names     row_count  distinct_count  null_count
