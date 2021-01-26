@@ -1163,7 +1163,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// configurations removes spans for indexes in the dropping state,
 				// which we don't want. So, set up the zone configs before we swap.
 				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					dbDesc, err := descsCol.GetImmutableDatabaseByID(
+					_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 						ctx,
 						txn,
 						scTable.GetParentID(),

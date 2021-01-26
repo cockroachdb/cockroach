@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -363,11 +364,11 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{},
+			tree.DatabaseLookupFlags{Required: true},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
@@ -2283,7 +2284,7 @@ func newTableDesc(
 	}
 
 	regionEnumID := descpb.InvalidID
-	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
 	)
 	if err != nil {
@@ -2612,8 +2613,9 @@ func incTelemetryForNewColumn(def *tree.ColumnTableDef, desc *descpb.ColumnDescr
 	}
 }
 
-// CreateInheritedPrivilegesFromDBDesc creates privileges with the appropriate
-// owner (node for system, the restoring user otherwise.)
+// CreateInheritedPrivilegesFromDBDesc creates privileges for a
+// table (or view/sequence) with the appropriate owner (node for system,
+// the restoring user otherwise.)
 func CreateInheritedPrivilegesFromDBDesc(
 	dbDesc catalog.DatabaseDescriptor, user security.SQLUsername,
 ) *descpb.PrivilegeDescriptor {
@@ -2624,6 +2626,20 @@ func CreateInheritedPrivilegesFromDBDesc(
 	}
 
 	privs := dbDesc.GetPrivileges()
+
+	// Remove privileges that are valid for databases but not for tables.
+	dbPrivBits := privilege.GetValidPrivilegesForObject(privilege.Database).ToBitField()
+	tablePrivBits := privilege.GetValidPrivilegesForObject(privilege.Table).ToBitField()
+
+	// Get the bits that are valid for DB privileges but not for table privileges.
+	removePrivilegeBits := (dbPrivBits ^ tablePrivBits) & dbPrivBits
+
+	for i, u := range privs.Users {
+		// Set bits that are only valid for DBs and not tables to 0.
+		u.Privileges = u.Privileges - (u.Privileges & removePrivilegeBits)
+		privs.Users[i].Privileges = u.Privileges
+	}
+
 	privs.SetOwner(user)
 
 	return privs
