@@ -332,19 +332,15 @@ vectorized: true
               table: d@foo_inv
               spans: /{}-/{}/PrefixEnd /???-/[]
 
-
-# TODO(mgartner): It should not be required to force the index scan. It is
-# required until the statistics builder treats b->'a' = '"b"' similarly to the
-# containment operator, @>.
 query T
-EXPLAIN (VERBOSE) SELECT * from d@foo_inv where b->'a' = '"b"'
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
 distribution: local
 vectorized: true
 ·
 • index join
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 111 (missing stats)
 │ table: d@primary
 │ key columns: a
 │
@@ -364,7 +360,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 111 (missing stats)
 │ filter: ((b->'a')->'c') = '"b"'
 │
 └── • scan
@@ -382,18 +378,15 @@ vectorized: true
 • norows
   columns: (a, b)
 
-# TODO(mgartner): It should not be required to force the index scan. It is
-# required until the statistics builder treats b->'a' = '"b"' similarly to the
-# containment operator, @>.
 query T
-EXPLAIN (VERBOSE) SELECT * from d@foo_inv where '"b"' = b->'a'
+EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
 distribution: local
 vectorized: true
 ·
 • index join
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 111 (missing stats)
 │ table: d@primary
 │ key columns: a
 │
