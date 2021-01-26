@@ -200,7 +200,7 @@ func changefeedPlanHook(
 		for _, desc := range targetDescs {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
 				_, qualified := opts[changefeedbase.OptFullTableName]
-				name, err := getMaybeQualifiedTableName(ctx, table, *p.ExecCfg(), p.Txn(), qualified)
+				name, err := getChangefeedTargetName(ctx, table, *p.ExecCfg(), p.Txn(), qualified)
 				if err != nil {
 					return err
 				}
@@ -683,30 +683,29 @@ func (b *changefeedResumer) OnPauseRequest(
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
-// or view represented by the provided descriptor. It is a sort of
-// reverse of the Resolve() functions.
+// or view represented by the provided descriptor.
 func getQualifiedTableName(
 	ctx context.Context, execCfg sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
-) (*tree.TableName, error) {
+) (string, error) {
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, desc.GetParentID())
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	schemaID := desc.GetParentSchemaID()
 	schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, execCfg.Codec, desc.GetParentID(), schemaID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
 		tree.Name(schemaName),
 		tree.Name(desc.GetName()),
 	)
-	return &tbName, nil
+	return tbName.String(), nil
 }
 
-// getMaybeQualifiedTableName gets a table name with or without the dots
-func getMaybeQualifiedTableName(
+// getChangefeedTargetName gets a table name with or without the dots
+func getChangefeedTargetName(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
 	execCfg sql.ExecutorConfig,
@@ -714,11 +713,7 @@ func getMaybeQualifiedTableName(
 	qualified bool,
 ) (string, error) {
 	if qualified {
-		tbl, err := getQualifiedTableName(ctx, execCfg, txn, desc)
-		if err != nil {
-			return "", err
-		}
-		return tbl.String(), err
+		return getQualifiedTableName(ctx, execCfg, txn, desc)
 	}
 	return desc.GetName(), nil
 }

@@ -441,7 +441,6 @@ func TestTableNameCollision(t *testing.T) {
 		})
 	}
 
-	//t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
