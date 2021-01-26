@@ -57,63 +57,79 @@ func TestExternalHashAggregator(t *testing.T) {
 	)
 	rng, _ := randutil.NewPseudoRand()
 	numForcedRepartitions := rng.Intn(5)
-	// Test the case in which the default memory is used as well as the case in
-	// which the hash aggregator spills to disk.
-	for _, spillForced := range []bool{false, true} {
-		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
-		for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
-			if len(tc.groupCols) == 0 {
-				// If there are no grouping columns, then the ordered aggregator
-				// is planned.
+	for _, diskSpillingEnabled := range []bool{true, false} {
+		HashAggregationDiskSpillingEnabled.Override(&flowCtx.Cfg.Settings.SV, diskSpillingEnabled)
+		// Test the case in which the default memory is used as well as the case
+		// in which the hash aggregator spills to disk.
+		for _, spillForced := range []bool{false, true} {
+			if !diskSpillingEnabled && spillForced {
 				continue
 			}
-			if tc.aggFilter != nil {
-				// Filtering aggregation is not supported with the ordered
-				// aggregation which is required for the external hash
-				// aggregator in the fallback strategy.
-				continue
-			}
-			log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.name)
-			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
-			)
-			require.NoError(t, err)
-			var semsToCheck []semaphore.Semaphore
-			runTestsWithTyps(
-				t,
-				[]tuples{tc.input},
-				[][]*types.T{tc.typs},
-				tc.expected,
-				unorderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
-					semsToCheck = append(semsToCheck, sem)
-					op, accs, mons, closers, err := createExternalHashAggregator(
-						ctx, flowCtx, &colexecagg.NewAggregatorArgs{
-							Allocator:      testAllocator,
-							MemAccount:     testMemAcc,
-							Input:          input[0],
-							InputTypes:     tc.typs,
-							Spec:           tc.spec,
-							EvalCtx:        &evalCtx,
-							Constructors:   constructors,
-							ConstArguments: constArguments,
-							OutputTypes:    outputTypes,
-						},
-						queueCfg, sem, numForcedRepartitions,
-					)
-					accounts = append(accounts, accs...)
-					monitors = append(monitors, mons...)
-					// Check that the external sorter and the disk spiller were
-					// added as Closers (the latter is responsible for closing
-					// the in-memory hash aggregator as well as the external
-					// one).
-					require.Equal(t, 2, len(closers))
-					return op, err
-				},
-			)
-			for i, sem := range semsToCheck {
-				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+			flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
+			for _, tc := range append(aggregatorsTestCases, hashAggregatorTestCases...) {
+				if len(tc.groupCols) == 0 {
+					// If there are no grouping columns, then the ordered
+					// aggregator is planned.
+					continue
+				}
+				if tc.aggFilter != nil {
+					// Filtering aggregation is not supported with the ordered
+					// aggregation which is required for the external hash
+					// aggregator in the fallback strategy.
+					continue
+				}
+				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.name)
+				constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
+					&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+				)
+				require.NoError(t, err)
+				var semsToCheck []semaphore.Semaphore
+				runTestsWithTyps(
+					t,
+					[]tuples{tc.input},
+					[][]*types.T{tc.typs},
+					tc.expected,
+					unorderedVerifier,
+					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+						sem := colexecbase.NewTestingSemaphore(ExternalSorterMinPartitions)
+						semsToCheck = append(semsToCheck, sem)
+						op, accs, mons, closers, err := createExternalHashAggregator(
+							ctx, flowCtx, &colexecagg.NewAggregatorArgs{
+								Allocator:      testAllocator,
+								MemAccount:     testMemAcc,
+								Input:          input[0],
+								InputTypes:     tc.typs,
+								Spec:           tc.spec,
+								EvalCtx:        &evalCtx,
+								Constructors:   constructors,
+								ConstArguments: constArguments,
+								OutputTypes:    outputTypes,
+							},
+							queueCfg, sem, numForcedRepartitions,
+						)
+						accounts = append(accounts, accs...)
+						monitors = append(monitors, mons...)
+						if diskSpillingEnabled {
+							// Check that the external sorter and the disk
+							// spiller were added as Closers (the latter is
+							// responsible for closing the in-memory hash
+							// aggregator as well as the external one).
+							require.Equal(t, 2, len(closers))
+						} else {
+							// Only the in-memory hash aggregator has been
+							// created.
+							require.Equal(t, 1, len(closers))
+							// Sanity check that indeed only the in-memory hash
+							// aggregator was created.
+							_, isHashAgg := op.(*hashAggregator)
+							require.True(t, isHashAgg)
+						}
+						return op, err
+					},
+				)
+				for i, sem := range semsToCheck {
+					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				}
 			}
 		}
 	}

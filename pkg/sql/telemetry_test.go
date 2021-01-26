@@ -63,7 +63,9 @@ import (
 //    variant outputs only the names of the counters that changed; the second
 //    variant outputs the counts as well. It is necessary to use
 //    feature-allowlist before these commands to avoid test flakes (e.g. because
-//    of counters that are changed by looking up descriptors)
+//    of counters that are changed by looking up descriptors).
+//    TODO(yuzefovich): counters currently don't really work because they are
+//    reset before executing every statement by reporter.ReportDiagnostics.
 //
 //  - schema
 //

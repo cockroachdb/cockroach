@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -93,6 +94,12 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 		// used. Mock contention events should be generated either using the cluster
 		// setting or programmatically using the testing knob, but not both.
 		cfg.TestingKnobs.GenerateMockContentionEvents = testingGenerateMockContentionEvents.Get(&cfg.Settings.SV)
+	})
+
+	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func() {
+		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
+			telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
+		}
 	})
 
 	return ds
