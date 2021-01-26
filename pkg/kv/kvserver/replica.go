@@ -1407,7 +1407,13 @@ func (ec *endCmds) done(
 // except for read-only requests that are older than `freezeStart`, until the
 // merge completes.
 func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timestamp) error {
-	desc := r.Desc()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maybeWatchForMergeLocked(ctx, freezeStart)
+}
+
+func (r *Replica) maybeWatchForMergeLocked(ctx context.Context, freezeStart hlc.Timestamp) error {
+	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
 		storage.MVCCGetOptions{Inconsistent: true})
@@ -1430,12 +1436,10 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	// whether the merge succeeded or not.
 
 	mergeCompleteCh := make(chan struct{})
-	r.mu.Lock()
 	if r.mu.mergeComplete != nil {
 		// Another request already noticed the merge, installed a mergeComplete
 		// channel, and launched a goroutine to watch for the merge's completion.
 		// Nothing more to do.
-		r.mu.Unlock()
 		return nil
 	}
 	// Note that if the merge txn retries for any reason (for example, if the
@@ -1451,7 +1455,6 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timest
 	// range in case it managed to quiesce between when the Subsume request
 	// arrived and now, which is rare but entirely legal.
 	r.unquiesceLocked()
-	r.mu.Unlock()
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
