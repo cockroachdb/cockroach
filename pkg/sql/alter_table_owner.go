@@ -121,7 +121,7 @@ func (p *planner) checkCanAlterTableAndSetNewOwner(
 	return p.logEvent(ctx,
 		desc.ID,
 		&eventpb.AlterTableOwner{
-			TableName: tn.String(),
+			TableName: tn.FQString(),
 			Owner:     newOwner.Normalized(),
 		})
 }

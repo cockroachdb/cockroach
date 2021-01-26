@@ -444,7 +444,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				droppedViews = append(droppedViews, cascadedViews...)
-				droppedViews = append(droppedViews, qualifiedView.String())
+				droppedViews = append(droppedViews, qualifiedView.FQString())
 			}
 
 			// We cannot remove this column if there are computed columns that use it.
