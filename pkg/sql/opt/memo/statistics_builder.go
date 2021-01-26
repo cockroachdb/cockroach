@@ -768,27 +768,10 @@ func (sb *statisticsBuilder) constrainScan(
 
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
-	// JSON and ARRAY inverted indexes are a special case; a constraint like:
-	// /1: [/'{"a": "b"}' - /'{"a": "b"}']
-	// does not necessarily mean there is only going to be one distinct
-	// value for column 1, if it is being applied to an inverted index.
-	// This is because inverted index keys could correspond to partial
-	// column values, such as one path-to-a-leaf through a JSON object.
-	//
-	// For now, don't apply constraints on inverted index columns.
 	if constraint != nil {
-		// TODO(mgartner): Remove this special case for JSON and ARRAY inverted
-		// indexes that are constrained by scan.Constraint once they are instead
-		// constrained by scan.InvertedConstraint.
-		if idx.IsInverted() && scan.InvertedConstraint == nil {
-			for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
-				numUnappliedConjuncts += sb.numConjunctsInConstraint(constraint, i)
-			}
-		} else {
-			constrainedColsLocal, histColsLocal := sb.applyIndexConstraint(constraint, scan, relProps, s)
-			constrainedCols.UnionWith(constrainedColsLocal)
-			histCols.UnionWith(histColsLocal)
-		}
+		constrainedColsLocal, histColsLocal := sb.applyIndexConstraint(constraint, scan, relProps, s)
+		constrainedCols.UnionWith(constrainedColsLocal)
+		histCols.UnionWith(histColsLocal)
 	}
 
 	// Calculate distinct counts and histograms for the partial index predicate
@@ -2803,10 +2786,17 @@ const (
 )
 
 // countPaths returns the number of JSON or Array paths in the specified
-// FiltersItem. Used in the calculation of unapplied conjuncts in a
-// Contains operator. Returns 0 if paths could not be counted for any
-// reason, such as malformed JSON.
+// FiltersItem. Used in the calculation of unapplied conjuncts in a Contains
+// operator, or an equality operator with a JSON fetch val operator on the left.
+// Returns 0 if paths could not be counted for any reason, such as malformed
+// JSON.
 func countPaths(conjunct *FiltersItem) int {
+	// TODO(mgartner): If the right side of the equality is a JSON object or
+	// array, there may be more than 1 path.
+	if conjunct.Condition.Op() == opt.EqOp && conjunct.Condition.Child(0).Op() == opt.FetchValOp {
+		return 1
+	}
+
 	rhs := conjunct.Condition.Child(1)
 	if !CanExtractConstDatum(rhs) {
 		return 0
@@ -2929,11 +2919,14 @@ func (sb *statisticsBuilder) applyFilter(
 			return
 		}
 
-		// Special case: The current conjunct is a JSON or Array Contains operator.
-		// If so, count every path to a leaf node in the RHS as a separate
-		// conjunct. If for whatever reason we can't get to the JSON or Array datum
-		// or enumerate its paths, count the whole operator as one conjunct.
-		if conjunct.Condition.Op() == opt.ContainsOp {
+		// Special case: The current conjunct is a JSON or Array Contains
+		// operator, or an equality operator with a JSON fetch value operator on
+		// the left (for example j->'a' = '1'). If so, count every path to a
+		// leaf node in the RHS as a separate conjunct. If for whatever reason
+		// we can't get to the JSON or Array datum or enumerate its paths, count
+		// the whole operator as one conjunct.
+		if conjunct.Condition.Op() == opt.ContainsOp ||
+			(conjunct.Condition.Op() == opt.EqOp && conjunct.Condition.Child(0).Op() == opt.FetchValOp) {
 			numPaths := countPaths(conjunct)
 			if numPaths == 0 {
 				numUnappliedConjuncts++
