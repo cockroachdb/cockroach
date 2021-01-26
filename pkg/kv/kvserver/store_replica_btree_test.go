@@ -97,7 +97,7 @@ func TestStoreReplicaBTree_LookupPrecedingReplica(t *testing.T) {
 		desc.EndKey = roachpb.RKey(end)
 		r := &Replica{}
 		r.mu.state.Desc = desc
-		r.startKey = desc.StartKey // this is what's actually used in btree
+		r.startKey = desc.StartKey // this is what's actually used in the btree
 		return r
 	}
 
