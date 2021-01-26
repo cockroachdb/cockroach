@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ func createAndIncrementSeqDescriptor(
 	incrementBy int64,
 	seqOpts descpb.TableDescriptor_SequenceOpts,
 	db *kv.DB,
-) tabledesc.Immutable {
+) catalog.TableDescriptor {
 	desc := tabledesc.MakeImmutable(descpb.TableDescriptor{
 		ID:           descpb.ID(id),
 		SequenceOpts: &seqOpts,
@@ -46,7 +47,7 @@ func createAndIncrementSeqDescriptor(
 	_, err := kv.IncrementValRetryable(
 		ctx, db, seqValueKey, incrementBy)
 	require.NoError(t, err)
-	return desc
+	return &desc
 }
 
 func createMockImportJob(
@@ -200,7 +201,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 					test.incrementBy, test.seqIDToOpts[id], db)
 				seqMetadata := &SequenceMetadata{
 					id:              descpb.ID(id),
-					seqDesc:         &seqDesc,
+					seqDesc:         seqDesc,
 					instancesPerRow: test.instancesPerRow,
 					curChunk:        nil,
 					curVal:          0,
