@@ -366,8 +366,7 @@ CREATE TABLE crdb_internal.tables (
 			// include added and dropped descriptors.
 			for _, desc := range descs {
 				table, ok := desc.(catalog.TableDescriptor)
-				_, isMutable := desc.(catalog.MutableDescriptor)
-				if !ok || isMutable || p.CheckAnyPrivilege(ctx, table) != nil {
+				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 					continue
 				}
 				dbName := dbNames[table.GetParentID()]
@@ -486,8 +485,7 @@ CREATE TABLE crdb_internal.schema_changes (
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(catalog.TableDescriptor)
-			_, isMutable := desc.(catalog.MutableDescriptor)
-			if !ok || isMutable || p.CheckAnyPrivilege(ctx, table) != nil {
+			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
 			tableID := tree.NewDInt(tree.DInt(int64(table.GetID())))
@@ -2511,8 +2509,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
 			switch desc := desc.(type) {
-			case *tabledesc.Immutable:
-				parents[id] = uint32(desc.ParentID)
+			case catalog.TableDescriptor:
+				parents[id] = uint32(desc.GetParentID())
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
 				for _, idx := range desc.PublicNonPrimaryIndexes() {

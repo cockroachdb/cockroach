@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -698,7 +697,7 @@ func newOptTable(
 	// table has a column with this name for some reason.
 	for i := range colinfo.AllSystemColumnDescs {
 		sysCol := &colinfo.AllSystemColumnDescs[i]
-		if c, _ := desc.(*tabledesc.Immutable).HasColumnWithName(tree.Name(sysCol.Name)); c == nil {
+		if c, _ := desc.HasColumnWithName(tree.Name(sysCol.Name)); c == nil {
 			col, ord := newColumn()
 			col.InitNonVirtual(
 				ord,

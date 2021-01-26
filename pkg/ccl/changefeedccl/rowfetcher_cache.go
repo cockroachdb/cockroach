@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,7 +94,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			return nil, err
 		}
 		tableDesc = desc.(catalog.TableDescriptor)
-		if tableDesc.(*tabledesc.Immutable).ContainsUserDefinedTypes() {
+		if tableDesc.ContainsUserDefinedTypes() {
 			// If the table contains user defined types, then use the descs.Collection
 			// to retrieve a TableDescriptor with type metadata hydrated. We open a
 			// transaction here only because the descs.Collection needs one to get

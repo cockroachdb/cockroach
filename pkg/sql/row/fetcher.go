@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -169,7 +168,7 @@ func (fta *FetcherTableArgs) InitCols(
 ) {
 	cols := desc.TableDesc().Columns
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.(*tabledesc.Immutable).ReadableColumns()
+		cols = desc.ReadableColumns()
 	}
 	if virtualColumn != nil {
 		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))

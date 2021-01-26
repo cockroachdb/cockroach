@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -1306,7 +1305,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-	typs := info.desc.(*tabledesc.Immutable).ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
+	typs := info.desc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, info.spec.VirtualColumn)
 	if info.containsSystemColumns {
 		for i := range colinfo.AllSystemColumnDescs {
 			typs = append(typs, colinfo.AllSystemColumnDescs[i].Type)

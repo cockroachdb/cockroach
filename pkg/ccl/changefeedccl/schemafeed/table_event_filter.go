@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -110,12 +109,12 @@ func newColumnBackfillComplete(e TableEvent) (res bool) {
 	// TODO(ajwerner): What is the case where the before has a backfill mutation
 	// and the After doesn't? What about other queued mutations?
 	return len(e.Before.TableDesc().Columns) < len(e.After.TableDesc().Columns) &&
-		e.Before.(*tabledesc.Immutable).HasColumnBackfillMutation() && !e.After.(*tabledesc.Immutable).HasColumnBackfillMutation()
+		e.Before.HasColumnBackfillMutation() && !e.After.HasColumnBackfillMutation()
 }
 
 func newColumnNoBackfill(e TableEvent) (res bool) {
 	return len(e.Before.TableDesc().Columns) < len(e.After.TableDesc().Columns) &&
-		!e.Before.(*tabledesc.Immutable).HasColumnBackfillMutation()
+		!e.Before.HasColumnBackfillMutation()
 }
 
 func pkChangeMutationExists(desc catalog.TableDescriptor) bool {

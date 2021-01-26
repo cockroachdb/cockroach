@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -62,7 +61,7 @@ func verifyTableDescriptorState(
 	shardColID := getShardColumnID(t, tableDesc, shardedIndexName)
 	foundCheckConstraint := false
 	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
-		usesShard, err := tableDesc.(*tabledesc.Immutable).CheckConstraintUsesColumn(check, shardColID)
+		usesShard, err := tableDesc.CheckConstraintUsesColumn(check, shardColID)
 		if err != nil {
 			t.Fatal(err)
 		}

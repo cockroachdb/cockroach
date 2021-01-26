@@ -671,7 +671,7 @@ type internalLookupCtx struct {
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
 	schemaNames map[descpb.ID]string
 	schemaIDs   []descpb.ID
-	tbDescs     map[descpb.ID]*tabledesc.Immutable
+	tbDescs     map[descpb.ID]catalog.TableDescriptor
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
@@ -759,7 +759,7 @@ func newInternalLookupCtx(
 	schemaNames := map[descpb.ID]string{
 		keys.PublicSchemaID: tree.PublicSchema,
 	}
-	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
+	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
 	// Record descriptors for name lookups.
@@ -772,11 +772,11 @@ func newInternalLookupCtx(
 				// Only make the database visible for iteration if the prefix was included.
 				dbIDs = append(dbIDs, desc.GetID())
 			}
-		case *tabledesc.Immutable:
+		case catalog.TableDescriptor:
 			tbDescs[desc.GetID()] = desc
-			if prefix == nil || prefix.GetID() == desc.ParentID {
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, desc.ID)
+				tbIDs = append(tbIDs, desc.GetID())
 			}
 		case *typedesc.Immutable:
 			typDescs[desc.GetID()] = desc

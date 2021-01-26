@@ -175,7 +175,7 @@ func NewColBatchScan(
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.(*tabledesc.Immutable).ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
+	typs := table.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 
 	// Add all requested system columns to the output.
@@ -245,7 +245,7 @@ func initCRowFetcher(
 	spec *execinfrapb.TableReaderSpec,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.(*tabledesc.Immutable).FindIndexByIndexIdx(int(spec.IndexIdx))
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, false, err
 	}

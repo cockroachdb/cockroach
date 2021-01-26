@@ -1184,8 +1184,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
-	case *tabledesc.Immutable:
-		// ImmutableTableDescriptors need to be copied before hydration, because
+	case catalog.TableDescriptor:
+		// Immutable table descriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
 		// defined types in the descriptor, then return early.
 		if !t.ContainsUserDefinedTypes() {
@@ -1598,8 +1598,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 				continue
 			}
 			tblDesc, ok := desc.(catalog.TableDescriptor)
-			_, isMutable := desc.(catalog.MutableDescriptor)
-			if ok && !isMutable {
+			if ok {
 				if err := typedesc.HydrateTypesInTableDescriptor(
 					ctx,
 					tblDesc.TableDesc(),

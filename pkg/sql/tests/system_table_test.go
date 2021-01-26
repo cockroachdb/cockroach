@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -162,7 +162,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	type testcase struct {
 		id     descpb.ID
 		schema string
-		pkg    *tabledesc.Immutable
+		pkg    catalog.TableDescriptor
 	}
 
 	for _, test := range []testcase{
@@ -192,7 +192,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.ScheduledJobsTableID, systemschema.ScheduledJobsTableSchema, systemschema.ScheduledJobsTable},
 		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
 	} {
-		privs := *test.pkg.Privileges
+		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
 			context.Background(),
 			keys.SystemDatabaseID,
@@ -208,7 +208,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		if !test.pkg.TableDesc().Equal(gen.TableDesc()) {
 			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
-				"hardcoded table descriptor:\n%s", test.pkg.Name, diff)
+				"hardcoded table descriptor:\n%s", test.pkg.GetName(), diff)
 		}
 	}
 }

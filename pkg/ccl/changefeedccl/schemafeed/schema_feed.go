@@ -121,7 +121,7 @@ type SchemaFeed struct {
 		// of the table descriptor seen by the poller. This is needed to determine
 		// when a backilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
-		previousTableVersion map[descpb.ID]*tabledesc.Immutable
+		previousTableVersion map[descpb.ID]catalog.TableDescriptor
 
 		// typeDeps tracks dependencies from target tables to user defined types
 		// that they use.
@@ -207,7 +207,7 @@ func New(cfg Config) *SchemaFeed {
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
 	}
-	m.mu.previousTableVersion = make(map[descpb.ID]*tabledesc.Immutable)
+	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
 	return m
@@ -495,14 +495,14 @@ func (tf *SchemaFeed) validateDescriptor(
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
 		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID)
-	case *tabledesc.Immutable:
+	case catalog.TableDescriptor:
 		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 			return err
 		}
 		log.Infof(ctx, "validate %v", formatDesc(desc))
-		if lastVersion, ok := tf.mu.previousTableVersion[desc.ID]; ok {
+		if lastVersion, ok := tf.mu.previousTableVersion[desc.GetID()]; ok {
 			// NB: Writes can occur to a table
-			if desc.ModificationTime.LessEq(lastVersion.ModificationTime) {
+			if desc.GetModificationTime().LessEq(lastVersion.GetModificationTime()) {
 				return nil
 			}
 
@@ -513,7 +513,7 @@ func (tf *SchemaFeed) validateDescriptor(
 			// allowed; without this explicit load, the lease manager might therefore
 			// return the previous version of the table, which is still technically
 			// allowed by the schema change system.
-			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
+			if err := tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID()); err != nil {
 				return err
 			}
 
@@ -545,7 +545,7 @@ func (tf *SchemaFeed) validateDescriptor(
 		}
 		// Add the types used by the table into the dependency tracker.
 		tf.mu.typeDeps.ingestTable(desc)
-		tf.mu.previousTableVersion[desc.ID] = desc
+		tf.mu.previousTableVersion[desc.GetID()] = desc
 		return nil
 	default:
 		return errors.AssertionFailedf("unexpected descriptor type %T", desc)

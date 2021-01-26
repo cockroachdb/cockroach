@@ -369,7 +369,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 	log.Info(ctx, "making table public")
 
-	fks := table.(*tabledesc.Immutable).AllActiveAndInactiveForeignKeys()
+	fks := table.AllActiveAndInactiveForeignKeys()
 	for _, fk := range fks {
 		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
 			return err

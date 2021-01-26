@@ -197,7 +197,7 @@ func newInvertedJoiner(
 	ij.colIdxMap = ij.desc.ColumnIdxMap()
 
 	var err error
-	ij.index, _, err = ij.desc.(*tabledesc.Immutable).FindIndexByIndexIdx(int(spec.IndexIdx))
+	ij.index, _, err = ij.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, err
 	}

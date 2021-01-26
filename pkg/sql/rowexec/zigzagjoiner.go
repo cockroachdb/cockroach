@@ -288,8 +288,8 @@ func newZigzagJoiner(
 	for i := range spec.Tables {
 		tables[i] = tabledesc.NewImmutable(spec.Tables[i])
 	}
-	leftColumnTypes := tables[0].(*tabledesc.Immutable).ColumnTypes()
-	rightColumnTypes := tables[1].(*tabledesc.Immutable).ColumnTypes()
+	leftColumnTypes := tables[0].ColumnTypes()
+	rightColumnTypes := tables[1].ColumnTypes()
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
@@ -425,7 +425,7 @@ func (z *zigzagJoiner) setupInfo(
 	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
 	info.indexTypes = make([]*types.T, len(columnIDs))
-	columnTypes := info.table.(*tabledesc.Immutable).ColumnTypes()
+	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
 		info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
@@ -627,7 +627,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 // Returns the column types of the equality columns.
 func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 	eqColTypes := make([]*types.T, len(zi.eqColumns))
-	colTypes := zi.table.(*tabledesc.Immutable).ColumnTypes()
+	colTypes := zi.table.ColumnTypes()
 	for i := range eqColTypes {
 		eqColTypes[i] = colTypes[zi.eqColumns[i]]
 	}

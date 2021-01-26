@@ -2932,21 +2932,6 @@ func (desc *Immutable) UserDefinedTypeColsHaveSameVersion(otherDesc catalog.Tabl
 	return true
 }
 
-// FindReadableColumnByID finds the readable column with specified ID. The
-// column may be undergoing a schema change and is marked nullable regardless
-// of its configuration. It returns true if the column is undergoing a
-// schema change.
-func (desc *Immutable) FindReadableColumnByID(
-	id descpb.ColumnID,
-) (*descpb.ColumnDescriptor, bool, error) {
-	for i, c := range desc.ReadableColumns() {
-		if c.ID == id {
-			return &c, i >= len(desc.Columns), nil
-		}
-	}
-	return nil, false, fmt.Errorf("column-id \"%d\" does not exist", id)
-}
-
 // FindFamilyByID finds the family with specified ID.
 func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error) {
 	for i := range desc.Families {
@@ -3754,7 +3739,9 @@ const IncludeConstraints = true
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
-func (desc *wrapper) MakeFirstMutationPublic(includeConstraints bool) (*Mutable, error) {
+func (desc *wrapper) MakeFirstMutationPublic(
+	includeConstraints bool,
+) (catalog.MutableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewExistingMutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID

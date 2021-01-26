@@ -253,6 +253,19 @@ type TableDescriptor interface {
 	IsLocalityRegionalByRow() bool
 	IsLocalityRegionalByTable() bool
 	IsLocalityGlobal() bool
+
+	HasColumnBackfillMutation() bool
+	MakeFirstMutationPublic(includeConstraints bool) (MutableDescriptor, error)
+	FindActiveColumnsByNames(names tree.NameList) ([]descpb.ColumnDescriptor, error)
+	ColumnTypesWithMutationsAndVirtualCol(mutations bool, virtualCol *descpb.ColumnDescriptor) []*types.T
+	HasColumnWithName(name tree.Name) (*descpb.ColumnDescriptor, bool)
+	ReadableColumns() []descpb.ColumnDescriptor
+	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
+	GetConstraintInfo(ctx context.Context, dg DescGetter) (map[string]descpb.ConstraintDetail, error)
+	FindIndexByIndexIdx(indexIdx int) (index *descpb.IndexDescriptor, isSecondary bool, err error) // deprecated
+	ColumnTypes() []*types.T
+	ColumnTypesWithMutations(mutations bool) []*types.T
+	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 }
 
 // Index is an interface around the index descriptor types.

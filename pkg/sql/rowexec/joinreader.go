@@ -205,7 +205,7 @@ func newJoinReader(
 	}
 	var err error
 	var isSecondary bool
-	jr.index, isSecondary, err = jr.desc.(*tabledesc.Immutable).FindIndexByIndexIdx(int(spec.IndexIdx))
+	jr.index, isSecondary, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +214,7 @@ func newJoinReader(
 
 	columnIDs, _ := jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
-	columnTypes := jr.desc.(*tabledesc.Immutable).ColumnTypesWithMutations(returnMutations)
+	columnTypes := jr.desc.ColumnTypesWithMutations(returnMutations)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 	}
