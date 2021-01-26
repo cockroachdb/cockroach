@@ -862,7 +862,7 @@ index-join t_json_arr
       ├── columns: a:1(int!null)
       ├── inverted constraint: /6/1
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
-      ├── stats: [rows=555.555556]
+      ├── stats: [rows=555.555556, distinct(6)=500, null(6)=0]
       └── key: (1)
 
 # Should generate a zigzag join on the inverted index. Row count should be

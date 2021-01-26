@@ -1750,58 +1750,6 @@ index-join b
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
-# TODO(rytaft): ensure that the stats prevent us from using the inverted index.
-opt
-SELECT * FROM b WHERE j @> '{}'
-----
-index-join b
- ├── columns: k:1!null u:2 v:3 j:4!null
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── inverted-filter
-      ├── columns: k:1!null
-      ├── inverted expression: /6
-      │    ├── tight: true, unique: false
-      │    └── union spans
-      │         ├── ["7\x00\x019", "7\x00\x019"]
-      │         └── ["7\x00\xff", "8")
-      ├── key: (1)
-      └── scan b@j_inv_idx
-           ├── columns: k:1!null j_inverted_key:6!null
-           ├── inverted constraint: /6/1
-           │    └── spans
-           │         ├── ["7\x00\x019", "7\x00\x019"]
-           │         └── ["7\x00\xff", "8")
-           ├── key: (1)
-           └── fd: (1)-->(6)
-
-# TODO(rytaft): ensure that the stats prevent us from using the inverted index.
-opt
-SELECT * FROM b WHERE j @> '[]'
-----
-index-join b
- ├── columns: k:1!null u:2 v:3 j:4!null
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── inverted-filter
-      ├── columns: k:1!null
-      ├── inverted expression: /6
-      │    ├── tight: true, unique: false
-      │    └── union spans
-      │         ├── ["7\x00\x018", "7\x00\x018"]
-      │         └── ["7\x00\x03", "7\x00\x03"]
-      ├── key: (1)
-      └── scan b@j_inv_idx
-           ├── columns: k:1!null j_inverted_key:6!null
-           ├── inverted constraint: /6/1
-           │    └── spans
-           │         ├── ["7\x00\x018", "7\x00\x018"]
-           │         └── ["7\x00\x03", "7\x00\x03"]
-           ├── key: (1)
-           └── fd: (1)-->(6)
-
 opt
 SELECT * FROM b WHERE j @> '2'
 ----
