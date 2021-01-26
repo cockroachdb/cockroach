@@ -110,7 +110,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
@@ -133,7 +132,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 
@@ -158,7 +156,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 
@@ -195,7 +192,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 
 # Multi-row upsert should auto-commit.
@@ -217,7 +213,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
@@ -266,7 +261,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
@@ -289,7 +283,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 
@@ -314,7 +307,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
 
@@ -351,7 +343,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
@@ -403,8 +394,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%QueryTxn%'
 ----
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
-dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Put, 1 EndTxn to (n1,s1):1
 
 # TODO(radu): allow non-side-effecting projections.
@@ -427,8 +416,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 Scan to (n1,s1):1
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -454,8 +441,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 Scan to (n1,s1):1
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -493,8 +478,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 1 Scan to (n1,s1):1
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # Multi-row delete should auto-commit.
@@ -516,8 +499,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 1 Scan to (n1,s1):1
-dist sender send  r35: sending batch 2 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
 
 # No auto-commit inside a transaction.
@@ -566,7 +547,6 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Del, 1 EndTxn to (n1,s1):1
 
@@ -590,7 +570,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Del to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -616,7 +595,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 2 Del to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -666,7 +644,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 Scan to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -690,7 +667,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 1 Put to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
@@ -716,7 +692,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 1 Del to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
@@ -744,7 +719,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 1 Scan to (n1,s1):1
 dist sender send  r35: sending batch 1 Del, 1 EndTxn to (n1,s1):1
@@ -775,7 +749,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
@@ -801,7 +774,6 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND message   NOT LIKE '%QueryTxn%'
   AND operation NOT LIKE '%async%'
 ----
-dist sender send  r35: sending batch 1 DelRng to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 2 CPut to (n1,s1):1
 dist sender send  r35: sending batch 1 EndTxn to (n1,s1):1
