@@ -1436,7 +1436,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 	}
 
 	// Subzone spans have the table prefix omitted.
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.ID))
+	prefix := keys.SystemSQLCodec.TablePrefix(uint32(table.GetID()))
 	for i := range expectedSpans {
 		// Subzone spans have the table prefix omitted.
 		expected := bytes.TrimPrefix(expectedSpans[i], prefix)

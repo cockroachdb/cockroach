@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -2098,7 +2097,7 @@ func TestImportCSVStmt(t *testing.T) {
 		// it was created in.
 		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
 		tableID := descpb.ID(dbID + 1)
-		var td *tabledesc.Immutable
+		var td catalog.TableDescriptor
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
 			return err
