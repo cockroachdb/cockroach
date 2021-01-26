@@ -135,13 +135,13 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	// Learners are not allowed to become leaseholders for now, see the comments
 	// in TransferLease and RequestLease.
 	_, err := TransferLease(ctx, nil, cArgs, nil)
-	require.EqualError(t, err, `replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`)
+	require.EqualError(t, err, `replica cannot hold lease`)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForUnknown = `cannot replace lease <empty> with <empty>: ` +
-		`replica (n0,s0):? not found in r0:{-} [(n1,s1):1, (n2,s2):2LEARNER, next=0, gen=0]`
+		`replica not found in RangeDescriptor`
 	require.EqualError(t, err, expForUnknown)
 
 	cArgs.Args = &roachpb.RequestLeaseRequest{
@@ -153,7 +153,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 
 	const expForLearner = `cannot replace lease <empty> ` +
 		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil>: ` +
-		`replica (n2,s2):2LEARNER of type LEARNER cannot hold lease`
+		`replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
 
@@ -180,7 +180,7 @@ func TestCheckCanReceiveLease(t *testing.T) {
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
+			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], &rngDesc)
 			require.Equal(t, tc.eligible, err == nil, "err: %v", err)
 		})
 	}
@@ -188,6 +188,6 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	t.Run("replica not in range desc", func(t *testing.T) {
 		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
 		rngDesc := roachpb.RangeDescriptor{}
-		require.Regexp(t, "replica.*not found", CheckCanReceiveLease(repDesc, &rngDesc))
+		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc, &rngDesc))
 	})
 }

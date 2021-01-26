@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -127,7 +126,7 @@ func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderIn
 			rngDesc := roachpb.RangeDescriptor{
 				InternalReplicas: []roachpb.ReplicaDescriptor{repDesc},
 			}
-			err := batcheval.CheckCanReceiveLease(repDesc, &rngDesc)
+			err := roachpb.CheckCanReceiveLease(repDesc, &rngDesc)
 			leaderEligibleForLease = err == nil
 		} else {
 			// This matches replicaProposed.leaderStatusRLocked().
