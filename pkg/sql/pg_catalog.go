@@ -925,7 +925,10 @@ type oneAtATimeSchemaResolver struct {
 }
 
 func (r oneAtATimeSchemaResolver) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
-	return r.p.Descriptors().GetImmutableDatabaseByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
+	_, desc, err := r.p.Descriptors().GetImmutableDatabaseByID(
+		r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{Required: true},
+	)
+	return desc, err
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
@@ -1008,9 +1011,12 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
+					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/)
+					if err != nil {
+						return false, err
+					}
 					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
-						table.Dropped() ||
-						!userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/) {
+						table.Dropped() || !canSeeDescriptor {
 						return false, nil
 					}
 					h := makeOidHasher()

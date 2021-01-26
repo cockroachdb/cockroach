@@ -63,11 +63,11 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
 		ctx,
 		p.txn,
 		tableDesc.GetParentID(),
-		tree.DatabaseLookupFlags{},
+		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
 		return nil, err
@@ -186,6 +186,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityNonRegionalByRowToRegional
 
 	// Ensure column exists and is of the correct type.
 	partCol, err := n.tableDesc.FindColumnWithName(newLocality.RegionalByRowColumn)
+
 	if err != nil {
 		return err
 	}

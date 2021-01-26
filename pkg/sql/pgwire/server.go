@@ -780,6 +780,8 @@ func parseClientProvidedSessionParameters(
 		args.ConnResultsBufferSize = connResultsBufferSize.Get(sv)
 	}
 
+	// TODO(richardjcai): When connecting to the database, we'll want to
+	// check for CONNECT privilege on the database. #59875.
 	if _, ok := args.SessionDefaults["database"]; !ok {
 		// CockroachDB-specific behavior: if no database is specified,
 		// default to "defaultdb". In PostgreSQL this would be "postgres".

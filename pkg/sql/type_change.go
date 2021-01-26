@@ -436,8 +436,8 @@ func (t *typeSchemaChanger) canRemoveEnumLabel(
 		// be unset by default) when executing the query constructed above. This is
 		// because the enum label may be used in a view expression, which is
 		// name resolved in the context of the type's database.
-		dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{})
+		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)

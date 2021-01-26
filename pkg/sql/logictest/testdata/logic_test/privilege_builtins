@@ -343,7 +343,7 @@ SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'syst
        has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMPORARY'),
        has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'system'), 'TEMP')
 ----
-false  true  false  false
+false  false  false  false
 
 query BBBB
 SELECT has_database_privilege((SELECT oid FROM pg_database WHERE datname = 'test'), 'CREATE'),
@@ -363,7 +363,7 @@ SELECT has_database_privilege('system', '  CrEaTe      '),
        has_database_privilege('system', 'TEMP'),
        has_database_privilege('system', '  CrEaTe      ,CONNECT')
 ----
-false  true  false  false  false
+false  false  false  false  false
 
 query BBBBB
 SELECT has_database_privilege('test', '  CrEaTe      '),
@@ -409,7 +409,15 @@ SELECT has_database_privilege('bar', 'test', 'CREATE'),
        has_database_privilege('bar', 'test', 'CREATE, CONNECT'),
        has_database_privilege('bar', 'test', 'CREATE, TEMP')
 ----
-true  true  true  true  true  true
+true  false  true  true  false  true
+
+statement ok
+GRANT CONNECT ON DATABASE test TO bar
+
+query B
+SELECT has_database_privilege('bar', 'test', 'CONNECT')
+----
+true
 
 query BBBBBB
 SELECT has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION'),
@@ -419,7 +427,7 @@ SELECT has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION'),
        has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION, CONNECT WITH GRANT OPTION'),
        has_database_privilege('bar', 'test', 'CREATE WITH GRANT OPTION, TEMP WITH GRANT OPTION')
 ----
-false  true  false  false  false  false
+false  false  false  false  false  false
 
 
 ## has_foreign_data_wrapper_privilege
