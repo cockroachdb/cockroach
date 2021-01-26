@@ -475,6 +475,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 // timestamps after the subsumption time.
 func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 59448, "flaky test")
 	// Skipping under short because this test pauses for a few seconds in order to
 	// trigger a node liveness expiration.
 	skip.UnderShort(t)
