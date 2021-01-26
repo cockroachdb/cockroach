@@ -18,31 +18,29 @@ func _() {
 	_ = x[AddScheduledJobsTable-7]
 	_ = x[UserDefinedSchemas-8]
 	_ = x[NoOriginFKIndexes-9]
-	_ = x[ClientRangeInfosOnBatchResponse-10]
-	_ = x[NodeMembershipStatus-11]
-	_ = x[RangeStatsRespHasDesc-12]
-	_ = x[MinPasswordLength-13]
-	_ = x[AbortSpanBytes-14]
-	_ = x[AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-15]
-	_ = x[MaterializedViews-16]
-	_ = x[Box2DType-17]
-	_ = x[UpdateScheduledJobsSchema-18]
-	_ = x[CreateLoginPrivilege-19]
-	_ = x[HBAForNonTLS-20]
-	_ = x[V20_2-21]
-	_ = x[Start21_1-22]
-	_ = x[EmptyArraysInInvertedIndexes-23]
-	_ = x[UniqueWithoutIndexConstraints-24]
-	_ = x[VirtualComputedColumns-25]
-	_ = x[CPutInline-26]
-	_ = x[ReplicaVersions-27]
-	_ = x[TruncatedAndRangeAppliedStateMigration-28]
-	_ = x[PostTruncatedAndRangeAppliedStateMigration-29]
+	_ = x[NodeMembershipStatus-10]
+	_ = x[MinPasswordLength-11]
+	_ = x[AbortSpanBytes-12]
+	_ = x[AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable-13]
+	_ = x[MaterializedViews-14]
+	_ = x[Box2DType-15]
+	_ = x[UpdateScheduledJobsSchema-16]
+	_ = x[CreateLoginPrivilege-17]
+	_ = x[HBAForNonTLS-18]
+	_ = x[V20_2-19]
+	_ = x[Start21_1-20]
+	_ = x[EmptyArraysInInvertedIndexes-21]
+	_ = x[UniqueWithoutIndexConstraints-22]
+	_ = x[VirtualComputedColumns-23]
+	_ = x[CPutInline-24]
+	_ = x[ReplicaVersions-25]
+	_ = x[TruncatedAndRangeAppliedStateMigration-26]
+	_ = x[PostTruncatedAndRangeAppliedStateMigration-27]
 }
 
-const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesClientRangeInfosOnBatchResponseNodeMembershipStatusRangeStatsRespHasDescMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInlineReplicaVersionsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigration"
+const _Key_name = "NamespaceTableWithSchemasStart20_2GeospatialTypeEnumsRangefeedLeasesAlterColumnTypeGeneralAlterSystemJobsAddCreatedByColumnsAddScheduledJobsTableUserDefinedSchemasNoOriginFKIndexesNodeMembershipStatusMinPasswordLengthAbortSpanBytesAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTableMaterializedViewsBox2DTypeUpdateScheduledJobsSchemaCreateLoginPrivilegeHBAForNonTLSV20_2Start21_1EmptyArraysInInvertedIndexesUniqueWithoutIndexConstraintsVirtualComputedColumnsCPutInlineReplicaVersionsTruncatedAndRangeAppliedStateMigrationPostTruncatedAndRangeAppliedStateMigration"
 
-var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 211, 231, 252, 269, 283, 347, 364, 373, 398, 418, 430, 435, 444, 472, 501, 523, 533, 548, 586, 628}
+var _Key_index = [...]uint16{0, 25, 34, 48, 53, 68, 90, 124, 145, 163, 180, 200, 217, 231, 295, 312, 321, 346, 366, 378, 383, 392, 420, 449, 471, 481, 496, 534, 576}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
