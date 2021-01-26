@@ -48,7 +48,7 @@ sort
  ├── save-table-name: q11_sort_1
  ├── columns: ps_partkey:1(int!null) value:21(float!null)
  ├── immutable
- ├── stats: [rows=9927.82897, distinct(1)=9927.82897, null(1)=0, distinct(21)=9927.82897, null(21)=0]
+ ├── stats: [rows=10752.6882, distinct(1)=10752.6882, null(1)=0, distinct(21)=10752.6882, null(21)=0]
  ├── key: (1)
  ├── fd: (1)-->(21)
  ├── ordering: -21
@@ -56,7 +56,7 @@ sort
       ├── save-table-name: q11_select_2
       ├── columns: ps_partkey:1(int!null) sum:21(float!null)
       ├── immutable
-      ├── stats: [rows=9927.82897, distinct(1)=9927.82897, null(1)=0, distinct(21)=9927.82897, null(21)=0]
+      ├── stats: [rows=10752.6882, distinct(1)=10752.6882, null(1)=0, distinct(21)=10752.6882, null(21)=0]
       ├── key: (1)
       ├── fd: (1)-->(21)
       ├── group-by
@@ -64,34 +64,34 @@ sort
       │    ├── columns: ps_partkey:1(int!null) sum:21(float!null)
       │    ├── grouping columns: ps_partkey:1(int!null)
       │    ├── immutable
-      │    ├── stats: [rows=29783.4869, distinct(1)=29783.4869, null(1)=0, distinct(21)=29783.4869, null(21)=0]
+      │    ├── stats: [rows=32258.0645, distinct(1)=32258.0645, null(1)=0, distinct(21)=32258.0645, null(21)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(21)
       │    ├── project
       │    │    ├── save-table-name: q11_project_4
       │    │    ├── columns: column20:20(float!null) ps_partkey:1(int!null)
       │    │    ├── immutable
-      │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(20)=31617.9161, null(20)=0]
+      │    │    ├── stats: [rows=32258.0645, distinct(1)=32258.0645, null(1)=0, distinct(20)=32258.0645, null(20)=0]
       │    │    ├── inner-join (lookup partsupp)
       │    │    │    ├── save-table-name: q11_lookup_join_5
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) ps_availqty:3(int!null) ps_supplycost:4(float!null) s_suppkey:7(int!null) s_nationkey:10(int!null) n_nationkey:15(int!null) n_name:16(char!null)
       │    │    │    ├── key columns: [1 2] = [1 2]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(2)=399.934613, null(2)=0, distinct(3)=9536.12259, null(3)=0, distinct(4)=27589.3232, null(4)=0, distinct(7)=399.934613, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(3,4)=31617.9161, null(3,4)=0]
+      │    │    │    ├── stats: [rows=32258.0645, distinct(1)=32258.0645, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=9920, null(3)=0, distinct(4)=32258.0645, null(4)=0, distinct(7)=400, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(3,4)=32258.0645, null(3,4)=0]
       │    │    │    ├── key: (1,7)
       │    │    │    ├── fd: ()-->(16), (1,2)-->(3,4), (7)-->(10), (10)==(15), (15)==(10), (2)==(7), (7)==(2)
       │    │    │    ├── inner-join (lookup partsupp@ps_sk)
       │    │    │    │    ├── save-table-name: q11_lookup_join_6
       │    │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) s_suppkey:7(int!null) s_nationkey:10(int!null) n_nationkey:15(int!null) n_name:16(char!null)
       │    │    │    │    ├── key columns: [7] = [2]
-      │    │    │    │    ├── stats: [rows=32258.0645, distinct(1)=29783.4869, null(1)=0, distinct(2)=399.934613, null(2)=0, distinct(7)=399.934613, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0]
+      │    │    │    │    ├── stats: [rows=32258.0645, distinct(1)=32258.0645, null(1)=0, distinct(2)=400, null(2)=0, distinct(7)=400, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0]
       │    │    │    │    ├── key: (1,7)
       │    │    │    │    ├── fd: ()-->(16), (7)-->(10), (10)==(15), (15)==(10), (2)==(7), (7)==(2)
       │    │    │    │    ├── inner-join (lookup supplier@s_nk)
       │    │    │    │    │    ├── save-table-name: q11_lookup_join_7
       │    │    │    │    │    ├── columns: s_suppkey:7(int!null) s_nationkey:10(int!null) n_nationkey:15(int!null) n_name:16(char!null)
       │    │    │    │    │    ├── key columns: [15] = [10]
-      │    │    │    │    │    ├── stats: [rows=400, distinct(7)=399.934613, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0]
+      │    │    │    │    │    ├── stats: [rows=400, distinct(7)=400, null(7)=0, distinct(10)=1, null(10)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0]
       │    │    │    │    │    ├── key: (7)
       │    │    │    │    │    ├── fd: ()-->(16), (7)-->(10), (10)==(15), (15)==(10)
       │    │    │    │    │    ├── select
@@ -146,26 +146,26 @@ sort
                           │    │    ├── save-table-name: q11_project_12
                           │    │    ├── columns: column41:41(float!null)
                           │    │    ├── immutable
-                          │    │    ├── stats: [rows=32258.0645, distinct(41)=31617.9161, null(41)=0]
+                          │    │    ├── stats: [rows=32258.0645, distinct(41)=32258.0645, null(41)=0]
                           │    │    ├── inner-join (lookup partsupp)
                           │    │    │    ├── save-table-name: q11_lookup_join_13
                           │    │    │    ├── columns: ps_suppkey:23(int!null) ps_availqty:24(int!null) ps_supplycost:25(float!null) s_suppkey:28(int!null) s_nationkey:31(int!null) n_nationkey:36(int!null) n_name:37(char!null)
                           │    │    │    ├── key columns: [22 23] = [22 23]
                           │    │    │    ├── lookup columns are key
-                          │    │    │    ├── stats: [rows=32258.0645, distinct(23)=399.934613, null(23)=0, distinct(24)=9536.12259, null(24)=0, distinct(25)=27589.3232, null(25)=0, distinct(28)=399.934613, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0, distinct(24,25)=31617.9161, null(24,25)=0]
+                          │    │    │    ├── stats: [rows=32258.0645, distinct(23)=400, null(23)=0, distinct(24)=9920, null(24)=0, distinct(25)=32258.0645, null(25)=0, distinct(28)=400, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0, distinct(24,25)=32258.0645, null(24,25)=0]
                           │    │    │    ├── fd: ()-->(37), (28)-->(31), (31)==(36), (36)==(31), (23)==(28), (28)==(23)
                           │    │    │    ├── inner-join (lookup partsupp@ps_sk)
                           │    │    │    │    ├── save-table-name: q11_lookup_join_14
                           │    │    │    │    ├── columns: ps_partkey:22(int!null) ps_suppkey:23(int!null) s_suppkey:28(int!null) s_nationkey:31(int!null) n_nationkey:36(int!null) n_name:37(char!null)
                           │    │    │    │    ├── key columns: [28] = [23]
-                          │    │    │    │    ├── stats: [rows=32258.0645, distinct(22)=29783.4869, null(22)=0, distinct(23)=399.934613, null(23)=0, distinct(28)=399.934613, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
+                          │    │    │    │    ├── stats: [rows=32258.0645, distinct(22)=32258.0645, null(22)=0, distinct(23)=400, null(23)=0, distinct(28)=400, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
                           │    │    │    │    ├── key: (22,28)
                           │    │    │    │    ├── fd: ()-->(37), (28)-->(31), (31)==(36), (36)==(31), (23)==(28), (28)==(23)
                           │    │    │    │    ├── inner-join (lookup supplier@s_nk)
                           │    │    │    │    │    ├── save-table-name: q11_lookup_join_15
                           │    │    │    │    │    ├── columns: s_suppkey:28(int!null) s_nationkey:31(int!null) n_nationkey:36(int!null) n_name:37(char!null)
                           │    │    │    │    │    ├── key columns: [36] = [31]
-                          │    │    │    │    │    ├── stats: [rows=400, distinct(28)=399.934613, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
+                          │    │    │    │    │    ├── stats: [rows=400, distinct(28)=400, null(28)=0, distinct(31)=1, null(31)=0, distinct(36)=1, null(36)=0, distinct(37)=1, null(37)=0]
                           │    │    │    │    │    ├── key: (28)
                           │    │    │    │    │    ├── fd: ()-->(37), (28)-->(31), (31)==(36), (36)==(31)
                           │    │    │    │    │    ├── select
@@ -205,8 +205,8 @@ column_names  row_count  distinct_count  null_count
 {value}       1048       1048            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
-{value}       9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
+{ps_partkey}  10753.00       10.26 <==      10753.00            10.26 <==           0.00            1.00
+{value}       10753.00       10.26 <==      10753.00            10.26 <==           0.00            1.00
 
 ----Stats for q11_select_2----
 column_names  row_count  distinct_count  null_count
@@ -214,8 +214,8 @@ column_names  row_count  distinct_count  null_count
 {sum}         1048       1048            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
-{sum}         9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
+{ps_partkey}  10753.00       10.26 <==      10753.00            10.26 <==           0.00            1.00
+{sum}         10753.00       10.26 <==      10753.00            10.26 <==           0.00            1.00
 
 ----Stats for q11_group_by_3----
 column_names  row_count  distinct_count  null_count
@@ -223,8 +223,8 @@ column_names  row_count  distinct_count  null_count
 {sum}         29818      29969           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_partkey}  29783.00       1.00           29783.00            1.00                0.00            1.00
-{sum}         29783.00       1.00           29783.00            1.01                0.00            1.00
+{ps_partkey}  32258.00       1.08           32258.00            1.09                0.00            1.00
+{sum}         32258.00       1.08           32258.00            1.08                0.00            1.00
 
 ----Stats for q11_project_4----
 column_names  row_count  distinct_count  null_count
@@ -232,8 +232,8 @@ column_names  row_count  distinct_count  null_count
 {ps_partkey}  31680      29669           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column20}    32258.00       1.02           31618.00            1.01                0.00            1.00
-{ps_partkey}  32258.00       1.02           29783.00            1.00                0.00            1.00
+{column20}    32258.00       1.02           32258.00            1.01                0.00            1.00
+{ps_partkey}  32258.00       1.02           32258.00            1.09                0.00            1.00
 
 ----Stats for q11_lookup_join_5----
 column_names     row_count  distinct_count  null_count
@@ -249,10 +249,10 @@ column_names     row_count  distinct_count  null_count
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}         32258.00       1.02           1.00                1.00                0.00            1.00
 {n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
-{ps_partkey}     32258.00       1.02           29783.00            1.00                0.00            1.00
+{ps_availqty}    32258.00       1.02           9920.00             1.04                0.00            1.00
+{ps_partkey}     32258.00       1.02           32258.00            1.09                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
+{ps_supplycost}  32258.00       1.02           32258.00            1.18                0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
@@ -268,7 +268,7 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       32258.00       1.02           1.00                1.00                0.00            1.00
 {n_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_partkey}   32258.00       1.02           29783.00            1.00                0.00            1.00
+{ps_partkey}   32258.00       1.02           32258.00            1.09                0.00            1.00
 {ps_suppkey}   32258.00       1.02           400.00              1.01                0.00            1.00
 {s_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}    32258.00       1.02           400.00              1.01                0.00            1.00
@@ -323,7 +323,7 @@ column_names  row_count  distinct_count  null_count
 {column41}    31680      31888           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column41}    32258.00       1.02           31618.00            1.01                0.00            1.00
+{column41}    32258.00       1.02           32258.00            1.01                0.00            1.00
 
 ----Stats for q11_lookup_join_13----
 column_names     row_count  distinct_count  null_count
@@ -338,9 +338,9 @@ column_names     row_count  distinct_count  null_count
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}         32258.00       1.02           1.00                1.00                0.00            1.00
 {n_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_availqty}    32258.00       1.02           9536.00             1.00                0.00            1.00
+{ps_availqty}    32258.00       1.02           9920.00             1.04                0.00            1.00
 {ps_suppkey}     32258.00       1.02           400.00              1.01                0.00            1.00
-{ps_supplycost}  32258.00       1.02           27589.00            1.01                0.00            1.00
+{ps_supplycost}  32258.00       1.02           32258.00            1.18                0.00            1.00
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
@@ -356,7 +356,7 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       32258.00       1.02           1.00                1.00                0.00            1.00
 {n_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
-{ps_partkey}   32258.00       1.02           29783.00            1.00                0.00            1.00
+{ps_partkey}   32258.00       1.02           32258.00            1.09                0.00            1.00
 {ps_suppkey}   32258.00       1.02           400.00              1.01                0.00            1.00
 {s_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}    32258.00       1.02           400.00              1.01                0.00            1.00

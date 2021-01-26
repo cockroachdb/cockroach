@@ -54,7 +54,7 @@ ORDER BY
 sort
  ├── save-table-name: q16_sort_1
  ├── columns: p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null) supplier_cnt:25(int!null)
- ├── stats: [rows=9962.4036, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0, distinct(25)=9962.4036, null(25)=0, distinct(10-12)=9962.4036, null(10-12)=0]
+ ├── stats: [rows=0.854004637, distinct(10)=0.854004637, null(10)=0, distinct(11)=0.854004637, null(11)=0, distinct(12)=0.854004637, null(12)=0, distinct(25)=0.854004637, null(25)=0, distinct(10-12)=0.854004637, null(10-12)=0]
  ├── key: (10-12)
  ├── fd: (10-12)-->(25)
  ├── ordering: -25,+10,+11,+12
@@ -62,26 +62,26 @@ sort
       ├── save-table-name: q16_group_by_2
       ├── columns: p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null) count:25(int!null)
       ├── grouping columns: p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null)
-      ├── stats: [rows=9962.4036, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0, distinct(25)=9962.4036, null(25)=0, distinct(10-12)=9962.4036, null(10-12)=0]
+      ├── stats: [rows=0.854004637, distinct(10)=0.854004637, null(10)=0, distinct(11)=0.854004637, null(11)=0, distinct(12)=0.854004637, null(12)=0, distinct(25)=0.854004637, null(25)=0, distinct(10-12)=0.854004637, null(10-12)=0]
       ├── key: (10-12)
       ├── fd: (10-12)-->(25)
       ├── distinct-on
       │    ├── save-table-name: q16_distinct_on_3
       │    ├── columns: ps_suppkey:2(int!null) p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null)
       │    ├── grouping columns: ps_suppkey:2(int!null) p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null)
-      │    ├── stats: [rows=28893.7828, distinct(2)=9381.05093, null(2)=0, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0, distinct(10-12)=9962.4036, null(10-12)=0, distinct(2,10-12)=28893.7828, null(2,10-12)=0]
+      │    ├── stats: [rows=0.854004637, distinct(2)=8.00000071e-05, null(2)=0, distinct(10)=0.854004637, null(10)=0, distinct(11)=0.854004637, null(11)=0, distinct(12)=0.854004637, null(12)=0, distinct(10-12)=0.854004637, null(10-12)=0, distinct(2,10-12)=0.854004637, null(2,10-12)=0]
       │    ├── key: (2,10-12)
       │    └── anti-join (hash)
       │         ├── save-table-name: q16_anti_join_4
       │         ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:7(int!null) p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null)
-      │         ├── stats: [rows=28893.7828, distinct(1)=10693.3353, null(1)=0, distinct(2)=9381.05093, null(2)=0, distinct(7)=10693.3353, null(7)=0, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0, distinct(10-12)=9962.4036, null(10-12)=0, distinct(2,10-12)=28893.7828, null(2,10-12)=0]
+      │         ├── stats: [rows=531647.382, distinct(1)=7.9999998e-05, null(1)=0, distinct(2)=8.00000071e-05, null(2)=0, distinct(7)=7.9999998e-05, null(7)=0, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0, distinct(10-12)=10675.057, null(10-12)=0, distinct(2,10-12)=0.854004637, null(2,10-12)=0]
       │         ├── key: (2,7)
       │         ├── fd: (7)-->(10-12), (1)==(7), (7)==(1)
       │         ├── inner-join (lookup partsupp)
       │         │    ├── save-table-name: q16_lookup_join_5
       │         │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:7(int!null) p_brand:10(char!null) p_type:11(varchar!null) p_size:12(int!null)
       │         │    ├── key columns: [7] = [1]
-      │         │    ├── stats: [rows=42940.7379, distinct(1)=10693.3353, null(1)=0, distinct(2)=9789.20988, null(2)=0, distinct(7)=10693.3353, null(7)=0, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0]
+      │         │    ├── stats: [rows=42940.7379, distinct(1)=10693.3353, null(1)=0, distinct(2)=9920, null(2)=0, distinct(7)=10693.3353, null(7)=0, distinct(10)=25, null(10)=0, distinct(11)=150, null(11)=0, distinct(12)=8, null(12)=0]
       │         │    ├── key: (2,7)
       │         │    ├── fd: (7)-->(10-12), (1)==(7), (7)==(1)
       │         │    ├── select
@@ -144,10 +144,10 @@ column_names    row_count  distinct_count  null_count
 {supplier_cnt}  18314      15              0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}       9962.00        1.84           25.00               1.04                0.00            1.00
-{p_size}        9962.00        1.84           8.00                1.00                0.00            1.00
-{p_type}        9962.00        1.84           150.00              1.03                0.00            1.00
-{supplier_cnt}  9962.00        1.84           9962.00             664.13 <==          0.00            1.00
+{p_brand}       1.00           18314.00 <==   1.00                24.00 <==           0.00            1.00
+{p_size}        1.00           18314.00 <==   1.00                8.00 <==            0.00            1.00
+{p_type}        1.00           18314.00 <==   1.00                145.00 <==          0.00            1.00
+{supplier_cnt}  1.00           18314.00 <==   1.00                15.00 <==           0.00            1.00
 
 ----Stats for q16_group_by_2----
 column_names  row_count  distinct_count  null_count
@@ -157,10 +157,10 @@ column_names  row_count  distinct_count  null_count
 {p_type}      18314      145             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       9962.00        1.84           9962.00             664.13 <==          0.00            1.00
-{p_brand}     9962.00        1.84           25.00               1.04                0.00            1.00
-{p_size}      9962.00        1.84           8.00                1.00                0.00            1.00
-{p_type}      9962.00        1.84           150.00              1.03                0.00            1.00
+{count}       1.00           18314.00 <==   1.00                15.00 <==           0.00            1.00
+{p_brand}     1.00           18314.00 <==   1.00                24.00 <==           0.00            1.00
+{p_size}      1.00           18314.00 <==   1.00                8.00 <==            0.00            1.00
+{p_type}      1.00           18314.00 <==   1.00                145.00 <==          0.00            1.00
 
 ----Stats for q16_distinct_on_3----
 column_names  row_count  distinct_count  null_count
@@ -170,10 +170,10 @@ column_names  row_count  distinct_count  null_count
 {ps_suppkey}  118250     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28894.00       4.09 <==       25.00               1.04                0.00            1.00
-{p_size}      28894.00       4.09 <==       8.00                1.00                0.00            1.00
-{p_type}      28894.00       4.09 <==       150.00              1.03                0.00            1.00
-{ps_suppkey}  28894.00       4.09 <==       9381.00             1.06                0.00            1.00
+{p_brand}     1.00           118250.00 <==  1.00                24.00 <==           0.00            1.00
+{p_size}      1.00           118250.00 <==  1.00                8.00 <==            0.00            1.00
+{p_type}      1.00           118250.00 <==  1.00                145.00 <==          0.00            1.00
+{ps_suppkey}  1.00           118250.00 <==  0.00                +Inf <==            0.00            1.00
 
 ----Stats for q16_anti_join_4----
 column_names  row_count  distinct_count  null_count
@@ -185,12 +185,12 @@ column_names  row_count  distinct_count  null_count
 {ps_suppkey}  118274     9916            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}     28894.00       4.09 <==       25.00               1.04                0.00            1.00
-{p_partkey}   28894.00       4.09 <==       10693.00            2.75 <==            0.00            1.00
-{p_size}      28894.00       4.09 <==       8.00                1.00                0.00            1.00
-{p_type}      28894.00       4.09 <==       150.00              1.03                0.00            1.00
-{ps_partkey}  28894.00       4.09 <==       10693.00            2.75 <==            0.00            1.00
-{ps_suppkey}  28894.00       4.09 <==       9381.00             1.06                0.00            1.00
+{p_brand}     531647.00      4.50 <==       25.00               1.04                0.00            1.00
+{p_partkey}   531647.00      4.50 <==       0.00                +Inf <==            0.00            1.00
+{p_size}      531647.00      4.50 <==       8.00                1.00                0.00            1.00
+{p_type}      531647.00      4.50 <==       150.00              1.03                0.00            1.00
+{ps_partkey}  531647.00      4.50 <==       0.00                +Inf <==            0.00            1.00
+{ps_suppkey}  531647.00      4.50 <==       0.00                +Inf <==            0.00            1.00
 
 ----Stats for q16_lookup_join_5----
 column_names  row_count  distinct_count  null_count
@@ -207,7 +207,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      42941.00       2.76 <==       8.00                1.00                0.00            1.00
 {p_type}      42941.00       2.76 <==       150.00              1.03                0.00            1.00
 {ps_partkey}  42941.00       2.76 <==       10693.00            2.75 <==            0.00            1.00
-{ps_suppkey}  42941.00       2.76 <==       9789.00             1.01                0.00            1.00
+{ps_suppkey}  42941.00       2.76 <==       9920.00             1.00                0.00            1.00
 
 ----Stats for q16_select_6----
 column_names  row_count  distinct_count  null_count

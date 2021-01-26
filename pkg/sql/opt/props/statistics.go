@@ -63,7 +63,7 @@ type Statistics struct {
 	// Selectivity is a value between 0 and 1 representing the estimated
 	// reduction in number of rows for the top-level operator in this
 	// expression.
-	Selectivity float64
+	Selectivity Selectivity
 }
 
 // Init initializes the data members of Statistics.
@@ -94,9 +94,9 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 // Histograms are not updated.
 // See ColumnStatistic.ApplySelectivity for updating distinct counts, null
 // counts, and histograms.
-func (s *Statistics) ApplySelectivity(selectivity float64) {
-	s.RowCount *= selectivity
-	s.Selectivity *= selectivity
+func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
+	s.RowCount *= float64(selectivity)
+	s.Selectivity.Multiply(selectivity)
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It
@@ -106,7 +106,7 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 func (s *Statistics) UnionWith(other *Statistics) {
 	s.Available = s.Available && other.Available
 	s.RowCount += other.RowCount
-	s.Selectivity += other.Selectivity
+	s.Selectivity = s.Selectivity.Add(other.Selectivity)
 }
 
 func (s *Statistics) String() string {
@@ -170,10 +170,10 @@ type ColumnStatistic struct {
 
 // ApplySelectivity updates the distinct count, null count, and histogram
 // according to a given selectivity.
-func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
+func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows float64) {
 	// Since the null count is a simple count of all null rows, we can
 	// just multiply the selectivity with it.
-	c.NullCount *= selectivity
+	c.NullCount *= float64(selectivity)
 
 	if c.Histogram != nil {
 		c.Histogram = c.Histogram.ApplySelectivity(selectivity)
@@ -197,7 +197,7 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	//
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
-	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
+	c.DistinctCount = d - d*math.Pow(float64(1-selectivity), n/d)
 	const epsilon = 1e-10
 	if c.DistinctCount < epsilon {
 		// Avoid setting the distinct count to 0 (since the row count is

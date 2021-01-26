@@ -438,18 +438,18 @@ GROUP BY y
 project
  ├── columns: count:10(int!null)
  ├── immutable
- ├── stats: [rows=138.170075]
+ ├── stats: [rows=166.666667]
  └── group-by
       ├── columns: y:2(int) count_rows:10(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=138.170075, distinct(2)=138.170075, null(2)=0]
+      ├── stats: [rows=166.666667, distinct(2)=166.666667, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── semi-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=166.666667, distinct(1)=166.666667, null(1)=0, distinct(2)=138.170075, null(2)=0]
+      │    ├── stats: [rows=166.666667, distinct(1)=166.666667, null(1)=0, distinct(2)=166.666667, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -475,18 +475,18 @@ GROUP BY y
 project
  ├── columns: count:10(int!null)
  ├── immutable
- ├── stats: [rows=400]
+ ├── stats: [rows=5.00000056e-07]
  └── group-by
       ├── columns: y:2(int) count_rows:10(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
+      ├── stats: [rows=5.00000056e-07, distinct(2)=5.00000056e-07, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── anti-join (hash)
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=4833.33333, distinct(2)=400, null(2)=0]
+      │    ├── stats: [rows=4833.33333, distinct(2)=5.00000056e-07, null(2)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
@@ -549,19 +549,19 @@ GROUP BY y
 project
  ├── columns: count:10(int!null)
  ├── immutable
- ├── stats: [rows=399.903879]
+ ├── stats: [rows=400]
  └── group-by
       ├── columns: y:2(int) count_rows:10(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=399.903879, distinct(2)=399.903879, null(2)=1]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=-49990000]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── left-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:6(int) v:7(int!null)
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    ├── immutable
-      │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=399.903879, null(2)=6666.66667]
+      │    ├── stats: [rows=10000, distinct(1)=500, null(1)=6666.66667, distinct(2)=400, null(2)=-49990000]
       │    ├── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:6(int) v:7(int!null)
@@ -591,14 +591,14 @@ project
       ├── columns: y:2(int) count_rows:10(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=400, distinct(2)=400, null(2)=1]
+      ├── stats: [rows=400, distinct(2)=400, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── full-join (hash)
       │    ├── columns: x:1(int) y:2(int) u:6(int) v:7(int)
       │    ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
       │    ├── immutable
-      │    ├── stats: [rows=11666.6667, distinct(2)=400, null(2)=6666.66667]
+      │    ├── stats: [rows=11666.6667, distinct(2)=400, null(2)=0]
       │    ├── fd: (1)-->(2)
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
@@ -726,13 +726,13 @@ SELECT *, rowid FROM xysd INNER JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:6(int!null) v:7(int!null) rowid:8(int!null)
- ├── stats: [rows=5000, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(6)=499, null(6)=0, distinct(2,3)=3160.69477, null(2,3)=25, distinct(3,6)=5000, null(3,6)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
+ ├── stats: [rows=5000, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(6)=499, null(6)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,6)=5000, null(3,6)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
  ├── key: (8)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2,6), (8)-->(1-4,6,7), (1)==(6), (6)==(1)
  └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) u:6(int!null) v:7(int!null) rowid:8(int!null) uv.crdb_internal_mvcc_timestamp:9(decimal)
       ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=399.99851, null(2)=2500, distinct(3)=499.977311, null(3)=50, distinct(6)=499, null(6)=0, distinct(2,3)=3160.69477, null(2,3)=25, distinct(3,6)=5000, null(3,6)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
+      ├── stats: [rows=5000, distinct(1)=499, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(6)=499, null(6)=0, distinct(2,3)=5000, null(2,3)=25, distinct(3,6)=5000, null(3,6)=0, distinct(1,2,8)=5000, null(1,2,8)=0]
       ├── key: (8)
       ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (8)-->(6,7,9), (1)==(6), (6)==(1)
       ├── scan xysd
@@ -753,13 +753,13 @@ SELECT *, rowid FROM xysd LEFT JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:6(int) v:7(int) rowid:8(int)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(6)=500, null(6)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,6)=10000, null(3,6)=50, distinct(1,2,8)=10000, null(1,2,8)=0]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(6)=500, null(6)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,6)=10000, null(3,6)=-499850, distinct(1,2,8)=10000, null(1,2,8)=0]
  ├── key: (1,8)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (8)-->(6,7)
  └── left-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) u:6(int) v:7(int) rowid:8(int) uv.crdb_internal_mvcc_timestamp:9(decimal)
       ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(6)=500, null(6)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,6)=10000, null(3,6)=50, distinct(1,2,8)=10000, null(1,2,8)=0]
+      ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=500, null(3)=100, distinct(6)=500, null(6)=0, distinct(2,3)=5000, null(2,3)=50, distinct(3,6)=10000, null(3,6)=-499850, distinct(1,2,8)=10000, null(1,2,8)=0]
       ├── key: (1,8)
       ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (8)-->(6,7,9)
       ├── scan xysd
@@ -780,12 +780,12 @@ SELECT *, rowid FROM xysd RIGHT JOIN uv ON x=u
 ----
 project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:6(int) v:7(int!null) rowid:8(int!null)
- ├── stats: [rows=10000, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(6)=500, null(6)=5000, distinct(2,3)=4323.45892, null(2,3)=50, distinct(3,6)=10000, null(3,6)=50, distinct(1,2,8)=10000, null(1,2,8)=0]
+ ├── stats: [rows=10000, distinct(2)=400, null(2)=-49985000, distinct(3)=500, null(3)=-49989900, distinct(6)=500, null(6)=5000, distinct(2,3)=5000, null(2,3)=-49989950, distinct(3,6)=10000, null(3,6)=-24994950, distinct(1,2,8)=10000, null(1,2,8)=0]
  ├── key: (8)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (8)-->(1-4,6,7)
  └── right-join (hash)
       ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) xysd.crdb_internal_mvcc_timestamp:5(decimal) u:6(int) v:7(int!null) rowid:8(int!null) uv.crdb_internal_mvcc_timestamp:9(decimal)
-      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=5000, distinct(3)=499.999999, null(3)=100, distinct(6)=500, null(6)=5000, distinct(2,3)=4323.45892, null(2,3)=50, distinct(3,6)=10000, null(3,6)=50, distinct(1,2,8)=10000, null(1,2,8)=0]
+      ├── stats: [rows=10000, distinct(1)=500, null(1)=0, distinct(2)=400, null(2)=-49985000, distinct(3)=500, null(3)=-49989900, distinct(6)=500, null(6)=5000, distinct(2,3)=5000, null(2,3)=-49989950, distinct(3,6)=10000, null(3,6)=-24994950, distinct(1,2,8)=10000, null(1,2,8)=0]
       ├── key: (8)
       ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (8)-->(1-7,9)
       ├── scan xysd
@@ -1360,7 +1360,7 @@ expr format=show-all colstat=6 colstat=7 colstat=(6, 7) colstat=1 colstat=2 cols
 inner-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:5(int!null) t.public.def.e:6(int!null) t.public.def.f:7(int)
  ├── key columns: [1 2] = [5 6]
- ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.00999500175, null(3)=0.0001, distinct(5)=0.01, null(5)=0, distinct(6)=0.01, null(6)=0, distinct(7)=0.00999995009, null(7)=0.0001, distinct(6,7)=0.00999999509, null(6,7)=0, distinct(1-3)=0.0099995001, null(1-3)=0]
+ ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.01, null(3)=0.0001, distinct(5)=0.01, null(5)=0, distinct(6)=0.01, null(6)=0, distinct(7)=0.01, null(7)=0.0001, distinct(6,7)=0.01, null(6,7)=0, distinct(1-3)=0.01, null(1-3)=0]
  ├── cost: 2110.0507
  ├── key: (5,6)
  ├── fd: (1,2)-->(3), (5,6)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2)

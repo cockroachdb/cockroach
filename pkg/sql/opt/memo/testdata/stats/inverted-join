@@ -33,7 +33,7 @@ project
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(4)=999.956829, null(4)=0]
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
       │    ├── key: (1,4)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
@@ -65,7 +65,7 @@ project
       │    ├── columns: ltable.k:1(int!null) ltable.geom:2(geometry) rtable.k:4(int!null)
       │    ├── inverted-expr
       │    │    └── st_intersects(ltable.geom:2, rtable.geom:5) [type=bool]
-      │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(4)=999.956829, null(4)=0]
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(4)=1000, null(4)=0]
       │    ├── key: (1,4)
       │    ├── fd: (1)-->(2)
       │    ├── scan ltable
@@ -138,7 +138,7 @@ project
       │    ├── columns: t1.k:1(int!null) t2.j:8(jsonb)
       │    ├── inverted-expr
       │    │    └── t1.j:2 @> t2.j:8 [type=bool]
-      │    ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0]
+      │    ├── stats: [rows=100, distinct(1)=100, null(1)=0]
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.j:8(jsonb)
       │    │    └── stats: [rows=10]
@@ -167,7 +167,7 @@ inner-join (lookup json_arr1 [as=t1])
  │    ├── columns: t1.k:1(int!null) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
  │    ├── inverted-expr
  │    │    └── (t1.a:3 @> t2.a:9) AND (t1.a:3 @> ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.3333333, distinct(1)=32.9461714, null(1)=0, distinct(7)=3.33318943, null(7)=0]
+ │    ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, distinct(7)=3.33333333, null(7)=0]
  │    ├── key: (1,7)
  │    ├── fd: (7)-->(8,9)
  │    ├── scan json_arr2 [as=t2]
@@ -202,7 +202,7 @@ project
       │    ├── columns: t1.k:1(int!null) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
       │    ├── inverted-expr
       │    │    └── t1.j:2 @> t2.j:8 [type=bool]
-      │    ├── stats: [rows=33.3333333, distinct(7)=3.33318943, null(7)=0]
+      │    ├── stats: [rows=33.3333333, distinct(7)=3.33333333, null(7)=0]
       │    ├── key: (1,7)
       │    ├── fd: (7)-->(8,9)
       │    ├── scan json_arr2 [as=t2]

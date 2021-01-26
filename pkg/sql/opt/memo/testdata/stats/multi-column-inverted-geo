@@ -107,7 +107,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              ├── stats: [rows=153.552632, distinct(1)=43.8721805, null(1)=0, distinct(3)=1, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=3, null(3,6)=0]
+      │              ├── stats: [rows=153.552632, distinct(1)=153.552632, null(1)=0, distinct(3)=1, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=3, null(3,6)=0]
       │              │   histogram(3)=  0    100
       │              │                <--- 'banana'
       │              │   histogram(6)=  0             0              25.592             0              25.592           51.184           25.592             0              0             0              25.592             0
@@ -158,7 +158,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=153.552632, distinct(1)=43.8721805, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=3, null(3,7)=0]
+      │              ├── stats: [rows=153.552632, distinct(1)=153.552632, null(1)=0, distinct(3)=1, null(3)=0, distinct(7)=3, null(7)=0, distinct(3,7)=3, null(3,7)=0]
       │              │   histogram(3)=  0    100
       │              │                <--- 'banana'
       │              │   histogram(7)=  0             0              25.592             0              25.592           51.184           25.592             0              0             0              25.592             0
@@ -225,7 +225,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=m
-      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
+      │              ├── stats: [rows=307.105263, distinct(1)=307.105263, null(1)=0, distinct(3)=2, null(3)=0, distinct(6)=3, null(6)=0, distinct(3,6)=6, null(3,6)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(6)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
@@ -276,7 +276,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=p
-      │              ├── stats: [rows=307.105263, distinct(1)=87.7443609, null(1)=0, distinct(3)=2, null(3)=0, distinct(8)=3, null(8)=0, distinct(3,8)=6, null(3,8)=0]
+      │              ├── stats: [rows=307.105263, distinct(1)=307.105263, null(1)=0, distinct(3)=2, null(3)=0, distinct(8)=3, null(8)=0, distinct(3,8)=6, null(3,8)=0]
       │              │   histogram(3)=  0    100     0    100
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(8)=  0             0              51.184             0              51.184           102.37           51.184             0              0             0              51.184             0
@@ -340,7 +340,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=24.0813118, distinct(1)=6.88037479, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=6, null(3,4,9)=0]
+      │              ├── stats: [rows=24.0813118, distinct(1)=24.0813118, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=6, null(3,4,9)=0]
       │              │   histogram(3)=  0   12.041   0   12.041
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 24.081
@@ -399,7 +399,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=48.1626236, distinct(1)=13.7607496, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=18, null(3,4,9)=0]
+      │              ├── stats: [rows=48.1626236, distinct(1)=48.1626236, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=3, null(4)=0, distinct(9)=3, null(9)=0, distinct(3,4,9)=18, null(3,4,9)=0]
       │              │   histogram(3)=  0   24.081   0   24.081
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 8.0271 0 16.054 0 24.081

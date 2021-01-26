@@ -60,7 +60,7 @@ sort
       │    ├── right-join (hash)
       │    │    ├── save-table-name: q13_right_join_4
       │    │    ├── columns: c_custkey:1(int!null) o_orderkey:10(int) o_custkey:11(int) o_comment:18(varchar)
-      │    │    ├── stats: [rows=503988.227, distinct(1)=148813, null(1)=0, distinct(10)=317522.248, null(10)=0, distinct(11)=99620.1148, null(11)=0, distinct(18)=317522.248, null(18)=0]
+      │    │    ├── stats: [rows=503988.227, distinct(1)=148813, null(1)=0, distinct(10)=500000, null(10)=-7.4999496e+10, distinct(11)=99620.1148, null(11)=0, distinct(18)=500000, null(18)=-7.4999496e+10]
       │    │    ├── key: (1,10)
       │    │    ├── fd: (10)-->(11,18)
       │    │    ├── select
@@ -132,11 +132,11 @@ column_names  row_count  distinct_count  null_count
 {o_custkey}   1533923    99846           50005
 {o_orderkey}  1533923    1511432         50005
 ~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}   503988.00      3.04 <==       148813.00           1.00                0.00            1.00
-{o_comment}   503988.00      3.04 <==       317522.00           4.58 <==            0.00            +Inf <==
-{o_custkey}   503988.00      3.04 <==       99620.00            1.00                0.00            +Inf <==
-{o_orderkey}  503988.00      3.04 <==       317522.00           4.76 <==            0.00            +Inf <==
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est           null_count_err
+{c_custkey}   503988.00      3.04 <==       148813.00           1.00                0.00                     1.00
+{o_comment}   503988.00      3.04 <==       500000.00           2.91 <==            18446743998710054912.00  368897990175183.56 <==
+{o_custkey}   503988.00      3.04 <==       99620.00            1.00                0.00                     +Inf <==
+{o_orderkey}  503988.00      3.04 <==       500000.00           3.02 <==            18446743998710054912.00  368897990175183.56 <==
 
 ----Stats for q13_select_5----
 column_names  row_count  distinct_count  null_count

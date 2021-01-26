@@ -572,7 +572,7 @@ project
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:8!null cardid:9!null version:16!null
       │         ├── constraint: /8/16: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621393, null(9)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
+      │         ├── stats: [rows=0.0201621426, distinct(8)=0.0201621426, null(8)=0, distinct(9)=0.0201621426, null(9)=0, distinct(16)=0.0201621426, null(16)=0, distinct(8,16)=0.0201621426, null(8,16)=0]
       │         │   histogram(16)=  0                0                 0.020162           0
       │         │                 <--- 1584421773604892000.0000000000 ---------- 1584421778604892000
       │         ├── key: (9)
@@ -726,7 +726,7 @@ project
       │    │    │    └── scan transactiondetails@detailscardidindex,rev
       │    │    │         ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null cardid:4!null quantity:5!null
       │    │    │         ├── constraint: /1/2/4/3/5: [/1/false/21953 - /1/false/21953]
-      │    │    │         ├── stats: [rows=478.646617, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.646617, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.640889, null(5)=0, distinct(1,2,4)=1, null(1,2,4)=0]
+      │    │    │         ├── stats: [rows=478.646617, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=478.646617, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=478.646617, null(5)=0, distinct(1,2,4)=1, null(1,2,4)=0]
       │    │    │         ├── key: (3,5)
       │    │    │         ├── fd: ()-->(1,2,4)
       │    │    │         ├── ordering: -3 opt(1,2,4) [actual: -3]
@@ -947,7 +947,7 @@ ORDER BY extract(day from d.TransactionDate)
 sort
  ├── columns: extract:41 totalsell:36!null totalbuy:38!null totalprofit:40!null
  ├── stable
- ├── stats: [rows=750327.164, distinct(41)=750327.164, null(41)=0]
+ ├── stats: [rows=1171234.57, distinct(41)=1171234.57, null(41)=0]
  ├── key: (41)
  ├── fd: (41)-->(36,38,40)
  ├── ordering: +41
@@ -955,23 +955,23 @@ sort
       ├── columns: sum:36!null sum:38!null sum:40!null column41:41
       ├── grouping columns: column41:41
       ├── stable
-      ├── stats: [rows=750327.164, distinct(41)=750327.164, null(41)=0]
+      ├── stats: [rows=1171234.57, distinct(41)=1171234.57, null(41)=0]
       ├── key: (41)
       ├── fd: (41)-->(36,38,40)
       ├── project
       │    ├── columns: column35:35!null column37:37!null column39:39!null column41:41
       │    ├── stable
-      │    ├── stats: [rows=1198631.87, distinct(41)=750327.164, null(41)=0]
+      │    ├── stats: [rows=1198631.87, distinct(41)=1171234.57, null(41)=0]
       │    ├── inner-join (hash)
       │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:10!null transactions.isbuy:11!null date:12!null accountname:13!null customername:14!null id:18!null cardsinfo.dealerid:25!null cardsinfo.cardid:26!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    ├── stats: [rows=1198631.87, distinct(3)=750327.164, null(3)=0, distinct(4)=37420.3552, null(4)=0, distinct(18)=37420.3552, null(18)=0]
+      │    │    ├── stats: [rows=1198631.87, distinct(3)=1171234.57, null(3)=0, distinct(4)=37420.3552, null(4)=0, distinct(18)=37420.3552, null(18)=0]
       │    │    ├── key: (5,12,26)
       │    │    ├── fd: ()-->(1,2,10,11,25), (3-5)-->(6,7), (12)-->(13,14), (3)==(12), (12)==(3), (18)==(4,26), (26)==(4,18), (4)==(18,26)
       │    │    ├── inner-join (hash)
       │    │    │    ├── columns: transactiondetails.dealerid:1!null transactiondetails.isbuy:2!null transactiondate:3!null transactiondetails.cardid:4!null quantity:5!null transactiondetails.sellprice:6!null transactiondetails.buyprice:7!null transactions.dealerid:10!null transactions.isbuy:11!null date:12!null accountname:13!null customername:14!null
       │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │    ├── stats: [rows=1171234.57, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1171234.57, null(3)=0, distinct(4)=56999.9999, null(4)=0, distinct(5)=1091498.71, null(5)=0, distinct(6)=1091498.71, null(6)=0, distinct(7)=1091498.71, null(7)=0, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1171234.57, null(12)=0, distinct(13)=551608.449, null(13)=0, distinct(14)=551608.449, null(14)=0]
+      │    │    │    ├── stats: [rows=1171234.57, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1171234.57, null(3)=0, distinct(4)=57000, null(4)=0, distinct(5)=1171234.57, null(5)=0, distinct(6)=1171234.57, null(6)=0, distinct(7)=1171234.57, null(7)=0, distinct(10)=1, null(10)=0, distinct(11)=1, null(11)=0, distinct(12)=1171234.57, null(12)=0, distinct(13)=666666.667, null(13)=0, distinct(14)=666666.667, null(14)=0]
       │    │    │    ├── key: (4,5,12)
       │    │    │    ├── fd: ()-->(1,2,10,11), (3-5)-->(6,7), (12)-->(13,14), (3)==(12), (12)==(3)
       │    │    │    ├── scan transactiondetails

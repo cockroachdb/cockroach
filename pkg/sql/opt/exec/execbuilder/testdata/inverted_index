@@ -955,7 +955,7 @@ inner-join (lookup geo_table)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(5)=999.956829, null(5)=0]
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(5)=1000, null(5)=0]
  │    ├── cost: 41784.03
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2)
@@ -1075,7 +1075,7 @@ semi-join (lookup geo_table)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:5 continuation:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:6)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0]
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 41984.03
  │    ├── key: (1,5)
  │    ├── fd: (1)-->(2), (5)-->(11)

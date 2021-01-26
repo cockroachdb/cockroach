@@ -55,7 +55,7 @@ limit
  │    ├── save-table-name: q3_sort_2
  │    ├── columns: o_orderdate:14(date!null) o_shippriority:17(int!null) l_orderkey:20(int!null) sum:38(float!null)
  │    ├── immutable
- │    ├── stats: [rows=358257.687, distinct(14)=358257.687, null(14)=0, distinct(17)=358257.687, null(17)=0, distinct(20)=358257.687, null(20)=0, distinct(38)=358257.687, null(38)=0]
+ │    ├── stats: [rows=492693.767, distinct(14)=492693.767, null(14)=0, distinct(17)=492693.767, null(17)=0, distinct(20)=492693.767, null(20)=0, distinct(38)=492693.767, null(38)=0]
  │    ├── key: (20)
  │    ├── fd: (20)-->(14,17,38)
  │    ├── ordering: -38,+14
@@ -65,26 +65,26 @@ limit
  │         ├── columns: o_orderdate:14(date!null) o_shippriority:17(int!null) l_orderkey:20(int!null) sum:38(float!null)
  │         ├── grouping columns: l_orderkey:20(int!null)
  │         ├── immutable
- │         ├── stats: [rows=358257.687, distinct(14)=358257.687, null(14)=0, distinct(17)=358257.687, null(17)=0, distinct(20)=358257.687, null(20)=0, distinct(38)=358257.687, null(38)=0]
+ │         ├── stats: [rows=492693.767, distinct(14)=492693.767, null(14)=0, distinct(17)=492693.767, null(17)=0, distinct(20)=492693.767, null(20)=0, distinct(38)=492693.767, null(38)=0]
  │         ├── key: (20)
  │         ├── fd: (20)-->(14,17,38)
  │         ├── project
  │         │    ├── save-table-name: q3_project_4
  │         │    ├── columns: column37:37(float!null) o_orderdate:14(date!null) o_shippriority:17(int!null) l_orderkey:20(int!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=492693.81, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0, distinct(20)=358257.687, null(20)=0, distinct(37)=408701.909, null(37)=0]
+ │         │    ├── stats: [rows=492693.767, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0, distinct(20)=492693.767, null(20)=0, distinct(37)=492693.767, null(37)=0]
  │         │    ├── fd: (20)-->(14,17)
  │         │    ├── inner-join (lookup lineitem)
  │         │    │    ├── save-table-name: q3_lookup_join_5
  │         │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) o_shippriority:17(int!null) l_orderkey:20(int!null) l_extendedprice:25(float!null) l_discount:26(float!null) l_shipdate:30(date!null)
  │         │    │    ├── key columns: [10] = [20]
- │         │    │    ├── stats: [rows=492693.81, distinct(1)=30293.7362, null(1)=0, distinct(7)=1, null(7)=0, distinct(10)=358257.687, null(10)=0, distinct(11)=30293.7362, null(11)=0, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0, distinct(20)=358257.687, null(20)=0, distinct(25)=362862.531, null(25)=0, distinct(26)=11, null(26)=0, distinct(30)=1351, null(30)=0, distinct(25,26)=408701.909, null(25,26)=0]
+ │         │    │    ├── stats: [rows=492693.767, distinct(1)=30293.7362, null(1)=0, distinct(7)=1, null(7)=0, distinct(10)=492693.767, null(10)=0, distinct(11)=30293.7362, null(11)=0, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0, distinct(20)=492693.767, null(20)=0, distinct(25)=492693.767, null(25)=0, distinct(26)=11, null(26)=0, distinct(30)=1351, null(30)=0, distinct(25,26)=492693.767, null(25,26)=0]
  │         │    │    ├── fd: ()-->(7), (10)-->(11,14,17), (10)==(20), (20)==(10), (1)==(11), (11)==(1)
  │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── save-table-name: q3_inner_join_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(char!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) o_shippriority:17(int!null)
  │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │    │    │    ├── stats: [rows=221623.813, distinct(1)=30293.7362, null(1)=0, distinct(7)=1, null(7)=0, distinct(10)=191135.905, null(10)=0, distinct(11)=30293.7362, null(11)=0, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0]
+ │         │    │    │    ├── stats: [rows=221623.813, distinct(1)=30293.7362, null(1)=0, distinct(7)=1, null(7)=0, distinct(10)=221623.813, null(10)=0, distinct(11)=30293.7362, null(11)=0, distinct(14)=1169, null(14)=0, distinct(17)=1, null(17)=0]
  │         │    │    │    ├── key: (10)
  │         │    │    │    ├── fd: ()-->(7), (10)-->(11,14,17), (1)==(11), (11)==(1)
  │         │    │    │    ├── select
@@ -167,10 +167,10 @@ column_names      row_count  distinct_count  null_count
 {sum}             0          0               0
 ~~~~
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_orderkey}      358258.00      +Inf <==       358258.00           +Inf <==            0.00            1.00
-{o_orderdate}     358258.00      +Inf <==       358258.00           +Inf <==            0.00            1.00
-{o_shippriority}  358258.00      +Inf <==       358258.00           +Inf <==            0.00            1.00
-{sum}             358258.00      +Inf <==       358258.00           +Inf <==            0.00            1.00
+{l_orderkey}      492694.00      +Inf <==       492694.00           +Inf <==            0.00            1.00
+{o_orderdate}     492694.00      +Inf <==       492694.00           +Inf <==            0.00            1.00
+{o_shippriority}  492694.00      +Inf <==       492694.00           +Inf <==            0.00            1.00
+{sum}             492694.00      +Inf <==       492694.00           +Inf <==            0.00            1.00
 
 ----Stats for q3_group_by_3----
 column_names      row_count  distinct_count  null_count
@@ -180,10 +180,10 @@ column_names      row_count  distinct_count  null_count
 {sum}             11620      11601           0
 ~~~~
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_orderkey}      358258.00      30.83 <==      358258.00           30.86 <==           0.00            1.00
-{o_orderdate}     358258.00      30.83 <==      358258.00           2985.48 <==         0.00            1.00
-{o_shippriority}  358258.00      30.83 <==      358258.00           358258.00 <==       0.00            1.00
-{sum}             358258.00      30.83 <==      358258.00           30.88 <==           0.00            1.00
+{l_orderkey}      492694.00      42.40 <==      492694.00           42.43 <==           0.00            1.00
+{o_orderdate}     492694.00      42.40 <==      492694.00           4105.78 <==         0.00            1.00
+{o_shippriority}  492694.00      42.40 <==      492694.00           492694.00 <==       0.00            1.00
+{sum}             492694.00      42.40 <==      492694.00           42.47 <==           0.00            1.00
 
 ----Stats for q3_project_4----
 column_names      row_count  distinct_count  null_count
@@ -193,8 +193,8 @@ column_names      row_count  distinct_count  null_count
 {o_shippriority}  30519      1               0
 ~~~~
 column_names      row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column37}        492694.00      16.14 <==      408702.00           13.43 <==           0.00            1.00
-{l_orderkey}      492694.00      16.14 <==      358258.00           30.86 <==           0.00            1.00
+{column37}        492694.00      16.14 <==      492694.00           16.19 <==           0.00            1.00
+{l_orderkey}      492694.00      16.14 <==      492694.00           42.43 <==           0.00            1.00
 {o_orderdate}     492694.00      16.14 <==      1169.00             9.74 <==            0.00            1.00
 {o_shippriority}  492694.00      16.14 <==      1.00                1.00                0.00            1.00
 
@@ -215,12 +215,12 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {c_custkey}        492694.00      16.14 <==      30294.00            3.51 <==            0.00            1.00
 {c_mktsegment}     492694.00      16.14 <==      1.00                1.00                0.00            1.00
 {l_discount}       492694.00      16.14 <==      11.00               1.00                0.00            1.00
-{l_extendedprice}  492694.00      16.14 <==      362863.00           12.08 <==           0.00            1.00
-{l_orderkey}       492694.00      16.14 <==      358258.00           30.86 <==           0.00            1.00
+{l_extendedprice}  492694.00      16.14 <==      492694.00           16.40 <==           0.00            1.00
+{l_orderkey}       492694.00      16.14 <==      492694.00           42.43 <==           0.00            1.00
 {l_shipdate}       492694.00      16.14 <==      1351.00             11.26 <==           0.00            1.00
 {o_custkey}        492694.00      16.14 <==      30294.00            3.51 <==            0.00            1.00
 {o_orderdate}      492694.00      16.14 <==      1169.00             9.74 <==            0.00            1.00
-{o_orderkey}       492694.00      16.14 <==      358258.00           30.86 <==           0.00            1.00
+{o_orderkey}       492694.00      16.14 <==      492694.00           42.43 <==           0.00            1.00
 {o_shippriority}   492694.00      16.14 <==      1.00                1.00                0.00            1.00
 
 ----Stats for q3_inner_join_6----
@@ -237,7 +237,7 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 {c_mktsegment}    221624.00      1.51           1.00                1.00                0.00            1.00
 {o_custkey}       221624.00      1.51           30294.00            1.50                0.00            1.00
 {o_orderdate}     221624.00      1.51           1169.00             1.00                0.00            1.00
-{o_orderkey}      221624.00      1.51           191136.00           1.32                0.00            1.00
+{o_orderkey}      221624.00      1.51           221624.00           1.53                0.00            1.00
 {o_shippriority}  221624.00      1.51           1.00                1.00                0.00            1.00
 
 ----Stats for q3_select_7----

@@ -67,7 +67,7 @@ limit
  │    ├── save-table-name: q10_sort_2
  │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:38(char!null) sum:43(float!null)
  │    ├── immutable
- │    ├── stats: [rows=33172.4448, distinct(1)=33172.4448, null(1)=0, distinct(2)=33172.4448, null(2)=0, distinct(3)=33172.4448, null(3)=0, distinct(5)=33172.4448, null(5)=0, distinct(6)=33172.4448, null(6)=0, distinct(8)=33172.4448, null(8)=0, distinct(38)=33172.4448, null(38)=0, distinct(43)=33172.4448, null(43)=0]
+ │    ├── stats: [rows=43895.519, distinct(1)=43895.519, null(1)=0, distinct(2)=43895.519, null(2)=0, distinct(3)=43895.519, null(3)=0, distinct(5)=43895.519, null(5)=0, distinct(6)=43895.519, null(6)=0, distinct(8)=43895.519, null(8)=0, distinct(38)=43895.519, null(38)=0, distinct(43)=43895.519, null(43)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3,5,6,8,38,43)
  │    ├── ordering: -43
@@ -77,26 +77,26 @@ limit
  │         ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:38(char!null) sum:43(float!null)
  │         ├── grouping columns: c_custkey:1(int!null)
  │         ├── immutable
- │         ├── stats: [rows=33172.4448, distinct(1)=33172.4448, null(1)=0, distinct(2)=33172.4448, null(2)=0, distinct(3)=33172.4448, null(3)=0, distinct(5)=33172.4448, null(5)=0, distinct(6)=33172.4448, null(6)=0, distinct(8)=33172.4448, null(8)=0, distinct(38)=33172.4448, null(38)=0, distinct(43)=33172.4448, null(43)=0]
+ │         ├── stats: [rows=43895.519, distinct(1)=43895.519, null(1)=0, distinct(2)=43895.519, null(2)=0, distinct(3)=43895.519, null(3)=0, distinct(5)=43895.519, null(5)=0, distinct(6)=43895.519, null(6)=0, distinct(8)=43895.519, null(8)=0, distinct(38)=43895.519, null(38)=0, distinct(43)=43895.519, null(43)=0]
  │         ├── key: (1)
  │         ├── fd: (1)-->(2,3,5,6,8,38,43)
  │         ├── project
  │         │    ├── save-table-name: q10_project_4
  │         │    ├── columns: column42:42(float!null) c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) n_name:38(char!null)
  │         │    ├── immutable
- │         │    ├── stats: [rows=82076.3181, distinct(1)=33172.4448, null(1)=0, distinct(2)=46412.2874, null(2)=0, distinct(3)=46409.7632, null(3)=0, distinct(5)=46412.2874, null(5)=0, distinct(6)=46012.5171, null(6)=0, distinct(8)=46385.053, null(8)=0, distinct(38)=25, null(38)=0, distinct(42)=41180.4573, null(42)=0]
+ │         │    ├── stats: [rows=82076.3181, distinct(1)=43895.519, null(1)=0, distinct(2)=82076.3181, null(2)=0, distinct(3)=82076.3181, null(3)=0, distinct(5)=82076.3181, null(5)=0, distinct(6)=82076.3181, null(6)=0, distinct(8)=82076.3181, null(8)=0, distinct(38)=25, null(38)=0, distinct(42)=81426.8208, null(42)=0]
  │         │    ├── fd: (1)-->(2,3,5,6,8,38)
  │         │    ├── inner-join (hash)
  │         │    │    ├── save-table-name: q10_inner_join_5
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_nationkey:4(int!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) l_orderkey:20(int!null) l_extendedprice:25(float!null) l_discount:26(float!null) l_returnflag:28(char!null) n_nationkey:37(int!null) n_name:38(char!null)
  │         │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │         │    │    ├── stats: [rows=82076.3181, distinct(1)=33172.4448, null(1)=0, distinct(2)=46412.2874, null(2)=0, distinct(3)=46409.7632, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=46412.2874, null(5)=0, distinct(6)=46012.5171, null(6)=0, distinct(8)=46385.053, null(8)=0, distinct(10)=37088.4198, null(10)=0, distinct(11)=33172.4448, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=37088.4198, null(20)=0, distinct(25)=40916.4266, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(37)=25, null(37)=0, distinct(38)=25, null(38)=0, distinct(25,26)=41180.4573, null(25,26)=0]
+ │         │    │    ├── stats: [rows=82076.3181, distinct(1)=43895.519, null(1)=0, distinct(2)=82076.3181, null(2)=0, distinct(3)=82076.3181, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=82076.3181, null(5)=0, distinct(6)=82076.3181, null(6)=0, distinct(8)=82076.3181, null(8)=0, distinct(10)=56726.5385, null(10)=0, distinct(11)=43895.519, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=56726.5385, null(20)=0, distinct(25)=81426.8208, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(37)=25, null(37)=0, distinct(38)=25, null(38)=0, distinct(25,26)=81426.8208, null(25,26)=0]
  │         │    │    ├── fd: ()-->(28), (1)-->(2-6,8), (10)-->(11,14), (10)==(20), (20)==(10), (1)==(11), (11)==(1), (37)-->(38), (4)==(37), (37)==(4)
  │         │    │    ├── inner-join (hash)
  │         │    │    │    ├── save-table-name: q10_inner_join_6
  │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(varchar!null) c_address:3(varchar!null) c_nationkey:4(int!null) c_phone:5(char!null) c_acctbal:6(float!null) c_comment:8(varchar!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) l_orderkey:20(int!null) l_extendedprice:25(float!null) l_discount:26(float!null) l_returnflag:28(char!null)
  │         │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
- │         │    │    │    ├── stats: [rows=82076.3181, distinct(1)=37028.0412, null(1)=0, distinct(2)=63212.8993, null(2)=0, distinct(3)=63206.2925, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=63212.8993, null(5)=0, distinct(6)=62176.9567, null(6)=0, distinct(8)=63141.6616, null(8)=0, distinct(10)=43378.6208, null(10)=0, distinct(11)=37028.0412, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=43378.6208, null(20)=0, distinct(25)=50563.2192, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(25,26)=51101.6377, null(25,26)=0]
+ │         │    │    │    ├── stats: [rows=82076.3181, distinct(1)=43895.519, null(1)=0, distinct(2)=82076.3181, null(2)=0, distinct(3)=82076.3181, null(3)=0, distinct(4)=25, null(4)=0, distinct(5)=82076.3181, null(5)=0, distinct(6)=82076.3181, null(6)=0, distinct(8)=82076.3181, null(8)=0, distinct(10)=56726.5385, null(10)=0, distinct(11)=43895.519, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=56726.5385, null(20)=0, distinct(25)=81426.8208, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(25,26)=81426.8208, null(25,26)=0]
  │         │    │    │    ├── fd: ()-->(28), (1)-->(2-6,8), (10)-->(11,14), (10)==(20), (20)==(10), (1)==(11), (11)==(1)
  │         │    │    │    ├── scan customer
  │         │    │    │    │    ├── save-table-name: q10_scan_7
@@ -122,7 +122,7 @@ limit
  │         │    │    │    │    ├── save-table-name: q10_lookup_join_8
  │         │    │    │    │    ├── columns: o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) l_orderkey:20(int!null) l_extendedprice:25(float!null) l_discount:26(float!null) l_returnflag:28(char!null)
  │         │    │    │    │    ├── key columns: [10] = [20]
- │         │    │    │    │    ├── stats: [rows=81426.8208, distinct(10)=56726.5385, null(10)=0, distinct(11)=37028.0412, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=56726.5385, null(20)=0, distinct(25)=77287.0368, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(25,26)=79194.3703, null(25,26)=0]
+ │         │    │    │    │    ├── stats: [rows=81426.8208, distinct(10)=56726.5385, null(10)=0, distinct(11)=43895.519, null(11)=0, distinct(14)=92, null(14)=0, distinct(20)=56726.5385, null(20)=0, distinct(25)=81426.8208, null(25)=0, distinct(26)=11, null(26)=0, distinct(28)=1, null(28)=0, distinct(25,26)=81426.8208, null(25,26)=0]
  │         │    │    │    │    ├── fd: ()-->(28), (10)-->(11,14), (10)==(20), (20)==(10)
  │         │    │    │    │    ├── index-join orders
  │         │    │    │    │    │    ├── save-table-name: q10_index_join_9
@@ -211,14 +211,14 @@ column_names  row_count  distinct_count  null_count
 {sum}         0          0               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{c_address}   33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{c_comment}   33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{c_custkey}   33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{c_name}      33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{c_phone}     33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{n_name}      33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
-{sum}         33172.00       +Inf <==       33172.00            +Inf <==            0.00            1.00
+{c_acctbal}   43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{c_address}   43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{c_comment}   43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{c_custkey}   43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{c_name}      43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{c_phone}     43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{n_name}      43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
+{sum}         43896.00       +Inf <==       43896.00            +Inf <==            0.00            1.00
 
 ----Stats for q10_group_by_3----
 column_names  row_count  distinct_count  null_count
@@ -232,14 +232,14 @@ column_names  row_count  distinct_count  null_count
 {sum}         37967      37881           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   33172.00       1.14           33172.00            1.14                0.00            1.00
-{c_address}   33172.00       1.14           33172.00            1.15                0.00            1.00
-{c_comment}   33172.00       1.14           33172.00            1.15                0.00            1.00
-{c_custkey}   33172.00       1.14           33172.00            1.14                0.00            1.00
-{c_name}      33172.00       1.14           33172.00            1.14                0.00            1.00
-{c_phone}     33172.00       1.14           33172.00            1.15                0.00            1.00
-{n_name}      33172.00       1.14           33172.00            1326.88 <==         0.00            1.00
-{sum}         33172.00       1.14           33172.00            1.14                0.00            1.00
+{c_acctbal}   43896.00       1.16           43896.00            1.17                0.00            1.00
+{c_address}   43896.00       1.16           43896.00            1.15                0.00            1.00
+{c_comment}   43896.00       1.16           43896.00            1.15                0.00            1.00
+{c_custkey}   43896.00       1.16           43896.00            1.16                0.00            1.00
+{c_name}      43896.00       1.16           43896.00            1.16                0.00            1.00
+{c_phone}     43896.00       1.16           43896.00            1.15                0.00            1.00
+{n_name}      43896.00       1.16           43896.00            1755.84 <==         0.00            1.00
+{sum}         43896.00       1.16           43896.00            1.16                0.00            1.00
 
 ----Stats for q10_project_4----
 column_names  row_count  distinct_count  null_count
@@ -253,13 +253,13 @@ column_names  row_count  distinct_count  null_count
 {n_name}      114705     25              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   82076.00       1.40           46013.00            1.22                0.00            1.00
-{c_address}   82076.00       1.40           46410.00            1.22                0.00            1.00
-{c_comment}   82076.00       1.40           46385.00            1.22                0.00            1.00
-{c_custkey}   82076.00       1.40           33172.00            1.14                0.00            1.00
-{c_name}      82076.00       1.40           46412.00            1.23                0.00            1.00
-{c_phone}     82076.00       1.40           46412.00            1.22                0.00            1.00
-{column42}    82076.00       1.40           41180.00            2.78 <==            0.00            1.00
+{c_acctbal}   82076.00       1.40           82076.00            2.18 <==            0.00            1.00
+{c_address}   82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_comment}   82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_custkey}   82076.00       1.40           43896.00            1.16                0.00            1.00
+{c_name}      82076.00       1.40           82076.00            2.17 <==            0.00            1.00
+{c_phone}     82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{column42}    82076.00       1.40           81427.00            1.41                0.00            1.00
 {n_name}      82076.00       1.40           25.00               1.00                0.00            1.00
 
 ----Stats for q10_inner_join_5----
@@ -282,22 +282,22 @@ column_names       row_count  distinct_count  null_count
 {o_orderkey}       114705     48516           0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}        82076.00       1.40           46013.00            1.22                0.00            1.00
-{c_address}        82076.00       1.40           46410.00            1.22                0.00            1.00
-{c_comment}        82076.00       1.40           46385.00            1.22                0.00            1.00
-{c_custkey}        82076.00       1.40           33172.00            1.14                0.00            1.00
-{c_name}           82076.00       1.40           46412.00            1.23                0.00            1.00
+{c_acctbal}        82076.00       1.40           82076.00            2.18 <==            0.00            1.00
+{c_address}        82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_comment}        82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_custkey}        82076.00       1.40           43896.00            1.16                0.00            1.00
+{c_name}           82076.00       1.40           82076.00            2.17 <==            0.00            1.00
 {c_nationkey}      82076.00       1.40           25.00               1.00                0.00            1.00
-{c_phone}          82076.00       1.40           46412.00            1.22                0.00            1.00
+{c_phone}          82076.00       1.40           82076.00            2.16 <==            0.00            1.00
 {l_discount}       82076.00       1.40           11.00               1.00                0.00            1.00
-{l_extendedprice}  82076.00       1.40           40916.00            2.60 <==            0.00            1.00
-{l_orderkey}       82076.00       1.40           37088.00            1.31                0.00            1.00
+{l_extendedprice}  82076.00       1.40           81427.00            1.30                0.00            1.00
+{l_orderkey}       82076.00       1.40           56727.00            1.17                0.00            1.00
 {l_returnflag}     82076.00       1.40           1.00                1.00                0.00            1.00
 {n_name}           82076.00       1.40           25.00               1.00                0.00            1.00
 {n_nationkey}      82076.00       1.40           25.00               1.00                0.00            1.00
-{o_custkey}        82076.00       1.40           33172.00            1.14                0.00            1.00
+{o_custkey}        82076.00       1.40           43896.00            1.16                0.00            1.00
 {o_orderdate}      82076.00       1.40           92.00               1.00                0.00            1.00
-{o_orderkey}       82076.00       1.40           37088.00            1.31                0.00            1.00
+{o_orderkey}       82076.00       1.40           56727.00            1.17                0.00            1.00
 
 ----Stats for q10_inner_join_6----
 column_names       row_count  distinct_count  null_count
@@ -317,20 +317,20 @@ column_names       row_count  distinct_count  null_count
 {o_orderkey}       114705     48516           0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}        82076.00       1.40           62177.00            1.65                0.00            1.00
-{c_address}        82076.00       1.40           63206.00            1.66                0.00            1.00
-{c_comment}        82076.00       1.40           63142.00            1.66                0.00            1.00
-{c_custkey}        82076.00       1.40           37028.00            1.02                0.00            1.00
-{c_name}           82076.00       1.40           63213.00            1.67                0.00            1.00
+{c_acctbal}        82076.00       1.40           82076.00            2.18 <==            0.00            1.00
+{c_address}        82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_comment}        82076.00       1.40           82076.00            2.16 <==            0.00            1.00
+{c_custkey}        82076.00       1.40           43896.00            1.16                0.00            1.00
+{c_name}           82076.00       1.40           82076.00            2.17 <==            0.00            1.00
 {c_nationkey}      82076.00       1.40           25.00               1.00                0.00            1.00
-{c_phone}          82076.00       1.40           63213.00            1.66                0.00            1.00
+{c_phone}          82076.00       1.40           82076.00            2.16 <==            0.00            1.00
 {l_discount}       82076.00       1.40           11.00               1.00                0.00            1.00
-{l_extendedprice}  82076.00       1.40           50563.00            2.10 <==            0.00            1.00
-{l_orderkey}       82076.00       1.40           43379.00            1.12                0.00            1.00
+{l_extendedprice}  82076.00       1.40           81427.00            1.30                0.00            1.00
+{l_orderkey}       82076.00       1.40           56727.00            1.17                0.00            1.00
 {l_returnflag}     82076.00       1.40           1.00                1.00                0.00            1.00
-{o_custkey}        82076.00       1.40           37028.00            1.02                0.00            1.00
+{o_custkey}        82076.00       1.40           43896.00            1.16                0.00            1.00
 {o_orderdate}      82076.00       1.40           92.00               1.00                0.00            1.00
-{o_orderkey}       82076.00       1.40           43379.00            1.12                0.00            1.00
+{o_orderkey}       82076.00       1.40           56727.00            1.17                0.00            1.00
 
 ----Stats for q10_scan_7----
 column_names   row_count  distinct_count  null_count
@@ -363,10 +363,10 @@ column_names       row_count  distinct_count  null_count
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_discount}       81427.00       1.41           11.00               1.00                0.00            1.00
-{l_extendedprice}  81427.00       1.41           77287.00            1.37                0.00            1.00
+{l_extendedprice}  81427.00       1.41           81427.00            1.30                0.00            1.00
 {l_orderkey}       81427.00       1.41           56727.00            1.17                0.00            1.00
 {l_returnflag}     81427.00       1.41           1.00                1.00                0.00            1.00
-{o_custkey}        81427.00       1.41           37028.00            1.02                0.00            1.00
+{o_custkey}        81427.00       1.41           43896.00            1.16                0.00            1.00
 {o_orderdate}      81427.00       1.41           92.00               1.00                0.00            1.00
 {o_orderkey}       81427.00       1.41           56727.00            1.17                0.00            1.00
 

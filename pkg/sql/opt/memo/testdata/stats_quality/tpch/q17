@@ -62,14 +62,14 @@ project
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── stats: [rows=2010.74031, distinct(2)=200.270401, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2008.56038, null(6)=0, distinct(18)=200.270401, null(18)=0, distinct(46)=200.270401, null(46)=0]
+ │    │    ├── stats: [rows=2010.74031, distinct(2)=200.270401, null(2)=0, distinct(5)=50, null(5)=0, distinct(6)=2010.74031, null(6)=0, distinct(18)=200.270401, null(18)=0, distinct(46)=200.270401, null(46)=0]
  │    │    ├── fd: (18)-->(46), (2)==(18), (18)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── save-table-name: q17_lookup_join_4
  │    │    │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) p_partkey:18(int!null) "?column?":46(float!null)
  │    │    │    ├── key columns: [18] = [2]
  │    │    │    ├── immutable
- │    │    │    ├── stats: [rows=6032.22094, distinct(1)=6020.33903, null(1)=0, distinct(2)=200.270401, null(2)=0, distinct(4)=7, null(4)=0, distinct(18)=200.270401, null(18)=0, distinct(46)=200.270401, null(46)=0]
+ │    │    │    ├── stats: [rows=6032.22094, distinct(1)=6032.22094, null(1)=0, distinct(2)=200.270401, null(2)=0, distinct(4)=7, null(4)=0, distinct(18)=200.270401, null(18)=0, distinct(46)=200.270401, null(46)=0]
  │    │    │    ├── key: (1,4)
  │    │    │    ├── fd: (18)-->(46), (1,4)-->(2), (2)==(18), (18)==(2)
  │    │    │    ├── project
@@ -99,7 +99,7 @@ project
  │    │    │    │    │    │    │    ├── save-table-name: q17_lookup_join_8
  │    │    │    │    │    │    │    ├── columns: p_partkey:18(int!null) p_brand:21(char!null) p_container:24(char!null) l_orderkey:28(int!null) l_partkey:29(int!null) l_linenumber:31(int!null)
  │    │    │    │    │    │    │    ├── key columns: [18] = [29]
- │    │    │    │    │    │    │    ├── stats: [rows=6032.23245, distinct(18)=200.270401, null(18)=0, distinct(21)=1, null(21)=0, distinct(24)=1, null(24)=0, distinct(28)=6020.35049, null(28)=0, distinct(29)=200.270401, null(29)=0, distinct(31)=7, null(31)=0]
+ │    │    │    │    │    │    │    ├── stats: [rows=6032.23245, distinct(18)=200.270401, null(18)=0, distinct(21)=1, null(21)=0, distinct(24)=1, null(24)=0, distinct(28)=6032.23245, null(28)=0, distinct(29)=200.270401, null(29)=0, distinct(31)=7, null(31)=0]
  │    │    │    │    │    │    │    ├── key: (28,31)
  │    │    │    │    │    │    │    ├── fd: ()-->(21,24), (28,31)-->(29), (18)==(29), (29)==(18)
  │    │    │    │    │    │    │    ├── ordering: +(18|29) opt(21,24) [actual: +18]
@@ -170,7 +170,7 @@ column_names       row_count  distinct_count  null_count
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {?column?}         2011.00        3.43 <==       200.00              1.08                0.00            1.00
-{l_extendedprice}  2011.00        3.43 <==       2009.00             4.67 <==            0.00            1.00
+{l_extendedprice}  2011.00        3.43 <==       2011.00             4.68 <==            0.00            1.00
 {l_partkey}        2011.00        3.43 <==       200.00              1.03                0.00            1.00
 {l_quantity}       2011.00        3.43 <==       50.00               8.33 <==            0.00            1.00
 {p_partkey}        2011.00        3.43 <==       200.00              1.03                0.00            1.00
@@ -186,7 +186,7 @@ column_names    row_count  distinct_count  null_count
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {?column?}      6032.00        1.01           200.00              1.03                0.00            1.00
 {l_linenumber}  6032.00        1.01           7.00                1.00                0.00            1.00
-{l_orderkey}    6032.00        1.01           6020.00             1.02                0.00            1.00
+{l_orderkey}    6032.00        1.01           6032.00             1.01                0.00            1.00
 {l_partkey}     6032.00        1.01           200.00              1.02                0.00            1.00
 {p_partkey}     6032.00        1.01           200.00              1.02                0.00            1.00
 
@@ -234,7 +234,7 @@ column_names    row_count  distinct_count  null_count
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_linenumber}  6032.00        1.01           7.00                1.00                0.00            1.00
-{l_orderkey}    6032.00        1.01           6020.00             1.02                0.00            1.00
+{l_orderkey}    6032.00        1.01           6032.00             1.01                0.00            1.00
 {l_partkey}     6032.00        1.01           200.00              1.02                0.00            1.00
 {p_brand}       6032.00        1.01           1.00                1.00                0.00            1.00
 {p_container}   6032.00        1.01           1.00                1.00                0.00            1.00

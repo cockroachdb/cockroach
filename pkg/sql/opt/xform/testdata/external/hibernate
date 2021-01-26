@@ -665,41 +665,40 @@ distinct-on
  ├── grouping columns: person2_.id:12!null
  ├── key: (12)
  ├── fd: (12)-->(13-17)
- ├── inner-join (hash)
+ ├── anti-join (hash)
  │    ├── columns: phone0_.id:1!null person_id:4!null calls1_.phone_id:10!null person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    ├── fd: (1)-->(4), (1)==(10), (10)==(1), (12)-->(13-17), (4)==(12), (12)==(4)
- │    ├── scan phone_call [as=calls1_]
- │    │    └── columns: calls1_.phone_id:10
  │    ├── inner-join (hash)
- │    │    ├── columns: phone0_.id:1!null person_id:4!null person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
- │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(4), (12)-->(13-17), (4)==(12), (12)==(4)
- │    │    ├── scan person [as=person2_]
- │    │    │    ├── columns: person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
- │    │    │    ├── key: (12)
- │    │    │    └── fd: (12)-->(13-17)
- │    │    ├── anti-join (hash)
- │    │    │    ├── columns: phone0_.id:1!null person_id:4
+ │    │    ├── columns: phone0_.id:1!null person_id:4!null calls1_.phone_id:10!null person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── fd: (1)-->(4), (12)-->(13-17), (4)==(12), (12)==(4), (1)==(10), (10)==(1)
+ │    │    ├── scan phone_call [as=calls1_]
+ │    │    │    └── columns: calls1_.phone_id:10
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: phone0_.id:1!null person_id:4!null person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
+ │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(4)
+ │    │    │    ├── fd: (1)-->(4), (12)-->(13-17), (4)==(12), (12)==(4)
  │    │    │    ├── scan phone [as=phone0_]
  │    │    │    │    ├── columns: phone0_.id:1!null person_id:4
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(4)
- │    │    │    ├── select
- │    │    │    │    ├── columns: call3_.duration:20!null call3_.phone_id:22
- │    │    │    │    ├── scan phone_call [as=call3_]
- │    │    │    │    │    └── columns: call3_.duration:20!null call3_.phone_id:22
- │    │    │    │    └── filters
- │    │    │    │         └── (call3_.duration:20 >= 50) IS NOT false [outer=(20)]
+ │    │    │    ├── scan person [as=person2_]
+ │    │    │    │    ├── columns: person2_.id:12!null address:13 createdon:14 name:15 nickname:16 version:17!null
+ │    │    │    │    ├── key: (12)
+ │    │    │    │    └── fd: (12)-->(13-17)
  │    │    │    └── filters
- │    │    │         └── call3_.phone_id:22 = phone0_.id:1 [outer=(1,22), constraints=(/1: (/NULL - ]; /22: (/NULL - ]), fd=(1)==(22), (22)==(1)]
+ │    │    │         └── person_id:4 = person2_.id:12 [outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
  │    │    └── filters
- │    │         └── person_id:4 = person2_.id:12 [outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │         └── phone0_.id:1 = calls1_.phone_id:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    ├── select
+ │    │    ├── columns: call3_.duration:20!null call3_.phone_id:22
+ │    │    ├── scan phone_call [as=call3_]
+ │    │    │    └── columns: call3_.duration:20!null call3_.phone_id:22
+ │    │    └── filters
+ │    │         └── (call3_.duration:20 >= 50) IS NOT false [outer=(20)]
  │    └── filters
- │         └── phone0_.id:1 = calls1_.phone_id:10 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         └── call3_.phone_id:22 = phone0_.id:1 [outer=(1,22), constraints=(/1: (/NULL - ]; /22: (/NULL - ]), fd=(1)==(22), (22)==(1)]
  └── aggregations
       ├── const-agg [as=address:13, outer=(13)]
       │    └── address:13

@@ -250,7 +250,7 @@ memo (optimized, ~13KB, required=[presentation: i:1,f:2,s:3,b:4])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-4)) (index-join G5 p,cols=(1-4)) (index-join G6 p,cols=(1-4)) (index-join G7 p,cols=(1-4))
  │    └── [presentation: i:1,f:2,s:3,b:4]
  │         ├── best: (index-join G4 p,cols=(1-4))
- │         └── cost: 49.00
+ │         └── cost: 34.26
  ├── G2: (scan p,cols=(1-4))
  │    └── []
  │         ├── best: (scan p,cols=(1-4))
@@ -1407,11 +1407,16 @@ SELECT * FROM p WHERE s = 'foo' AND i > 5 AND i < 10
 index-join p
  ├── columns: i:1!null f:2 s:3!null b:4
  ├── fd: ()-->(3)
- └── scan p@idx,partial
+ └── select
       ├── columns: i:1!null rowid:5!null
-      ├── constraint: /1/5: [/6 - /9]
       ├── key: (5)
-      └── fd: (5)-->(1)
+      ├── fd: (5)-->(1)
+      ├── scan p@idx,partial
+      │    ├── columns: i:1 rowid:5!null
+      │    ├── key: (5)
+      │    └── fd: (5)-->(1)
+      └── filters
+           └── (i:1 > 5) AND (i:1 < 10) [outer=(1), constraints=(/1: [/6 - /9]; tight)]
 
 exec-ddl
 DROP INDEX idx
@@ -1501,7 +1506,7 @@ memo (optimized, ~17KB, required=[presentation: i:1])
  ├── G2: (select G6 G7) (select G8 G9) (index-join G4 p,cols=(1,3)) (select G10 G9) (index-join G5 p,cols=(1,3))
  │    └── []
  │         ├── best: (index-join G4 p,cols=(1,3))
- │         └── cost: 21.05
+ │         └── cost: 16.43
  ├── G3: (projections)
  ├── G4: (select G11 G9)
  │    └── []
@@ -1519,7 +1524,7 @@ memo (optimized, ~17KB, required=[presentation: i:1])
  ├── G8: (index-join G14 p,cols=(1,3))
  │    └── []
  │         ├── best: (index-join G14 p,cols=(1,3))
- │         └── cost: 374.63
+ │         └── cost: 373.86
  ├── G9: (filters G12)
  ├── G10: (index-join G15 p,cols=(1,3))
  │    └── []
@@ -4443,7 +4448,7 @@ memo (optimized, ~30KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G8: (index-join G19 pqr,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G19 pqr,cols=(1-4))
- │         └── cost: 21.76
+ │         └── cost: 14.74
  ├── G9: (filters G14)
  ├── G10: (index-join G20 pqr,cols=(1-4))
  │    └── []

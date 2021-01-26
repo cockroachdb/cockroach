@@ -60,7 +60,7 @@ sort
  ├── save-table-name: q8_sort_1
  ├── columns: o_year:69(float) mkt_share:74(float!null)
  ├── immutable
- ├── stats: [rows=728.956992, distinct(69)=728.956992, null(69)=0, distinct(74)=728.956992, null(74)=0]
+ ├── stats: [rows=731, distinct(69)=731, null(69)=0, distinct(74)=731, null(74)=0]
  ├── key: (69)
  ├── fd: (69)-->(74)
  ├── ordering: +69
@@ -68,7 +68,7 @@ sort
       ├── save-table-name: q8_project_2
       ├── columns: mkt_share:74(float!null) o_year:69(float)
       ├── immutable
-      ├── stats: [rows=728.956992, distinct(69)=728.956992, null(69)=0, distinct(74)=728.956992, null(74)=0]
+      ├── stats: [rows=731, distinct(69)=731, null(69)=0, distinct(74)=731, null(74)=0]
       ├── key: (69)
       ├── fd: (69)-->(74)
       ├── group-by
@@ -76,30 +76,30 @@ sort
       │    ├── columns: o_year:69(float) sum:72(float!null) sum:73(float!null)
       │    ├── grouping columns: o_year:69(float)
       │    ├── immutable
-      │    ├── stats: [rows=728.956992, distinct(69)=728.956992, null(69)=0, distinct(72)=728.956992, null(72)=0, distinct(73)=728.956992, null(73)=0, distinct(72,73)=728.956992, null(72,73)=0]
+      │    ├── stats: [rows=731, distinct(69)=731, null(69)=0, distinct(72)=731, null(72)=0, distinct(73)=731, null(73)=0, distinct(72,73)=731, null(72,73)=0]
       │    ├── key: (69)
       │    ├── fd: (69)-->(72,73)
       │    ├── project
       │    │    ├── save-table-name: q8_project_4
       │    │    ├── columns: column71:71(float!null) o_year:69(float) volume:70(float!null)
       │    │    ├── immutable
-      │    │    ├── stats: [rows=4298.26025, distinct(69)=728.956992, null(69)=0, distinct(70)=4264.27541, null(70)=0, distinct(71)=4281.24453, null(71)=0]
+      │    │    ├── stats: [rows=3626.32395, distinct(69)=731, null(69)=0, distinct(70)=3626.32395, null(70)=0, distinct(71)=3626.32395, null(71)=0]
       │    │    ├── project
       │    │    │    ├── save-table-name: q8_project_5
       │    │    │    ├── columns: o_year:69(float) volume:70(float!null) n2.n_name:61(char!null)
       │    │    │    ├── immutable
-      │    │    │    ├── stats: [rows=4298.26025, distinct(61)=25, null(61)=0, distinct(69)=728.956992, null(69)=0, distinct(70)=4264.27541, null(70)=0, distinct(61,70)=4281.24453, null(61,70)=0]
+      │    │    │    ├── stats: [rows=3626.32395, distinct(61)=25, null(61)=0, distinct(69)=731, null(69)=0, distinct(70)=3626.32395, null(70)=0, distinct(61,70)=3626.32395, null(61,70)=0]
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q8_inner_join_6
       │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) s_suppkey:11(int!null) s_nationkey:14(int!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_suppkey:21(int!null) l_extendedprice:24(float!null) l_discount:25(float!null) o_orderkey:36(int!null) o_custkey:37(int!null) o_orderdate:40(date!null) c_custkey:46(int!null) c_nationkey:49(int!null) n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) n2.n_nationkey:60(int!null) n2.n_name:61(char!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │    │    │    ├── stats: [rows=4298.26025, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(11)=3488.16892, null(11)=0, distinct(14)=25, null(14)=0, distinct(19)=4219.39619, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3488.16892, null(21)=0, distinct(24)=4261.8323, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=4219.39619, null(36)=0, distinct(37)=3981.08605, null(37)=0, distinct(40)=728.956992, null(40)=0, distinct(46)=3981.08605, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(60)=25, null(60)=0, distinct(61)=25, null(61)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0, distinct(24,25)=4264.27541, null(24,25)=0, distinct(24,25,61)=4281.24453, null(24,25,61)=0]
+      │    │    │    │    ├── stats: [rows=3626.32395, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(11)=3626.32395, null(11)=0, distinct(14)=25, null(14)=0, distinct(19)=3626.32395, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3626.32395, null(21)=0, distinct(24)=3626.32395, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=3626.32395, null(36)=0, distinct(37)=3626.32395, null(37)=0, distinct(40)=731, null(40)=0, distinct(46)=3626.32395, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(60)=25, null(60)=0, distinct(61)=25, null(61)=0, distinct(65)=1, null(65)=0, distinct(66)=1, null(66)=0, distinct(24,25)=3626.32395, null(24,25)=0, distinct(24,25,61)=3626.32395, null(24,25,61)=0]
       │    │    │    │    ├── fd: ()-->(5,66), (11)-->(14), (36)-->(37,40), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49), (37)==(46), (46)==(37), (19)==(36), (36)==(19), (11)==(21), (21)==(11), (60)-->(61), (14)==(60), (60)==(14), (1)==(20), (20)==(1)
       │    │    │    │    ├── inner-join (hash)
       │    │    │    │    │    ├── save-table-name: q8_inner_join_7
       │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) s_suppkey:11(int!null) s_nationkey:14(int!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_suppkey:21(int!null) l_extendedprice:24(float!null) l_discount:25(float!null) o_orderkey:36(int!null) o_custkey:37(int!null) o_orderdate:40(date!null) c_custkey:46(int!null) c_nationkey:49(int!null) n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    │    │    │    │    ├── stats: [rows=4112.79535, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(11)=3366.78718, null(11)=0, distinct(14)=25, null(14)=0, distinct(19)=4041.18142, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3366.78718, null(21)=0, distinct(24)=4084.68927, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=4041.18142, null(36)=0, distinct(37)=3821.76888, null(37)=0, distinct(40)=728.366962, null(40)=0, distinct(46)=3821.76888, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
+      │    │    │    │    │    ├── stats: [rows=3626.32395, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(11)=3626.32395, null(11)=0, distinct(14)=25, null(14)=0, distinct(19)=3626.32395, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3626.32395, null(21)=0, distinct(24)=3626.32395, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=3626.32395, null(36)=0, distinct(37)=3626.32395, null(37)=0, distinct(40)=731, null(40)=0, distinct(46)=3626.32395, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=1, null(66)=0]
       │    │    │    │    │    ├── fd: ()-->(5,66), (11)-->(14), (36)-->(37,40), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49), (37)==(46), (46)==(37), (19)==(36), (36)==(19), (11)==(21), (21)==(11), (1)==(20), (20)==(1)
       │    │    │    │    │    ├── scan supplier@s_nk
       │    │    │    │    │    │    ├── save-table-name: q8_scan_8
@@ -115,20 +115,20 @@ sort
       │    │    │    │    │    │    ├── save-table-name: q8_inner_join_9
       │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_suppkey:21(int!null) l_extendedprice:24(float!null) l_discount:25(float!null) o_orderkey:36(int!null) o_custkey:37(int!null) o_orderdate:40(date!null) c_custkey:46(int!null) c_nationkey:49(int!null) n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    │    │    │    │    ├── stats: [rows=3858.21971, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=3795.78555, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3196.43556, null(21)=0, distinct(24)=3840.01484, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=3795.78555, null(36)=0, distinct(37)=3601.33863, null(37)=0, distinct(40)=727.270042, null(40)=0, distinct(46)=3601.33863, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
+      │    │    │    │    │    │    ├── stats: [rows=3597.31335, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=3597.31335, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=3597.31335, null(21)=0, distinct(24)=3597.31335, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=3597.31335, null(36)=0, distinct(37)=3597.31335, null(37)=0, distinct(40)=731, null(40)=0, distinct(46)=3597.31335, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=1, null(66)=0]
       │    │    │    │    │    │    ├── fd: ()-->(5,66), (36)-->(37,40), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49), (37)==(46), (46)==(37), (19)==(36), (36)==(19), (1)==(20), (20)==(1)
       │    │    │    │    │    │    ├── inner-join (lookup customer@c_nk)
       │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_10
       │    │    │    │    │    │    │    ├── columns: c_custkey:46(int!null) c_nationkey:49(int!null) n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    │    │    ├── key columns: [55] = [49]
-      │    │    │    │    │    │    │    ├── stats: [rows=30000, distinct(46)=27672.3293, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
+      │    │    │    │    │    │    │    ├── stats: [rows=30000, distinct(46)=30000, null(46)=0, distinct(49)=5, null(49)=0, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=1, null(66)=0]
       │    │    │    │    │    │    │    ├── key: (46)
       │    │    │    │    │    │    │    ├── fd: ()-->(66), (46)-->(49), (55)-->(57), (57)==(65), (65)==(57), (49)==(55), (55)==(49)
       │    │    │    │    │    │    │    ├── inner-join (lookup nation@n_rk [as=n1])
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_11
       │    │    │    │    │    │    │    │    ├── columns: n1.n_nationkey:55(int!null) n1.n_regionkey:57(int!null) r_regionkey:65(int!null) r_name:66(char!null)
       │    │    │    │    │    │    │    │    ├── key columns: [65] = [57]
-      │    │    │    │    │    │    │    │    ├── stats: [rows=5, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=0.996222107, null(66)=0]
+      │    │    │    │    │    │    │    │    ├── stats: [rows=5, distinct(55)=5, null(55)=0, distinct(57)=1, null(57)=0, distinct(65)=1, null(65)=0, distinct(66)=1, null(66)=0]
       │    │    │    │    │    │    │    │    ├── key: (55)
       │    │    │    │    │    │    │    │    ├── fd: ()-->(66), (55)-->(57), (57)==(65), (65)==(57)
       │    │    │    │    │    │    │    │    ├── select
@@ -158,20 +158,20 @@ sort
       │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_suppkey:21(int!null) l_extendedprice:24(float!null) l_discount:25(float!null) o_orderkey:36(int!null) o_custkey:37(int!null) o_orderdate:40(date!null)
       │    │    │    │    │    │    │    ├── key columns: [19] = [36]
       │    │    │    │    │    │    │    ├── lookup columns are key
-      │    │    │    │    │    │    │    ├── stats: [rows=11919.8023, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=11764.217, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=6936.91818, null(21)=0, distinct(24)=11830.3859, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=11764.217, null(36)=0, distinct(37)=11232.8152, null(37)=0, distinct(40)=730.999939, null(40)=0]
+      │    │    │    │    │    │    │    ├── stats: [rows=11918.2163, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=11918.2163, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=9920, null(21)=0, distinct(24)=11918.2163, null(24)=0, distinct(25)=11, null(25)=0, distinct(36)=11918.2163, null(36)=0, distinct(37)=11918.2163, null(37)=0, distinct(40)=731, null(40)=0]
       │    │    │    │    │    │    │    ├── fd: ()-->(5), (36)-->(37,40), (19)==(36), (36)==(19), (1)==(20), (20)==(1)
       │    │    │    │    │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_15
       │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_suppkey:21(int!null) l_extendedprice:24(float!null) l_discount:25(float!null)
       │    │    │    │    │    │    │    │    ├── key columns: [19 22] = [19 22]
       │    │    │    │    │    │    │    │    ├── lookup columns are key
-      │    │    │    │    │    │    │    │    ├── stats: [rows=40222.9207, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=39697.9733, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=9747.98733, null(21)=0, distinct(24)=39361.9016, null(24)=0, distinct(25)=11, null(25)=0]
+      │    │    │    │    │    │    │    │    ├── stats: [rows=40222.9207, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=40222.9207, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(21)=9920, null(21)=0, distinct(24)=40222.9207, null(24)=0, distinct(25)=11, null(25)=0]
       │    │    │    │    │    │    │    │    ├── fd: ()-->(5), (1)==(20), (20)==(1)
       │    │    │    │    │    │    │    │    ├── inner-join (lookup lineitem@l_pk)
       │    │    │    │    │    │    │    │    │    ├── save-table-name: q8_lookup_join_16
       │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(varchar!null) l_orderkey:19(int!null) l_partkey:20(int!null) l_linenumber:22(int!null)
       │    │    │    │    │    │    │    │    │    ├── key columns: [1] = [20]
-      │    │    │    │    │    │    │    │    │    ├── stats: [rows=40222.9207, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=39697.9733, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(22)=7, null(22)=0]
+      │    │    │    │    │    │    │    │    │    ├── stats: [rows=40222.9207, distinct(1)=1335.38838, null(1)=0, distinct(5)=1, null(5)=0, distinct(19)=40222.9207, null(19)=0, distinct(20)=1335.38838, null(20)=0, distinct(22)=7, null(22)=0]
       │    │    │    │    │    │    │    │    │    ├── key: (19,22)
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(5), (19,22)-->(20), (1)==(20), (20)==(1)
       │    │    │    │    │    │    │    │    │    ├── select
@@ -233,8 +233,8 @@ column_names  row_count  distinct_count  null_count
 {o_year}      2          2               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{mkt_share}   729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
-{o_year}      729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
+{mkt_share}   731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
+{o_year}      731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
 
 ----Stats for q8_project_2----
 column_names  row_count  distinct_count  null_count
@@ -242,8 +242,8 @@ column_names  row_count  distinct_count  null_count
 {o_year}      2          2               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{mkt_share}   729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
-{o_year}      729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
+{mkt_share}   731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
+{o_year}      731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
 
 ----Stats for q8_group_by_3----
 column_names  row_count  distinct_count  null_count
@@ -252,9 +252,9 @@ column_names  row_count  distinct_count  null_count
 {sum}         2          2               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_year}      729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
-{sum}         729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
-{sum_1}       729.00         364.50 <==     729.00              364.50 <==          0.00            1.00
+{o_year}      731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
+{sum}         731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
+{sum_1}       731.00         365.50 <==     731.00              365.50 <==          0.00            1.00
 
 ----Stats for q8_project_4----
 column_names  row_count  distinct_count  null_count
@@ -263,9 +263,9 @@ column_names  row_count  distinct_count  null_count
 {volume}      2603       2599            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column71}    4298.00        1.65           4281.00             39.64 <==           0.00            1.00
-{o_year}      4298.00        1.65           729.00              364.50 <==          0.00            1.00
-{volume}      4298.00        1.65           4264.00             1.64                0.00            1.00
+{column71}    3626.00        1.39           3626.00             33.57 <==           0.00            1.00
+{o_year}      3626.00        1.39           731.00              365.50 <==          0.00            1.00
+{volume}      3626.00        1.39           3626.00             1.40                0.00            1.00
 
 ----Stats for q8_project_5----
 column_names  row_count  distinct_count  null_count
@@ -274,9 +274,9 @@ column_names  row_count  distinct_count  null_count
 {volume}      2603       2599            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}      4298.00        1.65           25.00               1.00                0.00            1.00
-{o_year}      4298.00        1.65           729.00              364.50 <==          0.00            1.00
-{volume}      4298.00        1.65           4264.00             1.64                0.00            1.00
+{n_name}      3626.00        1.39           25.00               1.00                0.00            1.00
+{o_year}      3626.00        1.39           731.00              365.50 <==          0.00            1.00
+{volume}      3626.00        1.39           3626.00             1.40                0.00            1.00
 
 ----Stats for q8_inner_join_6----
 column_names       row_count  distinct_count  null_count
@@ -302,26 +302,26 @@ column_names       row_count  distinct_count  null_count
 {s_suppkey}        2603       1895            0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        4298.00        1.65           3981.00             1.67                0.00            1.00
-{c_nationkey}      4298.00        1.65           5.00                1.00                0.00            1.00
-{l_discount}       4298.00        1.65           11.00               1.00                0.00            1.00
-{l_extendedprice}  4298.00        1.65           4262.00             1.68                0.00            1.00
-{l_orderkey}       4298.00        1.65           4219.00             1.64                0.00            1.00
-{l_partkey}        4298.00        1.65           1335.00             1.09                0.00            1.00
-{l_suppkey}        4298.00        1.65           3488.00             1.84                0.00            1.00
-{n_name}           4298.00        1.65           25.00               1.00                0.00            1.00
-{n_nationkey}      4298.00        1.65           5.00                1.00                0.00            1.00
-{n_nationkey_1}    4298.00        1.65           25.00               1.00                0.00            1.00
-{n_regionkey}      4298.00        1.65           1.00                1.00                0.00            1.00
-{o_custkey}        4298.00        1.65           3981.00             1.67                0.00            1.00
-{o_orderdate}      4298.00        1.65           729.00              1.03                0.00            1.00
-{o_orderkey}       4298.00        1.65           4219.00             1.64                0.00            1.00
-{p_partkey}        4298.00        1.65           1335.00             1.09                0.00            1.00
-{p_type}           4298.00        1.65           1.00                1.00                0.00            1.00
-{r_name}           4298.00        1.65           1.00                1.00                0.00            1.00
-{r_regionkey}      4298.00        1.65           1.00                1.00                0.00            1.00
-{s_nationkey}      4298.00        1.65           25.00               1.00                0.00            1.00
-{s_suppkey}        4298.00        1.65           3488.00             1.84                0.00            1.00
+{c_custkey}        3626.00        1.39           3626.00             1.52                0.00            1.00
+{c_nationkey}      3626.00        1.39           5.00                1.00                0.00            1.00
+{l_discount}       3626.00        1.39           11.00               1.00                0.00            1.00
+{l_extendedprice}  3626.00        1.39           3626.00             1.43                0.00            1.00
+{l_orderkey}       3626.00        1.39           3626.00             1.41                0.00            1.00
+{l_partkey}        3626.00        1.39           1335.00             1.09                0.00            1.00
+{l_suppkey}        3626.00        1.39           3626.00             1.91 <==            0.00            1.00
+{n_name}           3626.00        1.39           25.00               1.00                0.00            1.00
+{n_nationkey}      3626.00        1.39           5.00                1.00                0.00            1.00
+{n_nationkey_1}    3626.00        1.39           25.00               1.00                0.00            1.00
+{n_regionkey}      3626.00        1.39           1.00                1.00                0.00            1.00
+{o_custkey}        3626.00        1.39           3626.00             1.52                0.00            1.00
+{o_orderdate}      3626.00        1.39           731.00              1.03                0.00            1.00
+{o_orderkey}       3626.00        1.39           3626.00             1.41                0.00            1.00
+{p_partkey}        3626.00        1.39           1335.00             1.09                0.00            1.00
+{p_type}           3626.00        1.39           1.00                1.00                0.00            1.00
+{r_name}           3626.00        1.39           1.00                1.00                0.00            1.00
+{r_regionkey}      3626.00        1.39           1.00                1.00                0.00            1.00
+{s_nationkey}      3626.00        1.39           25.00               1.00                0.00            1.00
+{s_suppkey}        3626.00        1.39           3626.00             1.91 <==            0.00            1.00
 
 ----Stats for q8_inner_join_7----
 column_names       row_count  distinct_count  null_count
@@ -345,24 +345,24 @@ column_names       row_count  distinct_count  null_count
 {s_suppkey}        2603       1895            0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        4113.00        1.58           3822.00             1.60                0.00            1.00
-{c_nationkey}      4113.00        1.58           5.00                1.00                0.00            1.00
-{l_discount}       4113.00        1.58           11.00               1.00                0.00            1.00
-{l_extendedprice}  4113.00        1.58           4085.00             1.61                0.00            1.00
-{l_orderkey}       4113.00        1.58           4041.00             1.57                0.00            1.00
-{l_partkey}        4113.00        1.58           1335.00             1.09                0.00            1.00
-{l_suppkey}        4113.00        1.58           3367.00             1.78                0.00            1.00
-{n_nationkey}      4113.00        1.58           5.00                1.00                0.00            1.00
-{n_regionkey}      4113.00        1.58           1.00                1.00                0.00            1.00
-{o_custkey}        4113.00        1.58           3822.00             1.60                0.00            1.00
-{o_orderdate}      4113.00        1.58           728.00              1.03                0.00            1.00
-{o_orderkey}       4113.00        1.58           4041.00             1.57                0.00            1.00
-{p_partkey}        4113.00        1.58           1335.00             1.09                0.00            1.00
-{p_type}           4113.00        1.58           1.00                1.00                0.00            1.00
-{r_name}           4113.00        1.58           1.00                1.00                0.00            1.00
-{r_regionkey}      4113.00        1.58           1.00                1.00                0.00            1.00
-{s_nationkey}      4113.00        1.58           25.00               1.00                0.00            1.00
-{s_suppkey}        4113.00        1.58           3367.00             1.78                0.00            1.00
+{c_custkey}        3626.00        1.39           3626.00             1.52                0.00            1.00
+{c_nationkey}      3626.00        1.39           5.00                1.00                0.00            1.00
+{l_discount}       3626.00        1.39           11.00               1.00                0.00            1.00
+{l_extendedprice}  3626.00        1.39           3626.00             1.43                0.00            1.00
+{l_orderkey}       3626.00        1.39           3626.00             1.41                0.00            1.00
+{l_partkey}        3626.00        1.39           1335.00             1.09                0.00            1.00
+{l_suppkey}        3626.00        1.39           3626.00             1.91 <==            0.00            1.00
+{n_nationkey}      3626.00        1.39           5.00                1.00                0.00            1.00
+{n_regionkey}      3626.00        1.39           1.00                1.00                0.00            1.00
+{o_custkey}        3626.00        1.39           3626.00             1.52                0.00            1.00
+{o_orderdate}      3626.00        1.39           731.00              1.03                0.00            1.00
+{o_orderkey}       3626.00        1.39           3626.00             1.41                0.00            1.00
+{p_partkey}        3626.00        1.39           1335.00             1.09                0.00            1.00
+{p_type}           3626.00        1.39           1.00                1.00                0.00            1.00
+{r_name}           3626.00        1.39           1.00                1.00                0.00            1.00
+{r_regionkey}      3626.00        1.39           1.00                1.00                0.00            1.00
+{s_nationkey}      3626.00        1.39           25.00               1.00                0.00            1.00
+{s_suppkey}        3626.00        1.39           3626.00             1.91 <==            0.00            1.00
 
 ----Stats for q8_scan_8----
 column_names   row_count  distinct_count  null_count
@@ -393,22 +393,22 @@ column_names       row_count  distinct_count  null_count
 {r_regionkey}      2603       1               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        3858.00        1.48           3601.00             1.51                0.00            1.00
-{c_nationkey}      3858.00        1.48           5.00                1.00                0.00            1.00
-{l_discount}       3858.00        1.48           11.00               1.00                0.00            1.00
-{l_extendedprice}  3858.00        1.48           3840.00             1.51                0.00            1.00
-{l_orderkey}       3858.00        1.48           3796.00             1.48                0.00            1.00
-{l_partkey}        3858.00        1.48           1335.00             1.09                0.00            1.00
-{l_suppkey}        3858.00        1.48           3196.00             1.69                0.00            1.00
-{n_nationkey}      3858.00        1.48           5.00                1.00                0.00            1.00
-{n_regionkey}      3858.00        1.48           1.00                1.00                0.00            1.00
-{o_custkey}        3858.00        1.48           3601.00             1.51                0.00            1.00
-{o_orderdate}      3858.00        1.48           727.00              1.03                0.00            1.00
-{o_orderkey}       3858.00        1.48           3796.00             1.48                0.00            1.00
-{p_partkey}        3858.00        1.48           1335.00             1.09                0.00            1.00
-{p_type}           3858.00        1.48           1.00                1.00                0.00            1.00
-{r_name}           3858.00        1.48           1.00                1.00                0.00            1.00
-{r_regionkey}      3858.00        1.48           1.00                1.00                0.00            1.00
+{c_custkey}        3597.00        1.38           3597.00             1.51                0.00            1.00
+{c_nationkey}      3597.00        1.38           5.00                1.00                0.00            1.00
+{l_discount}       3597.00        1.38           11.00               1.00                0.00            1.00
+{l_extendedprice}  3597.00        1.38           3597.00             1.42                0.00            1.00
+{l_orderkey}       3597.00        1.38           3597.00             1.40                0.00            1.00
+{l_partkey}        3597.00        1.38           1335.00             1.09                0.00            1.00
+{l_suppkey}        3597.00        1.38           3597.00             1.90                0.00            1.00
+{n_nationkey}      3597.00        1.38           5.00                1.00                0.00            1.00
+{n_regionkey}      3597.00        1.38           1.00                1.00                0.00            1.00
+{o_custkey}        3597.00        1.38           3597.00             1.51                0.00            1.00
+{o_orderdate}      3597.00        1.38           731.00              1.03                0.00            1.00
+{o_orderkey}       3597.00        1.38           3597.00             1.40                0.00            1.00
+{p_partkey}        3597.00        1.38           1335.00             1.09                0.00            1.00
+{p_type}           3597.00        1.38           1.00                1.00                0.00            1.00
+{r_name}           3597.00        1.38           1.00                1.00                0.00            1.00
+{r_regionkey}      3597.00        1.38           1.00                1.00                0.00            1.00
 
 ----Stats for q8_lookup_join_10----
 column_names   row_count  distinct_count  null_count
@@ -420,7 +420,7 @@ column_names   row_count  distinct_count  null_count
 {r_regionkey}  29952      1               0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}    30000.00       1.00           27672.00            1.09                0.00            1.00
+{c_custkey}    30000.00       1.00           30000.00            1.01                0.00            1.00
 {c_nationkey}  30000.00       1.00           5.00                1.00                0.00            1.00
 {n_nationkey}  30000.00       1.00           5.00                1.00                0.00            1.00
 {n_regionkey}  30000.00       1.00           1.00                1.00                0.00            1.00
@@ -472,16 +472,16 @@ column_names       row_count  distinct_count  null_count
 {p_type}           13389      1               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       11920.00       1.12           11.00               1.00                0.00            1.00
-{l_extendedprice}  11920.00       1.12           11830.00            1.02                0.00            1.00
-{l_orderkey}       11920.00       1.12           11764.00            1.14                0.00            1.00
-{l_partkey}        11920.00       1.12           1335.00             1.09                0.00            1.00
-{l_suppkey}        11920.00       1.12           6937.00             1.72                0.00            1.00
-{o_custkey}        11920.00       1.12           11233.00            1.09                0.00            1.00
-{o_orderdate}      11920.00       1.12           731.00              1.00                0.00            1.00
-{o_orderkey}       11920.00       1.12           11764.00            1.14                0.00            1.00
-{p_partkey}        11920.00       1.12           1335.00             1.09                0.00            1.00
-{p_type}           11920.00       1.12           1.00                1.00                0.00            1.00
+{l_discount}       11918.00       1.12           11.00               1.00                0.00            1.00
+{l_extendedprice}  11918.00       1.12           11918.00            1.01                0.00            1.00
+{l_orderkey}       11918.00       1.12           11918.00            1.12                0.00            1.00
+{l_partkey}        11918.00       1.12           1335.00             1.09                0.00            1.00
+{l_suppkey}        11918.00       1.12           9920.00             2.45 <==            0.00            1.00
+{o_custkey}        11918.00       1.12           11918.00            1.03                0.00            1.00
+{o_orderdate}      11918.00       1.12           731.00              1.00                0.00            1.00
+{o_orderkey}       11918.00       1.12           11918.00            1.12                0.00            1.00
+{p_partkey}        11918.00       1.12           1335.00             1.09                0.00            1.00
+{p_type}           11918.00       1.12           1.00                1.00                0.00            1.00
 
 ----Stats for q8_lookup_join_15----
 column_names       row_count  distinct_count  null_count
@@ -495,10 +495,10 @@ column_names       row_count  distinct_count  null_count
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_discount}       40223.00       1.09           11.00               1.00                0.00            1.00
-{l_extendedprice}  40223.00       1.09           39362.00            1.22                0.00            1.00
-{l_orderkey}       40223.00       1.09           39698.00            1.09                0.00            1.00
+{l_extendedprice}  40223.00       1.09           40223.00            1.25                0.00            1.00
+{l_orderkey}       40223.00       1.09           40223.00            1.08                0.00            1.00
 {l_partkey}        40223.00       1.09           1335.00             1.09                0.00            1.00
-{l_suppkey}        40223.00       1.09           9748.00             2.24 <==            0.00            1.00
+{l_suppkey}        40223.00       1.09           9920.00             2.28 <==            0.00            1.00
 {p_partkey}        40223.00       1.09           1335.00             1.09                0.00            1.00
 {p_type}           40223.00       1.09           1.00                1.00                0.00            1.00
 
@@ -512,7 +512,7 @@ column_names    row_count  distinct_count  null_count
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_linenumber}  40223.00       1.09           7.00                1.00                0.00            1.00
-{l_orderkey}    40223.00       1.09           39698.00            1.09                0.00            1.00
+{l_orderkey}    40223.00       1.09           40223.00            1.08                0.00            1.00
 {l_partkey}     40223.00       1.09           1335.00             1.09                0.00            1.00
 {p_partkey}     40223.00       1.09           1335.00             1.09                0.00            1.00
 {p_type}        40223.00       1.09           1.00                1.00                0.00            1.00
