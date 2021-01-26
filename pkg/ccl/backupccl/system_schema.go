@@ -137,94 +137,94 @@ func settingsRestoreFunc(
 // backup. Every system table should have a specification defined here, enforced
 // by TestAllSystemTablesHaveBackupConfig.
 var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
-	systemschema.UsersTable.Name: {
+	systemschema.UsersTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.ZonesTable.Name: {
+	systemschema.ZonesTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.SettingsTable.Name: {
+	systemschema.SettingsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 		customRestoreFunc:      settingsRestoreFunc,
 	},
-	systemschema.LocationsTable.Name: {
+	systemschema.LocationsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.RoleMembersTable.Name: {
+	systemschema.RoleMembersTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.RoleOptionsTable.Name: {
+	systemschema.RoleOptionsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.UITable.Name: {
+	systemschema.UITable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.CommentsTable.Name: {
+	systemschema.CommentsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.JobsTable.Name: {
+	systemschema.JobsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 		customRestoreFunc:      jobsRestoreFunc,
 	},
-	systemschema.ScheduledJobsTable.Name: {
+	systemschema.ScheduledJobsTable.GetName(): {
 		includeInClusterBackup: optInToClusterBackup,
 	},
-	systemschema.TableStatisticsTable.Name: {
+	systemschema.TableStatisticsTable.GetName(): {
 		// Table statistics are backed up in the backup descriptor for now.
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.DescriptorTable.Name: {
+	systemschema.DescriptorTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.EventLogTable.Name: {
+	systemschema.EventLogTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.LeaseTable.Name: {
+	systemschema.LeaseTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.NamespaceTable.Name: {
+	systemschema.NamespaceTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.DeprecatedNamespaceTable.Name: {
+	systemschema.DeprecatedNamespaceTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ProtectedTimestampsMetaTable.Name: {
+	systemschema.ProtectedTimestampsMetaTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ProtectedTimestampsRecordsTable.Name: {
+	systemschema.ProtectedTimestampsRecordsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.RangeEventTable.Name: {
+	systemschema.RangeEventTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ReplicationConstraintStatsTable.Name: {
+	systemschema.ReplicationConstraintStatsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ReplicationCriticalLocalitiesTable.Name: {
+	systemschema.ReplicationCriticalLocalitiesTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ReportsMetaTable.Name: {
+	systemschema.ReportsMetaTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.ReplicationStatsTable.Name: {
+	systemschema.ReplicationStatsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.SqllivenessTable.Name: {
+	systemschema.SqllivenessTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.StatementBundleChunksTable.Name: {
+	systemschema.StatementBundleChunksTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.StatementDiagnosticsTable.Name: {
+	systemschema.StatementDiagnosticsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.StatementDiagnosticsRequestsTable.Name: {
+	systemschema.StatementDiagnosticsRequestsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.TenantsTable.Name: {
+	systemschema.TenantsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.WebSessionsTable.Name: {
+	systemschema.WebSessionsTable.GetName(): {
 		includeInClusterBackup: optOutOfClusterBackup,
 	},
 }

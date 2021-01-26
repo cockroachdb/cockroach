@@ -1159,8 +1159,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			pgConstraintTableOid := tableOid(pgConstraintsDesc.ID)
-			pgClassTableOid := tableOid(pgClassDesc.ID)
+			pgConstraintTableOid := tableOid(pgConstraintsDesc.GetID())
+			pgClassTableOid := tableOid(pgClassDesc.GetID())
 			if table.IsSequence() &&
 				!table.GetSequenceOpts().SequenceOwner.Equal(descpb.TableDescriptor_SequenceOpts_SequenceOwner{}) {
 				refObjID := tableOid(table.GetSequenceOpts().SequenceOwner.OwnerTableID)

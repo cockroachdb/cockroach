@@ -47,7 +47,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Immutable, error)
+	LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableDescriptor, error)
 
 	tree.TypeReferenceResolver
 }

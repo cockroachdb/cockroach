@@ -2776,7 +2776,7 @@ CREATE TABLE crdb_internal.zones (
 				return err
 			}
 
-			var table *tabledesc.Immutable
+			var table catalog.TableDescriptor
 			if zs.Database != "" {
 				database, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, descpb.ID(id))
 				if err != nil {
@@ -3703,7 +3703,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 				if vTableEntry.comment != "" {
 					if err := addRow(
 						tableCommentKey,
-						tree.NewDInt(tree.DInt(table.ID)),
+						tree.NewDInt(tree.DInt(table.GetID())),
 						zeroVal,
 						tree.NewDString(vTableEntry.comment)); err != nil {
 						return err

@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -21,7 +21,7 @@ import (
 type sequenceSelectNode struct {
 	optColumnsSlot
 
-	desc *tabledesc.Immutable
+	desc catalog.TableDescriptor
 
 	val  int64
 	done bool
@@ -29,8 +29,8 @@ type sequenceSelectNode struct {
 
 var _ planNode = &sequenceSelectNode{}
 
-func (p *planner) SequenceSelectNode(desc *tabledesc.Immutable) (planNode, error) {
-	if desc.SequenceOpts == nil {
+func (p *planner) SequenceSelectNode(desc catalog.TableDescriptor) (planNode, error) {
+	if desc.GetSequenceOpts() == nil {
 		return nil, errors.New("descriptor is not a sequence")
 	}
 	return &sequenceSelectNode{

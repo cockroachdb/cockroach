@@ -174,7 +174,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			}
 			return err
 		}
-		dependedOnBy := seqDesc.GetDependedOnBy()
+		dependedOnBy := seqDesc.TableDesc().GetDependedOnBy()
 		affectsNoColumns := len(dependedOnBy) == 0
 		// It is okay if the sequence is depended on by columns that are being
 		// dropped in the same transaction

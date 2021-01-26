@@ -825,7 +825,7 @@ func (m *Manager) migrateSystemNamespace(
 			q := fmt.Sprintf(
 				`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]
               WHERE id NOT IN (SELECT id FROM [%d AS namespace]) LIMIT %d`,
-				systemschema.DeprecatedNamespaceTable.ID, systemschema.NamespaceTable.ID, batchSize+1)
+				systemschema.DeprecatedNamespaceTable.GetID(), systemschema.NamespaceTable.GetID(), batchSize+1)
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "read-deprecated-namespace-table", txn,
 				sessiondata.InternalExecutorOverride{
@@ -947,7 +947,7 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		if err != nil {
 			return err
 		}
-		descpb.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
+		descpb.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.GetName()
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to
