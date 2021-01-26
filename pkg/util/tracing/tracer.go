@@ -89,7 +89,7 @@ var tracingMode = settings.RegisterEnumSetting(
 	"trace.mode",
 	"if set to 'background', traces will be created for all operations (in"+
 		"'legacy' mode it's created when explicitly requested or when auxiliary tracers are configured)",
-	"background",
+	"legacy",
 	map[int64]string{
 		int64(modeLegacy):     "legacy",
 		int64(modeBackground): "background",
