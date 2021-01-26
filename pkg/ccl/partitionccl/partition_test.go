@@ -1413,7 +1413,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
 	// Get the zone config corresponding to the table.
 	table := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
-	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.ID)))
+	kv, err := kvDB.Get(ctx, config.MakeZoneKey(config.SystemTenantObjectID(table.GetID())))
 	if err != nil {
 		t.Fatal(err)
 	}

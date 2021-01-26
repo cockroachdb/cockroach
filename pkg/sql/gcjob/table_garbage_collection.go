@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,7 +42,7 @@ func gcTables(
 			continue
 		}
 
-		var table *tabledesc.Immutable
+		var table catalog.TableDescriptor
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
 			table, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, droppedTable.ID)
@@ -67,16 +66,16 @@ func gcTables(
 
 		// First, delete all the table data.
 		if err := ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, table); err != nil {
-			return errors.Wrapf(err, "clearing data for table %d", table.ID)
+			return errors.Wrapf(err, "clearing data for table %d", table.GetID())
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.
 		if err := sql.DeleteTableDescAndZoneConfig(ctx, execCfg.DB, execCfg.Codec, table); err != nil {
-			return errors.Wrapf(err, "dropping table descriptor for table %d", table.ID)
+			return errors.Wrapf(err, "dropping table descriptor for table %d", table.GetID())
 		}
 
 		// Update the details payload to indicate that the table was dropped.
-		markTableGCed(ctx, table.ID, progress)
+		markTableGCed(ctx, table.GetID(), progress)
 	}
 	return nil
 }
@@ -87,20 +86,20 @@ func ClearTableData(
 	db *kv.DB,
 	distSender *kvcoord.DistSender,
 	codec keys.SQLCodec,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
 	// TODO(pbardea): Note that we never set the drop time for interleaved tables,
 	// but this check was added to be more explicit about it. This should get
 	// cleaned up.
-	if table.DropTime == 0 || table.IsInterleaved() {
-		log.Infof(ctx, "clearing data in chunks for table %d", table.ID)
+	if table.GetDropTime() == 0 || table.IsInterleaved() {
+		log.Infof(ctx, "clearing data in chunks for table %d", table.GetID())
 		return sql.ClearTableDataInChunks(ctx, db, codec, table, false /* traceKV */)
 	}
-	log.Infof(ctx, "clearing data for table %d", table.ID)
+	log.Infof(ctx, "clearing data for table %d", table.GetID())
 
-	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.ID)))
+	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
 	// ClearRange requests lays down RocksDB range deletion tombstones that have

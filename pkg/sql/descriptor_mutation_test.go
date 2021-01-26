@@ -1154,11 +1154,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
 	}
 
-	if len(tableDesc.Mutations) != len(expected) {
-		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.Mutations), len(expected))
+	if len(tableDesc.TableDesc().Mutations) != len(expected) {
+		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.TableDesc().Mutations), len(expected))
 	}
 
-	for i, m := range tableDesc.Mutations {
+	for i, m := range tableDesc.TableDesc().Mutations {
 		name := expected[i].name
 		if col := m.GetColumn(); col != nil {
 			if col.Name != name {

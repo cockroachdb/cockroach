@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -24,7 +24,7 @@ import (
 
 type commentOnTableNode struct {
 	n         *tree.CommentOnTable
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 }
 
 // CommentOnTable add comment on a table.
@@ -61,7 +61,7 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, 0, $3)",
 			keys.TableCommentType,
-			n.tableDesc.ID,
+			n.tableDesc.GetID(),
 			*n.n.Comment)
 		if err != nil {
 			return err
@@ -74,7 +74,7 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
 			keys.TableCommentType,
-			n.tableDesc.ID)
+			n.tableDesc.GetID())
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 	return params.p.logEvent(params.ctx,
-		n.tableDesc.ID,
+		n.tableDesc.GetID(),
 		&eventpb.CommentOnTable{
 			TableName:   params.p.ResolvedName(n.n.Table).FQString(),
 			Comment:     comment,

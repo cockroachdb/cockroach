@@ -45,7 +45,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	constraint descpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {

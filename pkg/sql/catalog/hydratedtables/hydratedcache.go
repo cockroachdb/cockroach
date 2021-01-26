@@ -123,7 +123,7 @@ func NewCache(settings *cluster.Settings) *Cache {
 }
 
 type hydratedTableDescriptor struct {
-	tableDesc *tabledesc.Immutable
+	tableDesc catalog.TableDescriptor
 	typeDescs []*cachedType
 }
 
@@ -141,8 +141,8 @@ type cachedType struct {
 // descriptor on their own. If the table descriptor does not contain any
 // user-defined types, it will be returned unchanged.
 func (c *Cache) GetHydratedTableDescriptor(
-	ctx context.Context, table *tabledesc.Immutable, res catalog.TypeDescriptorResolver,
-) (hydrated *tabledesc.Immutable, err error) {
+	ctx context.Context, table catalog.TableDescriptor, res catalog.TypeDescriptorResolver,
+) (hydrated catalog.TableDescriptor, err error) {
 
 	// If the table has an uncommitted version, it cannot be cached. Return nil
 	// forcing the caller to hydrate.
@@ -223,7 +223,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 			if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, &cachedRes); err != nil {
 				return nil, err
 			}
-			hydrated := tabledesc.NewImmutable(*descBase).(*tabledesc.Immutable)
+			hydrated := tabledesc.NewImmutable(*descBase)
 
 			// If any of the types resolved as part of hydration are modified, skip
 			// writing this descriptor to the cache.
@@ -251,7 +251,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		return res.(*tabledesc.Immutable), nil
+		return res.(catalog.TableDescriptor), nil
 	}
 }
 

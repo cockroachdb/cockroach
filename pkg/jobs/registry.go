@@ -856,8 +856,8 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 			if err != nil {
 				return err
 			}
-			hasAnyMutations := len(td.GetMutations()) != 0 || len(td.GetGCMutations()) != 0
-			hasDropJob := td.DropJobID != 0
+			hasAnyMutations := len(td.TableDesc().GetMutations()) != 0 || len(td.TableDesc().GetGCMutations()) != 0
+			hasDropJob := td.TableDesc().DropJobID != 0
 			pendingMutations = hasAnyMutations || hasDropJob
 			return nil
 		}); err != nil {

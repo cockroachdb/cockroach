@@ -271,12 +271,12 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 				return err
 			}
 
-			seqOpts := seqDesc.SequenceOpts
+			seqOpts := seqDesc.GetSequenceOpts()
 			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.Name)
+				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
 			}
 
-			seqNameToMetadata[seqDesc.Name] = &SequenceMetadata{
+			seqNameToMetadata[seqDesc.GetName()] = &SequenceMetadata{
 				id:      seqID,
 				seqDesc: seqDesc,
 			}

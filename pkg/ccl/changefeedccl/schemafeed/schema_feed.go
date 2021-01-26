@@ -42,12 +42,12 @@ import (
 
 // TableEvent represents a change to a table descriptor.
 type TableEvent struct {
-	Before, After *tabledesc.Immutable
+	Before, After catalog.TableDescriptor
 }
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
 func (e TableEvent) Timestamp() hlc.Timestamp {
-	return e.After.ModificationTime
+	return e.After.TableDesc().ModificationTime
 }
 
 // Config configures a SchemaFeed.
@@ -166,7 +166,7 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 	}
 }
 
-func (t *typeDependencyTracker) purgeTable(tbl *tabledesc.Immutable) {
+func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
 	if !tbl.ContainsUserDefinedTypes() {
 		return
 	}
@@ -176,7 +176,7 @@ func (t *typeDependencyTracker) purgeTable(tbl *tabledesc.Immutable) {
 	}
 }
 
-func (t *typeDependencyTracker) ingestTable(tbl *tabledesc.Immutable) {
+func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
 	if !tbl.ContainsUserDefinedTypes() {
 		return
 	}
@@ -276,7 +276,7 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Lock()
 	// Register all types used by the initial set of tables.
 	for _, desc := range initialDescs {
-		tbl := desc.(*tabledesc.Immutable)
+		tbl := desc.(catalog.TableDescriptor)
 		tf.mu.typeDeps.ingestTable(tbl)
 	}
 	tf.mu.Unlock()
@@ -474,8 +474,8 @@ func (e TableEvent) String() string {
 	return formatEvent(e)
 }
 
-func formatDesc(desc *tabledesc.Immutable) string {
-	return fmt.Sprintf("%d:%d@%v", desc.ID, desc.Version, desc.ModificationTime)
+func formatDesc(desc catalog.TableDescriptor) string {
+	return fmt.Sprintf("%d:%d@%v", desc.GetID(), desc.GetVersion(), desc.GetModificationTime())
 }
 
 func formatEvent(e TableEvent) string {
@@ -534,7 +534,7 @@ func (tf *SchemaFeed) validateDescriptor(
 				// The head could already have been handed out and sorting is not
 				// stable.
 				idxToSort := sort.Search(len(tf.mu.events), func(i int) bool {
-					return !tf.mu.events[i].After.ModificationTime.Less(earliestTsBeingIngested)
+					return !tf.mu.events[i].After.GetModificationTime().Less(earliestTsBeingIngested)
 				})
 				tf.mu.events = append(tf.mu.events, e)
 				toSort := tf.mu.events[idxToSort:]

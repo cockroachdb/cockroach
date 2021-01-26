@@ -365,8 +365,9 @@ CREATE TABLE crdb_internal.tables (
 			// Note: we do not use forEachTableDesc() here because we want to
 			// include added and dropped descriptors.
 			for _, desc := range descs {
-				table, ok := desc.(*tabledesc.Immutable)
-				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+				table, ok := desc.(catalog.TableDescriptor)
+				_, isMutable := desc.(catalog.MutableDescriptor)
+				if !ok || isMutable || p.CheckAnyPrivilege(ctx, table) != nil {
 					continue
 				}
 				dbName := dbNames[table.GetParentID()]
@@ -484,14 +485,15 @@ CREATE TABLE crdb_internal.schema_changes (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table, ok := desc.(*tabledesc.Immutable)
-			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+			table, ok := desc.(catalog.TableDescriptor)
+			_, isMutable := desc.(catalog.MutableDescriptor)
+			if !ok || isMutable || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
-			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
+			tableID := tree.NewDInt(tree.DInt(int64(table.GetID())))
 			parentID := tree.NewDInt(tree.DInt(int64(table.GetParentID())))
-			tableName := tree.NewDString(table.Name)
-			for _, mut := range table.Mutations {
+			tableName := tree.NewDString(table.GetName())
+			for _, mut := range table.TableDesc().Mutations {
 				mutType := "UNKNOWN"
 				targetID := tree.DNull
 				targetName := tree.DNull

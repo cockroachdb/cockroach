@@ -72,34 +72,34 @@ func TestMaybeRefreshStats(t *testing.T) {
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// There should not be any stats yet.
-	if err := checkStatsCount(ctx, cache, descA.ID, 0 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descA.GetID(), 0 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// There are no stats yet, so this must refresh the statistics on table t
 	// even though rowsAffected=0.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descA.GetID(), 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA.ID, 1 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descA.GetID(), 1 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
 	// With rowsAffected=10, refreshing should work. Since there are more rows
 	// updated than exist in the table, the probability of a refresh is 100%.
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descA.ID, 10 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descA.GetID(), 10 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
-	if err := checkStatsCount(ctx, cache, descA.ID, 2 /* expected */); err != nil {
+	if err := checkStatsCount(ctx, cache, descA.GetID(), 2 /* expected */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +108,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// TODO(rytaft): Should not enqueue views to begin with.
 	descVW := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
-		ctx, s.Stopper(), descVW.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		ctx, s.Stopper(), descVW.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
 	select {
 	case <-refresher.mutations:
@@ -138,7 +138,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	tableID := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
+	tableID := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").GetID()
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
