@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -259,6 +260,7 @@ func (kv *kvSQL) done() {
 }
 
 func BenchmarkKV(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	for i, opFn := range []func(kvInterface, int, int) error{
 		kvInterface.Insert,
 		kvInterface.Update,

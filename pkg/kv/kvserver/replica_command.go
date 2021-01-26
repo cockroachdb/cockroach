@@ -2109,12 +2109,15 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
+	newBatchFn := func() storage.Batch {
+		return r.store.Engine().NewUnIndexedBatch(false /* supportReader */)
+	}
 	if err := r.store.cfg.Transport.SendSnapshot(
 		ctx,
 		r.store.allocator.storePool,
 		req,
 		snap,
-		r.store.Engine().NewWriteOnlyBatch,
+		newBatchFn,
 		sent,
 	); err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
