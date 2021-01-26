@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/binary"
 	gojson "encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
@@ -271,8 +272,8 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(
 // JSON format. Keys are the primary key columns in a record. Values are all
 // columns in a record.
 type confluentAvroEncoder struct {
-	registryURL                                       string
-	updatedField, beforeField, keyOnly, fullTableName bool
+	registryURL                                          string
+	updatedField, beforeField, keyOnly, useFullTableName bool
 
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
@@ -324,7 +325,7 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 		return nil, errors.Errorf(`%s is not supported with %s=%s`,
 			changefeedbase.OptKeyInValue, changefeedbase.OptFormat, changefeedbase.OptFormatAvro)
 	}
-	_, e.fullTableName = opts[changefeedbase.OptFullTableName]
+	_, e.useFullTableName = opts[changefeedbase.OptFullTableName]
 
 	if len(e.registryURL) == 0 {
 		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
@@ -336,6 +337,22 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 	return e, nil
 }
 
+//Get the raw SQL-formatted string for a table name and apply full_table_name option
+func (e *confluentAvroEncoder) rawTableName(desc catalog.TableDescriptor) string {
+	tableName := desc.GetName()
+	if e.useFullTableName {
+		//We can't use the statement time name here because schemas are version specific
+		//And the fully-qualified table name is either hard to get or undefined
+		//without a current transaction and execution context.
+		//But this just needs to avoid collisions, so we can use ids in place of names.
+		tableName = fmt.Sprintf("db%d.schema%d.%s",
+			desc.GetParentID(),
+			desc.GetParentSchemaID(),
+			tableName)
+	}
+	return tableName
+}
+
 // EncodeKey implements the Encoder interface.
 func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]byte, error) {
 	cacheKey := makeTableIDAndVersion(row.tableDesc.GetID(), row.tableDesc.GetVersion())
@@ -344,14 +361,15 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 	if !ok {
 		var err error
 
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), row.tableDesc.GetName())
+		tableName := e.rawTableName(row.tableDesc)
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName)
 		if err != nil {
 			return nil, err
 		}
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(row.tableDesc.GetName()) + confluentSubjectSuffixKey
+		subject := SQLNameToKafkaName(tableName) + confluentSubjectSuffixKey
 		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err
@@ -404,7 +422,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 		// NB: This uses the kafka name escaper because it has to match the name
 		// of the kafka topic.
-		subject := SQLNameToKafkaName(row.tableDesc.GetName()) + confluentSubjectSuffixValue
+		subject := SQLNameToKafkaName(e.rawTableName(row.tableDesc)) + confluentSubjectSuffixValue
 		registered.registryID, err = e.register(ctx, &registered.schema.avroRecord, subject)
 		if err != nil {
 			return nil, err

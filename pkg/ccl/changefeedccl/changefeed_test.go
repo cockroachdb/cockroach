@@ -214,7 +214,7 @@ func TestChangefeedFullTableName(t *testing.T) {
 			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
-	//TODO(zinger): No reason in principle this shouldn't be honored here
+	//TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
 	//t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
