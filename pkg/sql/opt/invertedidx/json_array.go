@@ -329,35 +329,18 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 
 // extractJSONFetchValEqCondition extracts an InvertedExpression representing an
 // inverted filter over the planner's inverted index, based on equality between
-// a fetch val expression and a right scalar expression. If the following criteria
-// are not met, an empty InvertedExpression is returned.
+// a chain of fetch val expressions and a right scalar expression. If an
+// InvertedExpression cannot be generated from the expression, an empty
+// InvertedExpression is returned.
 //
-//   1. The fetch value operator's left expression must be a variable
-//      referencing the inverted column in the index.
-//   2. The fetch value operator's right expression must be a constant string.
-//   3. The right expression in the equality expression must be a constant JSON
-//      value that is not an object or an array.
-//
-// TODO(mgartner): Support chained fetch val operators, e.g., j->'a'->'b' = '1'.
+// In order to generate a non-empty InvertedExpression, left must be a fetch val
+// expression in the form [col]->[index0]->[index1]->...->[indexN] where col is
+// a variable or expression referencing the inverted column in the inverted
+// index and each index is a constant string. The right expression must be a
+// constant JSON value that is not an object or an array.
 func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
-	evalCtx *tree.EvalContext, fetch *memo.FetchValExpr, right opt.ScalarExpr,
+	evalCtx *tree.EvalContext, left *memo.FetchValExpr, right opt.ScalarExpr,
 ) invertedexpr.InvertedExpression {
-	// The left side of the fetch val expression, the Json field, should be a
-	// variable corresponding to the index column.
-	if !isIndexColumn(j.tabID, j.index, fetch.Json, j.computedColumns) {
-		return invertedexpr.NonInvertedColExpression{}
-	}
-
-	// The right side of the fetch val expression, the Index field, should be a
-	// constant string.
-	if !memo.CanExtractConstDatum(fetch.Index) {
-		return invertedexpr.NonInvertedColExpression{}
-	}
-	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
-	if !ok {
-		return invertedexpr.NonInvertedColExpression{}
-	}
-
 	// The right side of the equals expression should be a constant JSON value
 	// that is not an object or array.
 	if !memo.CanExtractConstDatum(right) {
@@ -372,10 +355,67 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 		return invertedexpr.NonInvertedColExpression{}
 	}
 
-	// Build a new JSON object of the form: {<key>: <right>}.
-	b := json.NewObjectBuilder(1)
-	b.Add(string(*key), val.JSON)
-	obj := tree.NewDJSON(b.Build())
+	// Recursively traverse fetch val expressions and collect keys with which to
+	// build the InvertedExpression. If it is not possible to build an inverted
+	// expression from the tree of fetch val expressions, collectKeys returns
+	// early and foundKeys remains false. If successful, foundKeys is set to
+	// true and keys are collected and ordered by the outer-most fetch val index
+	// first. For example, the expression j->'a'->'b' results in the keys
+	// {"b", "a"}.
+	foundKeys := false
+	var keys []string
+	var collectKeys func(fetch *memo.FetchValExpr)
+	collectKeys = func(fetch *memo.FetchValExpr) {
+		// The right side of the fetch val expression, the Index field, must be
+		// a constant string. If not, then we cannot build an inverted
+		// expression.
+		if !memo.CanExtractConstDatum(fetch.Index) {
+			return
+		}
+		key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
+		if !ok {
+			return
+		}
 
-	return getSpanExprForJSONOrArrayIndex(evalCtx, obj)
+		// Append the key to the list of keys.
+		keys = append(keys, string(*key))
+
+		// If the left side of the fetch val expression, the Json field, is a
+		// variable or expression corresponding to the index column, then we
+		// have found a valid list of keys to build an inverted expression.
+		// an inverted
+		if isIndexColumn(j.tabID, j.index, fetch.Json, j.computedColumns) {
+			foundKeys = true
+			return
+		}
+
+		// If the left side of the fetch val expression is another fetch val
+		// expression, recursively collect its keys.
+		if innerFetch, ok := fetch.Json.(*memo.FetchValExpr); ok {
+			collectKeys(innerFetch)
+		}
+
+		// Otherwise, we cannot build an inverted expression.
+	}
+	collectKeys(left)
+	if !foundKeys {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
+	// Build a new JSON object of the form:
+	//   {<keyN>: ... {<key1>: {key0: <val>}}}
+	// Note that key0 is the outer-most fetch val index, so the expression
+	// j->'a'->'b' = 1 results in {"a": {"b": 1}}.
+	var obj json.JSON
+	for i := 0; i < len(keys); i++ {
+		b := json.NewObjectBuilder(1)
+		if i == 0 {
+			b.Add(keys[i], val.JSON)
+		} else {
+			b.Add(keys[i], obj)
+		}
+		obj = b.Build()
+	}
+
+	return getSpanExprForJSONOrArrayIndex(evalCtx, tree.NewDJSON(obj))
 }

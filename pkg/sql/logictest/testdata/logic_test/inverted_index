@@ -744,7 +744,15 @@ INSERT INTO f VALUES
   (2, '{"b": 2}'),
   (3, '{"b": 2, "a": 1}'),
   (4, '{"a": 1, "c": 3}'),
-  (5, '{"a": [1, 2]}')
+  (5, '{"a": [1, 2]}'),
+  (6, '{"a": {"b": 1}}'),
+  (7, '{"a": {"b": 1, "d": 2}}'),
+  (8, '{"a": {"d": 2}}'),
+  (9, '{"a": {"b": [1, 2]}}'),
+  (10, '{"a": {"b": {"c": 1}}}'),
+  (11, '{"a": {"b": {"c": 1, "d": 2}}}}'),
+  (12, '{"a": {"b": {"d": 2}}}}'),
+  (13, '{"a": {"b": {"c": [1, 2]}}}')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -768,6 +776,18 @@ SELECT j FROM f@i WHERE j->'a' = '1' OR j @> '{"b": 2}' ORDER BY k
 {"b": 2}
 {"a": 1, "b": 2}
 {"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' = '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b'->'c' = '1' ORDER BY k
+----
+{"a": {"b": {"c": 1}}}
+{"a": {"b": {"c": 1, "d": 2}}}
 
 subtest arrays
 
