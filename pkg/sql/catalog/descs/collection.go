@@ -1185,7 +1185,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 
 		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
 	case catalog.TableDescriptor:
-		// Immutable table descriptors need to be copied before hydration, because
+		// immutable table descriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
 		// defined types in the descriptor, then return early.
 		if !t.ContainsUserDefinedTypes() {

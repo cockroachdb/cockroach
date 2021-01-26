@@ -931,7 +931,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			desc := NewImmutable(d.desc).(*Immutable)
+			desc := NewImmutable(d.desc).(*immutable)
 			if err := desc.ValidateTable(ctx); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 			} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
@@ -1349,7 +1349,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
 			descs[otherDesc.ID] = NewImmutable(otherDesc)
 		}
-		desc := NewImmutable(test.desc).(*Immutable)
+		desc := NewImmutable(test.desc).(*immutable)
 		if err := desc.ValidateCrossReferences(ctx, descs); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
@@ -1560,7 +1560,7 @@ func TestValidatePartitioning(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(test.err, func(t *testing.T) {
-			desc := NewImmutable(test.desc).(*Immutable)
+			desc := NewImmutable(test.desc).(*immutable)
 			err := desc.ValidatePartitioning()
 			if !testutils.IsError(err, test.err) {
 				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
@@ -1687,7 +1687,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	tests := []struct {
 		desc       descpb.TableDescriptor
 		expUpgrade bool
-		verify     func(int, *Immutable) // nil means no extra verification.
+		verify     func(int, *immutable) // nil means no extra verification.
 	}{
 		{
 			desc: descpb.TableDescriptor{
@@ -1698,7 +1698,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 			expUpgrade: true,
-			verify: func(i int, desc *Immutable) {
+			verify: func(i int, desc *immutable) {
 				if len(desc.Families) == 0 {
 					t.Errorf("%d: expected families to be set, but it was empty", i)
 				}
@@ -1720,7 +1720,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	for i, test := range tests {
 		descI, err := NewFilledInImmutable(context.Background(), nil, &test.desc)
 		require.NoError(t, err)
-		desc := descI.(*Immutable)
+		desc := descI.(*immutable)
 		upgraded := desc.GetPostDeserializationChanges().UpgradedFormatVersion
 		if upgraded != test.expUpgrade {
 			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)

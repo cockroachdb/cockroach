@@ -226,7 +226,7 @@ func newInvertedJoiner(
 
 	outputColCount := len(ij.inputTypes)
 	// Inverted joins are not used for mutations.
-	rightColTypes := ij.desc.(*tabledesc.Immutable).ColumnTypesWithMutations(false /* mutations */)
+	rightColTypes := ij.desc.ColumnTypes()
 	var includeRightCols bool
 	if ij.joinType == descpb.InnerJoin || ij.joinType == descpb.LeftOuterJoin {
 		outputColCount += len(rightColTypes)
