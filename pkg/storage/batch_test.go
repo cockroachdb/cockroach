@@ -68,7 +68,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 
 			var b Batch
 			if writeOnly {
-				b = e.NewWriteOnlyBatch()
+				b = e.NewUnIndexedBatch(false /* supportReader */)
 			} else {
 				b = e.NewBatch()
 			}
@@ -815,7 +815,7 @@ func TestBatchConcurrency(t *testing.T) {
 	}
 }
 
-func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
+func TestBatchVisibleAfterApplyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -840,11 +840,8 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 
 			assert.NoError(t, batch.ApplyBatchRepr(wb, false /* sync */))
 
-			distinct := batch.Distinct()
-			defer distinct.Close()
-
-			// The distinct batch can see the earlier write to the batch.
-			v, err := distinct.MVCCGet(mvccKey("batchkey"))
+			// The batch can see the earlier write.
+			v, err := batch.MVCCGet(mvccKey("batchkey"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -853,7 +850,7 @@ func TestBatchDistinctAfterApplyBatchRepr(t *testing.T) {
 	}
 }
 
-func TestBatchDistinct(t *testing.T) {
+func TestUnIndexedBatchThatSupportsReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -866,107 +863,15 @@ func TestBatchDistinct(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			batch := e.NewBatch()
-			defer batch.Close()
-
-			if err := batch.PutUnversioned(mvccKey("a").Key, []byte("a")); err != nil {
-				t.Fatal(err)
-			}
-			if err := batch.ClearUnversioned(mvccKey("b").Key); err != nil {
-				t.Fatal(err)
-			}
-
-			// The original batch can see the writes to the batch.
-			if v, err := batch.MVCCGet(mvccKey("a")); err != nil {
-				t.Fatal(err)
-			} else if string(v) != "a" {
-				t.Fatalf("expected a, but got %s", v)
-			}
-
-			// The distinct batch will see previous writes to the batch.
-			distinct := batch.Distinct()
-			if v, err := distinct.MVCCGet(mvccKey("a")); err != nil {
-				t.Fatal(err)
-			} else if string(v) != "a" {
-				t.Fatalf("expected a, but got %s", v)
-			}
-			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
-				t.Fatal(err)
-			} else if v != nil {
-				t.Fatalf("expected nothing, but got %s", v)
-			}
-
-			// Similarly, for distinct batch iterators we will see previous writes to the
-			// batch.
-			iter := distinct.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-			iter.SeekGE(mvccKey("a"))
-			if ok, err := iter.Valid(); !ok {
-				t.Fatalf("expected iterator to be valid; err=%v", err)
-			}
-			if string(iter.Key().Key) != "a" {
-				t.Fatalf("expected a, but got %s", iter.Key())
-			}
-			iter.Close()
-
-			if err := distinct.PutUnversioned(mvccKey("c").Key, []byte("c")); err != nil {
-				t.Fatal(err)
-			}
-			if v, err := distinct.MVCCGet(mvccKey("c")); err != nil {
-				t.Fatal(err)
-			} else {
-				switch engineImpl.name {
-				case "pebble":
-					// With Pebble, writes to the distinct batch are readable by the
-					// distinct batch. This semantic difference is due to not buffering
-					// writes in a builder.
-					if v == nil {
-						t.Fatalf("expected success, but got %s", v)
-					}
-				default:
-					// Writes to the distinct batch are not readable by the distinct
-					// batch.
-					if v != nil {
-						t.Fatalf("expected nothing, but got %s", v)
-					}
-				}
-			}
-			distinct.Close()
-
-			// Writes to the distinct batch are reflected in the original batch.
-			if v, err := batch.MVCCGet(mvccKey("c")); err != nil {
-				t.Fatal(err)
-			} else if string(v) != "c" {
-				t.Fatalf("expected c, but got %s", v)
-			}
-		})
-	}
-}
-
-func TestWriteOnlyBatchDistinct(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			e := engineImpl.create()
-			defer e.Close()
-
-			if err := e.PutUnversioned(mvccKey("b").Key, []byte("b")); err != nil {
-				t.Fatal(err)
-			}
-			if _, _, err := PutProto(e, mvccKey("c").Key, &roachpb.Value{}); err != nil {
-				t.Fatal(err)
-			}
-
-			b := e.NewWriteOnlyBatch()
+			b := e.NewUnIndexedBatch(true /* supportReader */)
 			defer b.Close()
-
-			distinct := b.Distinct()
-			defer distinct.Close()
+			if err := b.PutUnversioned(mvccKey("b").Key, []byte("c")); err != nil {
+				t.Fatal(err)
+			}
 
 			// Verify that reads on the distinct batch go to the underlying engine, not
-			// to the write-only batch.
-			iter := distinct.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			// to the un-indexed batch.
+			iter := b.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.SeekGE(mvccKey("a"))
 			if ok, err := iter.Valid(); !ok {
 				t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -976,21 +881,24 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 			}
 			iter.Close()
 
-			if v, err := distinct.MVCCGet(mvccKey("b")); err != nil {
+			if v, err := b.MVCCGet(mvccKey("b")); err != nil {
 				t.Fatal(err)
 			} else if string(v) != "b" {
 				t.Fatalf("expected b, but got %s", v)
 			}
-
-			val := &roachpb.Value{}
-			if _, _, _, err := distinct.MVCCGetProto(mvccKey("c"), val); err != nil {
+			if err := b.Commit(true); err != nil {
 				t.Fatal(err)
+			}
+			if v, err := e.MVCCGet(mvccKey("b")); err != nil {
+				t.Fatal(err)
+			} else if string(v) != "c" {
+				t.Fatalf("expected c, but got %s", v)
 			}
 		})
 	}
 }
 
-func TestBatchDistinctPanics(t *testing.T) {
+func TestUnIndexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -999,24 +907,16 @@ func TestBatchDistinctPanics(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			batch := e.NewBatch()
+			batch := e.NewUnIndexedBatch(false)
 			defer batch.Close()
 
-			distinct := batch.Distinct()
-			defer distinct.Close()
-
-			// The various Reader and Writer methods on the original batch should panic
-			// while the distinct batch is open.
+			// The various Reader methods on the batch should panic.
 			a := mvccKey("a")
+			b := mvccKey("b")
 			testCases := []func(){
-				func() { _ = batch.PutUnversioned(a.Key, nil) },
-				func() { _ = batch.Merge(a, nil) },
-				func() { _ = batch.ClearUnversioned(a.Key) },
-				func() { _ = batch.SingleClearEngineKey(EngineKey{Key: a.Key}) },
-				func() { _ = batch.ApplyBatchRepr(nil, false) },
 				func() { _, _ = batch.MVCCGet(a) },
 				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
-				func() { _ = batch.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, nil) },
+				func() { _ = batch.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, nil) },
 				func() { _ = batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
 			for i, f := range testCases {
@@ -1024,7 +924,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 					defer func() {
 						if r := recover(); r == nil {
 							t.Fatalf("%d: test did not panic", i)
-						} else if r != "distinct batch open" {
+						} else if r != "write-only batch" {
 							t.Fatalf("%d: unexpected panic: %v", i, r)
 						}
 					}()
@@ -1164,7 +1064,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 						k := fmt.Sprint(v)
 
-						b := e.NewWriteOnlyBatch()
+						b := e.NewUnIndexedBatch(false /* supportReader */)
 						if err := b.PutUnversioned(mvccKey(k).Key, []byte(k)); err != nil {
 							errs <- errors.Wrap(err, "put failed")
 							return
