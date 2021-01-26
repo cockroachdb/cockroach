@@ -281,7 +281,7 @@ func (k rangeBTreeKey) Less(i btree.Item) bool {
 type btreeReplica Replica
 
 func (r *btreeReplica) key() roachpb.RKey {
-	return (*Replica)(r).startKey()
+	return r.startKey
 }
 
 func (r *btreeReplica) Less(i btree.Item) bool {
