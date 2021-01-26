@@ -1481,6 +1481,25 @@ func TestReplicaDrainLease(t *testing.T) {
 	require.Equal(t, r1.RaftStatus().Lead, uint64(r1.ReplicaID()),
 		"expected leadership to still be on the first replica")
 
+	// Wait until n1 has heartbeat its liveness record (epoch >= 1) and n2
+	// knows about it. Otherwise, the following could occur:
+	//
+	// - n1's heartbeats to epoch 1 and acquires lease
+	// - n2 doesn't receive this yet (gossip)
+	// - when n2 is asked to acquire the lease, it uses a lease with epoch 1
+	//   but the liveness record with epoch zero
+	// - lease status is ERROR, lease acquisition (and thus test) fails.
+	testutils.SucceedsSoon(t, func() error {
+		nl, ok := s2.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(s1.NodeID())
+		if !ok {
+			return errors.New("no liveness record for n1")
+		}
+		if nl.Epoch < 1 {
+			return errors.New("epoch for n1 still zero")
+		}
+		return nil
+	})
+
 	// Mark the stores as draining. We'll then start checking how acquiring leases
 	// behaves while draining.
 	store1.draining.Store(true)
