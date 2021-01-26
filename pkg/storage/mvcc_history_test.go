@@ -67,6 +67,7 @@ import (
 // - `=foo` means exactly key `foo`
 // - `+foo` means `Key(foo).Next()`
 // - `-foo` means `Key(foo).PrefixEnd()`
+// - `%foo` means `append(LocalRangePrefix, "foo")`
 //
 // Additionally, the pseudo-command `with` enables sharing
 // a group of arguments between multiple commands, for example:
@@ -1018,6 +1019,8 @@ func toKey(s string) roachpb.Key {
 		return roachpb.Key(s[1:])
 	case len(s) > 0 && s[0] == '-':
 		return roachpb.Key(s[1:]).PrefixEnd()
+	case len(s) > 0 && s[0] == '%':
+		return append(keys.LocalRangePrefix, s[1:]...)
 	default:
 		return roachpb.Key(s)
 	}

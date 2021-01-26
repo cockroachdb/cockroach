@@ -9,16 +9,16 @@ with t=A
     resolve_intent
 ----
 >> txn_begin ts=11 t=A
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0
 >> put v=abc k=a t=A
 called PutIntent("a", _, NoExistingIntent, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} ts=0.000000011,0 del=false klen=12 vlen=8
-data: "a"/0.000000011,0 -> /BYTES/abc
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=8
+data: "a"/11.000000000,0 -> /BYTES/abc
 >> get k=a t=A
-get: "a" -> /BYTES/abc @0.000000011,0
+get: "a" -> /BYTES/abc @11.000000000,0
 >> resolve_intent k=a t=A
 called ClearIntent("a", ExistingIntentInterleaved, TDNUM(true), 00000000-0000-0000-0000-000000000001)
-data: "a"/0.000000011,0 -> /BYTES/abc
+data: "a"/11.000000000,0 -> /BYTES/abc
 
 run ok
 with t=A resolve
@@ -29,11 +29,11 @@ with t=A resolve
   txn_remove
 ----
 >> at end:
-data: "a"/0.000000011,0 -> /BYTES/abc
-data: "a/1"/0.000000011,0 -> /BYTES/eee
-data: "b"/0.000000011,0 -> /BYTES/fff
-data: "b/2"/0.000000011,0 -> /BYTES/ggg
-data: "c"/0.000000011,0 -> /BYTES/hhh
+data: "a"/11.000000000,0 -> /BYTES/abc
+data: "a/1"/11.000000000,0 -> /BYTES/eee
+data: "b"/11.000000000,0 -> /BYTES/fff
+data: "b/2"/11.000000000,0 -> /BYTES/ggg
+data: "c"/11.000000000,0 -> /BYTES/hhh
 
 # Reads previous writes, transactional.
 
@@ -42,9 +42,9 @@ with t=A
   txn_begin  ts=11
   get   k=a
 ----
-get: "a" -> /BYTES/abc @0.000000011,0
+get: "a" -> /BYTES/abc @11.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0.000000011,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000011,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false max=0,0
 
 run trace ok
 with t=A
@@ -57,25 +57,25 @@ with t=A
   txn_remove
 ----
 >> scan k=a end==b t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
-scan: "a/1" -> /BYTES/eee @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
 >> scan k=a end=+a t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
 >> scan k=a end=-a t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
-scan: "a/1" -> /BYTES/eee @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
 >> scan k=a end=+b t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
-scan: "a/1" -> /BYTES/eee @0.000000011,0
-scan: "b" -> /BYTES/fff @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+scan: "b" -> /BYTES/fff @11.000000000,0
 >> scan k=a end==b t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
-scan: "a/1" -> /BYTES/eee @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
 >> scan k=a end=-b t=A
-scan: "a" -> /BYTES/abc @0.000000011,0
-scan: "a/1" -> /BYTES/eee @0.000000011,0
-scan: "b" -> /BYTES/fff @0.000000011,0
-scan: "b/2" -> /BYTES/ggg @0.000000011,0
+scan: "a" -> /BYTES/abc @11.000000000,0
+scan: "a/1" -> /BYTES/eee @11.000000000,0
+scan: "b" -> /BYTES/fff @11.000000000,0
+scan: "b/2" -> /BYTES/ggg @11.000000000,0
 >> txn_remove t=A
 
 
@@ -87,5 +87,5 @@ with t=A k=a
   txn_remove
 ----
 >> txn_begin ts=1 t=A k=a
-txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=0.000000001,0 min=0,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false max=0,0
+txn: "A" meta={id=00000000 key="a" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false max=0,0
 >> txn_remove t=A k=a
