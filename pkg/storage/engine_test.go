@@ -1476,7 +1476,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 func TestSupportsPrev(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	opts := IterOptions{LowerBound: keys.MinKey, UpperBound: keys.MaxKey}
+	opts := IterOptions{LowerBound: keys.LocalMax, UpperBound: keys.MaxKey}
 	type engineTest struct {
 		engineIterSupportsPrev   bool
 		batchIterSupportsPrev    bool

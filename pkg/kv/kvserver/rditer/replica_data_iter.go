@@ -220,6 +220,10 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 func NewReplicaMVCCDataIterator(
 	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
 ) *ReplicaMVCCDataIterator {
+	// TODO(sumeer): this is broken for separated intents since the upper bound
+	// is a global key, but the ranges include replicated range local keys. So
+	// it underlying iterator used by intentInterleavingIter can iterate up into
+	// the lock table which is not an MVCCKey.
 	it := reader.NewMVCCIterator(
 		storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	ri := &ReplicaMVCCDataIterator{
