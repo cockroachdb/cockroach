@@ -220,31 +220,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
-				if d.PartitionByIndex.ContainsPartitions() {
-					var numImplicitColumns int
-					var err error
-					idx, numImplicitColumns, err = detectImplicitPartitionColumns(
-						params.EvalContext(),
-						n.tableDesc,
-						idx,
-						d.PartitionByIndex.PartitionBy,
-					)
-					if err != nil {
-						return err
-					}
-					partitioning, err := CreatePartitioning(
-						params.ctx,
-						params.p.ExecCfg().Settings,
-						params.EvalContext(),
-						n.tableDesc,
-						&idx,
-						numImplicitColumns,
-						d.PartitionByIndex.PartitionBy,
-					)
-					if err != nil {
-						return err
-					}
-					idx.Partitioning = partitioning
+
+				var err error
+				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
+					params.ctx,
+					n.tableDesc,
+					idx,
+					d.PartitionByIndex,
+				)
+				if err != nil {
+					return err
 				}
 				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
 				if err == nil {
@@ -257,6 +242,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
+				// We need to allocate IDs upfront in the event we need to update the zone config
+				// in the same transaction.
+				if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+					return err
+				}
+				if err := params.p.configureZoneConfigForNewIndexPartitioning(
+					params.ctx,
+					n.tableDesc,
+					idx,
+				); err != nil {
+					return err
+				}
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
