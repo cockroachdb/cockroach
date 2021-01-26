@@ -690,3 +690,32 @@ ORDER BY a2.a
 ----
 7  {NULL}
 8  NULL
+
+statement ok
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON
+)
+
+statement ok
+INSERT INTO j1 VALUES (1, '{"a": "b"}')
+
+statement ok
+CREATE TABLE j2 (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX j_idx (j)
+)
+
+statement ok
+INSERT INTO j2 VALUES (1, '{"a": "b"}')
+
+# Regression test for #58892. Ensure that all right-side columns in the output
+# are NULL.
+query ITIT
+SELECT j1.*, j2.*
+FROM j1 LEFT INVERTED JOIN j2@j_idx
+  ON j2.j @> j1.j AND j2.j = '"foo"'
+ORDER BY j1.k, j2.k
+----
+1  {"a": "b"}  NULL  NULL

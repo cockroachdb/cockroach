@@ -4216,14 +4216,14 @@ project
  │    ├── fd: (15,16)-->(19)
  │    ├── inner-join (lookup nyc_census_blocks [as=c])
  │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10!null n.boroname:14!null name:15!null n.geom:16!null
- │    │    ├── key columns: [1] = [1]
+ │    │    ├── key columns: [33] = [1]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
  │    │    ├── fd: (9)==(14), (14)==(9)
  │    │    ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
- │    │    │    ├── columns: c.gid:1!null n.boroname:14 name:15!null n.geom:16
+ │    │    │    ├── columns: n.boroname:14 name:15!null n.geom:16 c.gid:33!null
  │    │    │    ├── inverted-expr
- │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
+ │    │    │    │    └── st_intersects(n.geom:16, c.geom:42)
  │    │    │    ├── select
  │    │    │    │    ├── columns: n.boroname:14 name:15!null n.geom:16
  │    │    │    │    ├── scan nyc_neighborhoods [as=n]
@@ -4251,7 +4251,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~34KB, required=[presentation: name:15,popn_per_sqkm:20])
+memo (optimized, ~35KB, required=[presentation: name:15,popn_per_sqkm:20])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:15,popn_per_sqkm:20]
  │         ├── best: (project G2 G3 name)
@@ -4261,9 +4261,9 @@ memo (optimized, ~34KB, required=[presentation: name:15,popn_per_sqkm:20])
  │         ├── best: (group-by G4 G5 cols=(15,16))
  │         └── cost: 7312.10
  ├── G3: (projections G6)
- ├── G4: (inner-join G7 G8 G9) (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods [as=n],keyCols=[13],outCols=(3,9,10,14-16)) (lookup-join G12 G11 nyc_neighborhoods [as=n],keyCols=[13],outCols=(3,9,10,14-16)) (lookup-join G13 G9 nyc_census_blocks [as=c],keyCols=[1],outCols=(3,9,10,14-16))
+ ├── G4: (inner-join G7 G8 G9) (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods [as=n],keyCols=[21],outCols=(3,9,10,14-16)) (lookup-join G12 G11 nyc_neighborhoods [as=n],keyCols=[27],outCols=(3,9,10,14-16)) (lookup-join G13 G9 nyc_census_blocks [as=c],keyCols=[33],outCols=(3,9,10,14-16))
  │    └── []
- │         ├── best: (lookup-join G13 G9 nyc_census_blocks [as=c],keyCols=[1],outCols=(3,9,10,14-16))
+ │         ├── best: (lookup-join G13 G9 nyc_census_blocks [as=c],keyCols=[33],outCols=(3,9,10,14-16))
  │         └── cost: 7305.98
  ├── G5: (aggregations G14)
  ├── G6: (div G15 G16)
@@ -4328,13 +4328,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4354,13 +4354,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4379,13 +4379,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
+      │    │    └── st_covers(c.geom:10, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4405,13 +4405,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:16)
+      │    │    └── st_coveredby(c.geom:10, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4431,13 +4431,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dwithinexclusive(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4457,13 +4457,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4484,13 +4484,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:16) AND (st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16))
+      │    │    └── st_coveredby(c.geom:10, n.geom:22) AND (st_dwithin(c.geom:10, n.geom:22, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:22))
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4510,13 +4510,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dfullywithin(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dfullywithin(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4535,13 +4535,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0)
+      │    │    └── st_dfullywithinexclusive(c.geom:10, n.geom:22, 50.0)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4562,13 +4562,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_census_blocks [as=c])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [1] = [1]
+      ├── key columns: [31] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_census_blocks@nyc_census_blocks_geo_idx [as=c])
-      │    ├── columns: c.gid:1!null name:15 n.geom:16!null
+      │    ├── columns: name:15 n.geom:16!null c.gid:31!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(n.geom:16, c.geom:10) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:10)
+      │    │    └── st_coveredby(n.geom:16, c.geom:40) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:40)
       │    ├── immutable
       │    ├── select
       │    │    ├── columns: name:15 n.geom:16!null
@@ -4610,14 +4610,14 @@ project
  ├── fd: ()-->(9)
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9!null c.geom:10!null name:15!null n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(9)
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9!null c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9!null c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
+      │    │    └── st_covers(c.geom:10, n.geom:22)
       │    ├── fd: ()-->(9)
       │    ├── select
       │    │    ├── columns: c.boroname:9!null c.geom:10
@@ -4665,17 +4665,17 @@ WHERE EXISTS (
 ----
 semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [13] = [13]
+ ├── key columns: [19] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:19
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19!null continuation:25
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:16)
- │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(19)
+ │    │    └── st_covers(c.geom:10, n.geom:22)
+ │    ├── key: (1,19)
+ │    ├── fd: (1)-->(2-10), (19)-->(25)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -4697,17 +4697,17 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [13] = [13]
+ ├── key columns: [19] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:19
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19 continuation:25
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:16)
- │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(19)
+ │    │    └── st_covers(c.geom:10, n.geom:22)
+ │    ├── key: (1,19)
+ │    ├── fd: (1)-->(2-10), (19)-->(25)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -4731,14 +4731,14 @@ project
  ├── immutable
  └── anti-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10
-      ├── key columns: [13] = [13]
+      ├── key columns: [20] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13 continuation:20
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:20 continuation:26
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    ├── fd: (13)-->(20)
+      │    │    └── st_covers(c.geom:10, n.geom:23)
+      │    ├── fd: (20)-->(26)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters
@@ -4756,17 +4756,17 @@ LEFT JOIN nyc_neighborhoods AS n ON ST_Covers(c.geom, n.geom)
 ----
 left-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10 gid:13 boroname:14 name:15 geom:16
- ├── key columns: [13] = [13]
+ ├── key columns: [19] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,13)
  ├── fd: (1)-->(2-10), (13)-->(14-16)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:19
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19 continuation:25
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:16)
- │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(19)
+ │    │    └── st_covers(c.geom:10, n.geom:22)
+ │    ├── key: (1,19)
+ │    ├── fd: (1)-->(2-10), (19)-->(25)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -4812,14 +4812,14 @@ with &1 (q)
       │    ├── fd: (24)-->(29)
       │    ├── left-join (lookup nyc_neighborhoods [as=n])
       │    │    ├── columns: geom:22 n.boroname:24 n.geom:26
-      │    │    ├── key columns: [23] = [23]
+      │    │    ├── key columns: [42] = [23]
       │    │    ├── lookup columns are key
       │    │    ├── immutable
       │    │    ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    │    │    ├── columns: geom:22 n.gid:23 continuation:42
+      │    │    │    ├── columns: geom:22 n.gid:42 continuation:48
       │    │    │    ├── inverted-expr
-      │    │    │    │    └── st_intersects(geom:22, n.geom:26)
-      │    │    │    ├── fd: (23)-->(42)
+      │    │    │    │    └── st_intersects(geom:22, n.geom:45)
+      │    │    │    ├── fd: (42)-->(48)
       │    │    │    ├── with-scan &1 (q)
       │    │    │    │    ├── columns: geom:22
       │    │    │    │    └── mapping:
@@ -4909,13 +4909,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_intersects(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    │    └── st_intersects(c.geom:10::BOX2D::GEOMETRY, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4934,13 +4934,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    │    └── st_covers(c.geom:10::BOX2D::GEOMETRY, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4959,13 +4959,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    │    └── st_coveredby(c.geom:10::BOX2D::GEOMETRY, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -4984,13 +4984,13 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [19] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:19!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:16)
+      │    │    └── st_coveredby(c.geom:10, n.geom:22)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
@@ -5072,14 +5072,14 @@ project
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.k:1!null t1.j:3 t2.j:10
-      ├── key columns: [1] = [1]
+      ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(3)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.j:10
+      │    ├── columns: t2.j:10 t1.k:13!null
       │    ├── inverted-expr
-      │    │    └── t1.j:3 @> t2.j:10
+      │    │    └── t1.j:15 @> t2.j:10
       │    ├── scan json_arr2 [as=t2]
       │    │    └── columns: t2.j:10
       │    └── filters (true)
@@ -5098,14 +5098,14 @@ project
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.k:1!null t1.a:4 t2.a:11
-      ├── key columns: [1] = [1]
+      ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(4)
       ├── inner-join (inverted json_arr1@a_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.a:11
+      │    ├── columns: t2.a:11 t1.k:13!null
       │    ├── inverted-expr
-      │    │    └── t1.a:4 @> t2.a:11
+      │    │    └── t1.a:16 @> t2.a:11
       │    ├── scan json_arr2 [as=t2]
       │    │    └── columns: t2.a:11
       │    └── filters (true)
@@ -5124,15 +5124,15 @@ project
  ├── immutable
  └── left-join (lookup json_arr1 [as=t1])
       ├── columns: t2.j:3 t1.k:6 t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [13] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (6)-->(8)
       ├── left-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6 continuation:13
+      │    ├── columns: t2.j:3 t1.k:13 continuation:20
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (6)-->(13)
+      │    │    └── t1.j:15 @> t2.j:3
+      │    ├── fd: (13)-->(20)
       │    ├── scan json_arr2 [as=t2]
       │    │    └── columns: t2.j:3
       │    └── filters (true)
@@ -5171,16 +5171,16 @@ ON t1.j @> t2.j AND t1.j @> '{"foo": "bar"}'::jsonb AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null i:2 j:3!null a:4 k:8!null l:9 j:10 a:11
- ├── key columns: [1] = [1]
+ ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,8)
  ├── fd: (1)-->(2-4), (8)-->(9-11)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t1.k:1!null t2.k:8!null l:9 t2.j:10 t2.a:11
+ │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11 t1.k:13!null
  │    ├── inverted-expr
- │    │    └── (t1.j:3 @> t2.j:10) AND (t1.j:3 @> '{"foo": "bar"}')
- │    ├── key: (1,8)
+ │    │    └── (t1.j:15 @> t2.j:10) AND (t1.j:15 @> '{"foo": "bar"}')
+ │    ├── key: (8,13)
  │    ├── fd: (8)-->(9-11)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11
@@ -5201,16 +5201,16 @@ ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null i:2 j:3 a:4!null k:8!null l:9 j:10 a:11
- ├── key columns: [1] = [1]
+ ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,8)
  ├── fd: (1)-->(2-4), (8)-->(9-11)
  ├── inner-join (inverted json_arr1@a_idx [as=t1])
- │    ├── columns: t1.k:1!null t2.k:8!null l:9 t2.j:10 t2.a:11
+ │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11 t1.k:13!null
  │    ├── inverted-expr
- │    │    └── (t1.a:4 @> t2.a:11) AND (t1.a:4 @> ARRAY['foo'])
- │    ├── key: (1,8)
+ │    │    └── (t1.a:16 @> t2.a:11) AND (t1.a:16 @> ARRAY['foo'])
+ │    ├── key: (8,13)
  │    ├── fd: (8)-->(9-11)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11
@@ -5231,17 +5231,17 @@ ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 left-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4 k:6 i:7 j:8 a:9
- ├── key columns: [6] = [6]
+ ├── key columns: [13] = [6]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,6)
  ├── fd: (1)-->(2-4), (6)-->(7-9)
  ├── left-join (inverted json_arr1@a_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6 continuation:13
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
  │    ├── inverted-expr
- │    │    └── (t1.a:9 @> t2.a:4) AND (t1.a:9 @> ARRAY['foo'])
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-4), (6)-->(13)
+ │    │    └── (t1.a:16 @> t2.a:4) AND (t1.a:16 @> ARRAY['foo'])
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -5261,17 +5261,17 @@ WHERE EXISTS (
 ----
 semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [6] = [6]
+ ├── key columns: [13] = [6]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null continuation:13
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13!null continuation:20
  │    ├── inverted-expr
- │    │    └── t1.j:8 @> t2.j:3
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-4), (6)-->(13)
+ │    │    └── t1.j:15 @> t2.j:3
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -5289,17 +5289,17 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
- ├── key columns: [6] = [6]
+ ├── key columns: [13] = [6]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6 continuation:13
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
  │    ├── inverted-expr
- │    │    └── t1.j:8 @> t2.j:3
- │    ├── key: (1,6)
- │    ├── fd: (1)-->(2-4), (6)-->(13)
+ │    │    └── t1.j:15 @> t2.j:3
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
@@ -5364,19 +5364,74 @@ project
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.k:1!null t1.j:3 t2.j:12
-      ├── key columns: [1] = [1]
+      ├── key columns: [15] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(3)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t1.k:1!null t2.j:12
+      │    ├── columns: t2.j:12 t1.k:15!null
       │    ├── inverted-expr
-      │    │    └── t1.j:3 @> t2.j:12
+      │    │    └── t1.j:17 @> t2.j:12
       │    ├── scan json_arr2 [as=t2]
       │    │    └── columns: t2.j:12
       │    └── filters (true)
       └── filters
            └── t1.j:3 @> t2.j:12 [outer=(3,12), immutable]
+
+exec-ddl
+CREATE TABLE j1 (
+  k INT PRIMARY KEY,
+  j JSON
+)
+----
+
+exec-ddl
+CREATE TABLE j2 (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX j2_j_idx (j)
+)
+----
+
+# Regression test for #58892. Ensure that the columns projected by the left
+# lookup join are from the primary index, not the inverted index.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT j1.*, j2.*
+FROM j1 LEFT INVERTED JOIN j2@j2_j_idx
+  ON j2.j @> j1.j AND j2.j = '"foo"'
+ORDER BY j1.k, j2.k
+----
+sort (segmented)
+ ├── columns: k:1!null j:2 k:4 j:5
+ ├── immutable
+ ├── key: (1,4)
+ ├── fd: (1)-->(2), (1,4)-->(5)
+ ├── ordering: +1,+4
+ └── left-join (lookup j2)
+      ├── columns: j1.k:1!null j1.j:2 j2.k:4 j2.j:5
+      ├── key columns: [8] = [4]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1,4)
+      ├── fd: (1)-->(2), (1,4)-->(5)
+      ├── ordering: +1
+      ├── left-join (inverted j2@j2_j_idx)
+      │    ├── columns: j1.k:1!null j1.j:2 j2.k:8 continuation:12
+      │    ├── flags: force inverted join (into right side)
+      │    ├── inverted-expr
+      │    │    └── j2.j:9 @> j1.j:2
+      │    ├── key: (1,8)
+      │    ├── fd: (1)-->(2), (8)-->(12)
+      │    ├── ordering: +1
+      │    ├── scan j1
+      │    │    ├── columns: j1.k:1!null j1.j:2
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
+      │    └── filters (true)
+      └── filters
+           ├── j2.j:5 @> j1.j:2 [outer=(2,5), immutable]
+           └── j2.j:5 = '"foo"' [outer=(5), immutable, constraints=(/5: [/'"foo"' - /'"foo"']; tight), fd=()-->(5)]
 
 # -------------------------------------------------------
 # GenerateInvertedJoins on multi-column inverted indexes
@@ -5423,17 +5478,17 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.gid:1!null c.geom:10!null n.boroname:14!null n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [21] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(14), (1)-->(10)
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
-      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null n.boroname:14!null "inverted_join_const_col_@14":20!null
-      │    ├── prefix key columns: [20] = [14]
+      │    ├── columns: c.gid:1!null c.geom:10 "inverted_join_const_col_@14":20!null n.gid:21!null n.boroname:22!null
+      │    ├── prefix key columns: [20] = [22]
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    ├── key: (1,13)
-      │    ├── fd: ()-->(14,20), (1)-->(10), (14)==(20), (20)==(14)
+      │    │    └── st_covers(c.geom:10, n.geom:24)
+      │    ├── key: (1,21)
+      │    ├── fd: ()-->(20,22), (1)-->(10), (20)==(22), (22)==(20)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@14":20!null c.gid:1!null c.geom:10
       │    │    ├── key: (1)
@@ -5461,17 +5516,17 @@ project
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.a:4 t1.k:6!null t1.a:9
-      ├── key columns: [6] = [6]
+      ├── key columns: [19] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(6,9)
       ├── inner-join (inverted json_arr1@a_idx [as=t1])
-      │    ├── columns: t2.a:4 t1.k:6!null "inverted_join_const_col_@6":18!null
+      │    ├── columns: t2.a:4 "inverted_join_const_col_@6":18!null t1.k:19!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [18] = [6]
+      │    ├── prefix key columns: [18] = [19]
       │    ├── inverted-expr
-      │    │    └── t1.a:9 @> t2.a:4
-      │    ├── fd: ()-->(6,18), (6)==(18), (18)==(6)
+      │    │    └── t1.a:22 @> t2.a:4
+      │    ├── fd: ()-->(18,19), (18)==(19), (19)==(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":18!null t2.a:4
       │    │    ├── fd: ()-->(18)
@@ -5496,17 +5551,17 @@ project
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(6,8)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null "inverted_join_const_col_@6":17!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@6":17!null t1.k:18!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [17] = [6]
+      │    ├── prefix key columns: [17] = [18]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: ()-->(6,17), (6)==(17), (17)==(6)
+      │    │    └── t1.j:20 @> t2.j:3
+      │    ├── fd: ()-->(17,18), (17)==(18), (18)==(17)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":17!null t2.j:3
       │    │    ├── fd: ()-->(17)
@@ -5531,17 +5586,17 @@ project
  ├── fd: ()-->(6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.j:8 t1.a:9!null
-      ├── key columns: [6] = [6]
+      ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(6,8,9)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null "inverted_join_const_col_@6":17!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@6":17!null t1.k:18!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [17] = [6]
+      │    ├── prefix key columns: [17] = [18]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: ()-->(6,17), (6)==(17), (17)==(6)
+      │    │    └── t1.j:20 @> t2.j:3
+      │    ├── fd: ()-->(17,18), (17)==(18), (18)==(17)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@6":17!null t2.j:3
       │    │    ├── fd: ()-->(17)
@@ -5566,17 +5621,17 @@ project
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (6)-->(8)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null "inverted_join_const_col_@6":17!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@6":17!null t1.k:18!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [17] = [6]
+      │    ├── prefix key columns: [17] = [18]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (6)==(17), (17)==(6)
+      │    │    └── t1.j:20 @> t2.j:3
+      │    ├── fd: (17)==(18), (18)==(17)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:3 "inverted_join_const_col_@6":17!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5606,19 +5661,19 @@ project
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.k:1!null t2.j:3 t1.k:6!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [17] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── key: (6)
       ├── fd: (1)-->(3), (6)-->(8), (1)==(6), (6)==(1)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null t2.j:3 t1.k:6!null
+      │    ├── columns: t2.k:1!null t2.j:3 t1.k:17!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [1] = [6]
+      │    ├── prefix key columns: [1] = [17]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (6)
-      │    ├── fd: (1)-->(3), (1)==(6), (6)==(1)
+      │    │    └── t1.j:19 @> t2.j:3
+      │    ├── key: (17)
+      │    ├── fd: (1)-->(3), (1)==(17), (17)==(1)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:1!null t2.j:3
       │    │    ├── key: (1)
@@ -5639,17 +5694,17 @@ project
  ├── immutable
  └── inner-join (lookup json_check [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [12] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (6)-->(8)
       ├── inner-join (inverted json_check@secondary [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@7":11!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@7":11!null t1.k:12!null i:13!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [11] = [7]
+      │    ├── prefix key columns: [11] = [13]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (6)-->(7), (7)==(11), (11)==(7)
+      │    │    └── t1.j:14 @> t2.j:3
+      │    ├── fd: (12)-->(13), (11)==(13), (13)==(11)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:3 "inverted_join_const_col_@7":11!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5678,17 +5733,17 @@ project
  ├── immutable
  └── inner-join (lookup json_comp [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
-      ├── key columns: [6] = [6]
+      ├── key columns: [13] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(7), (6)-->(9)
       ├── inner-join (inverted json_comp@bj_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null b:8!null "inverted_join_const_col_@8":12!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@8":12!null t1.k:13!null b:15!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [12] = [8]
+      │    ├── prefix key columns: [12] = [15]
       │    ├── inverted-expr
-      │    │    └── t1.j:9 @> t2.j:3
-      │    ├── fd: ()-->(8,12), (8)==(12), (12)==(8)
+      │    │    └── t1.j:16 @> t2.j:3
+      │    ├── fd: ()-->(12,15), (12)==(15), (15)==(12)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@8":12!null t2.j:3
       │    │    ├── fd: ()-->(12)
@@ -5723,17 +5778,17 @@ project
  ├── immutable
  └── inner-join (lookup json_comp [as=t1])
       ├── columns: t2.j:3 t1.k:6!null t1.a:7!null t1.j:9
-      ├── key columns: [6] = [6]
+      ├── key columns: [14] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(7), (6)-->(9)
       ├── inner-join (inverted json_comp@bj_partial_idx,partial [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null b:8!null "inverted_join_const_col_@8":13!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@8":13!null t1.k:14!null b:16!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [13] = [8]
+      │    ├── prefix key columns: [13] = [16]
       │    ├── inverted-expr
-      │    │    └── t1.j:9 @> t2.j:3
-      │    ├── fd: ()-->(8,13), (8)==(13), (13)==(8)
+      │    │    └── t1.j:17 @> t2.j:3
+      │    ├── fd: ()-->(13,16), (13)==(16), (16)==(13)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@8":13!null t2.j:3
       │    │    ├── fd: ()-->(13)
@@ -5795,17 +5850,17 @@ project
  ├── immutable
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.j:3 t1.k:6!null i:7!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [21] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (6)-->(7,8)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null
+      │    ├── columns: t2.j:3 "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null t1.k:21!null i:22!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [19 20] = [6 7]
+      │    ├── prefix key columns: [19 20] = [21 22]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (6)-->(7), (6)==(19), (19)==(6), (7)==(20), (20)==(7)
+      │    │    └── t1.j:23 @> t2.j:3
+      │    ├── fd: (21)-->(22), (19)==(21), (21)==(19), (20)==(22), (22)==(20)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:3 "inverted_join_const_col_@6":19!null "inverted_join_const_col_@7":20!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5844,18 +5899,18 @@ project
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.k:1!null t2.j:3 t1.k:6!null i:7!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [19] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── key: (6)
       ├── fd: (1)-->(3), (6)-->(7,8), (1)==(6), (6)==(1)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null t2.j:3 t1.k:6!null i:7!null "inverted_join_const_col_@7":18!null
+      │    ├── columns: t2.k:1!null t2.j:3 "inverted_join_const_col_@7":18!null t1.k:19!null i:20!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [1 18] = [6 7]
+      │    ├── prefix key columns: [1 18] = [19 20]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (1)-->(3), (6)-->(7), (1)==(6), (6)==(1), (7)==(18), (18)==(7)
+      │    │    └── t1.j:21 @> t2.j:3
+      │    ├── fd: (1)-->(3), (19)-->(20), (1)==(19), (19)==(1), (18)==(20), (20)==(18)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.k:1!null t2.j:3 "inverted_join_const_col_@7":18!null
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -5888,25 +5943,25 @@ project
  ├── key: (6)
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t2.k:1!null l:2!null t2.j:3 t1.k:6!null i:7!null t1.j:8
-      ├── key columns: [6] = [6]
+      ├── key columns: [18] = [6]
       ├── lookup columns are key
       ├── immutable
       ├── key: (6)
       ├── fd: (1)-->(2,3), (6)-->(7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
       ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2!null t2.j:3 t1.k:6!null i:7!null
+      │    ├── columns: t2.k:1!null l:2!null t2.j:3 t1.k:18!null i:19!null
       │    ├── flags: force inverted join (into right side)
-      │    ├── prefix key columns: [1 2] = [6 7]
+      │    ├── prefix key columns: [1 2] = [18 19]
       │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (6)
-      │    ├── fd: (1)-->(2,3), (6)-->(7), (2)==(7), (7)==(2), (1)==(6), (6)==(1)
+      │    │    └── t1.j:20 @> t2.j:3
+      │    ├── key: (18)
+      │    ├── fd: (1)-->(2,3), (18)-->(19), (2)==(19), (19)==(2), (1)==(18), (18)==(1)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:1!null l:2 t2.j:3
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,3)
       │    └── filters
-      │         └── i:7 = l:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      │         └── i:19 = l:2 [outer=(2,19), constraints=(/2: (/NULL - ]; /19: (/NULL - ]), fd=(2)==(19), (19)==(2)]
       └── filters
            └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
@@ -5962,40 +6017,36 @@ WHERE EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i IN (3, 4)
 )
 ----
-project
+semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [20] = [6]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── semi-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7!null
-      ├── key columns: [6] = [6]
-      ├── lookup columns are key
-      ├── immutable
-      ├── fd: (1)-->(2-4)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7!null "inverted_join_const_col_@7":19!null continuation:20
-      │    ├── prefix key columns: [19] = [7]
-      │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (1)-->(2-4), (6)-->(7,20), (7)==(19), (19)==(7)
-      │    ├── inner-join (cross)
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
-      │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── scan json_arr2 [as=t2]
-      │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── values
-      │    │    │    ├── columns: "inverted_join_const_col_@7":19!null
-      │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── (3,)
-      │    │    │    └── (4,)
-      │    │    └── filters (true)
-      │    └── filters (true)
-      └── filters
-           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+ ├── inner-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null t1.k:20!null i:21!null continuation:33
+ │    ├── prefix key columns: [19] = [21]
+ │    ├── inverted-expr
+ │    │    └── t1.j:22 @> t2.j:3
+ │    ├── fd: (1)-->(2-4), (20)-->(21,33), (19)==(21), (21)==(19)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── scan json_arr2 [as=t2]
+ │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-4)
+ │    │    ├── values
+ │    │    │    ├── columns: "inverted_join_const_col_@7":19!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (3,)
+ │    │    │    └── (4,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
 # Generate an inverted semi-join on a multi-column inverted index with the
 # prefix column constrained by an equality constraint.
@@ -6005,31 +6056,27 @@ WHERE EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i = t2.k
 )
 ----
-project
+semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [19] = [6]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── semi-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7!null
-      ├── key columns: [6] = [6]
-      ├── lookup columns are key
-      ├── immutable
-      ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
-      ├── inner-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null i:7!null continuation:19
-      │    ├── prefix key columns: [1] = [7]
-      │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (6)
-      │    ├── fd: (1)-->(2-4), (6)-->(7,19), (1)==(7), (7)==(1)
-      │    ├── scan json_arr2 [as=t2]
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4)
-      │    └── filters (true)
-      └── filters
-           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+ ├── inner-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:19!null i:20!null continuation:32
+ │    ├── prefix key columns: [1] = [20]
+ │    ├── inverted-expr
+ │    │    └── t1.j:21 @> t2.j:3
+ │    ├── key: (19)
+ │    ├── fd: (1)-->(2-4), (19)-->(20,32), (1)==(20), (20)==(1)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
 # Generate an inverted anti-join on a multi-column inverted index.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -6038,40 +6085,36 @@ WHERE NOT EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i IN (3, 4)
 )
 ----
-project
+anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [20] = [6]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── anti-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7
-      ├── key columns: [6] = [6]
-      ├── lookup columns are key
-      ├── immutable
-      ├── fd: (1)-->(2-4), (6)-->(7,20)
-      ├── left-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6 i:7 "inverted_join_const_col_@7":19!null continuation:20
-      │    ├── prefix key columns: [19] = [7]
-      │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── fd: (1)-->(2-4), (6)-->(7,20)
-      │    ├── inner-join (cross)
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
-      │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
-      │    │    ├── fd: (1)-->(2-4)
-      │    │    ├── scan json_arr2 [as=t2]
-      │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2-4)
-      │    │    ├── values
-      │    │    │    ├── columns: "inverted_join_const_col_@7":19!null
-      │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── (3,)
-      │    │    │    └── (4,)
-      │    │    └── filters (true)
-      │    └── filters (true)
-      └── filters
-           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+ ├── left-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null t1.k:20 i:21 continuation:33
+ │    ├── prefix key columns: [19] = [21]
+ │    ├── inverted-expr
+ │    │    └── t1.j:22 @> t2.j:3
+ │    ├── fd: (1)-->(2-4), (20)-->(21,33)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 "inverted_join_const_col_@7":19!null
+ │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
+ │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── scan json_arr2 [as=t2]
+ │    │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2-4)
+ │    │    ├── values
+ │    │    │    ├── columns: "inverted_join_const_col_@7":19!null
+ │    │    │    ├── cardinality: [2 - 2]
+ │    │    │    ├── (3,)
+ │    │    │    └── (4,)
+ │    │    └── filters (true)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
 # Generate an inverted anti-join on a multi-column inverted index with the
 # prefix column constrained by an equality constraint.
@@ -6081,32 +6124,27 @@ WHERE NOT EXISTS (
   SELECT * FROM json_arr1 AS t1 WHERE t1.j @> t2.j AND t1.i = t2.k
 )
 ----
-project
+anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [19] = [6]
+ ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
- └── anti-join (lookup json_arr1 [as=t1])
-      ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 i:7
-      ├── key columns: [6] = [6]
-      ├── lookup columns are key
-      ├── immutable
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-4), (6)-->(7,19)
-      ├── left-join (inverted json_arr1@j_idx [as=t1])
-      │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6 i:7 continuation:19
-      │    ├── prefix key columns: [1] = [7]
-      │    ├── inverted-expr
-      │    │    └── t1.j:8 @> t2.j:3
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2-4), (6)-->(7,19)
-      │    ├── scan json_arr2 [as=t2]
-      │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-4)
-      │    └── filters (true)
-      └── filters
-           └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+ ├── left-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:19 i:20 continuation:32
+ │    ├── prefix key columns: [1] = [20]
+ │    ├── inverted-expr
+ │    │    └── t1.j:21 @> t2.j:3
+ │    ├── key: (1,19)
+ │    ├── fd: (1)-->(2-4), (19)-->(20,32)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
@@ -6140,15 +6178,15 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.gid:1!null c.geom:10!null n.boroname:14!null n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [21] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── fd: (1)-->(10)
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
-      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null
+      │    ├── columns: c.gid:1!null c.geom:10 n.gid:21!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    ├── key: (1,13)
+      │    │    └── st_covers(c.geom:10, n.geom:24)
+      │    ├── key: (1,21)
       │    ├── fd: (1)-->(10)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    ├── columns: c.gid:1!null c.geom:10
@@ -6165,17 +6203,17 @@ ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 500
 ----
 inner-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4 k:6!null i:7 j:8 a:9
- ├── key columns: [6] = [6]
+ ├── key columns: [20] = [6]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,6)
  ├── fd: (1)-->(2-4), (6)-->(7-9)
  ├── inner-join (inverted json_arr1@j_idx,partial [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:20!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
- │    │    └── t1.j:8 @> t2.j:3
- │    ├── key: (1,6)
+ │    │    └── t1.j:22 @> t2.j:3
+ │    ├── key: (1,20)
  │    ├── fd: (1)-->(2-4)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
@@ -6197,15 +6235,15 @@ project
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods [as=n])
       ├── columns: c.gid:1!null c.geom:10!null n.boroname:14!null n.geom:16!null
-      ├── key columns: [13] = [13]
+      ├── key columns: [21] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(14), (1)-->(10)
       ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
-      │    ├── columns: c.gid:1!null c.geom:10 n.gid:13!null
+      │    ├── columns: c.gid:1!null c.geom:10 n.gid:21!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:16)
-      │    ├── key: (1,13)
+      │    │    └── st_covers(c.geom:10, n.geom:24)
+      │    ├── key: (1,21)
       │    ├── fd: (1)-->(10)
       │    ├── scan nyc_census_blocks [as=c]
       │    │    ├── columns: c.gid:1!null c.geom:10
@@ -6223,24 +6261,24 @@ ON t1.j @> t2.j AND t1.k > 0 AND t1.k <= 400
 ----
 inner-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4 k:6!null i:7 j:8 a:9
- ├── key columns: [6] = [6]
+ ├── key columns: [20] = [6]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1,6)
  ├── fd: (1)-->(2-4), (6)-->(7-9)
  ├── inner-join (inverted json_arr1@j_idx,partial [as=t1])
- │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:6!null
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:20!null
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
- │    │    └── t1.j:8 @> t2.j:3
- │    ├── key: (1,6)
+ │    │    └── t1.j:22 @> t2.j:3
+ │    ├── key: (1,20)
  │    ├── fd: (1)-->(2-4)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4)
  │    └── filters
- │         └── t1.k:6 <= 400 [outer=(6), constraints=(/6: (/NULL - /400]; tight)]
+ │         └── t1.k:20 <= 400 [outer=(20), constraints=(/20: (/NULL - /400]; tight)]
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
@@ -6254,17 +6292,17 @@ WHERE EXISTS (
 ----
 semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [13] = [13]
+ ├── key columns: [21] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null continuation:21
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21!null continuation:29
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:16)
- │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(21)
+ │    │    └── st_covers(c.geom:10, n.geom:24)
+ │    ├── key: (1,21)
+ │    ├── fd: (1)-->(2-10), (21)-->(29)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
@@ -6284,17 +6322,17 @@ WHERE NOT EXISTS (
 ----
 anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
- ├── key columns: [13] = [13]
+ ├── key columns: [21] = [13]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13 continuation:21
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21 continuation:29
  │    ├── inverted-expr
- │    │    └── st_covers(c.geom:10, n.geom:16)
- │    ├── key: (1,13)
- │    ├── fd: (1)-->(2-10), (13)-->(21)
+ │    │    └── st_covers(c.geom:10, n.geom:24)
+ │    ├── key: (1,21)
+ │    ├── fd: (1)-->(2-10), (21)-->(29)
  │    ├── scan nyc_census_blocks [as=c]
  │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
  │    │    ├── key: (1)
