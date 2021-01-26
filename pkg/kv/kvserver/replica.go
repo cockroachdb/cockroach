@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/v3"
 )
@@ -588,19 +587,6 @@ type Replica struct {
 }
 
 var _ batcheval.EvalContext = &Replica{}
-
-// KeyRange is an interface type for the replicasByKey BTree, to compare
-// Replica and ReplicaPlaceholder.
-type KeyRange interface {
-	Desc() *roachpb.RangeDescriptor
-	rangeKeyItem
-	btree.Item
-	fmt.Stringer
-}
-
-var _ KeyRange = &Replica{}
-
-var _ kv.Sender = &Replica{}
 
 // String returns the string representation of the replica using an
 // inconsistent copy of the range descriptor. Therefore, String does not
@@ -1671,11 +1657,6 @@ func checkIfTxnAborted(
 
 func (r *Replica) startKey() roachpb.RKey {
 	return r.Desc().StartKey
-}
-
-// Less implements the btree.Item interface.
-func (r *Replica) Less(i btree.Item) bool {
-	return r.startKey().Less(i.(rangeKeyItem).startKey())
 }
 
 // GetLeaseHistory returns the lease history stored on this replica.

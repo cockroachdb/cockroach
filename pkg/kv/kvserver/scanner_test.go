@@ -61,7 +61,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			LiveCount: 1,
 		}
 		repl.mu.state.Desc = desc
-		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+		if exRngItem := rs.replicasByKey.ReplaceOrInsert((*btreeReplica)(repl)); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)
 		}
 	}
@@ -76,7 +76,7 @@ func (rs *testRangeSet) Visit(visitor func(*Replica) bool) {
 		rs.visited++
 		rs.Unlock()
 		defer rs.Lock()
-		return visitor(i.(*Replica))
+		return visitor((*Replica)(i.(*btreeReplica)))
 	})
 }
 
@@ -99,7 +99,7 @@ func (rs *testRangeSet) remove(index int, t *testing.T) *Replica {
 	if repl == nil {
 		t.Fatalf("failed to delete range of end key %s", endKey)
 	}
-	return repl.(*Replica)
+	return (*Replica)(repl.(*btreeReplica))
 }
 
 // Test implementation of a range queue which adds range to an

@@ -149,7 +149,7 @@ func TestQueuePriorityQueue(t *testing.T) {
 	}
 	heap.Init(&pq)
 
-	// Insert a new item and then modify its priority.
+	// Insert a new replicaOrPlaceholder and then modify its priority.
 	priorityItem := &replicaItem{
 		rangeID:  -1,
 		priority: 1.0,

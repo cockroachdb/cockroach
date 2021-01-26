@@ -156,8 +156,8 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 		return
 	}
 
-	maybeAddRange := func(rr KeyRange) {
-		if rr.Desc().Generation != desc.Generation {
+	maybeAddRange := func(repl *Replica) {
+		if repl.Desc().Generation != desc.Generation {
 			// The next range does not look like it came from a split that produced
 			// both r and this next range. Of course, this has false negatives (e.g.
 			// if either the LHS or the RHS split multiple times since the client's
@@ -169,33 +169,18 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 		}
 
 		var rangeInfo roachpb.RangeInfo
-		if rep, ok := rr.(*Replica); ok {
-			// Note that we return the lease even if it's expired. The kvclient can
-			// use it as it sees fit.
-			rangeInfo.Desc, rangeInfo.Lease = rep.GetDescAndLease(ctx)
-		} else {
-			rangeInfo.Desc = *rr.Desc()
-		}
+		// Note that we return the lease even if it's expired. The kvclient can
+		// use it as it sees fit.
+		rangeInfo.Desc, rangeInfo.Lease = repl.GetDescAndLease(ctx)
 		br.RangeInfos = append(br.RangeInfos, rangeInfo)
 	}
 
-	r.store.VisitReplicasByKey(ctx, roachpb.RKeyMin, desc.StartKey, DescendingKeyOrder, func(ctx context.Context, prevR KeyRange) bool {
-		if !prevR.Desc().EndKey.Equal(desc.StartKey) {
-			// The next range does not correspond to the range immediately preceding r.
-			return false
-		}
-		maybeAddRange(prevR)
-		return false
-	})
-
-	r.store.VisitReplicasByKey(ctx, desc.EndKey, roachpb.RKeyMax, AscendingKeyOrder, func(ctx context.Context, nextR KeyRange) bool {
-		if !nextR.Desc().StartKey.Equal(desc.EndKey) {
-			// The next range does not correspond to the range immediately after r.
-			return false
-		}
-		maybeAddRange(nextR)
-		return false
-	})
+	if repl := r.store.lookupPrecedingReplica(desc.StartKey); repl != nil {
+		maybeAddRange(repl)
+	}
+	if repl := r.store.LookupReplica(desc.EndKey); repl != nil {
+		maybeAddRange(repl)
+	}
 }
 
 // batchExecutionFn is a method on Replica that is able to execute a
