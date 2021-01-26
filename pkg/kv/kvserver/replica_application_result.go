@@ -257,7 +257,9 @@ func (r *Replica) handleDescResult(ctx context.Context, desc *roachpb.RangeDescr
 }
 
 func (r *Replica) handleLeaseResult(ctx context.Context, lease *roachpb.Lease) {
-	r.leasePostApply(ctx, *lease, false /* permitJump */)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.leasePostApplyLocked(ctx, *lease, false /* permitJump */)
 }
 
 func (r *Replica) handleTruncatedStateResult(
