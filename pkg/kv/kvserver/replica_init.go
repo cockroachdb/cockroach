@@ -142,6 +142,9 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
+	if desc.IsInitialized() {
+		r.startKey = desc.StartKey
+	}
 
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
