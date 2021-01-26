@@ -82,9 +82,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	n.tableDesc.LocalityConfig = generateNewLocalityConfigForLocalityRegionalByTable(
-		descpb.RegionName(n.n.Locality.TableRegion),
-	)
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
@@ -110,7 +108,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 		)
 	}
 
-	n.tableDesc.LocalityConfig = generateNewLocalityConfigForLocalityGlobal()
+	n.tableDesc.SetTableLocalityGlobal()
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
@@ -136,9 +134,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	n.tableDesc.LocalityConfig = generateNewLocalityConfigForLocalityRegionalByTable(
-		descpb.RegionName(n.n.Locality.TableRegion),
-	)
+	n.tableDesc.SetTableLocalityRegionalByTable(n.n.Locality.TableRegion)
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
@@ -154,7 +150,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 
 func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(
+	dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 		params.ctx,
 		params.p.txn,
 		n.tableDesc.GetParentID(),
@@ -250,40 +246,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		})
 }
 
-func generateNewLocalityConfigForLocalityGlobal() *descpb.TableDescriptor_LocalityConfig {
-	return &descpb.TableDescriptor_LocalityConfig{
-		Locality: &descpb.TableDescriptor_LocalityConfig_Global_{
-			Global: &descpb.TableDescriptor_LocalityConfig_Global{},
-		},
-	}
-}
-
-func generateNewLocalityConfigForLocalityRegionalByTable(
-	newRegionName descpb.RegionName,
-) *descpb.TableDescriptor_LocalityConfig {
-	lc := &descpb.TableDescriptor_LocalityConfig{}
-	var newRegion *descpb.RegionName = nil
-
-	// If we haven't been provided a new region, we're altering to the PRIMARY REGION.
-	alterToPrimaryRegion := newRegionName == ""
-	// If we're altering to the primary region, leave the newRegion as nil.
-	if !alterToPrimaryRegion {
-		newRegion = &newRegionName
-	}
-
-	// Setup the Locality and Region fields of the LocalityConfig. In cases where we're
-	// altering to the PRIMARY REGION, the Region will be set to nil so that SHOW CREATE
-	// TABLE will show "REGIONAL BY TABLE IN PRIMARY REGION".
-	lc.Locality =
-		&descpb.TableDescriptor_LocalityConfig_RegionalByTable_{
-			RegionalByTable: &descpb.TableDescriptor_LocalityConfig_RegionalByTable{
-				Region: newRegion,
-			},
-		}
-
-	return lc
-}
-
 // validateAndWriteNewTableLocalityAndZoneConfig validates the newly updated LocalityConfig
 // in a table descriptor, writes that table descriptor, and writes a new zone configuration
 // for the given table.
@@ -291,10 +253,10 @@ func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfi
 	params runParams, dbDesc *dbdesc.Immutable, tableName tree.TableName,
 ) error {
 	// Validate the new locality before updating the table descriptor.
-	if err := tabledesc.ValidateTableLocalityConfig(
-		tableName.String(),
-		n.tableDesc.LocalityConfig,
-		dbDesc,
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
+	if err := n.tableDesc.ValidateTableLocalityConfig(
+		params.ctx,
+		dg,
 	); err != nil {
 		return err
 	}
