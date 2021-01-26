@@ -1951,6 +1951,20 @@ project
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
+# Chained fetch val operators.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->'a'->'b' = '"c"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /6/1
+      │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      └── key: (1)
+
 # Do not generate an inverted scan when the fetch val and equality operators are
 # wrapped in a NOT operator. The -> operator returns NULL if the key does not
 # exist in the JSON object, so (NOT j->'a' = '"b"') is not equivalent to the
