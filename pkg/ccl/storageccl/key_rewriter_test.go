@@ -60,7 +60,7 @@ func TestPrefixRewriter(t *testing.T) {
 func TestKeyRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := tabledesc.NewCreatedMutable(systemschema.NamespaceTable.TableDescriptor)
+	desc := tabledesc.NewCreatedMutable(*systemschema.NamespaceTable.TableDesc())
 	oldID := desc.ID
 	newID := desc.ID + 1
 	desc.ID = newID

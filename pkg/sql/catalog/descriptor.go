@@ -118,6 +118,8 @@ type TableDescriptor interface {
 	IsPartitionAllBy() bool
 	PrimaryIndexSpan(codec keys.SQLCodec) roachpb.Span
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
+	AllIndexSpans(codec keys.SQLCodec) roachpb.Spans
+	TableSpan(codec keys.SQLCodec) roachpb.Span
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 	KeysPerRow(id descpb.IndexID) (int, error)
 

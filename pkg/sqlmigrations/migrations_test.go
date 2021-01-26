@@ -545,7 +545,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := tabledesc.NewExistingMutable(systemschema.NamespaceTable.TableDescriptor)
+	table := tabledesc.NewExistingMutable(*systemschema.NamespaceTable.TableDesc())
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -799,16 +799,16 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.NamespaceTable.CreateAsOfTime
-			table.ModificationTime = systemschema.NamespaceTable.ModificationTime
+			table.CreateAsOfTime = systemschema.NamespaceTable.TableDesc().CreateAsOfTime
+			table.ModificationTime = systemschema.NamespaceTable.TableDesc().ModificationTime
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
 		}
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
 			table := descpb.TableFromDescriptor(desc, ts)
-			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.CreateAsOfTime
-			table.ModificationTime = systemschema.DeprecatedNamespaceTable.ModificationTime
+			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.TableDesc().CreateAsOfTime
+			table.ModificationTime = systemschema.DeprecatedNamespaceTable.TableDesc().ModificationTime
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
 		}
 		return nil
@@ -840,7 +840,7 @@ CREATE TABLE system.jobs (
 		keys.SystemDatabaseID,
 		keys.JobsTableID,
 		oldJobsTableSchema,
-		systemschema.JobsTable.Privileges,
+		systemschema.JobsTable.GetPrivileges(),
 	)
 	require.NoError(t, err)
 
@@ -925,7 +925,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 		keys.SystemDatabaseID,
 		keys.JobsTableID,
 		oldJobsTableSchema,
-		systemschema.JobsTable.Privileges,
+		systemschema.JobsTable.GetPrivileges(),
 	)
 	require.NoError(t, err)
 

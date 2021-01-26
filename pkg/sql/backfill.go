@@ -711,7 +711,7 @@ func (sc *SchemaChanger) getTableVersion(
 func TruncateInterleavedIndexes(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	table *tabledesc.Immutable,
+	table catalog.TableDescriptor,
 	indexes []descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
@@ -721,7 +721,7 @@ func TruncateInterleavedIndexes(
 	for _, desc := range indexes {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
-			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.ID, rowIdx, resume)
+			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.GetID(), rowIdx, resume)
 			resumeAt := resume
 			// Make a new txn just to drop this chunk.
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -746,7 +746,7 @@ func TruncateInterleavedIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.ParentID, indexes)
+			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.GetParentID(), indexes)
 		}); err != nil {
 			return err
 		}
@@ -2111,7 +2111,7 @@ func columnBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
@@ -2153,7 +2153,7 @@ func indexBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
 	var indexBackfillerMon *mon.BytesMonitor
@@ -2188,7 +2188,7 @@ func indexTruncateInTxn(
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Immutable,
+	tableDesc catalog.TableDescriptor,
 	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
@@ -2209,5 +2209,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []descpb.IndexDescriptor{*idx})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.GetID(), []descpb.IndexDescriptor{*idx})
 }

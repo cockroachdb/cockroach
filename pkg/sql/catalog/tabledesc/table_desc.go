@@ -208,7 +208,7 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	imm := NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	imm.(*Immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }
 

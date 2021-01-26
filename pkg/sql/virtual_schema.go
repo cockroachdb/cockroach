@@ -375,7 +375,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *tabledesc.Immutable
+	desc                       catalog.TableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -426,9 +426,9 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 		col := &columns[i]
 		datum := datums[i]
 		if datum == tree.DNull {
-			if !e.desc.Columns[i].Nullable {
+			if !e.desc.TableDesc().Columns[i].Nullable {
 				return errors.AssertionFailedf("column %s.%s not nullable, but found NULL value",
-					e.desc.Name, col.Name)
+					e.desc.GetName(), col.Name)
 			}
 		} else if !datum.ResolvedType().Equivalent(col.Typ) {
 			return errors.AssertionFailedf("datum column %q expected to be type %s; found type %s",
@@ -448,8 +448,8 @@ func (e *virtualDefEntry) getPlanInfo(
 	idxConstraint *constraint.Constraint,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
-	for i := range e.desc.Columns {
-		col := &e.desc.Columns[i]
+	for i := range e.desc.TableDesc().Columns {
+		col := &e.desc.TableDesc().Columns[i]
 		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.Name,
 			Typ:            col.Type,
@@ -506,7 +506,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			if index.ID == 1 {
 				return nil, errors.AssertionFailedf(
-					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.Name)
+					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.GetName())
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.
@@ -736,7 +736,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (*virtualD
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.Immutable, error)
+	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (*virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (*virtualDefEntry, error)
@@ -749,7 +749,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*tabledesc.Immutable, error) {
+) (catalog.TableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil || t == nil {
 		return nil, err

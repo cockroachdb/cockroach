@@ -284,12 +284,12 @@ func newZigzagJoiner(
 	z := &zigzagJoiner{}
 
 	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := make([]tabledesc.Immutable, len(spec.Tables))
+	tables := make([]catalog.TableDescriptor, len(spec.Tables))
 	for i := range spec.Tables {
-		tables[i] = tabledesc.MakeImmutable(spec.Tables[i])
+		tables[i] = tabledesc.NewImmutable(spec.Tables[i])
 	}
-	leftColumnTypes := tables[0].ColumnTypes()
-	rightColumnTypes := tables[1].ColumnTypes()
+	leftColumnTypes := tables[0].(*tabledesc.Immutable).ColumnTypes()
+	rightColumnTypes := tables[1].(*tabledesc.Immutable).ColumnTypes()
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
@@ -338,7 +338,7 @@ func newZigzagJoiner(
 		if err := z.setupInfo(flowCtx, spec, i, colOffset, tables); err != nil {
 			return nil, err
 		}
-		colOffset += len(z.infos[i].table.Columns)
+		colOffset += len(z.infos[i].table.TableDesc().Columns)
 	}
 	z.side = 0
 	return z, nil
@@ -374,7 +374,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
 	alloc      *rowenc.DatumAlloc
-	table      *tabledesc.Immutable
+	table      catalog.TableDescriptor
 	index      *descpb.IndexDescriptor
 	indexTypes []*types.T
 	indexDirs  []descpb.IndexDescriptor_Direction
@@ -411,13 +411,13 @@ func (z *zigzagJoiner) setupInfo(
 	spec *execinfrapb.ZigzagJoinerSpec,
 	side int,
 	colOffset int,
-	tables []tabledesc.Immutable,
+	tables []catalog.TableDescriptor,
 ) error {
 	z.side = side
 	info := z.infos[side]
 
 	info.alloc = &rowenc.DatumAlloc{}
-	info.table = &tables[side]
+	info.table = tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
 	info.index = info.table.ActiveIndexes()[indexOrdinal].IndexDesc()
@@ -425,7 +425,7 @@ func (z *zigzagJoiner) setupInfo(
 	var columnIDs []descpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
 	info.indexTypes = make([]*types.T, len(columnIDs))
-	columnTypes := info.table.ColumnTypes()
+	columnTypes := info.table.(*tabledesc.Immutable).ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
 		info.indexTypes[i] = columnTypes[colIdxMap.GetDefault(columnID)]
@@ -434,7 +434,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
 	outCols := z.Out.NeededColumns()
-	maxCol := colOffset + len(info.table.Columns)
+	maxCol := colOffset + len(info.table.TableDesc().Columns)
 	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
 		neededCols.Add(i - colOffset)
 	}
@@ -627,7 +627,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 // Returns the column types of the equality columns.
 func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 	eqColTypes := make([]*types.T, len(zi.eqColumns))
-	colTypes := zi.table.ColumnTypes()
+	colTypes := zi.table.(*tabledesc.Immutable).ColumnTypes()
 	for i := range eqColTypes {
 		eqColTypes[i] = colTypes[zi.eqColumns[i]]
 	}
@@ -638,7 +638,7 @@ func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 	ordering := make(colinfo.ColumnOrdering, len(zi.eqColumns))
 	for i := range zi.eqColumns {
-		colID := zi.table.Columns[zi.eqColumns[i]].ID
+		colID := zi.table.TableDesc().Columns[zi.eqColumns[i]].ID
 		// Search the index columns, then the primary keys to find an ordering for
 		// the current column, 'colID'.
 		var direction encoding.Direction

@@ -92,7 +92,7 @@ func newTableReader(
 
 	tableDesc := tabledesc.NewImmutable(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	resultTypes := tableDesc.ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
+	resultTypes := tableDesc.(*tabledesc.Immutable).ColumnTypesWithMutationsAndVirtualCol(returnMutations, spec.VirtualColumn)
 	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
 
 	// Add all requested system columns to the output.

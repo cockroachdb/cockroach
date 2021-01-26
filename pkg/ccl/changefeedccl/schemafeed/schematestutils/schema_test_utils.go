@@ -35,7 +35,7 @@ func MakeTableDesc(
 		td.Columns = append(td.Columns, *MakeColumnDesc(td.NextColumnID))
 		td.NextColumnID++
 	}
-	return tabledesc.NewImmutable(td)
+	return tabledesc.NewImmutable(td).(*tabledesc.Immutable)
 }
 
 // MakeColumnDesc makes a generic column descriptor with the provided id.

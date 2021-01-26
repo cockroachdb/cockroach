@@ -64,7 +64,7 @@ type rowFetcher interface {
 func initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	indexIdx int,
 	colIdxMap catalog.TableColMap,
 	reverseScan bool,
@@ -78,7 +78,7 @@ func initRowFetcher(
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	index, isSecondaryIndex, err = desc.(*tabledesc.Immutable).FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}

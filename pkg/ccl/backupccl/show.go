@@ -342,7 +342,7 @@ func backupShowerDefault(
 							IgnoreComments: true,
 						}
 						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
+							tabledesc.NewImmutable(*desc.TableDesc()).(*tabledesc.Immutable), displayOptions)
 						if err != nil {
 							// We expect that we might get an error here due to X-DB
 							// references, which were possible on 20.2 betas and rcs.

@@ -162,14 +162,14 @@ type FetcherTableArgs struct {
 
 // InitCols initializes the columns in FetcherTableArgs.
 func (fta *FetcherTableArgs) InitCols(
-	desc *tabledesc.Immutable,
+	desc catalog.TableDescriptor,
 	scanVisibility execinfrapb.ScanVisibility,
 	systemColumns []descpb.ColumnDescriptor,
 	virtualColumn *descpb.ColumnDescriptor,
 ) {
-	cols := desc.Columns
+	cols := desc.TableDesc().Columns
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
-		cols = desc.ReadableColumns()
+		cols = desc.(*tabledesc.Immutable).ReadableColumns()
 	}
 	if virtualColumn != nil {
 		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))

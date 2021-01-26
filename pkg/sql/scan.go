@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -44,7 +45,7 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	desc  *tabledesc.Immutable
+	desc  catalog.TableDescriptor
 	index *descpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -248,13 +249,13 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
-	desc *tabledesc.Immutable, colCfg scanColumnsConfig,
+	desc catalog.TableDescriptor, colCfg scanColumnsConfig,
 ) (cols []*descpb.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")
 	}
 
-	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.ReadableColumns()))
+	cols = make([]*descpb.ColumnDescriptor, 0, len(desc.(*tabledesc.Immutable).ReadableColumns()))
 	for _, wc := range colCfg.wantedColumns {
 		var c *descpb.ColumnDescriptor
 		var err error
@@ -270,7 +271,7 @@ func initColsForScan(
 			if id := descpb.ColumnID(wc); colCfg.visibility == execinfra.ScanVisibilityPublic {
 				c, err = desc.FindActiveColumnByID(id)
 			} else {
-				c, _, err = desc.FindReadableColumnByID(id)
+				c, _, err = desc.(*tabledesc.Immutable).FindReadableColumnByID(id)
 			}
 			if err != nil {
 				return cols, err
@@ -289,8 +290,8 @@ func initColsForScan(
 	}
 
 	if colCfg.addUnwantedAsHidden {
-		for i := range desc.Columns {
-			c := &desc.Columns[i]
+		for i := range desc.TableDesc().Columns {
+			c := &desc.TableDesc().Columns[i]
 			found := false
 			for _, wc := range colCfg.wantedColumns {
 				if descpb.ColumnID(wc) == c.ID {
