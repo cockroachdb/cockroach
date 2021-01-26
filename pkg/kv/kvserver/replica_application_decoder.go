@@ -144,7 +144,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 		} else if cmd.raftCmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
-			spanCtx, err := d.r.AmbientContext.Tracer.Extract(
+			spanMeta, err := d.r.AmbientContext.Tracer.Extract(
 				opentracing.TextMap, opentracing.TextMapCarrier(cmd.raftCmd.TraceData))
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
@@ -154,7 +154,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 					"raft application",
 					// NB: we are lying here - we are not actually going to propagate
 					// the recording towards the root. That seems ok.
-					tracing.WithParentAndManualCollection(spanCtx),
+					tracing.WithParentAndManualCollection(spanMeta),
 					tracing.WithFollowsFrom(),
 				)
 			}

@@ -1,0 +1,48 @@
+# LogicTest: local !metamorphic
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, FAMILY f1 (a, b))
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE ab ]
+
+# Populate table descriptor cache.
+query II
+SELECT * FROM ab
+----
+
+# No auto-commit inside a transaction.
+statement ok
+BEGIN
+
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (4, 4), (5, 5);
+SET TRACING=OFF
+
+# query TT
+# SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+# WHERE message     LIKE '%r$rangeid: sending batch%'
+#   AND message NOT LIKE '%PushTxn%'
+#   AND message NOT LIKE '%QueryTxn%'
+# ----
+# dist sender send  r35: sending batch 2 CPut to (n1,s1):1
+
+statement ok
+ROLLBACK
+
+statement ok
+SET TRACING=ON;
+  INSERT INTO ab VALUES (6, 6), (7, 7) RETURNING a, b;
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r35: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+# dist sender send  r35: sending batch 2 CPut to (n1,s1):1
