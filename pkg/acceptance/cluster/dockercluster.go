@@ -657,7 +657,7 @@ func (l *DockerCluster) Start(ctx context.Context) {
 // the cluster (restart, kill, ...). In the event of a mismatch, the passed
 // Tester receives a fatal error.
 func (l *DockerCluster) Assert(ctx context.Context, t testing.TB) {
-	const almostZero = 50 * time.Millisecond
+	const almostZero = 100 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		select {
 		case act := <-ch:
