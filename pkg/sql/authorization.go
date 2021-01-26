@@ -519,7 +519,7 @@ func (p *planner) canCreateOnSchema(
 			return nil
 		}
 		dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{})
+			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return err
 		}

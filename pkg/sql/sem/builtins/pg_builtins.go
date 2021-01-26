@@ -1344,8 +1344,8 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					// All users have CONNECT privileges for all databases.
-					return tree.DBoolTrue, nil
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.CONNECT, withGrantOpt)
 				},
 				"TEMPORARY": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {

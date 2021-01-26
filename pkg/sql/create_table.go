@@ -367,7 +367,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{},
+			tree.DatabaseLookupFlags{Required: true},
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")

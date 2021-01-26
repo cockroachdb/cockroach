@@ -431,6 +431,7 @@ func (p *planner) getQualifiedTableName(
 ) (*tree.TableName, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(),
 		tree.DatabaseLookupFlags{
+			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
 		})

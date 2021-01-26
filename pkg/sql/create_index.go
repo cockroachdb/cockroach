@@ -575,7 +575,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 			ctx,
 			p.txn,
 			tableDesc.ParentID,
-			tree.DatabaseLookupFlags{},
+			tree.DatabaseLookupFlags{Required: true},
 		)
 		if err != nil {
 			return err
