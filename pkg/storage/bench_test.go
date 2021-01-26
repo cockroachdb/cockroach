@@ -848,7 +848,7 @@ func runClearRange(
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		batch := eng.NewWriteOnlyBatch()
+		batch := eng.NewUnIndexedBatch(false /* supportReader */)
 		if err := clearRange(eng, batch, firstKey, MVCCKeyMax); err != nil {
 			b.Fatal(err)
 		}
@@ -1007,7 +1007,7 @@ func runBatchApplyBatchRepr(
 			})
 		}
 
-		batch := eng.NewWriteOnlyBatch()
+		batch := eng.NewUnIndexedBatch(false /* supportReader */)
 		defer batch.Close() // NB: hold open so batch.Repr() doesn't get reused
 
 		for i := 0; i < batchSize; i++ {
@@ -1026,7 +1026,7 @@ func runBatchApplyBatchRepr(
 	for i := 0; i < b.N; i++ {
 		var batch Batch
 		if !indexed {
-			batch = eng.NewWriteOnlyBatch()
+			batch = eng.NewUnIndexedBatch(false /* supportReader */)
 		} else {
 			batch = eng.NewBatch()
 		}
@@ -1052,7 +1052,7 @@ func runExportToSst(
 	engine := emk(b, dir)
 	defer engine.Close()
 
-	batch := engine.NewWriteOnlyBatch()
+	batch := engine.NewUnIndexedBatch(false /* supportReader */)
 	for i := 0; i < numKeys; i++ {
 		key := make([]byte, 16)
 		key = append(key, 'a', 'a', 'a')

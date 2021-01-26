@@ -638,12 +638,6 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 	}
 }
 
-// NewReadWriter returns an engine.ReadWriter that asserts access of the
-// underlying ReadWriter against the given SpanSet.
-func NewReadWriter(rw storage.ReadWriter, spans *SpanSet) storage.ReadWriter {
-	return makeSpanSetReadWriter(rw, spans)
-}
-
 // NewReadWriterAt returns an engine.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
 // If zero timestamp is provided, accesses are considered non-MVCC.
@@ -664,13 +658,6 @@ var _ storage.Batch = spanSetBatch{}
 
 func (s spanSetBatch) Commit(sync bool) error {
 	return s.b.Commit(sync)
-}
-
-func (s spanSetBatch) Distinct() storage.ReadWriter {
-	if s.spansOnly {
-		return NewReadWriter(s.b.Distinct(), s.spans)
-	}
-	return NewReadWriterAt(s.b.Distinct(), s.spans, s.ts)
 }
 
 func (s spanSetBatch) Empty() bool {

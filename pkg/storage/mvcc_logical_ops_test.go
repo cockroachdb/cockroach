@@ -56,23 +56,21 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Update the intents and write another. Use a distinct batch.
-			olDist := ol.Distinct()
+			// Update the intents and write another.
 			txn1ts.Sequence++
 			txn1ts.WriteTimestamp = hlc.Timestamp{Logical: 3}
-			if err := MVCCPut(ctx, olDist, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey1, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCPut(ctx, olDist, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
+			if err := MVCCPut(ctx, ol, nil, localKey, txn1ts.ReadTimestamp, value2, txn1ts); err != nil {
 				t.Fatal(err)
 			}
 			// Set the txn timestamp to a larger value than the intent.
 			txn1LargerTS := makeTxn(*txn1, hlc.Timestamp{Logical: 4})
 			txn1LargerTS.WriteTimestamp = hlc.Timestamp{Logical: 4}
-			if err := MVCCPut(ctx, olDist, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
+			if err := MVCCPut(ctx, ol, nil, testKey2, txn1LargerTS.ReadTimestamp, value3, txn1LargerTS); err != nil {
 				t.Fatal(err)
 			}
-			olDist.Close()
 
 			// Resolve all three intent.
 			txn1CommitTS := *txn1Commit
