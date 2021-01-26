@@ -1,5 +1,5 @@
 import { createSelector } from "reselect";
-import { chain, last, sortBy } from "lodash";
+import { chain, orderBy } from "lodash";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AppState } from "../reducers";
 
@@ -16,19 +16,23 @@ export const selectStatementDiagnosticsReports = createSelector(
 );
 
 type StatementDiagnosticsDictionary = {
-  [statementFingerprint: string]: IStatementDiagnosticsReport;
+  [statementFingerprint: string]: IStatementDiagnosticsReport[];
 };
 
-export const selectLastDiagnosticsReportPerStatement = createSelector(
+export const selectDiagnosticsReportsPerStatement = createSelector(
   selectStatementDiagnosticsReports,
   (
     diagnosticsReports: IStatementDiagnosticsReport[],
   ): StatementDiagnosticsDictionary =>
     chain(diagnosticsReports)
       .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
-      // Perform ASC sorting and take the last item
+      // Perform DESC sorting to get latest report on top
       .mapValues(diagnostics =>
-        last(sortBy(diagnostics, d => d.requested_at.seconds.toNumber())),
+        orderBy(
+          diagnostics,
+          [d => d.requested_at.seconds.toNumber()],
+          ["desc"],
+        ),
       )
       .value(),
 );
