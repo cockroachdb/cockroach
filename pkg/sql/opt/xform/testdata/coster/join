@@ -400,15 +400,15 @@ SELECT * FROM abc WHERE c = 1
 ----
 index-join abc
  ├── columns: a:1!null b:2 c:3!null
- ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
- ├── cost: 74.2110014
+ ├── stats: [rows=9.9005002, distinct(3)=1, null(3)=0]
+ ├── cost: 74.2145464
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1!null c:3!null
       ├── constraint: /3/1: [/1 - /1]
-      ├── stats: [rows=9.9000002, distinct(3)=1, null(3)=0]
-      ├── cost: 14.3060002
+      ├── stats: [rows=9.9005002, distinct(3)=1, null(3)=0]
+      ├── cost: 14.3065202
       ├── key: (1)
       └── fd: ()-->(3)
 
@@ -601,18 +601,18 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)
 ----
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
- ├── stats: [rows=4.50439883]
+ ├── stats: [rows=4.50439933]
  ├── cost: 12231.6
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:13!null b:14!null c:15!null
       ├── key columns: [1 2 3] = [13 14 15]
-      ├── stats: [rows=4.50439883, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884031733, null(3)=0, distinct(13)=0.9, null(13)=0, distinct(14)=0.9, null(14)=0, distinct(15)=0.884031733, null(15)=0]
+      ├── stats: [rows=4.50439933, distinct(1)=0.9000001, null(1)=0, distinct(2)=0.9000001, null(2)=0, distinct(3)=0.88403183, null(3)=0, distinct(13)=0.9000001, null(13)=0, distinct(14)=0.9000001, null(14)=0, distinct(15)=0.88403183, null(15)=0]
       ├── cost: 12231.545
       ├── fd: ()-->(1,2,5-10,13,14), (1)==(13), (13)==(1), (2)==(14), (14)==(2), (3)==(15), (15)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=0.9, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884031733, null(3)=0, distinct(4)=0.899635587, null(4)=0, distinct(5)=0.9, null(5)=0, distinct(6)=0.9, null(6)=0, distinct(7)=0.9, null(7)=0, distinct(8)=0.9, null(8)=0, distinct(9)=0.9, null(9)=0, distinct(10)=0.9, null(10)=0, distinct(5-10)=0.9, null(5-10)=0]
+      │    ├── stats: [rows=0.9000001, distinct(1)=0.9000001, null(1)=0, distinct(2)=0.9000001, null(2)=0, distinct(3)=0.88403183, null(3)=0, distinct(4)=0.899635687, null(4)=0, distinct(5)=0.9000001, null(5)=0, distinct(6)=0.9000001, null(6)=0, distinct(7)=0.9000001, null(7)=0, distinct(8)=0.9000001, null(8)=0, distinct(9)=0.9000001, null(9)=0, distinct(10)=0.9000001, null(10)=0, distinct(5-10)=0.9000001, null(5-10)=0]
       │    ├── cost: 12204.11
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn

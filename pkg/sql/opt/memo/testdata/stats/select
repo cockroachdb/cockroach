@@ -1074,7 +1074,7 @@ SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=9.35672515, distinct(1)=9.35672515, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=9.35672515, null(1,2)=0]
+ ├── stats: [rows=9.35672524, distinct(1)=9.35672524, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=9.35672524, null(1,2)=0]
  ├── key: (1)
  ├── fd: ()-->(2)
  ├── scan a
@@ -1140,7 +1140,7 @@ WHERE name='andy'
 ----
 select
  ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:5(int) item_id:6(int) customer_id:7(int!null) year:8(int)
- ├── stats: [rows=1.84197978, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1.8419798, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(2), (1)-->(3), (1)==(7), (7)==(1)
  ├── project
  │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:5(int) item_id:6(int) customer_id:7(int!null) year:8(int)
@@ -2482,7 +2482,7 @@ AND c29 = 1 AND c30 = 1 AND c31 = 1 AND c32 = 1 AND c33 = 1
 ----
 select
  ├── columns: c1:1(int!null) c2:2(int!null) c3:3(int!null) c4:4(int!null) c5:5(int!null) c6:6(int!null) c7:7(int!null) c8:8(int!null) c9:9(int!null) c10:10(int!null) c11:11(int!null) c12:12(int!null) c13:13(int!null) c14:14(int!null) c15:15(int!null) c16:16(int!null) c17:17(int!null) c18:18(int!null) c19:19(int!null) c20:20(int!null) c21:21(int!null) c22:22(int!null) c23:23(int!null) c24:24(int!null) c25:25(int!null) c26:26(int!null) c27:27(int!null) c28:28(int!null) c29:29(int!null) c30:30(int!null) c31:31(int!null) c32:32(int!null) c33:33(int!null)
- ├── stats: [rows=9e-11, distinct(1)=9e-11, null(1)=0, distinct(2)=9e-11, null(2)=0, distinct(3)=9e-11, null(3)=0, distinct(4)=9e-11, null(4)=0, distinct(5)=9e-11, null(5)=0, distinct(6)=9e-11, null(6)=0, distinct(7)=9e-11, null(7)=0, distinct(8)=9e-11, null(8)=0, distinct(9)=9e-11, null(9)=0, distinct(10)=9e-11, null(10)=0, distinct(11)=9e-11, null(11)=0, distinct(12)=9e-11, null(12)=0, distinct(13)=9e-11, null(13)=0, distinct(14)=9e-11, null(14)=0, distinct(15)=9e-11, null(15)=0, distinct(16)=9e-11, null(16)=0, distinct(17)=9e-11, null(17)=0, distinct(18)=9e-11, null(18)=0, distinct(19)=9e-11, null(19)=0, distinct(20)=9e-11, null(20)=0, distinct(21)=9e-11, null(21)=0, distinct(22)=9e-11, null(22)=0, distinct(23)=9e-11, null(23)=0, distinct(24)=9e-11, null(24)=0, distinct(25)=9e-11, null(25)=0, distinct(26)=9e-11, null(26)=0, distinct(27)=9e-11, null(27)=0, distinct(28)=9e-11, null(28)=0, distinct(29)=9e-11, null(29)=0, distinct(30)=9e-11, null(30)=0, distinct(31)=9e-11, null(31)=0, distinct(32)=9e-11, null(32)=0, distinct(33)=9e-11, null(33)=0, distinct(1-33)=9e-11, null(1-33)=0]
+ ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=0, distinct(4)=1e-10, null(4)=0, distinct(5)=1e-10, null(5)=0, distinct(6)=1e-10, null(6)=0, distinct(7)=1e-10, null(7)=0, distinct(8)=1e-10, null(8)=0, distinct(9)=1e-10, null(9)=0, distinct(10)=1e-10, null(10)=0, distinct(11)=1e-10, null(11)=0, distinct(12)=1e-10, null(12)=0, distinct(13)=1e-10, null(13)=0, distinct(14)=1e-10, null(14)=0, distinct(15)=1e-10, null(15)=0, distinct(16)=1e-10, null(16)=0, distinct(17)=1e-10, null(17)=0, distinct(18)=1e-10, null(18)=0, distinct(19)=1e-10, null(19)=0, distinct(20)=1e-10, null(20)=0, distinct(21)=1e-10, null(21)=0, distinct(22)=1e-10, null(22)=0, distinct(23)=1e-10, null(23)=0, distinct(24)=1e-10, null(24)=0, distinct(25)=1e-10, null(25)=0, distinct(26)=1e-10, null(26)=0, distinct(27)=1e-10, null(27)=0, distinct(28)=1e-10, null(28)=0, distinct(29)=1e-10, null(29)=0, distinct(30)=1e-10, null(30)=0, distinct(31)=1e-10, null(31)=0, distinct(32)=1e-10, null(32)=0, distinct(33)=1e-10, null(33)=0, distinct(1-33)=1e-10, null(1-33)=0]
  ├── fd: ()-->(1-33)
  ├── scan t
  │    ├── columns: c1:1(int) c2:2(int) c3:3(int) c4:4(int) c5:5(int) c6:6(int) c7:7(int) c8:8(int) c9:9(int) c10:10(int) c11:11(int) c12:12(int) c13:13(int) c14:14(int) c15:15(int) c16:16(int) c17:17(int) c18:18(int) c19:19(int) c20:20(int) c21:21(int) c22:22(int) c23:23(int) c24:24(int) c25:25(int) c26:26(int) c27:27(int) c28:28(int) c29:29(int) c30:30(int) c31:31(int) c32:32(int) c33:33(int)

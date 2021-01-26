@@ -430,7 +430,7 @@ func (h *Histogram) addBucket(bucket *cat.HistogramBucket, desc bool) {
 
 // ApplySelectivity reduces the size of each histogram bucket according to
 // the given selectivity, and returns a new histogram with the results.
-func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
+func (h *Histogram) ApplySelectivity(selectivity Selectivity) *Histogram {
 	res := h.copy()
 	for i := range res.buckets {
 		b := &res.buckets[i]
@@ -439,8 +439,8 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		n := b.NumRange
 		d := b.DistinctRange
 
-		b.NumEq *= selectivity
-		b.NumRange *= selectivity
+		b.NumEq *= selectivity.AsFloat()
+		b.NumRange *= selectivity.AsFloat()
 
 		if d == 0 {
 			continue
@@ -452,7 +452,7 @@ func (h *Histogram) ApplySelectivity(selectivity float64) *Histogram {
 		//
 		// This formula returns d * selectivity when d=n but is closer to d
 		// when d << n.
-		b.DistinctRange = d - d*math.Pow(1-selectivity, n/d)
+		b.DistinctRange = d - d*math.Pow(1-selectivity.AsFloat(), n/d)
 	}
 	return res
 }
@@ -617,11 +617,11 @@ func getFilteredBucket(
 			// This span represents an equality condition with a value in the range
 			// of this bucket. Use the distinct count of the bucket to estimate the
 			// selectivity of the equality condition.
-			selectivity := 1.0
+			selectivity := OneSelectivity
 			if b.DistinctRange > 1 {
-				selectivity = 1 / b.DistinctRange
+				selectivity = MakeSelectivity(1 / b.DistinctRange)
 			}
-			numEq = selectivity * b.NumRange
+			numEq = selectivity.AsFloat() * b.NumRange
 		} else if ok && rangeBefore > 0 && isDiscrete(bucketLowerBound.ResolvedType()) {
 			// If we were successful in finding the ranges before and after filtering
 			// and the data type is discrete (e.g., integer, date, or timestamp), we
