@@ -15,7 +15,8 @@ import { RouteComponentProps } from "react-router-dom";
 
 import { AppState } from "src/store";
 import { StatementsState } from "../store/statements";
-import { selectLastDiagnosticsReportPerStatement } from "../store/statementDiagnostics";
+import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnostics";
+import { AggregateStatistics } from "../statementsTable";
 
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 
@@ -100,12 +101,12 @@ export const selectLastReset = createSelector(statementsSelector, state => {
 export const selectStatements = createSelector(
   statementsSelector,
   (_: AppState, props: RouteComponentProps) => props,
-  selectLastDiagnosticsReportPerStatement,
+  selectDiagnosticsReportsPerStatement,
   (
     state: StatementsState,
     props: RouteComponentProps<any>,
-    lastDiagnosticsReportPerStatement,
-  ) => {
+    diagnosticsReportsPerStatement,
+  ): AggregateStatistics[] => {
     if (!state.data) {
       return null;
     }
@@ -154,7 +155,7 @@ export const selectStatements = createSelector(
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
         stats: combineStatementStats(stmt.stats),
-        diagnosticsReport: lastDiagnosticsReportPerStatement[stmt.statement],
+        diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };
     });
   },
