@@ -337,7 +337,7 @@ func makeFilters(
 		Available:   true,
 		RowCount:    1000,
 		ColStats:    colStatsMap,
-		Selectivity: 1,
+		Selectivity: props.OneSelectivity,
 	}
 
 	// Create a fake Select and input so that normalization rules are run.
